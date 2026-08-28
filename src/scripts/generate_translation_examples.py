@@ -4,7 +4,8 @@ Generates:
 - eng-eng (English -> Mentalese -> English)
 - eng-hu  (English -> Mentalese -> Hungarian)
 - hu-eng  (Hungarian -> Mentalese -> English)
-Saved to the output/ directory in JSON, text, and Markdown formats.
+- hu-hu   (Hungarian -> Mentalese -> Hungarian)
+Saved to the output/ directory in JSON and Markdown formats with full ASG node graph ASCII art.
 """
 
 from __future__ import annotations
@@ -13,10 +14,12 @@ from pathlib import Path
 import sys
 
 # Ensure src is importable
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from core.slots import get_slot_by_index
 from pipeline.translator_pipeline import TwoWayTranslationPipeline
+from visualization.asg_visualizer import ASGVisualizer
 
 
 def generate_all_examples(output_dir: Path):
@@ -27,6 +30,8 @@ def generate_all_examples(output_dir: Path):
     print("QUANTA TWO-WAY TRANSLATION & VERIFICATION PIPELINE RUNNER")
     print(f"Target Output Directory: {output_dir.resolve()}")
     print("==========================================================\n")
+
+    all_md_blocks = []
 
     # ------------------------------------------------------------------
     # 1. English -> English (Round-Trip Invariance)
@@ -46,6 +51,8 @@ def generate_all_examples(output_dir: Path):
 
     print("1. Generating English -> English (eng-eng) round-trip examples...")
     eng_eng_records = []
+    eng_eng_md = ["# English -> English Round-Trip Translation Graphs\n\n"]
+
     for i, sent in enumerate(eng_sentences, 1):
         res = pipeline.execute_translation(sent, target_modality="english", source_modality="english")
         rt = pipeline.round_trip(sent, modality="english")
@@ -64,17 +71,37 @@ def generate_all_examples(output_dir: Path):
             "active_slots": active_slots,
         }
         eng_eng_records.append(record)
+
+        md_block = ASGVisualizer.format_translation_block(
+            example_id=i,
+            source_text=sent,
+            target_text=res.output_text,
+            source_modality="english",
+            target_modality="english",
+            graph=res.graph,
+            merkle_root=res.merkle_root,
+            is_valid=res.validation.is_valid,
+            preservation_rate=rt.slot_preservation_rate,
+            as_markdown=True,
+        )
+        eng_eng_md.append(md_block)
+        all_md_blocks.append(md_block)
+
         print(f"   [{i:02d}] IN:  {sent}")
         print(f"        OUT: {res.output_text} (Preservation: {rt.slot_preservation_rate:.1%})")
 
     with open(output_dir / "examples_eng_eng.json", "w", encoding="utf-8") as f:
         json.dump(eng_eng_records, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "translation_graphs_eng_eng.md", "w", encoding="utf-8") as f:
+        f.write("".join(eng_eng_md))
 
     # ------------------------------------------------------------------
     # 2. English -> Hungarian (eng-hu)
     # ------------------------------------------------------------------
     print("\n2. Generating English -> Hungarian (eng-hu) cross-lingual examples...")
     eng_hu_records = []
+    eng_hu_md = ["# English -> Hungarian Cross-Lingual Translation Graphs\n\n"]
+
     for i, sent in enumerate(eng_sentences, 1):
         res = pipeline.execute_translation(sent, target_modality="hungarian", source_modality="english")
         vec = res.graph.to_proposition_vector()
@@ -90,11 +117,28 @@ def generate_all_examples(output_dir: Path):
             "active_slots": active_slots,
         }
         eng_hu_records.append(record)
+
+        md_block = ASGVisualizer.format_translation_block(
+            example_id=i,
+            source_text=sent,
+            target_text=res.output_text,
+            source_modality="english",
+            target_modality="hungarian",
+            graph=res.graph,
+            merkle_root=res.merkle_root,
+            is_valid=res.validation.is_valid,
+            as_markdown=True,
+        )
+        eng_hu_md.append(md_block)
+        all_md_blocks.append(md_block)
+
         print(f"   [{i:02d}] EN: {sent}")
         print(f"        HU: {res.output_text}")
 
     with open(output_dir / "examples_eng_hu.json", "w", encoding="utf-8") as f:
         json.dump(eng_hu_records, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "translation_graphs_eng_hu.md", "w", encoding="utf-8") as f:
+        f.write("".join(eng_hu_md))
 
     # ------------------------------------------------------------------
     # 3. Hungarian -> English (hu-eng)
@@ -114,6 +158,8 @@ def generate_all_examples(output_dir: Path):
 
     print("\n3. Generating Hungarian -> English (hu-eng) cross-lingual examples...")
     hu_eng_records = []
+    hu_eng_md = ["# Hungarian -> English Cross-Lingual Translation Graphs\n\n"]
+
     for i, sent in enumerate(hu_sentences, 1):
         res = pipeline.execute_translation(sent, target_modality="english", source_modality="hungarian")
         vec = res.graph.to_proposition_vector()
@@ -129,17 +175,36 @@ def generate_all_examples(output_dir: Path):
             "active_slots": active_slots,
         }
         hu_eng_records.append(record)
+
+        md_block = ASGVisualizer.format_translation_block(
+            example_id=i,
+            source_text=sent,
+            target_text=res.output_text,
+            source_modality="hungarian",
+            target_modality="english",
+            graph=res.graph,
+            merkle_root=res.merkle_root,
+            is_valid=res.validation.is_valid,
+            as_markdown=True,
+        )
+        hu_eng_md.append(md_block)
+        all_md_blocks.append(md_block)
+
         print(f"   [{i:02d}] HU: {sent}")
         print(f"        EN: {res.output_text}")
 
     with open(output_dir / "examples_hu_eng.json", "w", encoding="utf-8") as f:
         json.dump(hu_eng_records, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "translation_graphs_hu_eng.md", "w", encoding="utf-8") as f:
+        f.write("".join(hu_eng_md))
 
     # ------------------------------------------------------------------
     # 4. Hungarian -> Hungarian (hu-hu Round-Trip Invariance)
     # ------------------------------------------------------------------
     print("\n4. Generating Hungarian -> Hungarian (hu-hu) round-trip examples...")
     hu_hu_records = []
+    hu_hu_md = ["# Hungarian -> Hungarian Round-Trip Translation Graphs\n\n"]
+
     for i, sent in enumerate(hu_sentences, 1):
         res = pipeline.execute_translation(sent, target_modality="hungarian", source_modality="hungarian")
         rt = pipeline.round_trip(sent, modality="hungarian")
@@ -158,19 +223,53 @@ def generate_all_examples(output_dir: Path):
             "active_slots": active_slots,
         }
         hu_hu_records.append(record)
+
+        md_block = ASGVisualizer.format_translation_block(
+            example_id=i,
+            source_text=sent,
+            target_text=res.output_text,
+            source_modality="hungarian",
+            target_modality="hungarian",
+            graph=res.graph,
+            merkle_root=res.merkle_root,
+            is_valid=res.validation.is_valid,
+            preservation_rate=rt.slot_preservation_rate,
+            as_markdown=True,
+        )
+        hu_hu_md.append(md_block)
+        all_md_blocks.append(md_block)
+
         print(f"   [{i:02d}] IN:  {sent}")
         print(f"        OUT: {res.output_text} (Preservation: {rt.slot_preservation_rate:.1%})")
 
     with open(output_dir / "examples_hu_hu.json", "w", encoding="utf-8") as f:
         json.dump(hu_hu_records, f, indent=2, ensure_ascii=False)
+    with open(output_dir / "translation_graphs_hu_hu.md", "w", encoding="utf-8") as f:
+        f.write("".join(hu_hu_md))
 
     # ------------------------------------------------------------------
-    # 5. Generate Comprehensive Markdown Summary
+    # 5. Combined Master Graph Markdown File
+    # ------------------------------------------------------------------
+    with open(output_dir / "all_translation_graphs.md", "w", encoding="utf-8") as f:
+        f.write("# QUANTA Translation Examples — Complete ASG Node Graphs & ASCII Art\n\n")
+        f.write("This document compiles the complete Abstract Syntax Graph (ASG) node hierarchies, relation edges, active quaternary semantic slots, and Mermaid diagrams for all 40 benchmark translation examples across English and Hungarian.\n\n")
+        f.write("---\n\n")
+        f.write("".join(all_md_blocks))
+
+    # ------------------------------------------------------------------
+    # 6. Generate Comprehensive Markdown Summary
     # ------------------------------------------------------------------
     md_path = output_dir / "translation_examples_summary.md"
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("# QUANTA Two-Way Translation & Cross-Lingual Benchmarks\n\n")
         f.write("This document presents authentic input-output translation pairs generated via the Content-Addressed Neuro-Symbolic **QUANTA ASG** representation over $\\Sigma^{256}$.\n\n")
+        f.write("### Graph Visualizations\n")
+        f.write("Detailed structured ASCII graph trees, Mermaid diagrams, and node slot specifications are available in:\n")
+        f.write("- **Complete Graphs:** [`all_translation_graphs.md`](all_translation_graphs.md)\n")
+        f.write("- **English Round-Trip:** [`translation_graphs_eng_eng.md`](translation_graphs_eng_eng.md)\n")
+        f.write("- **English → Hungarian:** [`translation_graphs_eng_hu.md`](translation_graphs_eng_hu.md)\n")
+        f.write("- **Hungarian → English:** [`translation_graphs_hu_eng.md`](translation_graphs_hu_eng.md)\n")
+        f.write("- **Hungarian Round-Trip:** [`translation_graphs_hu_hu.md`](translation_graphs_hu_hu.md)\n\n")
         f.write("---\n\n")
 
         # Table 1: English -> English
@@ -226,12 +325,17 @@ def generate_all_examples(output_dir: Path):
     print(f"  - examples_hu_hu.json")
     print(f"  - examples_eng_hu.json")
     print(f"  - examples_hu_eng.json")
+    print(f"  - translation_graphs_eng_eng.md")
+    print(f"  - translation_graphs_eng_hu.md")
+    print(f"  - translation_graphs_hu_eng.md")
+    print(f"  - translation_graphs_hu_hu.md")
+    print(f"  - all_translation_graphs.md")
     print(f"  - translation_examples_summary.md")
     print("==========================================================")
 
 
 if __name__ == "__main__":
-    out = Path("output")
+    out = REPO_ROOT / "output"
     if len(sys.argv) > 1:
-        out = Path(sys.argv[1])
+        out = Path(sys.argv[1]).resolve()
     generate_all_examples(out)
