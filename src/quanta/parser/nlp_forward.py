@@ -409,10 +409,10 @@ class NLPForwardParser:
             node.set_slot("NSM_MORE", 1)
         if any(w in tokens for w in ("part", "portion", "piece", "component", "fraction", "segment", "element", "member")):
             node.set_slot("NSM_PART", 1)
-            node.set_slot("EXT_DOM_MEREOLOGICAL_PART", 1)
+            node.set_slot("MEREOLOGY_MERONYM_PART", 1)
         if any(w in tokens for w in ("first", "second", "third", "next", "last", "1st", "2nd", "3rd", "finally")):
             node.set_slot("LJB_MOI_ORDINAL", 1)
-            node.set_slot("EXT_DOM_TEMPORAL_ORDER", 1)
+            node.set_slot("TEMP_ALLEN_BEFORE", 1)
         if any(w in tokens for w in ("each other", "one another", "mutually", "reciprocally", "together")):
             node.set_slot("LJB_SOI_RECIPROCAL", 1)
 
@@ -481,7 +481,7 @@ class NLPForwardParser:
         if any(w in tokens for w in ("near", "close", "adjacent", "by", "beside", "next to", "alongside")):
             node.set_slot("NSM_NEAR", 1)
             node.set_slot("LJB_VI_SHORT_DISTANCE", 1)
-            node.set_slot("EXT_DOM_SPATIAL_ADJACENT", 1)
+            node.set_slot("SPATIAL_RCC_EXT_CONNECTED", 1)
         if any(w in tokens for w in ("side", "left", "right", "flank", "edge", "border")):
             node.set_slot("NSM_SIDE", 1)
         if any(w in tokens for w in ("inside", "in", "within", "into", "interior")):
@@ -535,7 +535,7 @@ class NLPForwardParser:
             node.set_slot("LJB_GANAI_IF_THEN", 1)
             node.set_slot("EPIST_ABDUCTIVE_BEST_EXPL", 1)
             node.set_slot("WN_MOTIVE_REASON", 1)
-            node.set_slot("EXT_DOM_CAUSAL_MECHANISM", 1)
+            node.set_slot("CAUSAL_DIRECT_MECHANISM", 1)
         if any(w in tokens for w in ("like", "as", "similar", "resembles")):
             node.set_slot("NSM_SAME", 1)
 
@@ -587,8 +587,8 @@ class NLPForwardParser:
             node.set_slot("GRAPH_BRANCH_COND", 1)
             node.set_slot("GRAPH_BRANCH_THEN", 1)
         if any(w in tokens for w in ("moved", "went", "travelled", "journeyed", "walked", "entered", "left", "dropped", "picked", "got", "took")):
-            node.set_slot("EXT_DOM_STATE_TRANSITION", 1)
+            node.set_slot("TEMP_ALLEN_MEETS", 1)
         if any(w in tokens for w in ("want", "wants", "wanted", "wish", "wishes", "intend", "intends", "purpose", "goal")):
-            node.set_slot("EXT_DOM_AGENT_INTENT", 1)
+            node.set_slot("TOM_INTENTION", 1)
         if any(w in tokens for w in ("meet", "met", "visit", "visited", "talk", "talked", "together", "each other")):
             node.set_slot("TOM_SHARED_ATTENTION", 1)

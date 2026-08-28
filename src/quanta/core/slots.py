@@ -2,9 +2,9 @@
 
 Partitions the 256 dimensions into four isolated 64-slot bands:
 - Band 0 (0-63): Universal NSM Primes & Kinematics
-- Band 1 (64-127): Structural Valencies & Concurrency Topology
-- Band 2 (128-191): Ontological Signatures & Theory of Mind Modalities
-- Band 3 (192-255): Epistemic Bounds, Probability & Logical Metarules
+- Band 1 (64-127): Structural Valencies, Formal Connectives & Graph/AST Topology
+- Band 2 (128-191): Ontological Signatures, Capabilities & Theory of Mind
+- Band 3 (192-255): Epistemic Bounds, Proof Solvers & Static Meta-Calculi
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ BAND_0_SLOTS = [
     SlotDefinition(4, "NSM_PEOPLE", SlotBand.BAND_0_NSM_KINEMATICS, "Substantives", "Plural humans prime"),
     SlotDefinition(5, "NSM_BODY", SlotBand.BAND_0_NSM_KINEMATICS, "Substantives", "Physical organism body prime"),
     
-    # Quantifiers & Determiners (06-17)
+    # Determiners & Quantifiers (06-17)
     SlotDefinition(6, "NSM_THIS", SlotBand.BAND_0_NSM_KINEMATICS, "Determiners", "Proximal deictic determiner"),
     SlotDefinition(7, "NSM_SAME", SlotBand.BAND_0_NSM_KINEMATICS, "Determiners", "Identity relation prime"),
     SlotDefinition(8, "NSM_OTHER", SlotBand.BAND_0_NSM_KINEMATICS, "Determiners", "Alterior / difference prime"),
@@ -111,51 +111,51 @@ BAND_0_SLOTS = [
 ]
 
 # ==============================================================================
-# BAND 1: Structural Valencies & Concurrency Topology (64-127)
+# BAND 1: Structural Valencies, Connectives & ASG/AST Topology (64-127)
 # ==============================================================================
 BAND_1_SLOTS = [
-    # Predicate Place Structures (64-74)
+    # Predicate Valencies & Thematic Slots (64-74)
     SlotDefinition(64, "VAL_X1_AGENT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Actor / initiator place x1"),
     SlotDefinition(65, "VAL_X2_PATIENT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Patient / theme / undergoer place x2"),
     SlotDefinition(66, "VAL_X3_DESTINATION", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Goal / recipient / destination place x3"),
     SlotDefinition(67, "VAL_X4_SOURCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Origin / source place x4"),
     SlotDefinition(68, "VAL_X5_INSTRUMENT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Instrument / medium place x5"),
     SlotDefinition(69, "VAL_EXPERIENCER", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Experiencer / sentient recipient"),
-    SlotDefinition(70, "VAL_TIME_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Temporal anchor argument"),
-    SlotDefinition(71, "VAL_LOCATION_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Spatial frame argument"),
-    SlotDefinition(72, "VAL_MANNER_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Manner / modification argument"),
+    SlotDefinition(70, "VAL_LOCATION_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Spatial frame argument"),
+    SlotDefinition(71, "VAL_TIME_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Temporal anchor argument"),
+    SlotDefinition(72, "VAL_MANNER_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Manner / qualitative modification argument"),
     SlotDefinition(73, "VAL_PURPOSE_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Teleological goal argument"),
     SlotDefinition(74, "VAL_RESULT_SLOT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Valency", "Result / output state argument"),
 
-    # Logical Connectives / cmavo (75-95)
+    # Logical Connectives & Formal Grammatical Relators (75-89)
     SlotDefinition(75, "LJB_NA_NEGATION", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Brute truth-functional negation"),
     SlotDefinition(76, "LJB_JE_AND", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Conjunction / logical AND"),
     SlotDefinition(77, "LJB_JA_OR", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Inclusive disjunction / logical OR"),
     SlotDefinition(78, "LJB_JON_XOR", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Exclusive disjunction / logical XOR"),
     SlotDefinition(79, "LJB_GANAI_IF_THEN", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Material implication / conditional"),
     SlotDefinition(80, "LJB_DU_IDENTITY", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Strict logical identity (=)"),
-    SlotDefinition(81, "LJB_PU_PAST_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Past tense grammatical marker"),
-    SlotDefinition(82, "LJB_CA_PRESENT_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Present tense grammatical marker"),
-    SlotDefinition(83, "LJB_BA_FUTURE_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Future tense grammatical marker"),
-    SlotDefinition(84, "LJB_VI_SHORT_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Near distance spatial marker"),
-    SlotDefinition(85, "LJB_VA_MEDIUM_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Medium distance spatial marker"),
-    SlotDefinition(86, "LJB_VU_LONG_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Far distance spatial marker"),
-    SlotDefinition(87, "LJB_ZI_SHORT_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Recent past marker"),
-    SlotDefinition(88, "LJB_ZA_MEDIUM_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Intermediate past marker"),
-    SlotDefinition(89, "LJB_ZU_LONG_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Ancient/distant past marker"),
-    SlotDefinition(90, "LJB_RO_ALL_QUANT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "All / every formal quantifier"),
+    SlotDefinition(81, "LJB_SOI_RECIPROCAL", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Reciprocal / mutual relation marker"),
+    SlotDefinition(82, "LJB_PU_PAST_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Past tense grammatical marker"),
+    SlotDefinition(83, "LJB_CA_PRESENT_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Present tense grammatical marker"),
+    SlotDefinition(84, "LJB_BA_FUTURE_TENSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Tense", "Future tense grammatical marker"),
+    SlotDefinition(85, "LJB_VI_SHORT_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Near distance spatial marker"),
+    SlotDefinition(86, "LJB_VA_MEDIUM_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Medium distance spatial marker"),
+    SlotDefinition(87, "LJB_VU_LONG_DISTANCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Spatial Tense", "Far distance spatial marker"),
+    SlotDefinition(88, "LJB_ZI_SHORT_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Recent past marker"),
+    SlotDefinition(89, "LJB_ZA_MEDIUM_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Intermediate past marker"),
+
+    # Quantifiers & Concurrency Markers (90-98)
+    SlotDefinition(90, "LJB_RO_ALL_QUANT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "All / every formal universal quantifier"),
     SlotDefinition(91, "LJB_SUO_AT_LEAST_ONE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "At least one existential quantifier"),
     SlotDefinition(92, "LJB_NO_NONE_QUANT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "Zero / none formal quantifier"),
     SlotDefinition(93, "LJB_MOI_ORDINAL", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "Ordinal modifier"),
     SlotDefinition(94, "LJB_MEI_CARDINAL", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Quantifiers", "Cardinal group converter"),
-    SlotDefinition(95, "LJB_SOI_RECIPROCAL", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Connectives", "Reciprocal / mutual relation marker"),
-
-    # Asynchronous Concurrency markers (96-98)
+    SlotDefinition(95, "LJB_ZU_LONG_PAST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Temporal Interval", "Ancient/distant past marker"),
     SlotDefinition(96, "LJB_ASYNC_CONCURRENT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Concurrency", "Concurrent non-blocking execution"),
     SlotDefinition(97, "LJB_MUTEX_DEPENDENCY", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Concurrency", "Mutual exclusion synchronization dependency"),
     SlotDefinition(98, "LJB_RACE_CONDITION", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Concurrency", "Non-deterministic race order flag"),
 
-    # Graph Structural Topology (99-127)
+    # Abstract Syntax Graph (ASG) & Code Structure Topology (99-127)
     SlotDefinition(99, "GRAPH_ROOT_NODE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Root proposition node of ASG"),
     SlotDefinition(100, "GRAPH_LEAF", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Terminal leaf entity in ASG"),
     SlotDefinition(101, "GRAPH_RECURSIVE_REF", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Self-referential recursive backlink"),
@@ -165,24 +165,24 @@ BAND_1_SLOTS = [
     SlotDefinition(105, "GRAPH_BRANCH_COND", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Branch condition evaluation head"),
     SlotDefinition(106, "GRAPH_BRANCH_THEN", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Branch true evaluation branch"),
     SlotDefinition(107, "GRAPH_BRANCH_ELSE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Branch false evaluation branch"),
-    SlotDefinition(108, "GRAPH_MERKLE_FOLD_POINT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Merkle tree folding boundary"),
-    SlotDefinition(109, "GRAPH_EXT_REFERENCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "External CID reference link"),
-    SlotDefinition(110, "GRAPH_ANAPHORA_TARGET", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Pronoun / anaphora referent link"),
-    SlotDefinition(111, "GRAPH_COREF_BUNDLE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Co-reference equivalence cluster"),
-    SlotDefinition(112, "GRAPH_METADATA_HEADER", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Metadata / provenance envelope"),
-    SlotDefinition(113, "GRAPH_SCOPED_CONTEXT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Lexical / operational scope container"),
-    SlotDefinition(114, "GRAPH_CLOSURE_CAPTURE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Captured environment variable closure"),
-    SlotDefinition(115, "GRAPH_TYPE_SIGNATURE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Static type constraint descriptor"),
-    SlotDefinition(116, "GRAPH_SCHEMA_SPEC", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Imported library schema definition"),
-    SlotDefinition(117, "GRAPH_INVOCATION_HEAD", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Function / predicate call operator"),
-    SlotDefinition(118, "GRAPH_ARGUMENT_LIST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Variadic argument sequence head"),
-    SlotDefinition(119, "GRAPH_RETURN_VALUE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Evaluation outcome sink"),
-    SlotDefinition(120, "GRAPH_EXCEPTION_HANDLE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Error / exceptional exit branch"),
-    SlotDefinition(121, "GRAPH_ASSERTION_CLAIM", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Logical assertion proposition head"),
-    SlotDefinition(122, "GRAPH_QUERY_TARGET", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Goal / query variable target"),
-    SlotDefinition(123, "GRAPH_ENTAILMENT_EDGE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Deductive derivation edge"),
-    SlotDefinition(124, "GRAPH_CONTRADICTION_EDGE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Mutual exclusivity constraint edge"),
-    SlotDefinition(125, "GRAPH_PROBABILISTIC_PRIOR", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Prior Bayesian probability attachment"),
+    SlotDefinition(108, "GRAPH_CONTROL_LOOP", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Iteration loop construct (while/for)"),
+    SlotDefinition(109, "GRAPH_FUNCTION_DEF", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Function or method definition"),
+    SlotDefinition(110, "GRAPH_INVOCATION_CALL", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Function or operator invocation"),
+    SlotDefinition(111, "GRAPH_VARIABLE_BIND", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Variable assignment / lexical binding"),
+    SlotDefinition(112, "GRAPH_ARGUMENT_LIST", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Variadic argument sequence head"),
+    SlotDefinition(113, "GRAPH_RETURN_VALUE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Evaluation outcome / return sink"),
+    SlotDefinition(114, "GRAPH_SCOPED_CONTEXT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Lexical scope block container"),
+    SlotDefinition(115, "GRAPH_CLOSURE_CAPTURE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Captured environment closure"),
+    SlotDefinition(116, "GRAPH_TYPE_SIGNATURE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Static type assertion / signature"),
+    SlotDefinition(117, "GRAPH_EXCEPTION_HANDLE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "AST: Error / exception catch handler"),
+    SlotDefinition(118, "GRAPH_ANAPHORA_TARGET", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Pronoun / anaphora referent link"),
+    SlotDefinition(119, "GRAPH_COREF_BUNDLE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Co-reference equivalence cluster"),
+    SlotDefinition(120, "GRAPH_ASSERTION_CLAIM", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Logical assertion proposition head"),
+    SlotDefinition(121, "GRAPH_QUERY_TARGET", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Goal / query variable target"),
+    SlotDefinition(122, "GRAPH_ENTAILMENT_EDGE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Deductive derivation edge"),
+    SlotDefinition(123, "GRAPH_CONTRADICTION_EDGE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Mutual exclusivity constraint edge"),
+    SlotDefinition(124, "GRAPH_MERKLE_FOLD_POINT", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Merkle tree folding boundary"),
+    SlotDefinition(125, "GRAPH_EXT_REFERENCE", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "External CID reference pointer"),
     SlotDefinition(126, "GRAPH_VIRTUAL_PAGE_LINK", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Host RAM virtual page-table pointer"),
     SlotDefinition(127, "GRAPH_IMMUTABLE_HASH_LOCK", SlotBand.BAND_1_VALENCIES_TOPOLOGY, "Graph Topology", "Cryptographically locked sub-graph CID"),
 ]
@@ -191,29 +191,29 @@ BAND_1_SLOTS = [
 # BAND 2: Ontological Signatures & Theory of Mind Modalities (128-191)
 # ==============================================================================
 BAND_2_SLOTS = [
-    # Entity Types (128-147)
+    # Core Entity Types (128-147)
     SlotDefinition(128, "TYPE_ANIMATE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Biological living being"),
     SlotDefinition(129, "TYPE_HUMAN", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Human person"),
     SlotDefinition(130, "TYPE_INANIMATE_PHYSICAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Non-living physical entity"),
-    SlotDefinition(131, "TYPE_ABSTRACT_CONCEPT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Intangible / mathematical / theoretical concept"),
-    SlotDefinition(132, "TYPE_PROPOSITION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Declarative statement with truth value"),
-    SlotDefinition(133, "TYPE_EVENT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Bounded temporal transition / occurrence"),
-    SlotDefinition(134, "TYPE_STATE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Static condition or enduring property"),
-    SlotDefinition(135, "TYPE_PROCESS", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Continuous ongoing activity"),
-    SlotDefinition(136, "TYPE_TEMPORAL_INTERVAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Time span / duration / era"),
-    SlotDefinition(137, "TYPE_SPATIAL_REGION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Geometric location or zone"),
-    SlotDefinition(138, "TYPE_MEASURE_SCALAR", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Quantitative magnitude with unit"),
-    SlotDefinition(139, "TYPE_COLLECTION_SET", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Plural set or aggregated group"),
-    SlotDefinition(140, "TYPE_SUBSTANCE_MASS", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Continuous uncounted material / matter"),
-    SlotDefinition(141, "TYPE_ARTIFACT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Manufactured tool or object"),
-    SlotDefinition(142, "TYPE_NATURAL_OBJECT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Non-manufactured physical object (rock, star)"),
-    SlotDefinition(143, "TYPE_ORGANIZATION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Institutional or corporate body"),
-    SlotDefinition(144, "TYPE_COMMUNICATION_MSG", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Message, utterance, or document"),
-    SlotDefinition(145, "TYPE_ATTRIBUTE_PROPERTY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Inherent trait, quality, or descriptor"),
-    SlotDefinition(146, "TYPE_RELATION_ROLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Relational association or bridge"),
-    SlotDefinition(147, "TYPE_NUMERIC_VALUE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Pure mathematical number or constant"),
+    SlotDefinition(131, "TYPE_NATURAL_OBJECT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Non-manufactured physical object (rock, star)"),
+    SlotDefinition(132, "TYPE_ARTIFACT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Manufactured tool or object"),
+    SlotDefinition(133, "TYPE_SUBSTANCE_MASS", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Continuous uncounted material / matter"),
+    SlotDefinition(134, "TYPE_COLLECTION_SET", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Plural set or aggregated group"),
+    SlotDefinition(135, "TYPE_ABSTRACT_CONCEPT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Intangible / mathematical / theoretical concept"),
+    SlotDefinition(136, "TYPE_PROPOSITION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Declarative statement with truth value"),
+    SlotDefinition(137, "TYPE_EVENT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Bounded temporal transition / occurrence"),
+    SlotDefinition(138, "TYPE_STATE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Static condition or enduring property"),
+    SlotDefinition(139, "TYPE_PROCESS", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Continuous ongoing activity"),
+    SlotDefinition(140, "TYPE_TEMPORAL_INTERVAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Time span / duration / era"),
+    SlotDefinition(141, "TYPE_SPATIAL_REGION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Geometric location or zone"),
+    SlotDefinition(142, "TYPE_MEASURE_SCALAR", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Quantitative magnitude with unit"),
+    SlotDefinition(143, "TYPE_NUMERIC_VALUE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Pure mathematical number or constant"),
+    SlotDefinition(144, "TYPE_ORGANIZATION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Institutional or corporate body"),
+    SlotDefinition(145, "TYPE_COMMUNICATION_MSG", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Message, utterance, or document"),
+    SlotDefinition(146, "TYPE_ATTRIBUTE_PROPERTY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Inherent trait, quality, or descriptor"),
+    SlotDefinition(147, "TYPE_RELATION_ROLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Entity Types", "Relational association or bridge"),
 
-    # Semantic Roles & Capabilities (148-154)
+    # Semantic Roles & Capabilities (148-155)
     SlotDefinition(148, "ROLE_AGENT_CAPABLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Capable of intentional volition / action"),
     SlotDefinition(149, "ROLE_SENTIENT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Capable of subjective perception and feeling"),
     SlotDefinition(150, "ROLE_MOVEABLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Capable of physical translation in space"),
@@ -221,28 +221,28 @@ BAND_2_SLOTS = [
     SlotDefinition(152, "ROLE_CONSUMABLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Can be ingested, depleted, or absorbed"),
     SlotDefinition(153, "ROLE_CONTAINER", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Can enclose other physical/abstract entities"),
     SlotDefinition(154, "ROLE_INSTRUMENT_USABLE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Can be utilized by an agent as an instrument"),
+    SlotDefinition(155, "ROLE_VOLITIONAL_SOURCE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Capabilities", "Origin of willful command or purpose"),
 
-    # Theory of Mind & Deception (155-156)
-    SlotDefinition(155, "ROLE_DECEPTIVE_PROJECTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Deceptive or manipulative communicative intent"),
-    SlotDefinition(156, "ROLE_SARCASM_IRONY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Pragmatic irony or sarcastic reversal"),
+    # Thematic & Cognitive Perspectives (156-159)
+    SlotDefinition(156, "ROLE_COGNITIVE_SUBJECT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Subject of internal cognition or belief"),
+    SlotDefinition(157, "ROLE_AFFECTIVE_TARGET", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Object of emotional valence"),
+    SlotDefinition(158, "ROLE_EPISTEMIC_AUTHORITY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Source of truth / authoritative claim"),
+    SlotDefinition(159, "ROLE_PATIENT_TARGET", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Entity targeted for state transition"),
 
-    # Modality Overlays (157-158)
-    SlotDefinition(157, "MODALITY_LITERAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Strict literal compositional interpretation"),
-    SlotDefinition(158, "MODALITY_FIGURATIVE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Metaphorical, allegorical, or poetic interpretation"),
+    # Theory of Mind & Cognitive State (160-166)
+    SlotDefinition(160, "TOM_BELIEF_FIRST_ORDER", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent belief about world state (A believes X)"),
+    SlotDefinition(161, "TOM_BELIEF_SECOND_ORDER", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent belief about other belief (A believes B believes X)"),
+    SlotDefinition(162, "TOM_INTENTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent teleological commitment to an action"),
+    SlotDefinition(163, "TOM_DESIRE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent appetitive / goal preference"),
+    SlotDefinition(164, "TOM_SHARED_ATTENTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Intersubjective mutual focus"),
+    SlotDefinition(165, "ROLE_DECEPTIVE_PROJECTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Deceptive or manipulative communicative intent"),
+    SlotDefinition(166, "ROLE_SARCASM_IRONY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Pragmatic irony or sarcastic reversal"),
 
-    # Extended Theory of Mind & Semantic Attributes (159-170)
-    SlotDefinition(159, "TOM_BELIEF_FIRST_ORDER", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent belief about world state (A believes X)"),
-    SlotDefinition(160, "TOM_BELIEF_SECOND_ORDER", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent belief about other belief (A believes B believes X)"),
-    SlotDefinition(161, "TOM_INTENTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent teleological commitment to an action"),
-    SlotDefinition(162, "TOM_DESIRE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Agent appetitive / goal preference"),
-    SlotDefinition(163, "TOM_SHARED_ATTENTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Theory of Mind", "Intersubjective mutual focus"),
-    SlotDefinition(164, "MODALITY_HYPOTHETICAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Conditional / hypothetical scenario premise"),
-    SlotDefinition(165, "MODALITY_COUNTERFACTUAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Counterfactual world branch (contrary to fact)"),
-    SlotDefinition(166, "MODALITY_METAPHORICAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Cross-domain mapping metaphor"),
-    SlotDefinition(167, "ROLE_COGNITIVE_SUBJECT", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Subject of internal cognition or belief"),
-    SlotDefinition(168, "ROLE_AFFECTIVE_TARGET", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Object of emotional valence"),
-    SlotDefinition(169, "ROLE_VOLITIONAL_SOURCE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Origin of willful command or purpose"),
-    SlotDefinition(170, "ROLE_EPISTEMIC_AUTHORITY", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Thematic Roles", "Source of truth / authoritative claim"),
+    # Modality Overlays (167-170)
+    SlotDefinition(167, "MODALITY_LITERAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Strict literal compositional interpretation"),
+    SlotDefinition(168, "MODALITY_FIGURATIVE", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Metaphorical or allegorical interpretation"),
+    SlotDefinition(169, "MODALITY_HYPOTHETICAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Conditional / hypothetical scenario premise"),
+    SlotDefinition(170, "MODALITY_COUNTERFACTUAL", SlotBand.BAND_2_ONTOLOGY_MODALITY, "Modality", "Counterfactual world branch (contrary to fact)"),
 
     # WordNet Root Categories (171-191)
     SlotDefinition(171, "WN_ACT_ACTION", SlotBand.BAND_2_ONTOLOGY_MODALITY, "WordNet Roots", "wn:act - actions, deeds"),
@@ -269,30 +269,32 @@ BAND_2_SLOTS = [
 ]
 
 # ==============================================================================
-# BAND 3: Epistemic Bounds, Probability & Logical Metarules (192-255)
+# BAND 3: Epistemic Bounds, Proof Solvers & Static Meta-Calculi (192-255)
 # ==============================================================================
 BAND_3_SLOTS = [
-    # Epistemic Context (192-200)
+    # Epistemic Context & Knowledge Sources (192-197)
     SlotDefinition(192, "EPIST_DIRECT_OBSERVATION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Empirically verified direct sensory observation"),
     SlotDefinition(193, "EPIST_DEDUCTIVE_INFERENCE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Sound deductive entailment from known axioms"),
     SlotDefinition(194, "EPIST_INDUCTIVE_GENERAL", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Inductive statistical generalization"),
     SlotDefinition(195, "EPIST_ABDUCTIVE_BEST_EXPL", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Abductive inference to best explanation"),
     SlotDefinition(196, "EPIST_HEARSAY_TESTIMONY", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Indirect hearsay or second-hand testimony"),
     SlotDefinition(197, "EPIST_AXIOMATIC_PREMISE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Epistemic Context", "Given ground truth or assumed premise"),
+
+    # Deontic Modality (198-200)
     SlotDefinition(198, "EPIST_DEONTIC_OBLIGATION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Deontic Modality", "Strict normative duty / requirement (Must)"),
     SlotDefinition(199, "EPIST_DEONTIC_PERMISSION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Deontic Modality", "Normative permission (May)"),
     SlotDefinition(200, "EPIST_DEONTIC_PROHIBITION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Deontic Modality", "Normative prohibition (Must Not)"),
 
-    # Probabilistic Weights (201-207)
+    # Probabilistic & Quantitative Truth Bounds (201-207)
     SlotDefinition(201, "EPIST_PROB_CERTAIN", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "P = 1.0 (Deterministic certainty)"),
     SlotDefinition(202, "EPIST_PROB_HIGH", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "P >= 0.8 (Strong probabilistic confidence)"),
     SlotDefinition(203, "EPIST_PROB_MARGINAL", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "P ~ 0.5 (Equi-probable or marginal)"),
     SlotDefinition(204, "EPIST_PROB_DISTRIBUTED", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "Multi-modal probability distribution"),
     SlotDefinition(205, "EPIST_STATISTICAL_EDGE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "Plausible correlation with statistical edge"),
-    SlotDefinition(206, "EPIST_FUZZY_PLAUSIBILITY", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "Possibilistic fuzzy truth evaluation"),
+    SlotDefinition(206, "EPIST_FUZZY_PLAUSIBILITY", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "Possibilistic fuzzy truth degree"),
     SlotDefinition(207, "EPIST_DEFAULT_HEURISTIC", SlotBand.BAND_3_EPISTEMIC_METARULES, "Probability", "Non-monotonic default presumption"),
 
-    # s(CASP) & Proof Solver Flags (208-223)
+    # s(CASP) & Proof Solver Invariants (208-223)
     SlotDefinition(208, "SOLVER_CWA_CLOSED_WORLD", SlotBand.BAND_3_EPISTEMIC_METARULES, "Solver Flags", "Closed World Assumption flag for s(CASP)"),
     SlotDefinition(209, "SOLVER_MUC_TARGETED", SlotBand.BAND_3_EPISTEMIC_METARULES, "Solver Flags", "Minimal Unsatisfiable Core candidate target"),
     SlotDefinition(210, "SOLVER_PROOF_VALIDATED", SlotBand.BAND_3_EPISTEMIC_METARULES, "Solver Flags", "Verified stable model theorem"),
@@ -310,39 +312,45 @@ BAND_3_SLOTS = [
     SlotDefinition(222, "SOLVER_STABLE_MODEL_MEMBER", SlotBand.BAND_3_EPISTEMIC_METARULES, "Solver Flags", "Atom belongs to active answer set"),
     SlotDefinition(223, "SOLVER_PARTIAL_INTERPRETATION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Solver Flags", "3-valued partial model assignment"),
 
-    # Extension Registers & AST / Domain Primitives (224-255)
-    SlotDefinition(224, "EXT_AST_FUNCTION_DEF", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Function or method definition"),
-    SlotDefinition(225, "EXT_AST_RETURN", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Return expression"),
-    SlotDefinition(226, "EXT_AST_CALL", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Function or operator call"),
-    SlotDefinition(227, "EXT_AST_VARIABLE_BINDING", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Variable assignment / binding"),
-    SlotDefinition(228, "EXT_AST_SCOPE_ENTER", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Lexical block entry"),
-    SlotDefinition(229, "EXT_AST_SCOPE_EXIT", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Lexical block exit"),
-    SlotDefinition(230, "EXT_AST_CONTROL_LOOP", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Iteration loop (while/for)"),
-    SlotDefinition(231, "EXT_AST_TYPE_CHECK", SlotBand.BAND_3_EPISTEMIC_METARULES, "AST Primitives", "AST: Type cast / assertion check"),
-    SlotDefinition(232, "EXT_DOM_TEMPORAL_ORDER", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Temporal ordering constraint (Allen interval)"),
-    SlotDefinition(233, "EXT_DOM_SPATIAL_ADJACENT", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Spatial adjacency topology"),
-    SlotDefinition(234, "EXT_DOM_CAUSAL_MECHANISM", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Direct causal dependency"),
-    SlotDefinition(235, "EXT_DOM_MEREOLOGICAL_PART", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Mereological whole-part relationship"),
-    SlotDefinition(236, "EXT_DOM_AGENT_INTENT", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Strategic intentional objective"),
-    SlotDefinition(237, "EXT_DOM_RESOURCE_BOUND", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Resource constraint (memory, time, energy)"),
-    SlotDefinition(238, "EXT_DOM_STATE_TRANSITION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Automata state machine transition"),
-    SlotDefinition(239, "EXT_DOM_EVIDENCE_WEIGHT", SlotBand.BAND_3_EPISTEMIC_METARULES, "Domain Primitives", "Evidential support weight"),
-    SlotDefinition(240, "EXT_REG_240", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 240"),
-    SlotDefinition(241, "EXT_REG_241", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 241"),
-    SlotDefinition(242, "EXT_REG_242", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 242"),
-    SlotDefinition(243, "EXT_REG_243", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 243"),
-    SlotDefinition(244, "EXT_REG_244", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 244"),
-    SlotDefinition(245, "EXT_REG_245", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 245"),
-    SlotDefinition(246, "EXT_REG_246", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 246"),
-    SlotDefinition(247, "EXT_REG_247", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 247"),
-    SlotDefinition(248, "EXT_REG_248", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 248"),
-    SlotDefinition(249, "EXT_REG_249", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 249"),
-    SlotDefinition(250, "EXT_REG_250", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 250"),
-    SlotDefinition(251, "EXT_REG_251", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 251"),
-    SlotDefinition(252, "EXT_REG_252", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 252"),
-    SlotDefinition(253, "EXT_REG_253", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 253"),
-    SlotDefinition(254, "EXT_REG_254", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 254"),
-    SlotDefinition(255, "EXT_REG_255", SlotBand.BAND_3_EPISTEMIC_METARULES, "Extension Registers", "General purpose extension slot 255"),
+    # Qualitative Temporal Relations (Allen's Interval Algebra) (224-231)
+    SlotDefinition(224, "TEMP_ALLEN_BEFORE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X strictly precedes Y (X < Y)"),
+    SlotDefinition(225, "TEMP_ALLEN_MEETS", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X touches start of Y at boundary"),
+    SlotDefinition(226, "TEMP_ALLEN_OVERLAPS", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X starts before Y and overlaps"),
+    SlotDefinition(227, "TEMP_ALLEN_STARTS", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X shares start boundary with Y"),
+    SlotDefinition(228, "TEMP_ALLEN_DURING", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X strictly contained within Y interval"),
+    SlotDefinition(229, "TEMP_ALLEN_FINISHES", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X shares end boundary with Y"),
+    SlotDefinition(230, "TEMP_ALLEN_EQUALS", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Allen: X and Y are temporally congruent"),
+    SlotDefinition(231, "TEMP_SYNCHRONOUS_COINCIDE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Temporal Calculus", "Simultaneous synchronous occurrence"),
+
+    # Spatial Topology & Mereology (RCC-8 / Qualitative Spatial Calculus) (232-239)
+    SlotDefinition(232, "SPATIAL_RCC_DISCONNECTED", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Disconnected regions (DC)"),
+    SlotDefinition(233, "SPATIAL_RCC_EXT_CONNECTED", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Externally connected / boundary touching (EC)"),
+    SlotDefinition(234, "SPATIAL_RCC_PARTIAL_OVERLAP", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Partially overlapping regions (PO)"),
+    SlotDefinition(235, "SPATIAL_RCC_TANGENTIAL_PART", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Tangential proper part (TPP)"),
+    SlotDefinition(236, "SPATIAL_RCC_NON_TANG_PART", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Non-tangential proper interior part (NTPP)"),
+    SlotDefinition(237, "SPATIAL_RCC_CONGRUENT_EQ", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "RCC-8: Geometrically congruent regions (EQ)"),
+    SlotDefinition(238, "MEREOLOGY_HOLONYM_WHOLE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "Mereological composite whole entity"),
+    SlotDefinition(239, "MEREOLOGY_MERONYM_PART", SlotBand.BAND_3_EPISTEMIC_METARULES, "Spatial Mereotopology", "Mereological constituent part"),
+
+    # Causal & Counterfactual Calculus (Pearl's Causal Hierarchy) (240-247)
+    SlotDefinition(240, "CAUSAL_DIRECT_MECHANISM", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Direct physical causal link (X -> Y)"),
+    SlotDefinition(241, "CAUSAL_ENABLING_CONDITION", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Necessary enabling background precondition"),
+    SlotDefinition(242, "CAUSAL_PREVENTIVE_BLOCK", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Active causal inhibitor or blocker"),
+    SlotDefinition(243, "CAUSAL_INTERVENTION_DO", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Pearl: Active intervention do(X)"),
+    SlotDefinition(244, "CAUSAL_COUNTERFACTUAL_NEC", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Counterfactual necessity (but-for clause)"),
+    SlotDefinition(245, "CAUSAL_COUNTERFACTUAL_SUFF", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Counterfactual sufficient cause"),
+    SlotDefinition(246, "CAUSAL_COMMON_CONFOUNDER", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Fork structure: Unobserved/common confounder"),
+    SlotDefinition(247, "CAUSAL_COLLIDER_EFFECT", SlotBand.BAND_3_EPISTEMIC_METARULES, "Causal Calculus", "Collider structure: Joint effect sink"),
+
+    # Higher-Order Modal & Epistemic Logic Metarules (248-255)
+    SlotDefinition(248, "LOGIC_NECESSITY_BOX", SlotBand.BAND_3_EPISTEMIC_METARULES, "Formal Modal Logic", "Alethic necessity: Box P (Necessarily True)"),
+    SlotDefinition(249, "LOGIC_POSSIBILITY_DIAMOND", SlotBand.BAND_3_EPISTEMIC_METARULES, "Formal Modal Logic", "Alethic possibility: Diamond P (Possibly True)"),
+    SlotDefinition(250, "LOGIC_COMMON_KNOWLEDGE", SlotBand.BAND_3_EPISTEMIC_METARULES, "Formal Modal Logic", "Epistemic logic: Common knowledge in group C_G(P)"),
+    SlotDefinition(251, "LOGIC_DISTRIBUTED_KNOW", SlotBand.BAND_3_EPISTEMIC_METARULES, "Formal Modal Logic", "Epistemic logic: Distributed knowledge D_G(P)"),
+    SlotDefinition(252, "LOGIC_TEMPORAL_ALWAYS_G", SlotBand.BAND_3_EPISTEMIC_METARULES, "Linear Temporal Logic", "LTL: Globally / Always operator (G P)"),
+    SlotDefinition(253, "LOGIC_TEMPORAL_EVENTUALLY_F", SlotBand.BAND_3_EPISTEMIC_METARULES, "Linear Temporal Logic", "LTL: Eventually / Finally operator (F P)"),
+    SlotDefinition(254, "LOGIC_TEMPORAL_NEXT_X", SlotBand.BAND_3_EPISTEMIC_METARULES, "Linear Temporal Logic", "LTL: Next state operator (X P)"),
+    SlotDefinition(255, "LOGIC_TEMPORAL_UNTIL_U", SlotBand.BAND_3_EPISTEMIC_METARULES, "Linear Temporal Logic", "LTL: Strong until operator (P U Q)"),
 ]
 
 # Combined canonical list of all 256 slots

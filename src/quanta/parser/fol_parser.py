@@ -101,7 +101,7 @@ class FOLParser:
                     arg_node.set_slot("VAL_X3_DESTINATION", 1)
 
                 if arg.islower() and len(arg) == 1:  # Variable like x, y
-                    arg_node.set_slot("EXT_AST_VARIABLE_BINDING", 1)
+                    arg_node.set_slot("GRAPH_VARIABLE_BIND", 1)
                 else:  # Constant like 'socrates'
                     arg_node.set_slot("TYPE_HUMAN", 1)
                     arg_node.set_slot("ROLE_AGENT_CAPABLE", 1)

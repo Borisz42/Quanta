@@ -38,9 +38,9 @@ class ASTForwardParser:
 
         # 1. Function / Method Definitions
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            q_node.set_slot("EXT_AST_FUNCTION_DEF", 1)
+            q_node.set_slot("GRAPH_FUNCTION_DEF", 1)
             q_node.set_slot("GRAPH_ROOT_NODE", 1)
-            q_node.set_slot("EXT_AST_SCOPE_ENTER", 1)
+            q_node.set_slot("GRAPH_SCOPED_CONTEXT", 1)
             q_node.set_slot("TYPE_PROCESS", 1)
             q_node.set_slot("ROLE_COMMUNICATOR", 1)
             q_node.anchor = f"func:{node.name}"
@@ -54,7 +54,7 @@ class ASTForwardParser:
             # Arguments
             for arg in node.args.args:
                 arg_qnode = QuantaNode(literal=f"arg:{arg.arg}")
-                arg_qnode.set_slot("EXT_AST_VARIABLE_BINDING", 1)
+                arg_qnode.set_slot("GRAPH_VARIABLE_BIND", 1)
                 arg_qnode.set_slot("VAL_X1_AGENT", 1)
                 arg_qnode.set_slot("GRAPH_ARGUMENT_LIST", 1)
                 arg_qnode.set_slot("GRAPH_LEAF", 1)
@@ -90,7 +90,7 @@ class ASTForwardParser:
 
         # 3. Loops (For / While)
         elif isinstance(node, (ast.For, ast.While, ast.AsyncFor)):
-            q_node.set_slot("EXT_AST_CONTROL_LOOP", 1)
+            q_node.set_slot("GRAPH_CONTROL_LOOP", 1)
             q_node.set_slot("GRAPH_CYCLIC_BACKLINK", 1)
             q_node.set_slot("NSM_CONTINUOUS_RATE", 1)
             q_node.set_slot("TYPE_PROCESS", 1)
@@ -127,12 +127,11 @@ class ASTForwardParser:
 
         # 5. Assignments (Assign / AugAssign / AnnAssign)
         elif isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
-            q_node.set_slot("EXT_AST_VARIABLE_BINDING", 1)
+            q_node.set_slot("GRAPH_VARIABLE_BIND", 1)
             q_node.set_slot("LJB_DU_IDENTITY", 1)
             q_node.set_slot("TYPE_EVENT", 1)
 
             if isinstance(node, ast.AnnAssign):
-                q_node.set_slot("EXT_AST_TYPE_CHECK", 1)
                 q_node.set_slot("GRAPH_TYPE_SIGNATURE", 1)
 
             if isinstance(node, ast.AugAssign):
@@ -148,9 +147,8 @@ class ASTForwardParser:
 
         # 6. Returns & Yields
         elif isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom)):
-            q_node.set_slot("EXT_AST_RETURN", 1)
-            q_node.set_slot("EXT_AST_SCOPE_EXIT", 1)
             q_node.set_slot("GRAPH_RETURN_VALUE", 1)
+            q_node.set_slot("GRAPH_SCOPED_CONTEXT", 1)
 
             graph.add_node(q_node)
 
@@ -162,8 +160,7 @@ class ASTForwardParser:
 
         # 7. Function Calls
         elif isinstance(node, ast.Call):
-            q_node.set_slot("EXT_AST_CALL", 1)
-            q_node.set_slot("GRAPH_INVOCATION_HEAD", 1)
+            q_node.set_slot("GRAPH_INVOCATION_CALL", 1)
             q_node.set_slot("TYPE_EVENT", 1)
 
             if isinstance(node.func, ast.Name):
@@ -249,7 +246,7 @@ class ASTForwardParser:
 
         # 12. Identifiers (Name)
         elif isinstance(node, ast.Name):
-            q_node.set_slot("EXT_AST_VARIABLE_BINDING", 1)
+            q_node.set_slot("GRAPH_VARIABLE_BIND", 1)
             q_node.anchor = f"var:{node.id}"
             q_node.literal = node.id
             lemma = node.id.lower().replace("_", "")

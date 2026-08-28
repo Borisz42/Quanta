@@ -10,6 +10,9 @@ from pathlib import Path
 import sys
 import numpy as np
 
+# Ensure quanta package is importable when run directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from quanta.core.asg import QuantaNode
 from quanta.core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_names
 from quanta.data.real_loader import RealDatasetLoader

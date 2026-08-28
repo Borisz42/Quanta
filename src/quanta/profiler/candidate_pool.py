@@ -208,7 +208,7 @@ def project_canonical_to_candidates(canonical_matrix: np.ndarray, candidates: Li
     if "FN_REASON" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["FN_REASON"]] = get_c("WN_MOTIVE_REASON")
     if "FN_CAUSE" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["FN_CAUSE"]] = get_c("EXT_DOM_CAUSAL_MECHANISM")
+        candidate_matrix[:, cand_name_to_idx["FN_CAUSE"]] = get_c("CAUSAL_DIRECT_MECHANISM")
     if "FN_TIME" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["FN_TIME"]] = get_c("VAL_TIME_SLOT")
     if "FN_PLACE" in cand_name_to_idx:
@@ -254,7 +254,7 @@ def project_canonical_to_candidates(canonical_matrix: np.ndarray, candidates: Li
     if "AMR_CONDITION" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["AMR_CONDITION"]] = get_c("LJB_GANAI_IF_THEN")
     if "AMR_CAUSE" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AMR_CAUSE"]] = get_c("EXT_DOM_CAUSAL_MECHANISM")
+        candidate_matrix[:, cand_name_to_idx["AMR_CAUSE"]] = get_c("CAUSAL_DIRECT_MECHANISM")
     if "AMR_PURPOSE" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["AMR_PURPOSE"]] = get_c("VAL_PURPOSE_SLOT")
     if "AMR_CONCESSION" in cand_name_to_idx:
@@ -268,7 +268,7 @@ def project_canonical_to_candidates(canonical_matrix: np.ndarray, candidates: Li
     if "AMR_POSS" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["AMR_POSS"]] = np.maximum(get_c("NSM_HAVE"), get_c("WN_POSSESSION_ASSET"))
     if "AMR_PART" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AMR_PART"]] = np.maximum(get_c("NSM_PART"), get_c("EXT_DOM_MEREOLOGICAL_PART"))
+        candidate_matrix[:, cand_name_to_idx["AMR_PART"]] = np.maximum(get_c("NSM_PART"), get_c("MEREOLOGY_MERONYM_PART"))
     if "AMR_SUBEVENT" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["AMR_SUBEVENT"]] = get_c("GRAPH_IS_SUB_EXP")
 
@@ -328,14 +328,14 @@ def project_canonical_to_candidates(canonical_matrix: np.ndarray, candidates: Li
     if "LOGIC_AXIOM" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["LOGIC_AXIOM"]] = np.maximum(get_c("EPIST_AXIOMATIC_PREMISE"), get_c("SOLVER_PROOF_VALIDATED"))
     if "AST_DEF_FUNC" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AST_DEF_FUNC"]] = get_c("EXT_AST_FUNCTION_DEF")
+        candidate_matrix[:, cand_name_to_idx["AST_DEF_FUNC"]] = get_c("GRAPH_FUNCTION_DEF")
     if "AST_LOOP_BLOCK" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AST_LOOP_BLOCK"]] = get_c("EXT_AST_CONTROL_LOOP")
+        candidate_matrix[:, cand_name_to_idx["AST_LOOP_BLOCK"]] = get_c("GRAPH_CONTROL_LOOP")
     if "AST_BRANCH_IF" in cand_name_to_idx:
         candidate_matrix[:, cand_name_to_idx["AST_BRANCH_IF"]] = get_c("GRAPH_BRANCH_COND")
     if "AST_BIND_VAR" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AST_BIND_VAR"]] = get_c("EXT_AST_VARIABLE_BINDING")
+        candidate_matrix[:, cand_name_to_idx["AST_BIND_VAR"]] = get_c("GRAPH_VARIABLE_BIND")
     if "AST_RETURN_VAL" in cand_name_to_idx:
-        candidate_matrix[:, cand_name_to_idx["AST_RETURN_VAL"]] = get_c("EXT_AST_RETURN")
+        candidate_matrix[:, cand_name_to_idx["AST_RETURN_VAL"]] = get_c("GRAPH_RETURN_VALUE")
 
     return candidate_matrix

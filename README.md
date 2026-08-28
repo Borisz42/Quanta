@@ -44,27 +44,34 @@ Anchors concepts to universal Natural Semantic Metalanguage (NSM) primes.
 * `60–61`: Continuous Kinematics (`NSM_CONTINUOUS_RATE`, `NSM_ACCELERATING_RATE`)
 * `62–63`: Logic (CAN, MAYBE)
 
-### Band 1: Structural Valencies & Concurrency Topology (64–127)
-Defines argument structures, logical operations, and asynchronous execution paths.
-* `64–74`: Predicate Place Structures (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_X3_DESTINATION`, `VAL_EXPERIENCER`, `VAL_TIME_SLOT`)
-* `75–95`: Logical Connectives / *cmavo* (Negation, AND, OR, XOR, If-Then, Past/Present/Future tense)
+### Band 1: Structural Valencies, Formal Connectives & ASG/AST Topology (64–127)
+Defines predicate argument structures, grammatical connectives (*cmavo*), concurrency, and Abstract Syntax Graph / Code AST topology.
+* `64–74`: Predicate Valencies (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_X3_DESTINATION`, `VAL_X4_SOURCE`, `VAL_X5_INSTRUMENT`, `VAL_EXPERIENCER`, `VAL_LOCATION_SLOT`, `VAL_TIME_SLOT`, `VAL_MANNER_SLOT`, `VAL_PURPOSE_SLOT`, `VAL_RESULT_SLOT`)
+* `75–89`: Logical Connectives & Tense (`LJB_NA_NEGATION`, `LJB_JE_AND`, `LJB_JA_OR`, `LJB_JON_XOR`, `LJB_GANAI_IF_THEN`, `LJB_DU_IDENTITY`, `LJB_SOI_RECIPROCAL`, Past/Present/Future tense, Short/Medium/Long past)
+* `90–95`: Formal Quantifiers & Ordinals (`LJB_RO_ALL_QUANT`, `LJB_SUO_AT_LEAST_ONE`, `LJB_NO_NONE_QUANT`, `LJB_MOI_ORDINAL`, `LJB_MEI_CARDINAL`)
 * `96–98`: Asynchronous Concurrency markers (`LJB_ASYNC_CONCURRENT`, `LJB_MUTEX_DEPENDENCY`, `LJB_RACE_CONDITION`)
-* `99–127`: Graph Structural Topology (`GRAPH_ROOT_NODE`, `GRAPH_LEAF`, `GRAPH_RECURSIVE_REF`)
+* `99–107`: Graph Hierarchy & Branching (`GRAPH_ROOT_NODE`, `GRAPH_LEAF`, `GRAPH_RECURSIVE_REF`, `GRAPH_IS_SUB_EXP`, `GRAPH_CYCLIC_BACKLINK`, `GRAPH_ORDERED_SEQ`, `GRAPH_BRANCH_COND`, `GRAPH_BRANCH_THEN`, `GRAPH_BRANCH_ELSE`)
+* `108–117`: AST & Program Structure (`GRAPH_CONTROL_LOOP`, `GRAPH_FUNCTION_DEF`, `GRAPH_INVOCATION_CALL`, `GRAPH_VARIABLE_BIND`, `GRAPH_ARGUMENT_LIST`, `GRAPH_RETURN_VALUE`, `GRAPH_SCOPED_CONTEXT`, `GRAPH_CLOSURE_CAPTURE`, `GRAPH_TYPE_SIGNATURE`, `GRAPH_EXCEPTION_HANDLE`)
+* `118–127`: Graph Relations & Addressing (`GRAPH_ANAPHORA_TARGET`, `GRAPH_COREF_BUNDLE`, `GRAPH_ASSERTION_CLAIM`, `GRAPH_QUERY_TARGET`, `GRAPH_ENTAILMENT_EDGE`, `GRAPH_CONTRADICTION_EDGE`, `GRAPH_MERKLE_FOLD_POINT`, `GRAPH_EXT_REFERENCE`, `GRAPH_VIRTUAL_PAGE_LINK`, `GRAPH_IMMUTABLE_HASH_LOCK`)
 
 ### Band 2: Ontological Signatures & Theory of Mind Modalities (128–191)
 Enforces compile-time semantic typing via WordNet and FrameNet constraints.
-* `128–147`: Entity Types (Animate, Human, Abstract_Concept, Proposition, Event, Temporal_Interval, Measure_Scalar)
-* `148–154`: Semantic Roles (Agent_Capable, Sentient, Moveable, Communicator)
-* `155–156`: Theory of Mind / Deception (`ROLE_DECEPTIVE_PROJECTION`, `ROLE_SARCASM_IRONY`)
-* `157–158`: Modality Overlays (`MODALITY_LITERAL`, `MODALITY_FIGURATIVE`)
-* `171–191`: WordNet Root Categories (Action_Perception, Action_Motion, State_Relation)
+* `128–147`: Core Entity Types (Animate, Human, Inanimate_Physical, Natural_Object, Artifact, Substance_Mass, Collection_Set, Abstract_Concept, Proposition, Event, State, Process, Temporal_Interval, Spatial_Region, Measure_Scalar, Numeric_Value, Organization, Communication_Msg, Attribute_Property, Relation_Role)
+* `148–155`: Behavioral Capabilities & Roles (Agent_Capable, Sentient, Moveable, Communicator, Consumable, Container, Instrument_Usable, Volitional_Source)
+* `156–159`: Thematic & Cognitive Orientations (`ROLE_COGNITIVE_SUBJECT`, `ROLE_AFFECTIVE_TARGET`, `ROLE_EPISTEMIC_AUTHORITY`, `ROLE_PATIENT_TARGET`)
+* `160–166`: Theory of Mind / Deception (`TOM_BELIEF_FIRST_ORDER`, `TOM_BELIEF_SECOND_ORDER`, `TOM_INTENTION`, `TOM_DESIRE`, `TOM_SHARED_ATTENTION`, `ROLE_DECEPTIVE_PROJECTION`, `ROLE_SARCASM_IRONY`)
+* `167–170`: Modality Overlays (`MODALITY_LITERAL`, `MODALITY_FIGURATIVE`, `MODALITY_HYPOTHETICAL`, `MODALITY_COUNTERFACTUAL`)
+* `171–191`: WordNet Root Categories (Action, Animal, Artifact, Attribute, Body_Part, Cognition, Communication, Event, Feeling, Food, Group, Location, Motive, Object, Person, Phenomenon, Plant, Possession, Process, Quantity, Relation)
 
-### Band 3: Epistemic Bounds, Probability & Logical Metarules (192–255)
-Guides the `s(CASP)` constraint solver and quantitative likelihoods.
-* `192–200`: Epistemic Context (Direct Observation, Deductive Inference, Hearsay, Axiomatic, Deontic Obligation)
-* `201–204`: Probabilistic Weights (`EPIST_PROB_HIGH`, `EPIST_PROB_MARGINAL`, `EPIST_PROB_DISTRIBUTED`, `EPIST_STATISTICAL_EDGE`)
-* `208–213`: `s(CASP)` Solver Flags (Closed World Assumption, MUC Targeted, Proof Validated)
-* `224–255`: Extension Registers for domain-specific payloads.
+### Band 3: Epistemic Bounds, Proof Solvers & Static Meta-Calculi (192–255)
+Guides the `s(CASP)` constraint solver and formal qualitative, causal, and modal calculi.
+* `192–200`: Epistemic Context & Deontics (Direct Observation, Deductive Inference, Inductive General, Abductive Best Expl, Hearsay Testimony, Axiomatic Premise, Deontic Obligation/Permission/Prohibition)
+* `201–207`: Probabilistic Truth Bounds (`EPIST_PROB_CERTAIN`, `EPIST_PROB_HIGH`, `EPIST_PROB_MARGINAL`, `EPIST_PROB_DISTRIBUTED`, `EPIST_STATISTICAL_EDGE`, `EPIST_FUZZY_PLAUSIBILITY`, `EPIST_DEFAULT_HEURISTIC`)
+* `208–223`: `s(CASP)` Proof Solver Invariants (Closed World Assumption, MUC Targeted, Proof Validated, Contradiction Flag, Abducible, Coinduction, Global Constraint, Inconsistency Core, Re-denoise Required, Stable Model Member, Partial Interpretation)
+* `224–231`: **Allen's Interval Temporal Calculus** (`TEMP_ALLEN_BEFORE`, `TEMP_ALLEN_MEETS`, `TEMP_ALLEN_OVERLAPS`, `TEMP_ALLEN_STARTS`, `TEMP_ALLEN_DURING`, `TEMP_ALLEN_FINISHES`, `TEMP_ALLEN_EQUALS`, `TEMP_SYNCHRONOUS_COINCIDE`)
+* `232–239`: **Spatial Mereotopology (RCC-8)** (`SPATIAL_RCC_DISCONNECTED`, `SPATIAL_RCC_EXT_CONNECTED`, `SPATIAL_RCC_PARTIAL_OVERLAP`, `SPATIAL_RCC_TANGENTIAL_PART`, `SPATIAL_RCC_NON_TANG_PART`, `SPATIAL_RCC_CONGRUENT_EQ`, `MEREOLOGY_HOLONYM_WHOLE`, `MEREOLOGY_MERONYM_PART`)
+* `240–247`: **Pearl's Causal & Counterfactual Hierarchy** (`CAUSAL_DIRECT_MECHANISM`, `CAUSAL_ENABLING_CONDITION`, `CAUSAL_PREVENTIVE_BLOCK`, `CAUSAL_INTERVENTION_DO`, `CAUSAL_COUNTERFACTUAL_NEC`, `CAUSAL_COUNTERFACTUAL_SUFF`, `CAUSAL_COMMON_CONFOUNDER`, `CAUSAL_COLLIDER_EFFECT`)
+* `248–255`: **Higher-Order Modal & Linear Temporal Logic** (`LOGIC_NECESSITY_BOX`, `LOGIC_POSSIBILITY_DIAMOND`, `LOGIC_COMMON_KNOWLEDGE`, `LOGIC_DISTRIBUTED_KNOW`, `LOGIC_TEMPORAL_ALWAYS_G`, `LOGIC_TEMPORAL_EVENTUALLY_F`, `LOGIC_TEMPORAL_NEXT_X`, `LOGIC_TEMPORAL_UNTIL_U`)
 
 ---
 
@@ -140,94 +147,8 @@ Where $Y_{\text{semantics}}$ is the target conceptual category, $I(f_i; Y)$ maxi
 
 ---
 
-### 4.3. Empirical Dimension Testing Harness (Python)
 
-Use this test harness to load a batch of encoded nodes, compute their entropy, identify redundant co-linear dimensions, and flag dead slots:
-
-```python
-import numpy as np
-from typing import Dict, List, Tuple
-
-class QuantaInformationProfiler:
-    def __init__(self, data_matrix: np.ndarray, dimension_labels: List[str]):
-        """
-        data_matrix: (N, 256) array with values in {0, 1, 2, 3}
-        dimension_labels: List of 256 human-readable dimension names
-        """
-        self.X = data_matrix
-        self.N, self.D = data_matrix.shape
-        self.labels = dimension_labels
-        assert self.D == 256, "Matrix must contain exactly 256 dimensions."
-
-    def compute_entropies(self) -> np.ndarray:
-        """Calculates Shannon entropy H(D_i) for each dimension in bits."""
-        entropies = np.zeros(self.D)
-        for i in range(self.D):
-            col = self.X[:, i]
-            counts = np.bincount(col, minlength=4)
-            probs = counts / self.N
-            probs = probs[probs > 0]
-            entropies[i] = -np.sum(probs * np.log2(probs))
-        return entropies
-
-    def compute_pairwise_mutual_information(self, top_k_pairs: int = 10) -> List[Tuple[str, str, float]]:
-        """Finds the most redundant pairs of dimensions using Mutual Information I(D_i; D_j)."""
-        redundant_pairs = []
-        
-        for i in range(self.D):
-            for j in range(i + 1, self.D):
-                col_i = self.X[:, i]
-                col_j = self.X[:, j]
-                
-                # Joint probability distribution P(D_i, D_j)
-                joint_counts = np.zeros((4, 4))
-                for v_i, v_j in zip(col_i, col_j):
-                    joint_counts[v_i, v_j] += 1
-                p_ij = joint_counts / self.N
-                
-                p_i = np.sum(p_ij, axis=1, keepdims=True)
-                p_j = np.sum(p_ij, axis=0, keepdims=True)
-                
-                # I(D_i; D_j) = sum(p_ij * log2(p_ij / (p_i * p_j)))
-                non_zero = p_ij > 0
-                mi = np.sum(p_ij[non_zero] * np.log2(p_ij[non_zero] / (p_i @ p_j)[non_zero]))
-                
-                redundant_pairs.append((self.labels[i], self.labels[j], float(mi)))
-
-        # Sort by highest mutual information
-        redundant_pairs.sort(key=lambda x: x[2], reverse=True)
-        return redundant_pairs[:top_k_pairs]
-
-    def run_diagnostic_suite(self, dead_threshold: float = 0.1, redundancy_threshold: float = 0.5):
-        """Runs automated evaluation and outputs actionable dimension refactoring advice."""
-        entropies = self.compute_entropies()
-        redundancies = self.compute_pairwise_mutual_information(top_k_pairs=10)
-
-        dead_slots = [
-            (idx, self.labels[idx], entropies[idx]) 
-            for idx in range(self.D) if entropies[idx] < dead_threshold
-        ]
-
-        print("=== QUANTA INFORMATION PROFILER REPORT ===")
-        print(f"Total Samples Evaluated: {self.N}")
-        print(f"Average Dimension Entropy: {np.mean(entropies):.3f} / 2.000 bits\n")
-
-        print(f"--- 1. Under-Utilized / Dead Dimensions (< {dead_threshold} bits) ---")
-        if not dead_slots:
-            print("None! All dimensions meet minimum entropy requirements.")
-        else:
-            for idx, label, h in dead_slots:
-                print(f"  Slot {idx:03d} [{label}]: Entropy = {h:.4f} bits (Candidate for pruning/replacement)")
-
-        print(f"\n--- 2. High Redundancy Pairs (Mutual Information > {redundancy_threshold} bits) ---")
-        for dim_a, dim_b, mi in redundancies:
-            if mi >= redundancy_threshold:
-                print(f"  [{dim_a}] <---> [{dim_b}]: MI = {mi:.4f} bits (High co-linearity; consider collapsing)")
-```
-
----
-
-### 4.4. Corpus-Based Testing Workflow
+### 4.3. Corpus-Based Testing Workflow
 
 To run this testing pipeline before training:
 

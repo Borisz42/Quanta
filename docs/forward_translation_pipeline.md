@@ -136,4 +136,4 @@ The real data ingestion pipeline streams authentic samples across 5 core benchma
 4. **CLUTRR (Inductive Kinship Graphs)**:
    - Stories of multi-hop family relationships mapping to transitivity and reciprocal roles.
 5. **Code ASTs (Python Standard Library)**:
-   - Direct recursive mapping from Python `ast.AST` nodes into `EXT_AST_*` code primitives and Merkle-folded execution branches.
+   - Direct recursive mapping from Python `ast.AST` nodes into `GRAPH_*` AST primitives and Merkle-folded execution branches.
