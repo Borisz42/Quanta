@@ -25,7 +25,7 @@ A QUANTA concept is decomposed into Abstract Syntax Graphs (ASGs) where each ato
 * **Semantic Vector (The 256-Dimension Logical Contract):**
   * A 64-byte payload storing 256 exact semantic, syntactic, and ontological constraints in $\{0, 1, 2, 3\}$.
 * **Edge Table & Literal Payloads (The Graph Topology):**
-  * **Edges:** Directed pointers linking to child CIDs with defined relation types (e.g., `VAL_X1_AGENT_ACTOR` $\to$ `CID: 0x9A4...`).
+  * **Edges:** Directed pointers linking to child CIDs with defined relation types (e.g., `VAL_X1_AGENT` $\to$ `CID: 0x9A4...`).
   * **Anchors & Literals:** Pointers to external lexicons (WordNet synsets, FrameNet roles) or immutable strings/timestamps.
 
 ---
@@ -200,6 +200,11 @@ Every concept in QUANTA is encoded into an Abstract Syntax Graph (ASG) over the 
 - `2 (FALSE)`: Explicit epistemic negation, confirmed absence, or contradiction.
 - `3 (UNKNOWN / MODAL)`: Epistemic uncertainty, hypothetical conjecture, or question query target.
 
+> [!IMPORTANT]
+> **Atomic Predicates vs. Whole-Tree Propositions:**
+> An individual atomic node (such as the root predicate) represents strictly its local semantic concept (e.g., the action `"bit"`). **The full sentence proposition is represented by the entire graph hierarchy, not by the root node alone.**
+> From a valency perspective, the root predicate specifies the relation arguments (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT`, etc.) and directs edges to child nodes. Each child node contains its own localized semantic signature, entity types, determiners/quantifiers, and ontological roles. The complete proposition vector ($\mathbf{v}_{\text{tree}} = \bigsqcup_{u \in \text{Tree}} \mathbf{v}_u$) aggregates all node activations across the tree via quaternary lattice union.
+
 ---
 
 ### Example A: Affirmative Action with Modifiers & Spatial Location (Value `1` Focus)
@@ -208,29 +213,38 @@ Every concept in QUANTA is encoded into an Abstract Syntax Graph (ASG) over the 
 **Hungarian Realization:** *"A golden retriever a kertben megharapta a postást."*
 
 ```text
-Node [3d09497c] Concept: 'wn:bite.v.01' = "A golden retriever bit the mailman in the garden."
+Node [3d09497c] Concept: 'wn:bite.v.01' = "bit" (Root Action Predicate)
 ├── (VAL_X1_AGENT) ──────> Node [7275e4f8] Concept: 'wn:golden_retriever.n.01' = "golden retriever"
 ├── (VAL_X2_PATIENT) ────> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
 └── (VAL_LOCATION_SLOT) ─> Node [8f12a93c] Concept: 'wn:garden.n.01' = "garden"
 ```
 
-* **Root Predicate (`wn:bite.v.01`):**
-  * `Band 0 (Primes):` `NSM_DO = 1`, `NSM_TOUCH = 1`, `NSM_TRUE = 1`
-  * `Band 1 (Valency & Tense):` `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`, `VAL_LOCATION_SLOT = 1`, `LJB_PU_PAST_TENSE = 1`, `GRAPH_ROOT_NODE = 1`
-  * `Band 2 (Ontology):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`
+* **Root Predicate Node (`wn:bite.v.01`, literal: `"bit"`):**
+  * `Band 0 (Primes):` `NSM_DO = 1` (agentive action), `NSM_TOUCH = 1` (physical contact / bite), `NSM_TRUE = 1`
+  * `Band 1 (Valencies, Tense & Topology):` `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`, `VAL_LOCATION_SLOT = 1`, `LJB_PU_PAST_TENSE = 1`, `GRAPH_ROOT_NODE = 1`
+  * `Band 2 (Ontology & Roots):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`, `WN_ACT_ACTION = 1`
   * `Band 3 (Epistemics):` `EPIST_DIRECT_OBSERVATION = 1`, `EPIST_PROB_CERTAIN = 1`
-* **Agent Entity (`wn:golden_retriever.n.01`):**
-  * `Band 0:` `NSM_ONE = 1`
-  * `Band 1:` `VAL_X1_AGENT = 1`
-  * `Band 2:` `TYPE_ANIMATE = 1`, `ROLE_AGENT_CAPABLE = 1`, `ROLE_SENTIENT = 1`, `WN_ANIMAL_FAUNA = 1`
-* **Patient Entity (`wn:mailman.n.01`):**
-  * `Band 0:` `NSM_THIS = 1`
-  * `Band 1:` `VAL_X2_PATIENT = 1`
-  * `Band 2:` `TYPE_HUMAN = 1`, `TYPE_ANIMATE = 1`, `ROLE_COMMUNICATOR = 1`, `WN_PERSON_HUMAN = 1`
-* **Location Entity (`wn:garden.n.01`):**
-  * `Band 0:` `NSM_INSIDE = 1`
-  * `Band 1:` `VAL_LOCATION_SLOT = 1`
-  * `Band 2:` `TYPE_SPATIAL_REGION = 1`, `WN_LOCATION_PLACE = 1`
+* **Agent Child Node (`wn:golden_retriever.n.01`, literal: `"golden retriever"`):**
+  * `Band 0 (Primes):` `NSM_ONE = 1` (indefinite singular determiner *"a"*)
+  * `Band 1 (Valency & Graph):` `VAL_X1_AGENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_ANIMATE = 1`, `ROLE_AGENT_CAPABLE = 1`, `ROLE_SENTIENT = 1`, `ROLE_MOVEABLE = 1`, `WN_ANIMAL_FAUNA = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+* **Patient Child Node (`wn:mailman.n.01`, literal: `"mailman"`):**
+  * `Band 0 (Primes):` `NSM_THIS = 1` (definite determiner *"the"*)
+  * `Band 1 (Valency & Graph):` `VAL_X2_PATIENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_HUMAN = 1`, `TYPE_ANIMATE = 1`, `ROLE_COMMUNICATOR = 1`, `ROLE_SENTIENT = 1`, `ROLE_PATIENT_TARGET = 1`, `WN_PERSON_HUMAN = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+* **Location Child Node (`wn:garden.n.01`, literal: `"garden"`):**
+  * `Band 0 (Primes):` `NSM_THIS = 1`, `NSM_INSIDE = 1` (locative containment *"in the"*)
+  * `Band 1 (Valency & Graph):` `VAL_LOCATION_SLOT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology):` `TYPE_SPATIAL_REGION = 1`, `WN_LOCATION_PLACE = 1`
+  * `Band 3 (Spatial Mereotopology):` `SPATIAL_RCC_NON_TANG_PART = 1` (topological interior containment)
+
+* **Aggregated Whole-Tree Proposition Vector ($\mathbf{v}_{\text{tree}} = \bigsqcup_{u \in \text{Tree}} \mathbf{v}_u$):**
+  * `Band 0:` `NSM_DO=1`, `NSM_TOUCH=1`, `NSM_TRUE=1`, `NSM_ONE=1`, `NSM_THIS=1`, `NSM_INSIDE=1`
+  * `Band 1:` `VAL_X1_AGENT=1`, `VAL_X2_PATIENT=1`, `VAL_LOCATION_SLOT=1`, `LJB_PU_PAST_TENSE=1`, `GRAPH_ROOT_NODE=1`, `GRAPH_LEAF=1`
+  * `Band 2:` `TYPE_EVENT=1`, `TYPE_ANIMATE=1`, `TYPE_HUMAN=1`, `TYPE_SPATIAL_REGION=1`, `ROLE_AGENT_CAPABLE=1`, `ROLE_SENTIENT=1`, `ROLE_COMMUNICATOR=1`, `ROLE_PATIENT_TARGET=1`, `MODALITY_LITERAL=1`, `WN_ACT_ACTION=1`, `WN_ANIMAL_FAUNA=1`, `WN_PERSON_HUMAN=1`, `WN_LOCATION_PLACE=1`
+  * `Band 3:` `EPIST_DIRECT_OBSERVATION=1`, `EPIST_PROB_CERTAIN=1`, `SPATIAL_RCC_NON_TANG_PART=1`
 
 ---
 
@@ -240,16 +254,32 @@ Node [3d09497c] Concept: 'wn:bite.v.01' = "A golden retriever bit the mailman in
 **Hungarian Realization:** *"A kutya nem harapta meg a postást."*
 
 ```text
-Node [e12a4f67] Concept: 'wn:bite.v.01' (Negated Action)
+Node [e12a4f67] Concept: 'wn:bite.v.01' = "did not bite" (Negated Action Predicate)
 ├── (VAL_X1_AGENT) ──> Node [0c5d3533] Concept: 'wn:dog.n.01' = "dog"
 └── (VAL_X2_PATIENT) ──> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
 ```
 
-* **Root Predicate (`wn:bite.v.01` with Polarity `2`):**
-  * `Band 0 (Primes):` `NSM_DO = 2` (Action explicitly negated), `NSM_TOUCH = 2` (No contact)
-  * `Band 1 (Valency & Tense):` `LJB_NA_NEGATION = 2` (Formal negation active), `LJB_PU_PAST_TENSE = 1`, `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`
-  * `Band 2 (Ontology):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`
-  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1` (Certain that the event did NOT occur)
+* **Root Predicate Node (`wn:bite.v.01`, literal: `"did not bite"`, Polarity `2`):**
+  * `Band 0 (Primes):` `NSM_DO = 2` (action explicitly negated), `NSM_TOUCH = 2` (no physical contact occurred)
+  * `Band 1 (Valencies, Negation & Tense):` `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`, `LJB_NA_NEGATION = 2` (formal negation active), `LJB_PU_PAST_TENSE = 1`, `GRAPH_ROOT_NODE = 1`
+  * `Band 2 (Ontology & Roots):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`, `WN_ACT_ACTION = 1`
+  * `Band 3 (Epistemics):` `EPIST_DIRECT_OBSERVATION = 1`, `EPIST_PROB_CERTAIN = 1` (deterministic certainty that the event did NOT occur)
+* **Agent Child Node (`wn:dog.n.01`, literal: `"dog"`):**
+  * `Band 0 (Primes):` `NSM_THIS = 1` (definite determiner *"the"*)
+  * `Band 1 (Valency & Graph):` `VAL_X1_AGENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_ANIMATE = 1`, `ROLE_AGENT_CAPABLE = 1`, `ROLE_SENTIENT = 1`, `WN_ANIMAL_FAUNA = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+* **Patient Child Node (`wn:mailman.n.01`, literal: `"mailman"`):**
+  * `Band 0 (Primes):` `NSM_THIS = 1` (definite determiner *"the"*)
+  * `Band 1 (Valency & Graph):` `VAL_X2_PATIENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_HUMAN = 1`, `TYPE_ANIMATE = 1`, `ROLE_COMMUNICATOR = 1`, `ROLE_SENTIENT = 1`, `WN_PERSON_HUMAN = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+
+* **Aggregated Whole-Tree Proposition Vector ($\mathbf{v}_{\text{tree}}$):**
+  * `Band 0:` `NSM_DO=2`, `NSM_TOUCH=2`, `NSM_THIS=1`
+  * `Band 1:` `VAL_X1_AGENT=1`, `VAL_X2_PATIENT=1`, `LJB_NA_NEGATION=2`, `LJB_PU_PAST_TENSE=1`, `GRAPH_ROOT_NODE=1`, `GRAPH_LEAF=1`
+  * `Band 2:` `TYPE_EVENT=1`, `TYPE_ANIMATE=1`, `TYPE_HUMAN=1`, `ROLE_AGENT_CAPABLE=1`, `ROLE_SENTIENT=1`, `ROLE_COMMUNICATOR=1`, `MODALITY_LITERAL=1`, `WN_ACT_ACTION=1`, `WN_ANIMAL_FAUNA=1`, `WN_PERSON_HUMAN=1`
+  * `Band 3:` `EPIST_DIRECT_OBSERVATION=1`, `EPIST_PROB_CERTAIN=1`
 
 ---
 
@@ -259,16 +289,32 @@ Node [e12a4f67] Concept: 'wn:bite.v.01' (Negated Action)
 **Hungarian Realization:** *"Vajon a kutya megharapott egy postást?"*
 
 ```text
-Node [9b77ac31] Concept: 'wn:bite.v.01' (Hypothetical / Interrogative Query)
+Node [9b77ac31] Concept: 'wn:bite.v.01' = "bite" (Hypothetical / Interrogative Query)
 ├── (VAL_X1_AGENT) ──> Node [0c5d3533] Concept: 'wn:dog.n.01' = "dog"
 └── (VAL_X2_PATIENT) ──> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
 ```
 
-* **Root Predicate (`wn:bite.v.01` with Polarity `3`):**
-  * `Band 0 (Primes):` `NSM_MAYBE = 3` (Epistemic possibility)
-  * `Band 1 (Valency & Query):` `GRAPH_QUERY_TARGET = 3` (Interrogative goal), `LJB_PU_PAST_TENSE = 1`, `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`
-  * `Band 2 (Ontology):` `TYPE_PROPOSITION = 3`, `MODALITY_HYPOTHETICAL = 3`
+* **Root Predicate Node (`wn:bite.v.01`, literal: `"bite"`, Polarity `3`):**
+  * `Band 0 (Primes):` `NSM_DO = 3`, `NSM_TOUCH = 3`, `NSM_MAYBE = 3` (epistemic possibility / conjecture)
+  * `Band 1 (Valencies, Query & Tense):` `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`, `GRAPH_QUERY_TARGET = 3` (interrogative target goal), `LJB_PU_PAST_TENSE = 1`, `GRAPH_ROOT_NODE = 1`
+  * `Band 2 (Ontology & Modality):` `TYPE_EVENT = 1`, `TYPE_PROPOSITION = 3`, `MODALITY_HYPOTHETICAL = 3`
   * `Band 3 (Epistemics):` `EPIST_PROB_MARGINAL = 3`, `EPIST_FUZZY_PLAUSIBILITY = 3`
+* **Agent Child Node (`wn:dog.n.01`, literal: `"dog"`):**
+  * `Band 0 (Primes):` `NSM_THIS = 1` (definite determiner *"the"*)
+  * `Band 1 (Valency & Graph):` `VAL_X1_AGENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_ANIMATE = 1`, `ROLE_AGENT_CAPABLE = 1`, `ROLE_SENTIENT = 1`, `WN_ANIMAL_FAUNA = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+* **Patient Child Node (`wn:mailman.n.01`, literal: `"mailman"`):**
+  * `Band 0 (Primes):` `NSM_ONE = 1` (indefinite singular determiner *"a"*)
+  * `Band 1 (Valency & Graph):` `VAL_X2_PATIENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology & Capabilities):` `TYPE_HUMAN = 1`, `TYPE_ANIMATE = 1`, `ROLE_COMMUNICATOR = 1`, `WN_PERSON_HUMAN = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1`
+
+* **Aggregated Whole-Tree Proposition Vector ($\mathbf{v}_{\text{tree}}$):**
+  * `Band 0:` `NSM_DO=3`, `NSM_TOUCH=3`, `NSM_MAYBE=3`, `NSM_THIS=1`, `NSM_ONE=1`
+  * `Band 1:` `VAL_X1_AGENT=1`, `VAL_X2_PATIENT=1`, `GRAPH_QUERY_TARGET=3`, `LJB_PU_PAST_TENSE=1`, `GRAPH_ROOT_NODE=1`, `GRAPH_LEAF=1`
+  * `Band 2:` `TYPE_EVENT=1`, `TYPE_PROPOSITION=3`, `TYPE_ANIMATE=1`, `TYPE_HUMAN=1`, `ROLE_AGENT_CAPABLE=1`, `ROLE_SENTIENT=1`, `ROLE_COMMUNICATOR=1`, `MODALITY_HYPOTHETICAL=3`, `WN_ANIMAL_FAUNA=1`, `WN_PERSON_HUMAN=1`
+  * `Band 3:` `EPIST_PROB_MARGINAL=3`, `EPIST_FUZZY_PLAUSIBILITY=3`
 
 ---
 
@@ -276,22 +322,89 @@ Node [9b77ac31] Concept: 'wn:bite.v.01' (Hypothetical / Interrogative Query)
 
 QUANTA features a typo-resilient lexical grounding engine:
 
-* **Corrupted Input:** `"A glden retreiver bit the maileman in the graden."`
-* **Fuzzy Lexicon Normalization:**
-  * `glden retreiver` $\xrightarrow{\text{Edit Distance / Phonetic}}$ `wn:golden_retriever.n.01`
-  * `maileman` $\xrightarrow{\text{Edit Distance}}$ `wn:mailman.n.01`
-  * `graden` $\xrightarrow{\text{Edit Distance}}$ `wn:garden.n.01`
-* **Reconstructed Invariant:** Same canonical Merkle CID hash as clean input with 100% semantic slot preservation.
+* **Corrupted Surface Input:** `"A glden retreiver bit the maileman in the graden."`
+* **Fuzzy Damerau-Levenshtein Normalization:**
+  * `glden retreiver` $\xrightarrow{\text{Compound Healing}}$ `wn:golden_retriever.n.01` (literal: `"golden retriever"`)
+  * `bit` $\to$ `wn:bite.v.01` (literal: `"bit"`)
+  * `maileman` $\xrightarrow{\text{Single Deletion}}$ `wn:mailman.n.01` (literal: `"mailman"`)
+  * `graden` $\xrightarrow{\text{Adjacent Transposition}}$ `wn:garden.n.01` (literal: `"garden"`)
+* **Reconstructed Invariant:** Same canonical Merkle CID hash (`0x3d09497c...`) and topological structure as clean Example A with 100% semantic slot preservation.
 
 ---
 
-### Example E: Code Execution (Factorial Function)
+### Example E: First-Order Logic (FOL) Deductive Implication (FOLIO Benchmark)
 
-Code is stored via Abstract Syntax Tree topology, not text files.
+**Input Formula:** $\forall x (\text{Dog}(x) \rightarrow \text{Animal}(x))$  
+**Natural Language Realization:** *"Every dog is an animal."*
 
-* **Root (Function Def):** `GRAPH_ROOT_NODE=1`, `TYPE_PROCESS=1`, `TYPE_MEASURE_SCALAR=1`.
-* **Base Case (Branching):** `NSM_IF=1`, `NSM_THE_SAME=1`, `LJB_DU_IDENTITY=1`.
-* **Recursive Call:** `GRAPH_IS_SUB_EXP=1`, `GRAPH_RECURSIVE_REF=1` (Points to Root CID).
+```text
+Node [a1b2c3d4] Proposition Head: 'implication' = "\forall x (Dog(x) -> Animal(x))"
+├── (GRAPH_BRANCH_COND / GRAPH_IS_SUB_EXP) ─> Node [e5f6g7h8] Predicate: 'wn:dog.n.01' = "Dog"
+│   └── (VAL_X1_AGENT) ─────────────────────> Node [0a1b2c3d] Variable: 'var:x' = "x"
+└── (GRAPH_BRANCH_THEN / GRAPH_IS_SUB_EXP) ─> Node [9i0j1k2l] Predicate: 'wn:animal.n.01' = "Animal"
+    └── (VAL_X1_AGENT) ─────────────────────> Node [0a1b2c3d] Variable: 'var:x' = "x"
+```
+
+* **Root Implication Head Node:**
+  * `Band 0 (Primes):` `NSM_ALL = 1` (universal quantifier prime)
+  * `Band 1 (Connectives & Topology):` `LJB_RO_ALL_QUANT = 1`, `LJB_GANAI_IF_THEN = 1`, `GRAPH_ROOT_NODE = 1`, `GRAPH_BRANCH_COND = 1`, `GRAPH_BRANCH_THEN = 1`, `GRAPH_ENTAILMENT_EDGE = 1`
+  * `Band 2 (Ontology):` `TYPE_PROPOSITION = 1`, `MODALITY_LITERAL = 1`
+  * `Band 3 (Epistemics & Proof):` `EPIST_DEDUCTIVE_INFERENCE = 1`, `SOLVER_PROOF_VALIDATED = 1`
+* **Sub-Predicate Antecedent Node (`wn:dog.n.01`, literal: `"Dog"`):**
+  * `Band 1:` `GRAPH_IS_SUB_EXP = 1`, `VAL_X1_AGENT = 1`
+  * `Band 2:` `TYPE_RELATION_ROLE = 1`, `WN_ANIMAL_FAUNA = 1`
+* **Sub-Predicate Consequent Node (`wn:animal.n.01`, literal: `"Animal"`):**
+  * `Band 1:` `GRAPH_IS_SUB_EXP = 1`, `VAL_X1_AGENT = 1`
+  * `Band 2:` `TYPE_RELATION_ROLE = 1`, `WN_ANIMAL_FAUNA = 1`
+* **Bound Variable Leaf Node (`var:x`, literal: `"x"`):**
+  * `Band 1:` `GRAPH_VARIABLE_BIND = 1`, `GRAPH_LEAF = 1`, `VAL_X1_AGENT = 1`
+
+---
+
+### Example F: AST Code Topology (Recursive Factorial Function)
+
+Code is stored via Abstract Syntax Tree graph topology, not text files.
+
+**Python Source Code:**
+```python
+def factorial(n):
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+```
+
+**ASG Graph Topology:**
+```text
+Node [f1a2b3c4] Function Def: 'func:factorial' = "def factorial(n)"
+├── (VAL_X1_AGENT / GRAPH_ARGUMENT_LIST) ──> Node [v1a2b3c4] Variable: 'var:n' = "n"
+├── (GRAPH_IS_SUB_EXP) ────────────────────> Node [b1a2b3c4] Branch: 'if_branch' = "if n == 0"
+│   ├── (GRAPH_BRANCH_COND) ───────────────> Node [c1a2b3c4] Comparison: '==' = "n == 0"
+│   └── (GRAPH_BRANCH_THEN) ───────────────> Node [r1a2b3c4] Return Value: '1' = "return 1"
+└── (GRAPH_IS_SUB_EXP) ────────────────────> Node [r2a2b3c4] Return Value: 'expr' = "return n * factorial(n - 1)"
+    └── (GRAPH_RECURSIVE_REF) ─────────────> Node [f1a2b3c4] Function Def: 'func:factorial' (Self-CID)
+```
+
+* **Root Function Definition (`func:factorial`, literal: `"def factorial(n)"`):**
+  * `Band 1 (AST Topology):` `GRAPH_ROOT_NODE = 1`, `GRAPH_FUNCTION_DEF = 1`, `GRAPH_SCOPED_CONTEXT = 1`
+  * `Band 2 (Ontology):` `TYPE_PROCESS = 1`, `ROLE_COMMUNICATOR = 1`
+* **Formal Parameter Node (`var:n`, literal: `"n"`):**
+  * `Band 1 (AST Topology):` `GRAPH_VARIABLE_BIND = 1`, `GRAPH_ARGUMENT_LIST = 1`, `VAL_X1_AGENT = 1`, `GRAPH_LEAF = 1`
+  * `Band 2 (Ontology):` `TYPE_NUMERIC_VALUE = 1`, `TYPE_MEASURE_SCALAR = 1`
+* **Branch Head Node (`if_branch`, literal: `"if n == 0"`):**
+  * `Band 1 (Control Flow):` `GRAPH_BRANCH_COND = 3`, `GRAPH_BRANCH_THEN = 1`, `LJB_GANAI_IF_THEN = 3`, `GRAPH_IS_SUB_EXP = 1`
+  * `Band 2 (Ontology):` `TYPE_PROPOSITION = 3`
+* **Comparison Node (`c1a2b3c4`, literal: `"n == 0"`):**
+  * `Band 0 (Primes):` `NSM_SAME = 1`
+  * `Band 1 (Connectives):` `LJB_DU_IDENTITY = 1`, `LJB_NO_NONE_QUANT = 1`
+  * `Band 2 (Ontology):` `TYPE_PROPOSITION = 3`
+* **Base Case Return (`r1a2b3c4`, literal: `"return 1"`):**
+  * `Band 0 (Primes):` `NSM_ONE = 1`
+  * `Band 1 (AST Topology):` `GRAPH_RETURN_VALUE = 1`, `GRAPH_SCOPED_CONTEXT = 1`
+  * `Band 2 (Ontology):` `TYPE_NUMERIC_VALUE = 1`, `TYPE_MEASURE_SCALAR = 1`
+* **Recursive Return (`r2a2b3c4`, literal: `"return n * factorial(n - 1)"`):**
+  * `Band 0 (Primes):` `NSM_PART = 1` (subtraction), `NSM_MUCH = 1` (multiplication)
+  * `Band 1 (AST Topology):` `GRAPH_RETURN_VALUE = 1`, `GRAPH_IS_SUB_EXP = 1`, `GRAPH_RECURSIVE_REF = 1` (cyclic backlink pointing to Root CID `0xf1a2b3c4...`)
+  * `Band 2 (Ontology):` `TYPE_PROCESS = 1`
 
 ---
 
