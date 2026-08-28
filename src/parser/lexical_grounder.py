@@ -13,9 +13,9 @@ except ImportError:
     wn = None
     NLTK_WN_AVAILABLE = False
 
-from quanta.core.slots import get_slot_by_name
-from quanta.core.types import QuantaVector, QuaternaryValue
-from quanta.core.asg import QuantaNode
+from core.slots import get_slot_by_name
+from core.types import QuantaVector, QuaternaryValue
+from core.asg import QuantaNode
 
 
 @dataclass

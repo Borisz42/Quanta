@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import clingo
 
-from quanta.core.asg import QuantaGraph, QuantaNode
-from quanta.core.slots import get_slot_by_index, get_slot_by_name
+from core.asg import QuantaGraph, QuantaNode
+from core.slots import get_slot_by_index, get_slot_by_name
 
 
 @dataclass

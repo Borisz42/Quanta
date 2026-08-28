@@ -4,13 +4,13 @@ import numpy as np
 import pytest
 import torch
 
-from quanta.core.types import (
+from core.types import (
     QuantaVector,
     QuaternaryValue,
     pack_quaternary_array,
     unpack_quaternary_bytes,
 )
-from quanta.core.slots import SlotBand, CANONICAL_SLOTS, get_slot_by_name, get_slot_by_index
+from core.slots import SlotBand, CANONICAL_SLOTS, get_slot_by_name, get_slot_by_index
 
 
 def test_quaternary_enum_values():

@@ -1,0 +1,83 @@
+"""Tests for QUANTA Round-Trip Invariance and Semantic Preservation.
+
+Verifies strict round-trip invariance (NL -> Mentalese -> NL, FOL -> Mentalese -> FOL, Code -> Mentalese -> Code)
+with low Hamming distance and 100% semantic type consistency.
+"""
+
+import pytest
+from pipeline.translator_pipeline import TwoWayTranslationPipeline
+
+
+@pytest.fixture(scope="module")
+def pipeline():
+    return TwoWayTranslationPipeline()
+
+
+def test_english_round_trip_action_sentence(pipeline):
+    # Action sentence
+    input_text = "A dog chased a cat."
+    result = pipeline.round_trip(input_text, modality="english")
+
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert "dog" in result.realized_output.lower()
+    assert "cat" in result.realized_output.lower()
+    assert result.slot_preservation_rate >= 0.85
+
+
+def test_english_round_trip_modal_obligation(pipeline):
+    # Deontic modal
+    input_text = "A person must touch a rock."
+    result = pipeline.round_trip(input_text, modality="english")
+
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert "must" in result.realized_output.lower()
+    assert result.original_vector["EPIST_DEONTIC_OBLIGATION"] == 1
+    assert result.reparsed_vector["EPIST_DEONTIC_OBLIGATION"] == 1
+
+
+def test_fol_round_trip_implication(pipeline):
+    # FOL implication
+    fol_input = "\\forall x (Dog(x) -> Animal(x))"
+    result = pipeline.round_trip(fol_input, modality="fol")
+
+    assert result.validation_pass
+    assert "\\forall" in result.realized_output or "Dog" in result.realized_output
+    assert result.slot_preservation_rate >= 0.80
+
+
+def test_python_code_round_trip(pipeline):
+    # Python code snippet
+    code_input = """def process(x):\n    return x"""
+    result = pipeline.round_trip(code_input, modality="python")
+
+    assert result.validation_pass
+    assert "def process" in result.realized_output
+    assert "return" in result.realized_output
+    assert result.original_vector["GRAPH_FUNCTION_DEF"] == 1
+    assert result.reparsed_vector["GRAPH_FUNCTION_DEF"] == 1
+
+
+def test_multi_sentence_preservation_rates(pipeline):
+    # Test across multiple sentence archetypes
+    test_cases = [
+        "A person saw a garden.",
+        "A dog ran rapidly into the house.",
+        "A mailman gave a book to a person.",
+    ]
+
+    for sentence in test_cases:
+        res = pipeline.round_trip(sentence, modality="english")
+        assert res.validation_pass, f"Failed on '{sentence}': {res.muc_errors}"
+        assert res.slot_preservation_rate >= 0.70
+
+
+def test_hungarian_round_trip(pipeline):
+    # Hungarian round trip
+    hu_input = "A kutya kergetett a macskát."
+    result = pipeline.round_trip(hu_input, modality="hungarian")
+
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert "kutya" in result.realized_output.lower()
+    assert "macskát" in result.realized_output.lower()
+    assert result.slot_preservation_rate >= 0.85
+

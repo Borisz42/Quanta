@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 
-from quanta.data.corpus_generator import ValidationCorpusGenerator
-from quanta.profiler.info_profiler import QuantaInformationProfiler
-from quanta.profiler.mrmr_selector import MRMRSelector
-from quanta.profiler.candidate_pool import build_candidate_pool
+from data.corpus_generator import ValidationCorpusGenerator
+from profiler.info_profiler import QuantaInformationProfiler
+from profiler.mrmr_selector import MRMRSelector
+from profiler.candidate_pool import build_candidate_pool
 
 
 @pytest.fixture(scope="module")

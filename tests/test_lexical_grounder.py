@@ -1,7 +1,7 @@
 """Tests for WordNet lexical grounding and ontological slot assignment."""
 
 import pytest
-from quanta.parser.lexical_grounder import WordNetLexicalGrounder, NLTK_WN_AVAILABLE
+from parser.lexical_grounder import WordNetLexicalGrounder, NLTK_WN_AVAILABLE
 
 
 @pytest.mark.skipif(not NLTK_WN_AVAILABLE, reason="NLTK WordNet not available")

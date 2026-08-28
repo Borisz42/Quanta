@@ -1,8 +1,8 @@
 """Tests for BLAKE3 Content Identifier (CID) generation and Merkle ASG graphs."""
 
 import pytest
-from quanta.core.asg import QuantaNode, QuantaGraph
-from quanta.core.types import QuantaVector
+from core.asg import QuantaNode, QuantaGraph
+from core.types import QuantaVector
 
 
 def test_deterministic_node_cid():

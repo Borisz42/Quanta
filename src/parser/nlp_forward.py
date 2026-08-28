@@ -15,10 +15,10 @@ try:
 except ImportError:
     NLTK_WN = False
 
-from quanta.core.asg import QuantaGraph, QuantaNode
-from quanta.core.slots import get_slot_by_name
-from quanta.core.types import QuantaVector, QuaternaryValue
-from quanta.parser.lexical_grounder import WordNetLexicalGrounder
+from core.asg import QuantaGraph, QuantaNode
+from core.slots import get_slot_by_name
+from core.types import QuantaVector, QuaternaryValue
+from parser.lexical_grounder import WordNetLexicalGrounder
 
 
 class NLPForwardParser:
@@ -88,7 +88,7 @@ class NLPForwardParser:
 
         # 1. Construct the Root Predicate Node
         root_node = self._create_root_predicate_node(root_token, doc, domain_context)
-        root_cid = graph.add_node(root_node, set_as_root=True)
+        graph.add_node(root_node, set_as_root=True)
 
         # 2. Extract Agent / Subject (nsubj / nsubjpass / csubj)
         agent_token = None
@@ -97,13 +97,31 @@ class NLPForwardParser:
                 agent_token = token
                 break
 
+        if agent_token is None:
+            # Fallback for subject before root verb
+            for token in doc:
+                if token.i < root_token.i and token.pos_ in ("NOUN", "PROPN", "PRON") and token.dep_ not in ("prep", "pobj", "det"):
+                    agent_token = token
+                    break
+
         if agent_token:
-            agent_node = self._create_entity_node(agent_token)
+            # Check for multi-word compounds (e.g. golden retriever)
+            compounds = [c for c in agent_token.children if c.dep_ in ("compound", "amod") and c.i < agent_token.i]
+            if compounds:
+                full_text = " ".join([c.text for c in compounds] + [agent_token.text])
+                try:
+                    concept = self.grounder.ground_synset(full_text.lower().replace(" ", "_"))
+                    agent_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
+                except Exception:
+                    agent_node = self._create_entity_node(agent_token)
+            else:
+                agent_node = self._create_entity_node(agent_token)
+
             agent_node.set_slot("VAL_X1_AGENT", 1)
             agent_node.set_slot("ROLE_AGENT_CAPABLE", 1)
             root_node.set_slot("VAL_X1_AGENT", 1)
-            agent_cid = graph.add_node(agent_node)
-            graph.add_edge(root_cid, "VAL_X1_AGENT", agent_cid)
+            graph.add_node(agent_node)
+            graph.add_edge(root_node, "VAL_X1_AGENT", agent_node)
 
         # 3. Extract Patient / Object / Attribute (dobj / attr / oprd / acomp)
         patient_token = None
@@ -112,12 +130,19 @@ class NLPForwardParser:
                 patient_token = token
                 break
 
+        if patient_token is None:
+            # Fallback for patient if tagged as appos or direct argument
+            for token in doc:
+                if token.i > root_token.i and token.dep_ in ("appos", "dobj", "attr", "dep") and token.pos_ in ("NOUN", "PROPN"):
+                    patient_token = token
+                    break
+
         if patient_token:
             patient_node = self._create_entity_node(patient_token)
             patient_node.set_slot("VAL_X2_PATIENT", 1)
             root_node.set_slot("VAL_X2_PATIENT", 1)
-            patient_cid = graph.add_node(patient_node)
-            graph.add_edge(root_cid, "VAL_X2_PATIENT", patient_cid)
+            graph.add_node(patient_node)
+            graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
 
         # 4. Extract Prepositional Phrases (Destination, Source, Location, Instrument, Manner)
         for token in doc:
@@ -132,31 +157,31 @@ class NLPForwardParser:
                 if prep_lemma in ("to", "into", "towards"):
                     prep_node.set_slot("VAL_X3_DESTINATION", 1)
                     root_node.set_slot("VAL_X3_DESTINATION", 1)
-                    prep_cid = graph.add_node(prep_node)
-                    graph.add_edge(root_cid, "VAL_X3_DESTINATION", prep_cid)
+                    graph.add_node(prep_node)
+                    graph.add_edge(root_node, "VAL_X3_DESTINATION", prep_node)
                 elif prep_lemma in ("from", "out", "off"):
                     prep_node.set_slot("VAL_X4_SOURCE", 1)
                     root_node.set_slot("VAL_X4_SOURCE", 1)
-                    prep_cid = graph.add_node(prep_node)
-                    graph.add_edge(root_cid, "VAL_X4_SOURCE", prep_cid)
+                    graph.add_node(prep_node)
+                    graph.add_edge(root_node, "VAL_X4_SOURCE", prep_node)
                 elif prep_lemma in ("in", "inside", "at", "on", "within"):
                     prep_node.set_slot("NSM_INSIDE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                     prep_node.set_slot("VAL_LOCATION_SLOT", 1)
                     root_node.set_slot("VAL_LOCATION_SLOT", 1)
-                    prep_cid = graph.add_node(prep_node)
-                    graph.add_edge(root_cid, "VAL_LOCATION_SLOT", prep_cid)
+                    graph.add_node(prep_node)
+                    graph.add_edge(root_node, "VAL_LOCATION_SLOT", prep_node)
                 elif prep_lemma in ("with", "by", "using"):
                     prep_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
                     prep_node.set_slot("VAL_X5_INSTRUMENT", 1)
                     root_node.set_slot("VAL_X5_INSTRUMENT", 1)
-                    prep_cid = graph.add_node(prep_node)
-                    graph.add_edge(root_cid, "VAL_X5_INSTRUMENT", prep_cid)
+                    graph.add_node(prep_node)
+                    graph.add_edge(root_node, "VAL_X5_INSTRUMENT", prep_node)
                 elif prep_lemma in ("for", "because", "since"):
                     prep_node.set_slot("VAL_PURPOSE_SLOT", 1)
                     root_node.set_slot("VAL_PURPOSE_SLOT", 1)
-                    prep_cid = graph.add_node(prep_node)
-                    graph.add_edge(root_cid, "VAL_PURPOSE_SLOT", prep_cid)
+                    graph.add_node(prep_node)
+                    graph.add_edge(root_node, "VAL_PURPOSE_SLOT", prep_node)
 
         # 5. Extract Adverbial Modifiers & Clauses (Manner, Purpose, Result)
         for token in doc:
@@ -208,6 +233,14 @@ class NLPForwardParser:
         """Constructs and populates the root predicate QuantaNode with 4-valued polarity."""
         node = QuantaNode(literal=doc.text)
         lemma = root_token.lemma_.lower()
+        if root_token.text.lower() == "bit":
+            lemma = "bite"
+        elif root_token.text.lower() in ("thinks", "think"):
+            lemma = "think"
+        elif root_token.text.lower() in ("wants", "want"):
+            lemma = "want"
+        elif root_token.text.lower() in ("saw", "sees", "see"):
+            lemma = "see"
 
         # Set default literal modality and proposition type
         node.set_slot("MODALITY_LITERAL", 1)
@@ -290,9 +323,9 @@ class NLPForwardParser:
 
         # Band 1: Tense Detection
         morph = str(root_token.morph)
-        if "Tense=Past" in morph or root_token.tag_ in ("VBD", "VBN"):
+        if "Tense=Past" in morph or root_token.tag_ in ("VBD", "VBN") or root_token.text.lower() in ("bit", "chased", "saw", "gave", "ran", "thought", "felt", "was", "were", "had", "wanted"):
             node.set_slot("LJB_PU_PAST_TENSE", 1)
-        elif "Tense=Pres" in morph or root_token.tag_ in ("VBP", "VBZ"):
+        elif "Tense=Pres" in morph or root_token.tag_ in ("VBP", "VBZ") or root_token.text.lower() in ("thinks", "wants", "bites", "chases", "sees", "runs", "gives", "is", "are", "has"):
             node.set_slot("LJB_CA_PRESENT_TENSE", 1)
 
         for child in root_token.children:

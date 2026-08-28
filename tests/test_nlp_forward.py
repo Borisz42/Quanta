@@ -1,9 +1,9 @@
 """Tests for NLPForwardParser and First-Order Logic formula parser."""
 
 import pytest
-from quanta.parser.nlp_forward import NLPForwardParser
-from quanta.parser.fol_parser import FOLParser
-from quanta.core.types import QuaternaryValue
+from parser.nlp_forward import NLPForwardParser
+from parser.fol_parser import FOLParser
+from core.types import QuaternaryValue
 
 
 @pytest.fixture(scope="module")

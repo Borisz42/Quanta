@@ -84,7 +84,7 @@ class QuantaVector:
         elif isinstance(data, bytes):
             self._data = unpack_quaternary_bytes(data)
         elif isinstance(data, dict):
-            from quanta.core.slots import get_slot_by_name
+            from core.slots import get_slot_by_name
             self._data = np.zeros(256, dtype=np.uint8)
             for k, val in data.items():
                 if isinstance(k, str):
@@ -185,7 +185,7 @@ class QuantaVector:
 
     def _resolve_slot_idx(self, key: Union[int, str]) -> int:
         if isinstance(key, str):
-            from quanta.core.slots import get_slot_by_name
+            from core.slots import get_slot_by_name
             sd = get_slot_by_name(key)
             if sd is None:
                 raise KeyError(f"Unknown slot name: {key}")

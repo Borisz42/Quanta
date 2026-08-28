@@ -4,9 +4,9 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional, Tuple, Union
 
-from quanta.core.asg import QuantaGraph, QuantaNode
-from quanta.core.types import QuantaVector, QuaternaryValue
-from quanta.parser.lexical_grounder import WordNetLexicalGrounder
+from core.asg import QuantaGraph, QuantaNode
+from core.types import QuantaVector, QuaternaryValue
+from parser.lexical_grounder import WordNetLexicalGrounder
 
 
 class FOLParser:
@@ -86,10 +86,7 @@ class FOLParser:
                 if is_pred_negated:
                     pred_node.set_slot("LJB_NA_NEGATION", 2)
 
-            pred_cid = graph.add_node(pred_node)
-            graph.add_edge(root_cid, "GRAPH_IS_SUB_EXP", pred_cid)
-
-            # Add arguments as child nodes
+            # Add arguments as child nodes first
             for i, arg in enumerate(args):
                 arg_node = QuantaNode(literal=arg)
                 arg_node.set_slot("GRAPH_LEAF", 1)
@@ -105,9 +102,12 @@ class FOLParser:
                 else:  # Constant like 'socrates'
                     arg_node.set_slot("TYPE_HUMAN", 1)
                     arg_node.set_slot("ROLE_AGENT_CAPABLE", 1)
-                arg_cid = graph.add_node(arg_node)
+                graph.add_node(arg_node)
                 rel_name = f"VAL_X{min(i+1, 5)}_AGENT" if i == 0 else f"VAL_X{min(i+1, 5)}_PATIENT"
-                graph.add_edge(pred_cid, rel_name, arg_cid)
+                graph.add_edge(pred_node, rel_name, arg_node)
+
+            graph.add_node(pred_node)
+            graph.add_edge(root_node, "GRAPH_IS_SUB_EXP", pred_node)
 
         return graph
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 import ast
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from quanta.core.asg import QuantaGraph, QuantaNode
-from quanta.core.types import QuantaVector, QuaternaryValue
-from quanta.parser.lexical_grounder import WordNetLexicalGrounder
+from core.asg import QuantaGraph, QuantaNode
+from core.types import QuantaVector, QuaternaryValue
+from parser.lexical_grounder import WordNetLexicalGrounder
 
 
 class ASTForwardParser:
@@ -36,6 +36,21 @@ class ASTForwardParser:
         # Default modality and basic types
         q_node.set_slot("MODALITY_LITERAL", 1)
 
+        # 0. Module Root
+        if isinstance(node, ast.Module):
+            if not node.body:
+                graph.add_node(q_node)
+                return q_node
+            if len(node.body) == 1:
+                return self._build_node_recursive(node.body[0], graph)
+            q_node.set_slot("GRAPH_ROOT_NODE", 1)
+            q_node.set_slot("GRAPH_SCOPED_CONTEXT", 1)
+            graph.add_node(q_node)
+            for stmt in node.body:
+                stmt_qnode = self._build_node_recursive(stmt, graph)
+                graph.add_edge(q_node, "GRAPH_IS_SUB_EXP", stmt_qnode)
+            return q_node
+
         # 1. Function / Method Definitions
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             q_node.set_slot("GRAPH_FUNCTION_DEF", 1)
@@ -59,13 +74,13 @@ class ASTForwardParser:
                 arg_qnode.set_slot("GRAPH_ARGUMENT_LIST", 1)
                 arg_qnode.set_slot("GRAPH_LEAF", 1)
                 arg_qnode.anchor = f"var:{arg.arg}"
-                arg_cid = graph.add_node(arg_qnode)
-                graph.add_edge(q_node.cid, "VAL_X1_AGENT", arg_cid)
+                graph.add_node(arg_qnode)
+                graph.add_edge(q_node, "VAL_X1_AGENT", arg_qnode)
 
             # Body statements (first 5 to capture structure)
             for stmt in node.body[:5]:
                 stmt_qnode = self._build_node_recursive(stmt, graph)
-                graph.add_edge(q_node.cid, "GRAPH_IS_SUB_EXP", stmt_qnode.cid)
+                graph.add_edge(q_node, "GRAPH_IS_SUB_EXP", stmt_qnode)
             return q_node
 
         # 2. Class Definitions
@@ -84,8 +99,8 @@ class ASTForwardParser:
                     base_qnode = QuantaNode(literal=f"base:{base.id}")
                     base_qnode.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
                     base_qnode.set_slot("VAL_X4_SOURCE", 1)
-                    base_cid = graph.add_node(base_qnode)
-                    graph.add_edge(q_node.cid, "VAL_X4_SOURCE", base_cid)
+                    graph.add_node(base_qnode)
+                    graph.add_edge(q_node, "VAL_X4_SOURCE", base_qnode)
             return q_node
 
         # 3. Loops (For / While)
@@ -106,7 +121,7 @@ class ASTForwardParser:
 
             for stmt in node.body[:3]:
                 stmt_qnode = self._build_node_recursive(stmt, graph)
-                graph.add_edge(q_node.cid, "GRAPH_IS_SUB_EXP", stmt_qnode.cid)
+                graph.add_edge(q_node, "GRAPH_IS_SUB_EXP", stmt_qnode)
             return q_node
 
         # 4. Conditionals (If / IfExp)
@@ -122,7 +137,7 @@ class ASTForwardParser:
             graph.add_node(q_node)
 
             test_qnode = self._build_node_recursive(node.test, graph)
-            graph.add_edge(q_node.cid, "GRAPH_BRANCH_COND", test_qnode.cid)
+            graph.add_edge(q_node, "GRAPH_BRANCH_COND", test_qnode)
             return q_node
 
         # 5. Assignments (Assign / AugAssign / AnnAssign)
@@ -142,7 +157,7 @@ class ASTForwardParser:
             val_node = getattr(node, "value", None)
             if val_node:
                 val_qnode = self._build_node_recursive(val_node, graph)
-                graph.add_edge(q_node.cid, "VAL_X2_PATIENT", val_qnode.cid)
+                graph.add_edge(q_node, "VAL_X2_PATIENT", val_qnode)
             return q_node
 
         # 6. Returns & Yields
@@ -155,7 +170,7 @@ class ASTForwardParser:
             val_node = getattr(node, "value", None)
             if val_node:
                 val_qnode = self._build_node_recursive(val_node, graph)
-                graph.add_edge(q_node.cid, "VAL_X2_PATIENT", val_qnode.cid)
+                graph.add_edge(q_node, "VAL_X2_PATIENT", val_qnode)
             return q_node
 
         # 7. Function Calls

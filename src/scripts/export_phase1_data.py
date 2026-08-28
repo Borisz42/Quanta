@@ -10,15 +10,15 @@ from pathlib import Path
 import sys
 import numpy as np
 
-# Ensure quanta package is importable when run directly
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# Ensure src modules are importable when run directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from quanta.core.asg import QuantaNode
-from quanta.core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_names
-from quanta.data.real_loader import RealDatasetLoader
-from quanta.profiler.candidate_pool import build_candidate_pool
-from quanta.profiler.info_profiler import QuantaInformationProfiler
-from quanta.profiler.mrmr_selector import MRMRSelector
+from core.asg import QuantaNode
+from core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_names
+from data.real_loader import RealDatasetLoader
+from profiler.candidate_pool import build_candidate_pool
+from profiler.info_profiler import QuantaInformationProfiler
+from profiler.mrmr_selector import MRMRSelector
 
 
 def export_phase1_artifacts(output_dir: Path, samples_per_domain: int = 500):

@@ -216,53 +216,90 @@ Code is stored via Abstract Syntax Tree topology, not text files.
 ## 7. Directory Structure
 
 ```bash
-quanta-core/
+quanta/
 ├── data/
-│   ├── wordnet_offline.db        # O(1) Anchor lookup indices
-│   ├── framenet_valency.json     # Role template matrices
+│   ├── wordnet_offline.db        # O(1) Anchor lookup indices (SQLite cache)
+│   ├── framenet_valency.json     # Role template matrices & FrameNet frames
 │   ├── validation_corpus/        # 5k proposition validation set (FOLIO, bAbI, CLUTRR)
-│   └── virtual_page_table/       # Merkle-folded library schemas
+│   ├── virtual_page_table/       # Merkle-folded library schemas
+│   └── raw/                      # Raw benchmark datasets (FOLIO, bAbI, ProofWriter, CLUTRR)
+├── docs/
+│   └── forward_translation_pipeline.md  # 5-stage forward mapping specification
+├── output/
+│   ├── canonical_slots_layout.json      # 256-dimension canonical slot definitions
+│   ├── optimal_256_dimensions.csv       # mRMR ranked dimensions
+│   ├── optimal_256_dimensions.json      # Full mRMR dimension metadata
+│   └── information_profiler_report.txt  # Entropy & mutual information metrics
 ├── src/
+│   ├── core/
+│   │   ├── asg.py            # QuantaNode & QuantaGraph with BLAKE3 Merkle hashing
+│   │   ├── slots.py          # 256 canonical slots, 4 isolated bands
+│   │   └── types.py          # QuantaVector & QuaternaryValue {0,1,2,3}
 │   ├── parser/
-│   │   ├── nlp_forward.py        # spaCy -> ASG parser
-│   │   └── lexical_grounder.py   # Hypernym to Band 2 resolver
+│   │   ├── nlp_forward.py    # spaCy -> Quanta ASG forward parser
+│   │   ├── lexical_grounder.py # WordNet synset & hypernym resolver
+│   │   ├── fol_parser.py     # First-Order Logic formula parser
+│   │   └── ast_parser.py     # Python AST recursive forward parser
 │   ├── solver/
-│   │   ├── scasp_rules.pl        # Prolog / s(CASP) logical invariants
-│   │   └── validator_gate.py     # Subprocess MUC extractor
+│   │   ├── scasp_rules.lp    # Clingo ASP invariants & integrity constraints
+│   │   ├── scasp_rules.pl    # s(CASP) / Prolog invariants & MUC definitions
+│   │   └── validator_gate.py # Neuro-symbolic validator gate & MUC extractor
 │   ├── profiler/
-│   │   └── info_profiler.py      # Discrete Information Bottleneck & entropy test suite
+│   │   ├── candidate_pool.py # 512+ candidate dimension pool builder
+│   │   ├── info_profiler.py  # Slot entropy H(D_i) & redundancy TC(D) profiler
+│   │   └── mrmr_selector.py  # Minimal Redundancy Maximal Relevance selector
+│   ├── realizer/
+│   │   ├── english_nlg.py    # Quanta ASG -> SVO English NLG realizer
+│   │   ├── hungarian_morph.py # Quanta ASG -> Agglutinative Hungarian realizer
+│   │   ├── fol_emitter.py    # Quanta ASG -> First-Order Logic formula emitter
+│   │   └── code_emitter.py   # Quanta ASG -> Executable Python code emitter
+│   ├── pipeline/
+│   │   └── translator_pipeline.py # Unified Two-Way Translation & Execution Pipeline
 │   ├── models/
-│   │   ├── fast_dllm.py          # Discrete Diffusion v2 backbone
-│   │   └── ltn_loss.py           # Logic Tensor Network differentiable loss
-│   └── realizer/
-│       ├── english_nlg.py        # ASG -> SVO English mapping
-│       ├── hungarian_morph.py    # ASG -> Agglutinative mapping
-│       └── code_emitter.py       # ASG -> Python/Java compiler
+│   │   ├── fast_dllm.py      # [Phase 3] Discrete Diffusion v2 backbone
+│   │   └── ltn_loss.py       # [Phase 3] Logic Tensor Network differentiable loss
+│   ├── data/
+│   │   ├── corpus_generator.py # Synthetic validation corpus generator
+│   │   └── real_loader.py    # Benchmark dataset ingestion stream
+│   └── scripts/
+│       └── export_phase1_data.py # Data export & profiler runner
 ├── tests/
 │   ├── test_dimension_entropy.py # Information bottleneck & redundancy validation
-│   ├── test_round_trip.py        # English -> QUANTA -> English integrity
+│   ├── test_lexical_grounder.py  # WordNet hypernym path & slot grounding
 │   ├── test_merkle_hashes.py     # BLAKE3 topological mismatch testing
-│   └── test_type_constraints.py  # s(CASP) contradiction catching
+│   ├── test_nlp_forward.py       # Forward sentence parsing to ASG
+│   ├── test_quaternary_tensors.py # Quaternary lattice algebra tests
+│   ├── test_type_constraints.py  # ASP contradiction catching & MUC extraction
+│   ├── test_realizers.py         # Reverse realizers (English, Hungarian, FOL, Code)
+│   ├── test_round_trip.py        # English/FOL/Code -> QUANTA -> Target round-trip
+│   └── test_validation_pipeline.py # End-to-end translation & validation pipeline
 └── README.md
-
 ```
 
 ---
 
 ## 8. Implementation Roadmap & Milestones
 
-* **Phase 1: Formalization, Dimension Optimization & Core Symbolic Engine**
-  * Implement $\Sigma = \{0, 1, 2, 3\}^{256}$ tensor layouts in PyTorch.
+* **Phase 1: Formalization, Dimension Optimization & Core Symbolic Engine** *(Completed)*
+  * Implement $\Sigma = \{0, 1, 2, 3\}^{256}$ tensor layouts and quaternary lattice algebra in Python.
   * Execute mRMR dimension selection across candidate pool ($K = 512\text{--}1024$) from NSM, WordNet, and FrameNet.
-  * Run Information Profiler on 5k validation corpus to eliminate dead slots ($H(D_i) < 0.1\text{ bits}$) and collapse redundant pairs ($I(D_i; D_j) > 0.5\text{ bits}$).
-  * Build Python `pyclingo`/`s(CASP)` validator gate and offline WordNet schema loader.
+  * Run Information Profiler on real reasoning benchmarks (FOLIO, ProofWriter, bAbI, CLUTRR, Python ASTs) to eliminate dead slots ($H(D_i) < 0.1\text{ bits}$) and verify low redundancy.
+  * Build Python `clingo`/`s(CASP)` validator gate with Minimal Unsatisfiable Core (MUC) extraction and offline WordNet schema cache.
 
-* **Phase 2: Bidirectional Realizers & Benchmarking**
-  * Build strict `English -> Mentalese -> English` round-trip invariance tests.
-  * Ensure 100% Type Constraint validation (catching logic flaws prior to generation).
+* **Phase 2: Bidirectional Realizers, Extended Invariants & Verification Pipeline**
+  * **Reverse Realizer Suite (`quanta.realizer`)**:
+    * `EnglishRealizer`: ASG traversal unrolling thematic roles (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, etc.), tense inflection (`LJB_PU_PAST_TENSE`, etc.), modals (`EPIST_DEONTIC_*`), negation (`LJB_NA_NEGATION`), and descriptors into natural SVO English.
+    * `HungarianRealizer`: Morphophonological vowel harmony engine (back vs. front, rounded vs. unrounded) and agglutinative case suffix generator (Accusative `-t`, Inessive `-ban/-ben`, Instrumental `-val/-vel`, etc.).
+    * `FOLEmitter`: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg, \oplus, P(x, y)$).
+    * `CodeEmitter`: Executable Python AST/code reconstruction from `GRAPH_*` program topology.
+  * **Extended Neuro-Symbolic Invariants (`scasp_rules.lp` / `scasp_rules.pl`)**:
+    * Full 4-band integrity rules: Ontological domain/range exclusivity, RCC-8 spatial mereotopology, Allen interval temporal calculus, and causal hierarchy invariants.
+  * **Unified Two-Way Translation & Execution Pipeline (`quanta.pipeline`)**:
+    * End-to-end $Input \to Forward\ Parser \to ASP\ Gating \to Merkle\ Address \to Reverse\ Realizer$.
+    * Strict round-trip invariance benchmarking ($NL \leftrightarrow \text{Quanta ASG}$, $FOL \leftrightarrow \text{Quanta ASG}$, $\text{Code} \leftrightarrow \text{Quanta ASG}$) with Hamming distance = 0 verification.
 
 * **Phase 3: Diffusion Backbone & Compilation Loop**
-  * Train Fast-dLLM v2 discrete diffusion masking mechanism.
+  * Train Fast-dLLM v2 discrete diffusion masking mechanism over $\Sigma^{256}$.
   * Integrate Logic Tensor Network (LTN) loss for early denoising and MUC invalidation.
 
 * **Phase 4: Empirical Evaluation**
@@ -271,5 +308,6 @@ quanta-core/
 
 * **Phase 5: Publication Writing**
   * Target conferences: NeurIPS, NeSy, ACL.
+
 
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import numpy as np
 
-from quanta.core.slots import CANONICAL_SLOTS, SLOT_NAME_TO_INDEX
+from core.slots import CANONICAL_SLOTS, SLOT_NAME_TO_INDEX
 
 
 @dataclass(frozen=True)

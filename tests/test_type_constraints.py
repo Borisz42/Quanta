@@ -1,8 +1,8 @@
 """Tests for neuro-symbolic ASP validator gate and Minimal Unsatisfiable Core (MUC) extraction."""
 
 import pytest
-from quanta.core.asg import QuantaNode, QuantaGraph
-from quanta.solver.validator_gate import ValidationGate
+from core.asg import QuantaNode, QuantaGraph
+from solver.validator_gate import ValidationGate
 
 
 @pytest.fixture
@@ -106,3 +106,38 @@ def test_deontic_obligation_prohibition_contradiction(validator):
     violated_slots = [slot for _, slot, _ in result.muc_slots]
     assert "EPIST_DEONTIC_OBLIGATION" in violated_slots
     assert "EPIST_DEONTIC_PROHIBITION" in violated_slots
+
+
+def test_allen_temporal_contradiction(validator):
+    # Simultaneous Before and During is logically impossible
+    temporal_conflict = QuantaNode(
+        vector={
+            "TEMP_ALLEN_BEFORE": 1,
+            "TEMP_ALLEN_DURING": 1,
+            "TYPE_TEMPORAL_INTERVAL": 1,
+        },
+    )
+
+    result = validator.validate_node(temporal_conflict)
+    assert not result.is_valid
+    violated_slots = [slot for _, slot, _ in result.muc_slots]
+    assert "TEMP_ALLEN_BEFORE" in violated_slots
+    assert "TEMP_ALLEN_DURING" in violated_slots
+
+
+def test_rcc8_spatial_contradiction(validator):
+    # Disconnected and Congruent Eq is spatially contradictory
+    spatial_conflict = QuantaNode(
+        vector={
+            "SPATIAL_RCC_DISCONNECTED": 1,
+            "SPATIAL_RCC_CONGRUENT_EQ": 1,
+            "TYPE_SPATIAL_REGION": 1,
+        },
+    )
+
+    result = validator.validate_node(spatial_conflict)
+    assert not result.is_valid
+    violated_slots = [slot for _, slot, _ in result.muc_slots]
+    assert "SPATIAL_RCC_DISCONNECTED" in violated_slots
+    assert "SPATIAL_RCC_CONGRUENT_EQ" in violated_slots
+

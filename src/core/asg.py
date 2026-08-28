@@ -5,8 +5,8 @@ import json
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import blake3
 
-from quanta.core.types import QuantaVector, QuaternaryValue
-from quanta.core.slots import SLOT_NAME_TO_INDEX, get_slot_by_name
+from core.types import QuantaVector, QuaternaryValue
+from core.slots import SLOT_NAME_TO_INDEX, get_slot_by_name
 
 
 def _blake3_hash(data: bytes) -> str:
@@ -129,7 +129,7 @@ class QuantaNode:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes node to dictionary format."""
-        from quanta.core.slots import get_slot_by_index
+        from core.slots import get_slot_by_index
         readable_slots = {get_slot_by_index(k).name: int(v) for k, v in self.vector.active_slots().items()}
         return {
             "cid": self.cid,
