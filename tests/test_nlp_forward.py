@@ -59,3 +59,19 @@ def test_fol_implication_parsing(fol_parser):
     assert root.get_slot("LJB_GANAI_IF_THEN") == QuaternaryValue.TRUE
     assert root.get_slot("TYPE_PROPOSITION") == QuaternaryValue.TRUE
     assert root.get_slot("EPIST_DEDUCTIVE_INFERENCE") == QuaternaryValue.TRUE
+
+
+def test_negated_past_sentence_parsing(nlp_parser):
+    # "A person did not see a cat."
+    graph = nlp_parser.parse_sentence("A person did not see a cat.")
+    assert graph.root is not None
+    root = graph.root
+
+    assert root.literal == "A person did not see a cat."
+    assert root.get_slot("NSM_SEE") == QuaternaryValue.FALSE
+    assert root.get_slot("LJB_NA_NEGATION") == QuaternaryValue.FALSE
+    assert root.get_slot("LJB_PU_PAST_TENSE") == QuaternaryValue.TRUE
+    assert root.get_slot("NSM_DIE") == QuaternaryValue.IRRELEVANT
+    assert "VAL_X1_AGENT" in root.edges
+    assert "VAL_X2_PATIENT" in root.edges
+

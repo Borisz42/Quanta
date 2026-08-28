@@ -85,7 +85,14 @@ class WordNetLexicalGrounder:
             # Fallback: try finding synsets for lemma
             synsets = wn.synsets(key)
             if not synsets:
-                raise KeyError(f"WordNet synset not found for '{key}'")
+                # Try fuzzy typo correction
+                from parser.typo_normalizer import TypoNormalizer
+                corr = TypoNormalizer.get_instance().correct_word(key.replace("_", " "), lang="en")
+                corr_key = corr.replace(" ", "_")
+                synsets = wn.synsets(corr_key)
+                if not synsets:
+                    raise KeyError(f"WordNet synset not found for '{key}'")
+                key = corr_key
             synset = synsets[0]
             key = synset.name()
 

@@ -157,8 +157,12 @@ class EnglishRealizer:
 
         # 4. Resolve Patient / Object (VAL_X2_PATIENT) or Experiencer
         patient_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X2_PATIENT")
-        if not patient_str and "VAL_EXPERIENCER" in predicate_node.edges:
-            patient_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_EXPERIENCER")
+        experiencer_str = ""
+        if "VAL_EXPERIENCER" in predicate_node.edges:
+            if patient_str:
+                experiencer_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_EXPERIENCER", prep="to")
+            else:
+                patient_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_EXPERIENCER")
 
         # 5. Resolve Prepositional Arguments
         dest_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X3_DESTINATION", prep="to")
@@ -179,6 +183,8 @@ class EnglishRealizer:
             tokens.append(manner_str)
         if patient_str:
             tokens.append(patient_str)
+        if experiencer_str:
+            tokens.append(experiencer_str)
         if dest_str:
             tokens.append(dest_str)
         if source_str:

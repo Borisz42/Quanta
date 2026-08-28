@@ -73,8 +73,25 @@ class NLPForwardParser:
 
     def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
         """Parses a single natural language sentence into a validated QuantaGraph ASG."""
-        doc = self.nlp(text.strip())
+        from parser.typo_normalizer import TypoNormalizer
+        clean_text = TypoNormalizer.get_instance().normalize_text(text, lang="en")
+        doc = self.nlp(clean_text.strip())
         graph = QuantaGraph()
+
+        # Disambiguate verb / root tokens (e.g. 'bit' misclassified as NOUN)
+        known_verb_lemmas = {
+            "bit": "bite", "bites": "bite", "bite": "bite",
+            "chased": "chase", "chases": "chase", "chase": "chase",
+            "ran": "run", "runs": "run", "run": "run",
+            "saw": "see", "sees": "see", "see": "see",
+            "gave": "give", "gives": "give", "give": "give",
+            "walked": "walk", "walks": "walk", "walk": "walk",
+            "thought": "think", "thinks": "think", "think": "think",
+            "knew": "know", "knows": "know", "know": "know",
+            "wanted": "want", "wants": "want", "want": "want",
+            "felt": "feel", "feels": "feel", "feel": "feel",
+            "touched": "touch", "touches": "touch", "touch": "touch",
+        }
 
         # Find main predicate verb (ROOT)
         root_token = None
@@ -82,6 +99,13 @@ class NLPForwardParser:
             if token.dep_ == "ROOT":
                 root_token = token
                 break
+
+        # If ROOT token is misclassified (e.g. noun 'bit'), find best verb token
+        if root_token is not None and root_token.pos_ != "VERB":
+            for token in doc:
+                if token.text.lower() in known_verb_lemmas or token.pos_ == "VERB":
+                    root_token = token
+                    break
 
         if root_token is None and len(doc) > 0:
             root_token = doc[0]
@@ -93,7 +117,7 @@ class NLPForwardParser:
         # 2. Extract Agent / Subject (nsubj / nsubjpass / csubj)
         agent_token = None
         for token in doc:
-            if token.dep_ in ("nsubj", "nsubjpass", "csubj") and token.head == root_token:
+            if token.dep_ in ("nsubj", "nsubjpass", "csubj") and (token.head == root_token or token.i < root_token.i):
                 agent_token = token
                 break
 
@@ -104,9 +128,15 @@ class NLPForwardParser:
                     agent_token = token
                     break
 
+        agent_node = None
         if agent_token:
             # Check for multi-word compounds (e.g. golden retriever)
             compounds = [c for c in agent_token.children if c.dep_ in ("compound", "amod") and c.i < agent_token.i]
+            if not compounds:
+                # Check preceding sibling tokens before agent
+                prev_tokens = [doc[i] for i in range(max(0, agent_token.i - 2), agent_token.i) if doc[i].pos_ in ("ADJ", "NOUN") and doc[i].dep_ not in ("det", "prep")]
+                compounds = prev_tokens
+
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [agent_token.text])
                 try:
@@ -117,6 +147,11 @@ class NLPForwardParser:
             else:
                 agent_node = self._create_entity_node(agent_token)
 
+            # Apply descriptors modifying agent before finalizing CID
+            for token in doc:
+                if token.pos_ == "ADJ" and (token.head == agent_token or token.i < agent_token.i):
+                    self._apply_descriptor_to_node(agent_node, token.lemma_.lower())
+
             agent_node.set_slot("VAL_X1_AGENT", 1)
             agent_node.set_slot("ROLE_AGENT_CAPABLE", 1)
             root_node.set_slot("VAL_X1_AGENT", 1)
@@ -126,41 +161,72 @@ class NLPForwardParser:
         # 3. Extract Patient / Object / Attribute (dobj / attr / oprd / acomp)
         patient_token = None
         for token in doc:
-            if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and token.head == root_token:
+            if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and (token.head == root_token or token.i > root_token.i):
                 patient_token = token
                 break
 
         if patient_token is None:
-            # Fallback for patient if tagged as appos or direct argument
+            # Fallback for patient if tagged as appos or direct argument after root
             for token in doc:
                 if token.i > root_token.i and token.dep_ in ("appos", "dobj", "attr", "dep") and token.pos_ in ("NOUN", "PROPN"):
                     patient_token = token
                     break
 
+        patient_node = None
         if patient_token:
-            patient_node = self._create_entity_node(patient_token)
+            compounds = [c for c in patient_token.children if c.dep_ in ("compound", "amod") and c.i < patient_token.i]
+            if compounds:
+                full_text = " ".join([c.text for c in compounds] + [patient_token.text])
+                try:
+                    concept = self.grounder.ground_synset(full_text.lower().replace(" ", "_"))
+                    patient_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
+                except Exception:
+                    patient_node = self._create_entity_node(patient_token)
+            else:
+                patient_node = self._create_entity_node(patient_token)
+
+            # Apply descriptors modifying patient before finalizing CID
+            for token in doc:
+                if token.pos_ == "ADJ" and (token.head == patient_token or (token.i > root_token.i and token.i < patient_token.i)):
+                    self._apply_descriptor_to_node(patient_node, token.lemma_.lower())
+
             patient_node.set_slot("VAL_X2_PATIENT", 1)
             root_node.set_slot("VAL_X2_PATIENT", 1)
             graph.add_node(patient_node)
             graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
 
-        # 4. Extract Prepositional Phrases (Destination, Source, Location, Instrument, Manner)
+        # 4. Extract Prepositional Phrases across the entire clause (Destination, Source, Location, Instrument, Manner)
         for token in doc:
-            if token.dep_ == "prep" and token.head == root_token:
+            if token.dep_ == "prep" or token.pos_ == "ADP":
                 prep_lemma = token.lemma_.lower()
-                pobj = [child for child in token.children if child.dep_ == "pobj"]
+                pobj = [child for child in token.children if child.dep_ in ("pobj", "dobj")]
+                if not pobj:
+                    # Look ahead for following noun token
+                    for next_tok in doc[token.i + 1:]:
+                        if next_tok.pos_ in ("NOUN", "PROPN"):
+                            pobj = [next_tok]
+                            break
                 if not pobj:
                     continue
+
                 pobj_token = pobj[0]
                 prep_node = self._create_entity_node(pobj_token)
 
                 if prep_lemma in ("to", "into", "towards"):
-                    prep_node.set_slot("VAL_X3_DESTINATION", 1)
-                    root_node.set_slot("VAL_X3_DESTINATION", 1)
-                    graph.add_node(prep_node)
-                    graph.add_edge(root_node, "VAL_X3_DESTINATION", prep_node)
+                    if prep_node.get_slot("TYPE_ANIMATE") == 1 or prep_node.get_slot("TYPE_HUMAN") == 1:
+                        prep_node.set_slot("VAL_EXPERIENCER", 1)
+                        root_node.set_slot("VAL_EXPERIENCER", 1)
+                        graph.add_node(prep_node)
+                        graph.add_edge(root_node, "VAL_EXPERIENCER", prep_node)
+                    else:
+                        prep_node.set_slot("VAL_X3_DESTINATION", 1)
+                        prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
+                        root_node.set_slot("VAL_X3_DESTINATION", 1)
+                        graph.add_node(prep_node)
+                        graph.add_edge(root_node, "VAL_X3_DESTINATION", prep_node)
                 elif prep_lemma in ("from", "out", "off"):
                     prep_node.set_slot("VAL_X4_SOURCE", 1)
+                    prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                     root_node.set_slot("VAL_X4_SOURCE", 1)
                     graph.add_node(prep_node)
                     graph.add_edge(root_node, "VAL_X4_SOURCE", prep_node)
@@ -195,11 +261,14 @@ class NLPForwardParser:
                 root_node.set_slot("VAL_PURPOSE_SLOT", 1)
                 root_node.set_slot("VAL_RESULT_SLOT", 1)
 
-        # 6. Extract Adjectives / Descriptors across the sentence
+        # 6. Extract Predicate Adjectives (e.g. 'A dog was not big')
         for token in doc:
             if token.pos_ == "ADJ":
-                adj_lemma = token.lemma_.lower()
-                self._apply_descriptor_to_node(root_node, adj_lemma)
+                is_agent_adj = agent_token and (token.head == agent_token or token.i < agent_token.i)
+                is_patient_adj = patient_token and (token.head == patient_token or (token.i > root_token.i and token.i < patient_token.i))
+                if not is_agent_adj and not is_patient_adj:
+                    adj_lemma = token.lemma_.lower()
+                    self._apply_descriptor_to_node(root_node, adj_lemma)
 
         # 7. Extract Comprehensive Logic, Pronouns, Substantives & Space/Time Primes
         self._apply_comprehensive_linguistic_primes(root_node, doc)
@@ -323,7 +392,8 @@ class NLPForwardParser:
 
         # Band 1: Tense Detection
         morph = str(root_token.morph)
-        if "Tense=Past" in morph or root_token.tag_ in ("VBD", "VBN") or root_token.text.lower() in ("bit", "chased", "saw", "gave", "ran", "thought", "felt", "was", "were", "had", "wanted"):
+        has_past_aux = any(t.text.lower() in ("did", "didn't", "was", "were", "had") for t in doc)
+        if "Tense=Past" in morph or root_token.tag_ in ("VBD", "VBN") or root_token.text.lower() in ("bit", "chased", "saw", "gave", "ran", "thought", "felt", "was", "were", "had", "wanted") or has_past_aux:
             node.set_slot("LJB_PU_PAST_TENSE", 1)
         elif "Tense=Pres" in morph or root_token.tag_ in ("VBP", "VBZ") or root_token.text.lower() in ("thinks", "wants", "bites", "chases", "sees", "runs", "gives", "is", "are", "has"):
             node.set_slot("LJB_CA_PRESENT_TENSE", 1)

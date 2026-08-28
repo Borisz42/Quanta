@@ -76,7 +76,8 @@ class HungarianForwardParser:
 
     def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
         """Parses a Hungarian sentence into a QuantaGraph ASG."""
-        clean_text = text.strip().rstrip(".?!")
+        from parser.typo_normalizer import TypoNormalizer
+        clean_text = TypoNormalizer.get_instance().normalize_text(text, lang="hu").strip().rstrip(".?!")
         words = clean_text.split()
         graph = QuantaGraph()
 
@@ -169,11 +170,26 @@ class HungarianForwardParser:
                 root_node.set_slot("VAL_X5_INSTRUMENT", 1)
                 graph.add_edge(root_node, "VAL_X5_INSTRUMENT", entity_node)
 
+        # Check standalone predicate adjectives
+        for w in words:
+            w_lower = w.lower()
+            if w_lower in self.ADJECTIVES:
+                if w_lower == "nagy":
+                    root_node.set_slot("NSM_BIG", 1)
+                    root_node.set_slot("TYPE_ATTRIBUTE_PROPERTY", 1)
+                elif w_lower in ("kis", "kicsi"):
+                    root_node.set_slot("NSM_SMALL", 1)
+                    root_node.set_slot("TYPE_ATTRIBUTE_PROPERTY", 1)
+
         return graph
 
     def _stem_verb(self, word: str) -> Tuple[str, bool]:
         """Stems a Hungarian verb and detects past tense."""
         w = word.lower()
+        if w in ("volt", "voltak"):
+            return "van", True
+        if w in ("van", "vannak"):
+            return "van", False
         if w in self.HU_TO_EN_DICTIONARY:
             return w, False
 
@@ -284,6 +300,9 @@ class HungarianForwardParser:
     def _create_entity_from_tokens(self, tokens: List[str], case: str) -> Optional[QuantaNode]:
         """Creates a grounded QuantaNode from noun phrase tokens."""
         if not tokens:
+            return None
+
+        if all(t.lower() in self.ADJECTIVES or t.lower() in ("volt", "van", "nem", "a", "az") for t in tokens):
             return None
 
         # Separate article, adjectives, head noun

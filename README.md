@@ -192,18 +192,100 @@ To run this testing pipeline before training:
 
 ---
 
-## 6. Examples
+## 6. Canonical ASG & Quaternary Logic Examples
 
-### Example A: Natural Language Representation
+Every concept in QUANTA is encoded into an Abstract Syntax Graph (ASG) over the epistemic 4-valued logic $\mathcal{FOUR} = \{0, 1, 2, 3\}$:
+- `0 (IRRELEVANT)`: Slot is unasserted / inactive.
+- `1 (TRUE)`: Affirmed feature, positive existence, confirmed truth.
+- `2 (FALSE)`: Explicit epistemic negation, confirmed absence, or contradiction.
+- `3 (UNKNOWN / MODAL)`: Epistemic uncertainty, hypothetical conjecture, or question query target.
 
-*"A brown golden retriever dog bit the postman yesterday."*
+---
 
-* **Root (`BITE_EVENT`):** `NSM_DO=1`, `LJB_PU_PAST_TENSE=1`, `TYPE_EVENT=1`, `MODALITY_LITERAL=1`.
-* **Agent (`DOG_ENTITY`):** `TYPE_ANIMATE=1`, `ROLE_AGENT_CAPABLE=1`. Anchor: `wn:golden_retriever.n.01`.
-* **Patient (`POSTMAN_ENTITY`):** `TYPE_HUMAN=1`, `VAL_EXPERIENCER=1`. Anchor: `wn:mailman.n.01`.
-* *Validation:* If the LLM assigned `TYPE_ABSTRACT_CONCEPT=1` to the Dog, `s(CASP)` flags an immediate MUC contradiction without querying WordNet.
+### Example A: Affirmative Action with Modifiers & Spatial Location (Value `1` Focus)
 
-### Example B: Code Execution (Factorial Function)
+**Input:** *"A golden retriever bit the mailman in the garden."*  
+**Hungarian Realization:** *"A golden retriever a kertben megharapta a postást."*
+
+```text
+Node [3d09497c] Concept: 'wn:bite.v.01' = "A golden retriever bit the mailman in the garden."
+├── (VAL_X1_AGENT) ──────> Node [7275e4f8] Concept: 'wn:golden_retriever.n.01' = "golden retriever"
+├── (VAL_X2_PATIENT) ────> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
+└── (VAL_LOCATION_SLOT) ─> Node [8f12a93c] Concept: 'wn:garden.n.01' = "garden"
+```
+
+* **Root Predicate (`wn:bite.v.01`):**
+  * `Band 0 (Primes):` `NSM_DO = 1`, `NSM_TOUCH = 1`, `NSM_TRUE = 1`
+  * `Band 1 (Valency & Tense):` `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`, `VAL_LOCATION_SLOT = 1`, `LJB_PU_PAST_TENSE = 1`, `GRAPH_ROOT_NODE = 1`
+  * `Band 2 (Ontology):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`
+  * `Band 3 (Epistemics):` `EPIST_DIRECT_OBSERVATION = 1`, `EPIST_PROB_CERTAIN = 1`
+* **Agent Entity (`wn:golden_retriever.n.01`):**
+  * `Band 0:` `NSM_ONE = 1`
+  * `Band 1:` `VAL_X1_AGENT = 1`
+  * `Band 2:` `TYPE_ANIMATE = 1`, `ROLE_AGENT_CAPABLE = 1`, `ROLE_SENTIENT = 1`, `WN_ANIMAL_FAUNA = 1`
+* **Patient Entity (`wn:mailman.n.01`):**
+  * `Band 0:` `NSM_THIS = 1`
+  * `Band 1:` `VAL_X2_PATIENT = 1`
+  * `Band 2:` `TYPE_HUMAN = 1`, `TYPE_ANIMATE = 1`, `ROLE_COMMUNICATOR = 1`, `WN_PERSON_HUMAN = 1`
+* **Location Entity (`wn:garden.n.01`):**
+  * `Band 0:` `NSM_INSIDE = 1`
+  * `Band 1:` `VAL_LOCATION_SLOT = 1`
+  * `Band 2:` `TYPE_SPATIAL_REGION = 1`, `WN_LOCATION_PLACE = 1`
+
+---
+
+### Example B: Explicit Epistemic Negation (Value `2` Focus)
+
+**Input:** *"The dog did not bite the mailman."*  
+**Hungarian Realization:** *"A kutya nem harapta meg a postást."*
+
+```text
+Node [e12a4f67] Concept: 'wn:bite.v.01' (Negated Action)
+├── (VAL_X1_AGENT) ──> Node [0c5d3533] Concept: 'wn:dog.n.01' = "dog"
+└── (VAL_X2_PATIENT) ──> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
+```
+
+* **Root Predicate (`wn:bite.v.01` with Polarity `2`):**
+  * `Band 0 (Primes):` `NSM_DO = 2` (Action explicitly negated), `NSM_TOUCH = 2` (No contact)
+  * `Band 1 (Valency & Tense):` `LJB_NA_NEGATION = 2` (Formal negation active), `LJB_PU_PAST_TENSE = 1`, `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`
+  * `Band 2 (Ontology):` `TYPE_EVENT = 1`, `MODALITY_LITERAL = 1`
+  * `Band 3 (Epistemics):` `EPIST_PROB_CERTAIN = 1` (Certain that the event did NOT occur)
+
+---
+
+### Example C: Epistemic Uncertainty & Question Query (Value `3` Focus)
+
+**Input:** *"Did the dog perhaps bite a mailman?"*  
+**Hungarian Realization:** *"Vajon a kutya megharapott egy postást?"*
+
+```text
+Node [9b77ac31] Concept: 'wn:bite.v.01' (Hypothetical / Interrogative Query)
+├── (VAL_X1_AGENT) ──> Node [0c5d3533] Concept: 'wn:dog.n.01' = "dog"
+└── (VAL_X2_PATIENT) ──> Node [247564ae] Concept: 'wn:mailman.n.01' = "mailman"
+```
+
+* **Root Predicate (`wn:bite.v.01` with Polarity `3`):**
+  * `Band 0 (Primes):` `NSM_MAYBE = 3` (Epistemic possibility)
+  * `Band 1 (Valency & Query):` `GRAPH_QUERY_TARGET = 3` (Interrogative goal), `LJB_PU_PAST_TENSE = 1`, `VAL_X1_AGENT = 1`, `VAL_X2_PATIENT = 1`
+  * `Band 2 (Ontology):` `TYPE_PROPOSITION = 3`, `MODALITY_HYPOTHETICAL = 3`
+  * `Band 3 (Epistemics):` `EPIST_PROB_MARGINAL = 3`, `EPIST_FUZZY_PLAUSIBILITY = 3`
+
+---
+
+### Example D: Typo-Tolerant Resolution & Lexical Grounding
+
+QUANTA features a typo-resilient lexical grounding engine:
+
+* **Corrupted Input:** `"A glden retreiver bit the maileman in the graden."`
+* **Fuzzy Lexicon Normalization:**
+  * `glden retreiver` $\xrightarrow{\text{Edit Distance / Phonetic}}$ `wn:golden_retriever.n.01`
+  * `maileman` $\xrightarrow{\text{Edit Distance}}$ `wn:mailman.n.01`
+  * `graden` $\xrightarrow{\text{Edit Distance}}$ `wn:garden.n.01`
+* **Reconstructed Invariant:** Same canonical Merkle CID hash as clean input with 100% semantic slot preservation.
+
+---
+
+### Example E: Code Execution (Factorial Function)
 
 Code is stored via Abstract Syntax Tree topology, not text files.
 

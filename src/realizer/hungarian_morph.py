@@ -106,7 +106,18 @@ class HungarianRealizer:
         # Location -> Inessive (-ban/-ben)
         loc_str = self._resolve_entity_with_case(graph, root, "VAL_LOCATION_SLOT", case="ine")
 
-        # Assemble Hungarian sentence: Subject + Modifiers + Object + (Nem) + Verb
+        # Predicate adjective for copula sentences
+        pred_adj = ""
+        if root.get_slot("NSM_BIG") == 1:
+            pred_adj = "nagy"
+        elif root.get_slot("NSM_SMALL") == 1:
+            pred_adj = "kis"
+        elif root.get_slot("NSM_GOOD") == 1:
+            pred_adj = "jó"
+        elif root.get_slot("NSM_BAD") == 1:
+            pred_adj = "rossz"
+
+        # Assemble Hungarian sentence: Subject + Modifiers + Object + (Nem) + Verb / Predicate Adj
         tokens: List[str] = []
         if subject_str:
             tokens.append(subject_str)
@@ -122,7 +133,15 @@ class HungarianRealizer:
             tokens.append(patient_str)
         if is_negated:
             tokens.append("nem")
-        tokens.append(conjugated_verb)
+        if verb_base == "van":
+            if is_past:
+                tokens.append("volt")
+            elif not pred_adj:
+                tokens.append("van")
+        else:
+            tokens.append(conjugated_verb)
+        if pred_adj:
+            tokens.append(pred_adj)
 
         raw = " ".join(tokens).strip()
         if not raw:
