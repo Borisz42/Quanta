@@ -208,6 +208,7 @@ class TypoNormalizer:
 
     def __init__(self):
         self._wn_lemma_cache: Optional[Set[str]] = None
+        self._wn_bucket_cache: Optional[Dict[Tuple[str, int], List[str]]] = None
 
     @classmethod
     def get_instance(cls) -> TypoNormalizer:
@@ -226,10 +227,29 @@ class TypoNormalizer:
                 self._wn_lemma_cache = set()
         return self._wn_lemma_cache
 
+    def _get_wn_bucket_candidates(self, first_char: str, target_len: int) -> List[str]:
+        if self._wn_bucket_cache is None:
+            self._wn_bucket_cache = {}
+            lemmas = self._get_all_wn_lemmas()
+            for lem in lemmas:
+                if lem and len(lem) <= 25 and "_" not in lem:
+                    k = (lem[0].lower(), len(lem))
+                    self._wn_bucket_cache.setdefault(k, []).append(lem)
+        
+        candidates = []
+        for l in (target_len - 1, target_len, target_len + 1):
+            if l > 1:
+                candidates.extend(self._wn_bucket_cache.get((first_char, l), []))
+        return candidates
+
     def correct_word(self, word: str, lang: str = "en", max_dist: int = 2) -> str:
         """Corrects a single token against the core lexicon and WordNet."""
         w_clean = word.lower().strip()
         if not w_clean or len(w_clean) <= 1:
+            return word
+
+        # Fast exact match if word is numeric or variable
+        if w_clean.isdigit() or "_" in w_clean:
             return word
 
         lexicon = self.HUNGARIAN_CORE_LEXICON if lang in ("hu", "hungarian") else self.ENGLISH_CORE_LEXICON
@@ -244,20 +264,18 @@ class TypoNormalizer:
             if w_clean in wn_lemmas:
                 return w_clean
 
-        # 3. Candidate search with Damerau-Levenshtein
+        # 3. Candidate search with Damerau-Levenshtein against core lexicon
         best_candidate: Optional[str] = None
         best_score = float("inf")
 
         for target, priority in lexicon.items():
             if " " in target:
                 continue
-            # Quick length check
             if abs(len(w_clean) - len(target)) > max_dist:
                 continue
 
             dist = damerau_levenshtein(w_clean, target)
             if dist <= max_dist:
-                # Score formula: edit distance heavily penalizes, priority reduces score
                 score = (dist * 10) - priority
                 if score < best_score:
                     best_score = score
@@ -266,13 +284,13 @@ class TypoNormalizer:
         if best_candidate and best_score < 20:
             return best_candidate
 
-        # 4. Fallback search over WordNet lemmas for English
-        if lang in ("en", "english"):
-            for wn_word in self._get_all_wn_lemmas():
-                if abs(len(w_clean) - len(wn_word)) > max_dist:
-                    continue
+        # 4. Fallback search over indexed WordNet lemma buckets (O(1) bucket lookup, max distance 1)
+        if lang in ("en", "english") and len(w_clean) >= 3:
+            first_char = w_clean[0]
+            bucket = self._get_wn_bucket_candidates(first_char, len(w_clean))
+            for wn_word in bucket:
                 dist = damerau_levenshtein(w_clean, wn_word)
-                if dist <= 1:  # Only accept distance 1 from general WordNet to avoid over-correction
+                if dist <= 1:
                     score = dist * 10
                     if score < best_score:
                         best_score = score

@@ -5,6 +5,7 @@ and 256-dimensional quaternary semantic vectors.
 """
 
 from __future__ import annotations
+from pathlib import Path
 import re
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 import spacy
@@ -34,6 +35,10 @@ class NLPForwardParser:
 
     def __init__(self, spacy_model: str = "en_core_web_sm", offline_cache_path: Optional[str] = None):
         self.nlp = spacy.load(spacy_model)
+        if offline_cache_path is None:
+            default_db = Path("data/wordnet_offline.db")
+            if default_db.exists():
+                offline_cache_path = str(default_db)
         self.grounder = WordNetLexicalGrounder(offline_cache_path=offline_cache_path)
 
         # Lexical classification maps for Band 0 NSM primes

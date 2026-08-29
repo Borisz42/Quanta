@@ -273,9 +273,12 @@ class WordNetLexicalGrounder:
             entry = self._cache[key]
             slots = entry["active_slots"]
             vec = QuantaVector(slots)
+            s_name = entry.get("synset_name") or key
+            if not s_name.startswith("wn:"):
+                s_name = f"wn:{s_name}"
             return GroundedLexicalConcept(
                 lemma=entry["lemma"],
-                synset_name=f"wn:{key}",
+                synset_name=s_name,
                 definition=entry["definition"],
                 pos=entry["pos"],
                 hypernym_path=entry["hypernym_path"],

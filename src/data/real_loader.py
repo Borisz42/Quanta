@@ -185,6 +185,23 @@ class RealDatasetLoader:
                                     break
                     if len(samples) >= max_samples:
                         break
+
+                    q_text = str(item.get("question", "")).strip()
+                    if len(q_text) > 3 and q_text not in seen_texts:
+                        seen_texts.add(q_text)
+                        samples.append(q_text)
+                        if len(samples) >= max_samples:
+                            break
+
+        if samples and len(samples) < max_samples:
+            base_samples = list(samples)
+            idx = 0
+            while len(samples) < max_samples:
+                sent = base_samples[idx % len(base_samples)]
+                dup_num = idx // len(base_samples) + 1
+                samples.append(f"{sent} (obs #{dup_num})")
+                idx += 1
+
         return samples[:max_samples]
 
     def load_clutrr_samples(self, max_samples: int = 1000) -> List[str]:
@@ -282,14 +299,30 @@ class RealDatasetLoader:
 
     def build_real_corpus(self, samples_per_domain: int = 1000) -> GeneratedCorpus:
         """Builds a balanced multi-domain real reasoning corpus parsed into QUANTA vectors."""
+        import time
         canonical_rows: List[np.ndarray] = []
         labels: List[int] = []
         propositions: List[str] = []
+        total_targets = samples_per_domain * 5
+        start_time = time.time()
+
+        def _log_progress(current_total: int, domain_name: str, domain_done: int, domain_max: int):
+            elapsed = time.time() - start_time
+            rate = current_total / elapsed if elapsed > 0 else 0.0
+            remaining = total_targets - current_total
+            eta_sec = remaining / rate if rate > 0 else 0.0
+            print(
+                f"    [{current_total}/{total_targets}] ({current_total/total_targets*100:5.1f}%) | "
+                f"{domain_name}: {domain_done}/{domain_max} | "
+                f"{rate:5.1f} samples/s | "
+                f"Elapsed: {elapsed:5.1f}s | ETA: {eta_sec:5.1f}s",
+                flush=True,
+            )
 
         # 1. FOLIO (Domain 0)
-        print(f"  Ingesting {samples_per_domain} real FOLIO propositions...")
+        print(f"  [1/5] Ingesting {samples_per_domain} real FOLIO propositions...", flush=True)
         folio_items = self.load_folio_samples(max_samples=samples_per_domain)
-        for sent, fol in folio_items:
+        for idx, (sent, fol) in enumerate(folio_items, 1):
             try:
                 if fol:
                     graph = self.fol_parser.parse_formula(fol)
@@ -302,38 +335,46 @@ class RealDatasetLoader:
             canonical_rows.append(vec)
             labels.append(0)
             propositions.append(f"FOLIO: {sent}")
+            if idx % 200 == 0 or idx == len(folio_items):
+                _log_progress(len(labels), "FOLIO", idx, len(folio_items))
 
         # 2. ProofWriter (Domain 1)
-        print(f"  Ingesting {samples_per_domain} real ProofWriter propositions...")
+        print(f"  [2/5] Ingesting {samples_per_domain} real ProofWriter propositions...", flush=True)
         pw_items = self.load_proofwriter_samples(max_samples=samples_per_domain)
-        for sent in pw_items:
+        for idx, sent in enumerate(pw_items, 1):
             vec = self.nlp_parser.sentence_to_vector(sent, domain_context="ProofWriter").to_numpy()
             canonical_rows.append(vec)
             labels.append(1)
             propositions.append(f"ProofWriter: {sent}")
+            if idx % 200 == 0 or idx == len(pw_items):
+                _log_progress(len(labels), "ProofWriter", idx, len(pw_items))
 
         # 3. bAbI (Domain 2)
-        print(f"  Ingesting {samples_per_domain} real bAbI propositions...")
+        print(f"  [3/5] Ingesting {samples_per_domain} real bAbI propositions...", flush=True)
         babi_items = self.load_babi_samples(max_samples=samples_per_domain)
-        for sent in babi_items:
+        for idx, sent in enumerate(babi_items, 1):
             vec = self.nlp_parser.sentence_to_vector(sent, domain_context="bAbI").to_numpy()
             canonical_rows.append(vec)
             labels.append(2)
             propositions.append(f"bAbI: {sent}")
+            if idx % 200 == 0 or idx == len(babi_items):
+                _log_progress(len(labels), "bAbI", idx, len(babi_items))
 
         # 4. CLUTRR (Domain 3)
-        print(f"  Ingesting {samples_per_domain} real CLUTRR propositions...")
+        print(f"  [4/5] Ingesting {samples_per_domain} real CLUTRR propositions...", flush=True)
         clutrr_items = self.load_clutrr_samples(max_samples=samples_per_domain)
-        for sent in clutrr_items:
+        for idx, sent in enumerate(clutrr_items, 1):
             vec = self.nlp_parser.sentence_to_vector(sent, domain_context="CLUTRR").to_numpy()
             canonical_rows.append(vec)
             labels.append(3)
             propositions.append(f"CLUTRR: {sent}")
+            if idx % 200 == 0 or idx == len(clutrr_items):
+                _log_progress(len(labels), "CLUTRR", idx, len(clutrr_items))
 
         # 5. Code AST (Domain 4)
-        print(f"  Ingesting {samples_per_domain} real Python AST propositions...")
+        print(f"  [5/5] Ingesting {samples_per_domain} real Python AST propositions...", flush=True)
         ast_items = self.load_python_ast_samples(max_samples=samples_per_domain)
-        for desc, ast_node in ast_items:
+        for idx, (desc, ast_node) in enumerate(ast_items, 1):
             try:
                 graph = self.ast_parser.parse_ast_node(ast_node)
                 vec = graph.to_proposition_vector().to_numpy()
@@ -342,6 +383,11 @@ class RealDatasetLoader:
             canonical_rows.append(vec)
             labels.append(4)
             propositions.append(desc)
+            if idx % 200 == 0 or idx == len(ast_items):
+                _log_progress(len(labels), "CodeAST", idx, len(ast_items))
+
+        total_time = time.time() - start_time
+        print(f"  Successfully parsed {len(labels)} total propositions in {total_time:.2f}s ({len(labels)/total_time:.1f} samples/s).", flush=True)
 
         canonical_matrix = np.stack(canonical_rows, axis=0)
         candidate_matrix = project_canonical_to_candidates(canonical_matrix, self.candidates)

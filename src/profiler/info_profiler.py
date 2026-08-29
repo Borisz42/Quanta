@@ -65,17 +65,17 @@ class QuantaInformationProfiler:
     ) -> List[Tuple[str, str, float]]:
         """Finds the most redundant pairs of dimensions using Mutual Information I(D_i; D_j)."""
         redundant_pairs = []
+        X_int = self.X.astype(np.int32)
+        n = float(self.N)
 
-        # Vectorized joint counts across 4x4 discrete space
         for i in range(self.D):
-            col_i = self.X[:, i]
+            col_i = X_int[:, i]
+            col_i_scaled = col_i * 4
             for j in range(i + 1, self.D):
-                col_j = self.X[:, j]
-
-                # Joint probability distribution P(D_i, D_j)
-                joint_counts = np.zeros((4, 4), dtype=np.float64)
-                np.add.at(joint_counts, (col_i, col_j), 1.0)
-                p_ij = joint_counts / self.N
+                col_j = X_int[:, j]
+                flat_idx = col_i_scaled + col_j
+                joint_counts = np.bincount(flat_idx, minlength=16).reshape((4, 4)).astype(np.float64)
+                p_ij = joint_counts / n
 
                 p_i = np.sum(p_ij, axis=1, keepdims=True)
                 p_j = np.sum(p_ij, axis=0, keepdims=True)

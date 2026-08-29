@@ -263,3 +263,20 @@ false :-
     slot(N, 'LJB_NA_NEGATION', 1),
     not slot(N, 'NSM_MAYBE', 1),
     not slot(N, 'MODALITY_FIGURATIVE', 1).
+
+% ----------------------------------------------------------------------
+% 8. Profiler-Derived Dimension Refactoring & Deduction Rules (Phase 11B.4)
+% ----------------------------------------------------------------------
+
+% Deduction 1: Animate entities automatically possess sentience and motility
+slot(N, 'ROLE_SENTIENT', 1) :- slot(N, 'TYPE_ANIMATE', 1).
+slot(N, 'ROLE_MOVEABLE', 1) :- slot(N, 'TYPE_ANIMATE', 1).
+
+% Deduction 2: Ontological Attribute Property equivalence
+slot(N, 'WN_ATTRIBUTE_PROP', 1) :- slot(N, 'TYPE_ATTRIBUTE_PROPERTY', 1).
+
+% Deduction 3: Deductive inference implies proof validation
+slot(N, 'SOLVER_PROOF_VALIDATED', 1) :- slot(N, 'EPIST_DEDUCTIVE_INFERENCE', 1).
+
+% Deduction 4: Axiomatic premises operate under Closed-World Assumption
+slot(N, 'SOLVER_CWA_CLOSED_WORLD', 1) :- slot(N, 'EPIST_AXIOMATIC_PREMISE', 1).
