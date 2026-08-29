@@ -70,6 +70,23 @@ class HungarianRealizer:
         "quick": "gyors",
     }
 
+    VERB_PREFIXES = {
+        "harap": "meg",
+        "hal": "meg",
+        "öl": "meg",
+        "lát": "meg",
+        "ért": "meg",
+        "tud": "meg",
+        "mond": "meg",
+        "tesz": "meg",
+        "eszik": "meg",
+        "iszik": "meg",
+        "lép": "be",
+        "megy": "el",
+        "fut": "el",
+        "sétál": "el",
+    }
+
     def realize_graph(self, graph: QuantaGraph) -> str:
         """Realizes a QuantaGraph ASG into an agglutinative Hungarian sentence."""
         root = graph.root
@@ -84,26 +101,35 @@ class HungarianRealizer:
                   root.get_slot("LJB_ZU_LONG_PAST") == 1
         is_future = root.get_slot("LJB_BA_FUTURE_TENSE") == 1
         is_negated = root.get_slot("LJB_NA_NEGATION") == 2
+        is_query = root.get_slot("GRAPH_QUERY_TARGET") == 3 or root.get_slot("NSM_MAYBE") == 3
+
+        # Check if direct object is definite
+        is_definite = False
+        patient_node = None
+        if "VAL_X2_PATIENT" in root.edges and root.edges["VAL_X2_PATIENT"]:
+            patient_node = graph.get_node(root.edges["VAL_X2_PATIENT"][0])
+        elif "VAL_EXPERIENCER" in root.edges and root.edges["VAL_EXPERIENCER"]:
+            patient_node = graph.get_node(root.edges["VAL_EXPERIENCER"][0])
+
+        if patient_node:
+            if (patient_node.get_slot("NSM_THIS") == 1 or patient_node.get_slot("LJB_RO_ALL_QUANT") == 1) and \
+               patient_node.get_slot("NSM_ONE") != 1 and patient_node.get_slot("NSM_SOME") != 1:
+                is_definite = True
 
         # 2. Conjugate Verb
-        conjugated_verb = self._conjugate_verb(verb_base, is_past=is_past, is_future=is_future)
+        conjugated_verb, prefix = self._conjugate_verb(
+            verb_base, is_past=is_past, is_future=is_future, is_definite=is_definite
+        )
 
-        # 3. Resolve Subject (Nominative: no suffix)
+        # 3. Resolve Arguments
         subject_str = self._resolve_entity_with_case(graph, root, "VAL_X1_AGENT", case="nom")
-
-        # 4. Resolve Patient (Accusative: -t / -ot / -et / -öt)
         patient_str = self._resolve_entity_with_case(graph, root, "VAL_X2_PATIENT", case="acc")
         if not patient_str and "VAL_EXPERIENCER" in root.edges:
             patient_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="acc")
 
-        # 5. Resolve Prepositional / Valency Cases
-        # Destination -> Illative (-ba/-be) or Sublative (-ra/-re)
         dest_str = self._resolve_entity_with_case(graph, root, "VAL_X3_DESTINATION", case="ill")
-        # Source -> Elative (-ból/-ből)
         source_str = self._resolve_entity_with_case(graph, root, "VAL_X4_SOURCE", case="ela")
-        # Instrument -> Instrumental (-val/-vel)
         inst_str = self._resolve_entity_with_case(graph, root, "VAL_X5_INSTRUMENT", case="ins")
-        # Location -> Inessive (-ban/-ben)
         loc_str = self._resolve_entity_with_case(graph, root, "VAL_LOCATION_SLOT", case="ine")
 
         # Predicate adjective for copula sentences
@@ -117,10 +143,38 @@ class HungarianRealizer:
         elif root.get_slot("NSM_BAD") == 1:
             pred_adj = "rossz"
 
-        # Assemble Hungarian sentence: Subject + Modifiers + Object + (Nem) + Verb / Predicate Adj
+        # 4. Form Verb Phrase with Prefix Placement
+        if verb_base == "van":
+            if is_past:
+                verb_phrase = "volt"
+            elif not pred_adj:
+                verb_phrase = "van"
+            else:
+                verb_phrase = ""
+            if is_negated:
+                verb_phrase = f"nem {verb_phrase}".strip()
+        else:
+            if is_negated:
+                if prefix:
+                    verb_phrase = f"nem {conjugated_verb} {prefix}"
+                else:
+                    verb_phrase = f"nem {conjugated_verb}"
+            else:
+                verb_phrase = f"{prefix}{conjugated_verb}"
+
+        # 5. Assemble Tokens
         tokens: List[str] = []
-        if subject_str:
-            tokens.append(subject_str)
+        if is_query:
+            tokens.append("Vajon")
+            if subject_str:
+                s_tokens = subject_str.split()
+                if s_tokens:
+                    s_tokens[0] = s_tokens[0].lower()
+                    tokens.append(" ".join(s_tokens))
+        else:
+            if subject_str:
+                tokens.append(subject_str)
+
         if loc_str:
             tokens.append(loc_str)
         if source_str:
@@ -129,24 +183,22 @@ class HungarianRealizer:
             tokens.append(dest_str)
         if inst_str:
             tokens.append(inst_str)
+
+        if verb_phrase:
+            tokens.append(verb_phrase)
+
         if patient_str:
             tokens.append(patient_str)
-        if is_negated:
-            tokens.append("nem")
-        if verb_base == "van":
-            if is_past:
-                tokens.append("volt")
-            elif not pred_adj:
-                tokens.append("van")
-        else:
-            tokens.append(conjugated_verb)
+
         if pred_adj:
             tokens.append(pred_adj)
 
         raw = " ".join(tokens).strip()
         if not raw:
             return ""
-        return raw[0].upper() + raw[1:] + "."
+
+        punct = "?" if is_query else "."
+        return raw[0].upper() + raw[1:] + punct
 
     def get_vowel_harmony(self, word: str) -> str:
         """Determines vowel harmony of a word: 'back', 'front_unrounded', or 'front_rounded'."""
@@ -193,6 +245,11 @@ class HungarianRealizer:
         elif case == "acc":
             if ends_with_vowel:
                 return stem + "t"
+            if noun.endswith(("ás", "és", "ár", "ér", "úr", "őr", "os", "es", "ös")):
+                return stem + "t"
+            long_vowels = set("áéóőúűÁÉÓŐÚŰ")
+            if len(noun) >= 2 and noun[-2] in long_vowels and noun[-1] in "szjlnrSZJLNR":
+                return stem + "t"
             if harmony == "back":
                 return stem + "ot"
             elif harmony == "front_rounded":
@@ -235,23 +292,39 @@ class HungarianRealizer:
 
         return noun
 
-    def _conjugate_verb(self, verb_base: str, is_past: bool, is_future: bool) -> str:
-        """Conjugates a Hungarian verb stem in 3rd person singular."""
+    def _conjugate_verb(
+        self,
+        verb_base: str,
+        is_past: bool,
+        is_future: bool,
+        is_definite: bool = False,
+    ) -> Tuple[str, str]:
+        """Conjugates a Hungarian verb stem in 3rd person singular with verbal prefixes."""
+        prefix = self.VERB_PREFIXES.get(verb_base, "")
         harmony = self.get_vowel_harmony(verb_base)
 
         if is_future:
-            return f"fog {verb_base}ni"
+            return f"fog {verb_base}ni", prefix
 
         if is_past:
-            if harmony == "back":
-                return verb_base + "ott"
-            elif harmony == "front_rounded":
-                return verb_base + "ött"
+            if is_definite:
+                suffix = "ta" if harmony == "back" else "te"
+                return verb_base + suffix, prefix
             else:
-                return verb_base + "ett"
+                if harmony == "back":
+                    suffix = "ott"
+                elif harmony == "front_rounded":
+                    suffix = "ött"
+                else:
+                    suffix = "ett"
+                return verb_base + suffix, prefix
 
         # Present tense 3sg
-        return verb_base
+        if is_definite:
+            suffix = "ja" if harmony == "back" else "i"
+            return verb_base + suffix, prefix
+        else:
+            return verb_base, prefix
 
     def _extract_hungarian_verb(self, node: QuantaNode) -> str:
         """Translates verb anchor or prime to Hungarian verb stem."""
@@ -328,7 +401,7 @@ class HungarianRealizer:
             article = "minden"
         elif target_node.get_slot("NSM_TWO") == 1:
             article = "két"
-        elif target_node.get_slot("NSM_SOME") == 1:
+        elif (target_node.get_slot("NSM_SOME") == 1 or target_node.get_slot("NSM_ONE") == 1) and case != "nom":
             article = "egy"
 
         # Adjective

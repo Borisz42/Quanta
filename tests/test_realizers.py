@@ -167,6 +167,33 @@ def test_hungarian_sentence_realization(hungarian_realizer):
     assert "kergetett" in hu_text.lower()
 
 
+def test_hungarian_canonical_example_a(hungarian_realizer):
+    """Verify Phase 8 Item 8B.7: Example A graph -> 'A golden retriever a kertben megharapta a postást.'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("A golden retriever bit the mailman in the garden.")
+    hu_text = hungarian_realizer.realize_graph(graph)
+    assert hu_text == "A golden retriever a kertben megharapta a postást."
+
+
+def test_hungarian_canonical_example_b(hungarian_realizer):
+    """Verify Phase 8 Item 8B.8: Example B graph -> 'A kutya nem harapta meg a postást.'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("The dog did not bite the mailman.")
+    hu_text = hungarian_realizer.realize_graph(graph)
+    assert hu_text == "A kutya nem harapta meg a postást."
+
+
+def test_hungarian_canonical_example_c(hungarian_realizer):
+    """Verify Phase 8 Item 8B.9: Example C graph -> 'Vajon a kutya megharapott egy postást?'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("Did the dog perhaps bite a mailman?")
+    hu_text = hungarian_realizer.realize_graph(graph)
+    assert hu_text == "Vajon a kutya megharapott egy postást?"
+
+
 def test_fol_emitter(fol_emitter):
     # \forall x (Dog(x) -> Animal(x))
     root = QuantaNode(
