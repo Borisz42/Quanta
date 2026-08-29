@@ -252,6 +252,162 @@ class QuantaGraph:
             hasher.update(node.vector.to_bytes())
         return hasher.hexdigest()
 
+    def fold_subgraph(
+        self,
+        subtree_root_cid: str,
+        storage: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, str]:
+        """Folds a reachable subtree into a cryptographic Merkle pointer node.
+        
+        Args:
+            subtree_root_cid: Root CID of the subtree to fold.
+            storage: Optional dictionary or storage backend to preserve the folded sub-graph.
+            
+        Returns:
+            Tuple of (pointer_node_cid, sub_merkle_cid).
+        """
+        current_nodes = self.nodes
+        if subtree_root_cid not in current_nodes:
+            raise KeyError(f"Subtree root CID '{subtree_root_cid}' not found in graph")
+
+        # 1. Identify all reachable nodes in the subtree
+        visited: Set[str] = set()
+        def collect_reachable(curr: str):
+            if curr in visited:
+                return
+            visited.add(curr)
+            n = current_nodes.get(curr)
+            if n:
+                for targets in n.edges.values():
+                    for t in targets:
+                        collect_reachable(t)
+
+        collect_reachable(subtree_root_cid)
+
+        # 2. Build isolated sub-graph
+        sub_graph = QuantaGraph(root_cid=subtree_root_cid)
+        for cid in visited:
+            node = current_nodes[cid]
+            new_node = QuantaNode(
+                vector=node.vector.copy(),
+                anchor=node.anchor,
+                literal=node.literal,
+                parent_cid=node.parent_cid,
+            )
+            new_node.edges = {k: list(v) for k, v in node.edges.items()}
+            sub_graph.add_node(new_node)
+
+        sub_merkle_cid = sub_graph.compute_merkle_root()
+
+        if storage is not None:
+            storage[sub_merkle_cid] = sub_graph.to_dict()
+
+        # 3. Create pointer node in main graph
+        pointer_node = QuantaNode(
+            vector={
+                "GRAPH_MERKLE_FOLD_POINT": 1,
+                "GRAPH_EXT_REFERENCE": 1,
+                "TYPE_PROPOSITION": 1,
+            },
+            anchor=f"merkle:{sub_merkle_cid}",
+            literal=f"FoldedSubtree({sub_merkle_cid[:8]})",
+        )
+        pointer_cid = pointer_node.compute_cid()
+
+        # 4. Remove all subtree nodes from self._node_list and _cid_to_node
+        self._node_list = [n for n in self._node_list if n.cid not in visited]
+        for cid in list(visited):
+            self._cid_to_node.pop(cid, None)
+
+        # 5. Add pointer node
+        self.add_node(pointer_node)
+
+        # 6. Rewire incoming edges from remaining nodes pointing to subtree_root_cid to pointer_cid
+        for node in self._node_list:
+            for rel, targets in list(node.edges.items()):
+                new_targets = []
+                for t in targets:
+                    if t == subtree_root_cid:
+                        new_targets.append(pointer_cid)
+                    else:
+                        new_targets.append(t)
+                node.edges[rel] = new_targets
+            node.compute_cid()
+
+        if self.root_cid == subtree_root_cid:
+            self.root_cid = pointer_cid
+
+        return pointer_cid, sub_merkle_cid
+
+    def unfold_subgraph(
+        self,
+        pointer_node_cid: str,
+        storage: Dict[str, Any],
+    ) -> str:
+        """Unfolds a previously folded Merkle pointer node back into its full sub-graph structure.
+        
+        Args:
+            pointer_node_cid: The CID of the fold pointer node.
+            storage: Storage mapping sub_merkle_cid to serialized or QuantaGraph objects.
+            
+        Returns:
+            The restored subtree root CID.
+        """
+        pointer_node = self.get_node(pointer_node_cid)
+        if pointer_node is None:
+            raise KeyError(f"Pointer node '{pointer_node_cid}' not found in graph")
+
+        if not pointer_node.anchor or not pointer_node.anchor.startswith("merkle:"):
+            raise ValueError(f"Node '{pointer_node_cid}' is not a valid Merkle fold pointer")
+
+        sub_merkle_cid = pointer_node.anchor.split("merkle:")[1]
+        if sub_merkle_cid not in storage:
+            raise KeyError(f"Sub-graph with Merkle CID '{sub_merkle_cid}' not found in storage")
+
+        stored_data = storage[sub_merkle_cid]
+        if isinstance(stored_data, dict):
+            sub_graph = QuantaGraph.from_dict(stored_data)
+        elif isinstance(stored_data, QuantaGraph):
+            sub_graph = stored_data
+        else:
+            raise TypeError(f"Unsupported storage payload type: {type(stored_data)}")
+
+        restored_root_cid = sub_graph.root_cid
+        if not restored_root_cid:
+            raise ValueError("Unfolded sub-graph has no root CID")
+
+        # 1. Remove pointer node from graph
+        self._node_list = [n for n in self._node_list if n.cid != pointer_node_cid]
+        self._cid_to_node.pop(pointer_node_cid, None)
+
+        # 2. Add all nodes from sub_graph back into self
+        for sub_node in sub_graph.nodes.values():
+            new_node = QuantaNode(
+                vector=sub_node.vector.copy(),
+                anchor=sub_node.anchor,
+                literal=sub_node.literal,
+                parent_cid=sub_node.parent_cid,
+            )
+            new_node.edges = {k: list(v) for k, v in sub_node.edges.items()}
+            self.add_node(new_node)
+
+        # 3. Rewire incoming edges from main graph pointing to pointer_node_cid to restored_root_cid
+        for node in self._node_list:
+            for rel, targets in list(node.edges.items()):
+                new_targets = []
+                for t in targets:
+                    if t == pointer_node_cid:
+                        new_targets.append(restored_root_cid)
+                    else:
+                        new_targets.append(t)
+                node.edges[rel] = new_targets
+            node.compute_cid()
+
+        if self.root_cid == pointer_node_cid:
+            self.root_cid = restored_root_cid
+
+        return restored_root_cid
+
     def validate_integrity(self) -> Tuple[bool, List[str]]:
         """Verifies that all child pointers exist and CIDs match node payloads."""
         errors: List[str] = []

@@ -85,9 +85,9 @@
 ## Phase 4: Merkle-Tree Sub-Graph Folding
 
 - [x] **4.1** Implement recursive sub-graph CID folding: `CID(G_sub) = BLAKE3(⊕ v_node ∥ Adj(G_sub))`
-- [ ] **4.2** Implement `fold_subgraph(graph, subtree_root_cid) → folded_cid` that replaces a subtree with a CID pointer node
-- [ ] **4.3** Implement `unfold_subgraph(folded_cid, storage) → QuantaGraph` that restores the subtree from storage
-- [ ] **4.4** 🧪 Test fold → unfold round-trip: CID matches, restored graph is identical to original
+- [x] **4.2** Implement `fold_subgraph(graph, subtree_root_cid) → folded_cid` that replaces a subtree with a CID pointer node
+- [x] **4.3** Implement `unfold_subgraph(folded_cid, storage) → QuantaGraph` that restores the subtree from storage
+- [x] **4.4** 🧪 Test fold → unfold round-trip: CID matches, restored graph is identical to original
 - [x] **4.5** 🧪 Test that modifying any node in the subtree changes the folded CID (tamper detection)
 
 ---

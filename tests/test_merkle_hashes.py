@@ -94,3 +94,52 @@ def test_graph_serialization_roundtrip():
     assert reconstructed.root_cid == graph.root_cid
     assert reconstructed.compute_merkle_root() == graph.compute_merkle_root()
     assert len(reconstructed) == len(graph)
+
+
+def test_subgraph_folding_and_unfolding_roundtrip():
+    """Verify that folding a subtree collapses active node count and unfolding restores exact graph."""
+    event_node = QuantaNode(
+        vector={"NSM_DO": 1, "TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:bite.v.01",
+    )
+    dog_node = QuantaNode(
+        vector={"TYPE_ANIMATE": 1, "WN_ANIMAL_FAUNA": 1},
+        anchor="wn:golden_retriever.n.01",
+    )
+    postman_node = QuantaNode(
+        vector={"TYPE_HUMAN": 1, "WN_PERSON_HUMAN": 1},
+        anchor="wn:mailman.n.01",
+    )
+
+    graph = QuantaGraph()
+    event_cid = graph.add_node(event_node, set_as_root=True)
+    dog_cid = graph.add_node(dog_node)
+    postman_cid = graph.add_node(postman_node)
+
+    graph.add_edge(event_cid, "VAL_X1_AGENT", dog_cid)
+    graph.add_edge(event_cid, "VAL_X2_PATIENT", postman_cid)
+
+    initial_merkle = graph.compute_merkle_root()
+    initial_node_count = len(graph)
+    assert initial_node_count == 3
+
+    # Fold dog node subtree
+    storage = {}
+    pointer_cid, sub_merkle = graph.fold_subgraph(dog_cid, storage=storage)
+
+    assert sub_merkle in storage
+    # Active nodes in main graph is now 2 (event_node + pointer_node, postman) -> dog_node replaced by pointer
+    assert len(graph) == 3
+    assert graph.get_node(dog_cid) is None
+    pointer_node = graph.get_node(pointer_cid)
+    assert pointer_node is not None
+    assert pointer_node.get_slot("GRAPH_MERKLE_FOLD_POINT") == 1
+    assert pointer_node.anchor == f"merkle:{sub_merkle}"
+
+    # Unfold dog node subtree
+    restored_root = graph.unfold_subgraph(pointer_cid, storage=storage)
+    assert restored_root == dog_cid
+    assert len(graph) == initial_node_count
+    assert graph.get_node(dog_cid) is not None
+    assert graph.compute_merkle_root() == initial_merkle
+
