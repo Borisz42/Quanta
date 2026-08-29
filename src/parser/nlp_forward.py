@@ -186,6 +186,28 @@ class NLPForwardParser:
         verb_str = root_token.text if root_token else None
         return SVOResult(subject=subject_str, verb=verb_str, object=object_str, modifiers=modifiers)
 
+    def _get_determiner_slot(self, token: Any, doc: Any) -> Optional[str]:
+        """Detects determiner modifying token and maps to Band 0 NSM prime slot name."""
+        for child in token.children:
+            if child.dep_ == "det" or child.pos_ == "DET":
+                det_text = child.text.lower()
+                if det_text in ("a", "an", "one"):
+                    return "NSM_ONE"
+                elif det_text in ("the", "this", "that", "these", "those"):
+                    return "NSM_THIS"
+                elif det_text in ("all", "every", "each"):
+                    return "NSM_ALL"
+        for i in range(max(0, token.i - 3), token.i):
+            det_text = doc[i].text.lower()
+            if doc[i].dep_ == "det" or doc[i].pos_ == "DET":
+                if det_text in ("a", "an", "one"):
+                    return "NSM_ONE"
+                elif det_text in ("the", "this", "that", "these", "those"):
+                    return "NSM_THIS"
+                elif det_text in ("all", "every", "each"):
+                    return "NSM_ALL"
+        return None
+
     def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
         """Parses a single natural language sentence into a validated QuantaGraph ASG."""
         doc = self.parse_dependency_tree(text)
@@ -266,7 +288,18 @@ class NLPForwardParser:
                     self._apply_descriptor_to_node(agent_node, token.lemma_.lower())
 
             agent_node.set_slot("VAL_X1_AGENT", 1)
+            agent_node.set_slot("GRAPH_LEAF", 1)
             agent_node.set_slot("ROLE_AGENT_CAPABLE", 1)
+            agent_node.set_slot("EPIST_PROB_CERTAIN", 1)
+
+            det_slot = self._get_determiner_slot(agent_token, doc)
+            if det_slot:
+                agent_node.set_slot(det_slot, 1)
+
+            if agent_node.get_slot("TYPE_ANIMATE") == 1 and agent_node.get_slot("TYPE_HUMAN") != 1:
+                agent_node.set_slot("ROLE_MOVEABLE", 1)
+                agent_node.set_slot("ROLE_SENTIENT", 1)
+
             root_node.set_slot("VAL_X1_AGENT", 1)
             graph.add_node(agent_node)
             graph.add_edge(root_node, "VAL_X1_AGENT", agent_node)
@@ -304,6 +337,19 @@ class NLPForwardParser:
                     self._apply_descriptor_to_node(patient_node, token.lemma_.lower())
 
             patient_node.set_slot("VAL_X2_PATIENT", 1)
+            patient_node.set_slot("GRAPH_LEAF", 1)
+            patient_node.set_slot("EPIST_PROB_CERTAIN", 1)
+
+            det_slot = self._get_determiner_slot(patient_token, doc)
+            if det_slot:
+                patient_node.set_slot(det_slot, 1)
+
+            if patient_node.get_slot("TYPE_HUMAN") == 1:
+                patient_node.set_slot("TYPE_ANIMATE", 1)
+                patient_node.set_slot("ROLE_COMMUNICATOR", 1)
+                patient_node.set_slot("ROLE_SENTIENT", 1)
+                patient_node.set_slot("ROLE_PATIENT_TARGET", 1)
+
             root_node.set_slot("VAL_X2_PATIENT", 1)
             graph.add_node(patient_node)
             graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
@@ -324,6 +370,11 @@ class NLPForwardParser:
 
                 pobj_token = pobj[0]
                 prep_node = self._create_entity_node(pobj_token)
+                prep_node.set_slot("GRAPH_LEAF", 1)
+
+                det_slot = self._get_determiner_slot(pobj_token, doc)
+                if det_slot:
+                    prep_node.set_slot(det_slot, 1)
 
                 if prep_lemma in ("to", "into", "towards"):
                     if prep_node.get_slot("TYPE_ANIMATE") == 1 or prep_node.get_slot("TYPE_HUMAN") == 1:
@@ -347,6 +398,8 @@ class NLPForwardParser:
                     prep_node.set_slot("NSM_INSIDE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                     prep_node.set_slot("VAL_LOCATION_SLOT", 1)
+                    prep_node.set_slot("WN_LOCATION_PLACE", 1)
+                    prep_node.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
                     root_node.set_slot("VAL_LOCATION_SLOT", 1)
                     graph.add_node(prep_node)
                     graph.add_edge(root_node, "VAL_LOCATION_SLOT", prep_node)
@@ -413,7 +466,6 @@ class NLPForwardParser:
         domain_context: Optional[str] = None,
     ) -> QuantaNode:
         """Constructs and populates the root predicate QuantaNode with 4-valued polarity."""
-        node = QuantaNode(literal=doc.text)
         lemma = root_token.lemma_.lower()
         if root_token.text.lower() == "bit":
             lemma = "bite"
@@ -424,10 +476,6 @@ class NLPForwardParser:
         elif root_token.text.lower() in ("saw", "sees", "see"):
             lemma = "see"
 
-        # Set default literal modality and proposition type
-        node.set_slot("MODALITY_LITERAL", 1)
-        node.set_slot("GRAPH_ROOT_NODE", 1)
-
         # Clause polarity
         has_negation = any(t.dep_ == "neg" or t.lemma_.lower() in ("not", "never", "no", "neither", "none", "without", "cannot", "doesn't", "didn't", "isn't", "aren't", "wasn't", "weren't") for t in doc)
         has_uncertainty = any(w in doc.text.lower() for w in ("maybe", "perhaps", "possibly", "possible", "might", "could", "may", "uncertain", "unclear", "doubt", "suppose", "hypothetical", "whether", "guess", "wonder", "probably", "likely")) or doc.text.strip().endswith("?")
@@ -435,13 +483,24 @@ class NLPForwardParser:
         polarity = 1
         if has_negation:
             polarity = 2
+            literal_str = f"did not {lemma}" if any(t.text.lower() in ("did", "didn't") for t in doc) else f"not {lemma}"
         elif has_uncertainty:
             polarity = 3
+            literal_str = lemma
+        else:
+            literal_str = root_token.text
+
+        node = QuantaNode(literal=literal_str)
+
+        # Set default literal modality and proposition type
+        node.set_slot("MODALITY_LITERAL", 1)
+        node.set_slot("GRAPH_ROOT_NODE", 1)
 
         # Band 0 & Band 2: Map Lemma to NSM Primes and Cognitive/Theory-of-Mind Slots
         if self._is_motion_verb(lemma):
             node.set_slot("NSM_MOVE", polarity)
             node.set_slot("TYPE_EVENT", 1)
+            node.set_slot("WN_ACT_ACTION", 1)
         elif lemma in self.speech_verbs:
             node.set_slot("NSM_SAY", polarity)
             node.set_slot("NSM_WORDS", polarity)
@@ -476,6 +535,7 @@ class NLPForwardParser:
             node.set_slot("NSM_DO", polarity)
             node.set_slot("NSM_TOUCH", polarity)
             node.set_slot("TYPE_EVENT", 1)
+            node.set_slot("WN_ACT_ACTION", 1)
         elif lemma in self.possession_verbs:
             node.set_slot("NSM_HAVE", polarity)
             node.set_slot("TYPE_STATE", 1)
@@ -498,6 +558,7 @@ class NLPForwardParser:
             if root_token.pos_ == "VERB":
                 node.set_slot("NSM_DO", polarity)
                 node.set_slot("TYPE_EVENT", 1)
+                node.set_slot("WN_ACT_ACTION", 1)
             else:
                 node.set_slot("TYPE_STATE", 1)
 

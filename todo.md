@@ -274,7 +274,7 @@ The forward parser transforms heterogeneous surface expressions (natural languag
 - [x] **6B.8** Implement determiner resolution: "a" → `NSM_ONE=1`, "the" → `NSM_THIS=1`, "every" → `NSM_ALL=1`
 - [x] **6B.9** 🧪 Full forward-parse test for Example A ("golden retriever bit the mailman in the garden") — verify all node vectors match README
 - [x] **6B.10** 🧪 Full forward-parse test for Example B ("The dog did not bite the mailman") — verify negation slots
-- [ ] **6B.11** 🧪 Full forward-parse test for Example C ("Did the dog perhaps bite a mailman?") — verify query/uncertainty slots
+- [x] **6B.11** 🧪 Full forward-parse test for Example C ("Did the dog perhaps bite a mailman?") — verify query/uncertainty slots
 
 #### 6C — FOL formula parser
 - [x] **6C.1** Implement tokenizer for FOL strings: `∀`, `∃`, `→`, `∧`, `∨`, `¬`, `(`, `)`, predicates, variables
