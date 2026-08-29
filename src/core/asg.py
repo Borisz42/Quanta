@@ -249,13 +249,74 @@ class QuantaGraph:
         return cid
 
     def get_node(self, cid: str) -> Optional[QuantaNode]:
-        """Retrieves node by CID."""
+        """Retrieves node by CID (supporting current CIDs and historical alias CIDs)."""
         if cid in self._cid_to_node:
-            return self._cid_to_node[cid]
+            node = self._cid_to_node[cid]
+            if node in self._node_list:
+                return node
         for n in self._node_list:
             if n.cid == cid:
+                self._cid_to_node[cid] = n
                 return n
         return None
+
+    def _propagate_cid_updates(self, initial_replacements: Dict[str, str]):
+        """Propagates CID updates bottom-up through the graph.
+        
+        Whenever a child node's CID changes (due to edge additions, rewiring, folding, or unfolding),
+        all ancestor nodes referencing that child have their edge tables updated, and their
+        CIDs are recursively recomputed up to the root.
+        """
+        replacements = dict(initial_replacements)
+        if not replacements:
+            return
+
+        max_iterations = max(len(self._node_list) * 2, 20)
+        iteration = 0
+        changed = True
+
+        while changed and iteration < max_iterations:
+            changed = False
+            iteration += 1
+            new_replacements: Dict[str, str] = {}
+
+            for node in self._node_list:
+                node_modified = False
+                for rel, targets in list(node.edges.items()):
+                    new_targets = []
+                    for t in targets:
+                        if t in replacements:
+                            new_targets.append(replacements[t])
+                            node_modified = True
+                        else:
+                            new_targets.append(t)
+                    node.edges[rel] = new_targets
+
+                if node_modified:
+                    old_cid = node._cid_cache or node.cid
+                    new_cid = node.compute_cid()
+                    if old_cid != new_cid:
+                        new_replacements[old_cid] = new_cid
+                        if self.root_cid == old_cid:
+                            self.root_cid = new_cid
+                        changed = True
+
+            replacements.update(new_replacements)
+
+        # Update parent_cid pointers for all reachable children
+        for node in self._node_list:
+            for rel, targets in node.edges.items():
+                for t in targets:
+                    child = self.get_node(t)
+                    if child is not None:
+                        child.parent_cid = node.cid
+
+        # Preserve alias mappings for historical CIDs while registering new CIDs
+        for old_cid, new_cid in replacements.items():
+            if old_cid in self._cid_to_node:
+                self._cid_to_node[new_cid] = self._cid_to_node[old_cid]
+        for n in self._node_list:
+            self._cid_to_node[n.cid] = n
 
     def add_edge(self, source_cid_or_node: Union[str, QuantaNode], relation: str, target_cid_or_node: Union[str, QuantaNode]) -> str:
         """Adds a directed relation edge between two nodes in the graph."""
@@ -282,13 +343,14 @@ class QuantaGraph:
         dst_node.parent_cid = src_node.cid
         new_src_cid = src_node.compute_cid()
 
-        # Update cache indices
-        self._cid_to_node[new_src_cid] = src_node
-        self._cid_to_node[old_src_cid] = src_node
-        if self.root_cid == old_src_cid:
-            self.root_cid = new_src_cid
+        if old_src_cid != new_src_cid:
+            if self.root_cid == old_src_cid:
+                self.root_cid = new_src_cid
+            self._propagate_cid_updates({old_src_cid: new_src_cid})
+        else:
+            self._cid_to_node[new_src_cid] = src_node
 
-        return new_src_cid
+        return src_node.cid
 
     @property
     def root(self) -> Optional[QuantaNode]:
@@ -317,15 +379,16 @@ class QuantaGraph:
         """Folds a reachable subtree into a cryptographic Merkle pointer node.
         
         Args:
-            subtree_root_cid: Root CID of the subtree to fold.
+            subtree_root_cid: Root CID of the subtree to fold (or historical alias CID).
             storage: Optional dictionary or storage backend to preserve the folded sub-graph.
             
         Returns:
             Tuple of (pointer_node_cid, sub_merkle_cid).
         """
-        current_nodes = self.nodes
-        if subtree_root_cid not in current_nodes:
+        root_node = self.get_node(subtree_root_cid)
+        if root_node is None:
             raise KeyError(f"Subtree root CID '{subtree_root_cid}' not found in graph")
+        actual_subtree_root_cid = root_node.cid
 
         # 1. Identify all reachable nodes in the subtree
         visited: Set[str] = set()
@@ -333,18 +396,20 @@ class QuantaGraph:
             if curr in visited:
                 return
             visited.add(curr)
-            n = current_nodes.get(curr)
+            n = self.get_node(curr)
             if n:
                 for targets in n.edges.values():
                     for t in targets:
                         collect_reachable(t)
 
-        collect_reachable(subtree_root_cid)
+        collect_reachable(actual_subtree_root_cid)
 
         # 2. Build isolated sub-graph
-        sub_graph = QuantaGraph(root_cid=subtree_root_cid)
+        sub_graph = QuantaGraph(root_cid=actual_subtree_root_cid)
         for cid in visited:
-            node = current_nodes[cid]
+            node = self.get_node(cid)
+            if node is None:
+                continue
             new_node = QuantaNode(
                 vector=node.vector.copy(),
                 anchor=node.anchor,
@@ -359,13 +424,14 @@ class QuantaGraph:
         if storage is not None:
             storage[sub_merkle_cid] = sub_graph.to_dict()
 
-        # 3. Create pointer node in main graph
+        # 3. Create pointer node in main graph preserving aggregate semantic proposition vector
+        pointer_vec = sub_graph.to_proposition_vector()
+        pointer_vec["GRAPH_MERKLE_FOLD_POINT"] = 1
+        pointer_vec["GRAPH_EXT_REFERENCE"] = 1
+        pointer_vec["TYPE_PROPOSITION"] = 1
+
         pointer_node = QuantaNode(
-            vector={
-                "GRAPH_MERKLE_FOLD_POINT": 1,
-                "GRAPH_EXT_REFERENCE": 1,
-                "TYPE_PROPOSITION": 1,
-            },
+            vector=pointer_vec,
             anchor=f"merkle:{sub_merkle_cid}",
             literal=f"FoldedSubtree({sub_merkle_cid[:8]})",
         )
@@ -377,22 +443,13 @@ class QuantaGraph:
             self._cid_to_node.pop(cid, None)
 
         # 5. Add pointer node
-        self.add_node(pointer_node)
+        self._node_list.append(pointer_node)
+        self._cid_to_node[pointer_cid] = pointer_node
 
-        # 6. Rewire incoming edges from remaining nodes pointing to subtree_root_cid to pointer_cid
-        for node in self._node_list:
-            for rel, targets in list(node.edges.items()):
-                new_targets = []
-                for t in targets:
-                    if t == subtree_root_cid:
-                        new_targets.append(pointer_cid)
-                    else:
-                        new_targets.append(t)
-                node.edges[rel] = new_targets
-            node.compute_cid()
-
-        if self.root_cid == subtree_root_cid:
+        # 6. Rewire incoming edges and propagate CID updates bottom-up across ancestors
+        if self.root_cid == actual_subtree_root_cid or self.root_cid == subtree_root_cid:
             self.root_cid = pointer_cid
+        self._propagate_cid_updates({actual_subtree_root_cid: pointer_cid, subtree_root_cid: pointer_cid})
 
         return pointer_cid, sub_merkle_cid
 
@@ -429,6 +486,13 @@ class QuantaGraph:
         else:
             raise TypeError(f"Unsupported storage payload type: {type(stored_data)}")
 
+        # Verify tamper integrity
+        actual_merkle = sub_graph.compute_merkle_root()
+        if actual_merkle != sub_merkle_cid:
+            raise ValueError(
+                f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle} (storage payload tampered)"
+            )
+
         restored_root_cid = sub_graph.root_cid
         if not restored_root_cid:
             raise ValueError("Unfolded sub-graph has no root CID")
@@ -446,22 +510,14 @@ class QuantaGraph:
                 parent_cid=sub_node.parent_cid,
             )
             new_node.edges = {k: list(v) for k, v in sub_node.edges.items()}
-            self.add_node(new_node)
+            if new_node not in self._node_list:
+                self._node_list.append(new_node)
+            self._cid_to_node[new_node.compute_cid()] = new_node
 
         # 3. Rewire incoming edges from main graph pointing to pointer_node_cid to restored_root_cid
-        for node in self._node_list:
-            for rel, targets in list(node.edges.items()):
-                new_targets = []
-                for t in targets:
-                    if t == pointer_node_cid:
-                        new_targets.append(restored_root_cid)
-                    else:
-                        new_targets.append(t)
-                node.edges[rel] = new_targets
-            node.compute_cid()
-
         if self.root_cid == pointer_node_cid:
             self.root_cid = restored_root_cid
+        self._propagate_cid_updates({pointer_node_cid: restored_root_cid})
 
         return restored_root_cid
 
@@ -579,4 +635,73 @@ class QuantaGraph:
 
     def __repr__(self) -> str:
         return f"QuantaGraph(nodes={len(self._node_list)}, root_cid={self.root_cid[:8] if self.root_cid else 'None'})"
+
+
+def fold_subgraph(
+    graph: QuantaGraph,
+    subtree_root_cid: str,
+    storage: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    """Folds a reachable subtree in graph into a Merkle pointer node.
+    
+    Args:
+        graph: Target QuantaGraph to modify.
+        subtree_root_cid: Root CID of the subtree to fold.
+        storage: Optional dict or backend to store folded sub-graph.
+        
+    Returns:
+        Tuple of (pointer_node_cid, sub_merkle_cid).
+    """
+    return graph.fold_subgraph(subtree_root_cid, storage=storage)
+
+
+def unfold_subgraph(
+    folded_cid_or_node: Union[str, QuantaNode],
+    storage: Dict[str, Any],
+    target_graph: Optional[QuantaGraph] = None,
+) -> Union[str, QuantaGraph]:
+    """Unfolds a Merkle pointer node.
+    
+    Args:
+        folded_cid_or_node: Pointer node instance, pointer node CID, or Merkle CID.
+        storage: Storage mapping sub_merkle_cid to serialized or QuantaGraph objects.
+        target_graph: Optional graph to unfold into in-place. If provided, returns the restored root CID.
+                      If None, returns an isolated restored QuantaGraph.
+                      
+    Returns:
+        Restored root CID string if target_graph is provided, or QuantaGraph if target_graph is None.
+    """
+    if target_graph is not None:
+        cid = folded_cid_or_node.cid if isinstance(folded_cid_or_node, QuantaNode) else folded_cid_or_node
+        return target_graph.unfold_subgraph(cid, storage)
+
+    if isinstance(folded_cid_or_node, QuantaNode):
+        if not folded_cid_or_node.anchor or not folded_cid_or_node.anchor.startswith("merkle:"):
+            raise ValueError("Node is not a valid Merkle fold pointer")
+        sub_merkle_cid = folded_cid_or_node.anchor.split("merkle:")[1]
+    else:
+        cid_str = str(folded_cid_or_node)
+        if cid_str.startswith("merkle:"):
+            sub_merkle_cid = cid_str.split("merkle:")[1]
+        else:
+            sub_merkle_cid = cid_str
+
+    if sub_merkle_cid not in storage:
+        raise KeyError(f"Sub-graph with Merkle CID '{sub_merkle_cid}' not found in storage")
+
+    stored_data = storage[sub_merkle_cid]
+    if isinstance(stored_data, dict):
+        sub_graph = QuantaGraph.from_dict(stored_data)
+    elif isinstance(stored_data, QuantaGraph):
+        sub_graph = stored_data
+    else:
+        raise TypeError(f"Unsupported storage payload type: {type(stored_data)}")
+
+    actual_merkle = sub_graph.compute_merkle_root()
+    if actual_merkle != sub_merkle_cid:
+        raise ValueError(
+            f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle} (storage payload tampered)"
+        )
+    return sub_graph
+
 

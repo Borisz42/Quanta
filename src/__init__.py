@@ -2,7 +2,7 @@
 
 from core.types import QuantaVector, QuaternaryValue
 from core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_by_name, get_slot_names
-from core.asg import QuantaNode, QuantaGraph
+from core.asg import QuantaNode, QuantaGraph, fold_subgraph, unfold_subgraph
 from parser.nlp_forward import NLPForwardParser
 from parser.lexical_grounder import WordNetLexicalGrounder
 from parser.fol_parser import FOLParser
@@ -27,6 +27,8 @@ __all__ = [
     "get_slot_names",
     "QuantaNode",
     "QuantaGraph",
+    "fold_subgraph",
+    "unfold_subgraph",
     "NLPForwardParser",
     "WordNetLexicalGrounder",
     "FOLParser",
