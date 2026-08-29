@@ -13,10 +13,8 @@ from core.types import QuantaVector, QuaternaryValue
 from parser.nlp_forward import NLPForwardParser
 from parser.fol_parser import FOLParser
 from parser.ast_parser import ASTForwardParser
-from parser.hungarian_parser import HungarianForwardParser
 from solver.validator_gate import ValidationGate, ValidationResult
 from realizer.english_nlg import EnglishRealizer
-from realizer.hungarian_morph import HungarianRealizer
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
 
@@ -62,19 +60,17 @@ class TwoWayTranslationPipeline:
         rules_path: Optional[str] = None,
     ):
         self.nlp_parser = NLPForwardParser(spacy_model=spacy_model, offline_cache_path=offline_cache_path)
-        self.hungarian_parser = HungarianForwardParser(offline_cache_path=offline_cache_path)
         self.fol_parser = FOLParser(offline_cache_path=offline_cache_path)
         self.ast_parser = ASTForwardParser(offline_cache_path=offline_cache_path)
         self.validator = ValidationGate(rules_path=rules_path)
 
         # Realizers
         self.english_realizer = EnglishRealizer()
-        self.hungarian_realizer = HungarianRealizer()
         self.fol_emitter = FOLEmitter()
         self.code_emitter = CodeEmitter()
 
     def detect_modality(self, input_data: Union[str, Any]) -> str:
-        """Detects whether input is English, Hungarian, First-Order Logic, or Python Code."""
+        """Detects whether input is English, First-Order Logic, or Python Code."""
         if not isinstance(input_data, str):
             return "python"
 
@@ -91,13 +87,6 @@ class TwoWayTranslationPipeline:
                 return "python"
             except Exception:
                 pass
-
-        # Hungarian indicators
-        hu_markers = ("kutya", "macska", "postás", "ember", "kert", "ház", "kerget", "harap", "nem ", "egy ", "a kutya", "a macska")
-        if any(ch in text for ch in ("ö", "ő", "ü", "ű", "á", "é", "í", "ó", "ú")) or any(m in text.lower() for m in hu_markers):
-            # If common English words aren't dominating
-            if not any(ew in text.lower().split() for ew in ("the", "is", "a", "an", "dog", "cat", "chased", "bit")):
-                return "hungarian"
 
         return "english"
 
@@ -122,8 +111,6 @@ class TwoWayTranslationPipeline:
                 graph = self.ast_parser.parse_ast_node(ast_root, source_text=input_data)
             else:
                 graph = self.ast_parser.parse_ast_node(input_data)
-        elif modality in ("hungarian", "hu"):
-            graph = self.hungarian_parser.parse_sentence(str(input_data), domain_context=domain_context)
         else:
             graph = self.nlp_parser.parse_sentence(str(input_data), domain_context=domain_context)
 
@@ -144,8 +131,6 @@ class TwoWayTranslationPipeline:
         mod = target_modality.lower()
         if mod in ("english", "en"):
             return self.english_realizer.realize_graph(graph)
-        elif mod in ("hungarian", "hu"):
-            return self.hungarian_realizer.realize_graph(graph)
         elif mod in ("fol", "logic"):
             return self.fol_emitter.emit_formula(graph)
         elif mod in ("python", "code", "py"):

@@ -1,9 +1,8 @@
-"""Unit tests for QUANTA Reverse Realizers (English NLG, Hungarian Morph, FOLEmitter, CodeEmitter)."""
+"""Unit tests for QUANTA Reverse Realizers (English NLG, FOLEmitter, CodeEmitter)."""
 
 import pytest
 from core.asg import QuantaGraph, QuantaNode
 from realizer.english_nlg import EnglishRealizer
-from realizer.hungarian_morph import HungarianRealizer
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
 
@@ -11,11 +10,6 @@ from realizer.code_emitter import CodeEmitter
 @pytest.fixture
 def english_realizer():
     return EnglishRealizer()
-
-
-@pytest.fixture
-def hungarian_realizer():
-    return HungarianRealizer()
 
 
 @pytest.fixture
@@ -112,86 +106,6 @@ def test_english_canonical_example_c(english_realizer):
     graph = parser.parse_sentence("Did the dog perhaps bite a mailman?")
     realized = english_realizer.realize_graph(graph)
     assert realized == "Did the dog perhaps bite a mailman?"
-
-
-def test_hungarian_vowel_harmony_and_cases(hungarian_realizer):
-    # Back vowels: kutya (dog), ház (house)
-    assert hungarian_realizer.get_vowel_harmony("kutya") == "back"
-    assert hungarian_realizer.get_vowel_harmony("ház") == "back"
-
-    # Front unrounded: kert (garden), ember (person)
-    assert hungarian_realizer.get_vowel_harmony("kert") == "front_unrounded"
-    assert hungarian_realizer.get_vowel_harmony("ember") == "front_unrounded"
-
-    # Case suffixes
-    assert hungarian_realizer.apply_case_suffix("kutya", "acc") == "kutyát"
-    assert hungarian_realizer.apply_case_suffix("ház", "ine") == "házban"
-    assert hungarian_realizer.apply_case_suffix("kert", "ine") == "kertben"
-    assert hungarian_realizer.apply_case_suffix("ház", "ill") == "házba"
-    assert hungarian_realizer.apply_case_suffix("kert", "ill") == "kertbe"
-
-
-def test_hungarian_sentence_realization(hungarian_realizer):
-    # "A kutya kergetett a macskát a kertben."
-    event = QuantaNode(
-        vector={"NSM_DO": 1, "TYPE_EVENT": 1, "LJB_PU_PAST_TENSE": 1},
-        anchor="wn:chase.v.01",
-    )
-    dog = QuantaNode(
-        vector={"TYPE_ANIMATE": 1},
-        anchor="wn:dog.n.01",
-    )
-    cat = QuantaNode(
-        vector={"TYPE_ANIMATE": 1},
-        anchor="wn:cat.n.01",
-    )
-    garden = QuantaNode(
-        vector={"TYPE_SPATIAL_REGION": 1},
-        anchor="wn:garden.n.01",
-    )
-
-    graph = QuantaGraph()
-    e_cid = graph.add_node(event, set_as_root=True)
-    d_cid = graph.add_node(dog)
-    c_cid = graph.add_node(cat)
-    g_cid = graph.add_node(garden)
-
-    graph.add_edge(e_cid, "VAL_X1_AGENT", d_cid)
-    graph.add_edge(e_cid, "VAL_X2_PATIENT", c_cid)
-    graph.add_edge(e_cid, "VAL_LOCATION_SLOT", g_cid)
-
-    hu_text = hungarian_realizer.realize_graph(graph)
-    assert "kutya" in hu_text.lower()
-    assert "macskát" in hu_text.lower()
-    assert "kertben" in hu_text.lower()
-    assert "kergetett" in hu_text.lower()
-
-
-def test_hungarian_canonical_example_a(hungarian_realizer):
-    """Verify Phase 8 Item 8B.7: Example A graph -> 'Egy golden retriever a kertben megharapta a postást.'"""
-    from parser.nlp_forward import NLPForwardParser
-    parser = NLPForwardParser()
-    graph = parser.parse_sentence("A golden retriever bit the mailman in the garden.")
-    hu_text = hungarian_realizer.realize_graph(graph)
-    assert hu_text == "Egy golden retriever a kertben megharapta a postást."
-
-
-def test_hungarian_canonical_example_b(hungarian_realizer):
-    """Verify Phase 8 Item 8B.8: Example B graph -> 'A kutya nem harapta meg a postást.'"""
-    from parser.nlp_forward import NLPForwardParser
-    parser = NLPForwardParser()
-    graph = parser.parse_sentence("The dog did not bite the mailman.")
-    hu_text = hungarian_realizer.realize_graph(graph)
-    assert hu_text == "A kutya nem harapta meg a postást."
-
-
-def test_hungarian_canonical_example_c(hungarian_realizer):
-    """Verify Phase 8 Item 8B.9: Example C graph -> 'Vajon a kutya megharapott egy postást?'"""
-    from parser.nlp_forward import NLPForwardParser
-    parser = NLPForwardParser()
-    graph = parser.parse_sentence("Did the dog perhaps bite a mailman?")
-    hu_text = hungarian_realizer.realize_graph(graph)
-    assert hu_text == "Vajon a kutya megharapott egy postást?"
 
 
 def test_fol_emitter(fol_emitter):

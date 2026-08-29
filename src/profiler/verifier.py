@@ -13,7 +13,6 @@ from core.types import QuantaVector, QuaternaryValue
 from data.gold_corpus import GoldPair
 from realizer.english_nlg import EnglishRealizer
 from realizer.fol_emitter import FOLEmitter
-from realizer.hungarian_morph import HungarianRealizer
 from realizer.code_emitter import CodeEmitter
 from solver.validator_gate import ValidationGate, ValidationResult
 
@@ -81,7 +80,6 @@ class SemanticVectorVerifier:
     def __init__(self, validator_gate: Optional[ValidationGate] = None):
         self.validator = validator_gate or ValidationGate()
         self.english_realizer = EnglishRealizer()
-        self.hungarian_realizer = HungarianRealizer()
         self.fol_emitter = FOLEmitter()
         self.code_emitter = CodeEmitter()
 

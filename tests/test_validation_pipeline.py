@@ -19,14 +19,6 @@ def test_valid_pipeline_execution(pipeline):
     assert res.validation.is_valid
 
 
-def test_cross_lingual_hungarian_pipeline(pipeline):
-    # English to Hungarian translation
-    res = pipeline.execute_translation("A dog chased a cat into the garden.", target_modality="hungarian")
-    assert res.is_success
-    assert "kutya" in res.output_text.lower()
-    assert "kert" in res.output_text.lower()
-
-
 def test_flawed_proposition_trapped_by_muc(pipeline):
     # Construct an ungrounded proposition where an abstract concept acts as agent without figurative modality
     invalid_event = QuantaNode(

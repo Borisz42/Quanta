@@ -3,7 +3,6 @@
 import pytest
 from parser.typo_normalizer import TypoNormalizer, damerau_levenshtein
 from parser.nlp_forward import NLPForwardParser
-from parser.hungarian_parser import HungarianForwardParser
 from pipeline.translator_pipeline import TwoWayTranslationPipeline
 from core.types import QuaternaryValue
 
@@ -82,8 +81,3 @@ def test_typo_translation_pipeline_round_trip(pipeline):
     assert "garden" in res_en.output_text.lower()
     assert "retriever" in res_en.output_text.lower()
     assert "mailman" in res_en.output_text.lower()
-
-    res_hu = pipeline.execute_translation(typo_input, target_modality="hungarian", source_modality="english")
-    assert res_hu.is_success
-    assert "kert" in res_hu.output_text.lower() or "kertben" in res_hu.output_text.lower()
-    assert "postás" in res_hu.output_text.lower() or "postásot" in res_hu.output_text.lower() or "postást" in res_hu.output_text.lower()

@@ -11,7 +11,6 @@ from solver.validator_gate import ValidationGate, ValidationResult
 from profiler.info_profiler import QuantaInformationProfiler
 from profiler.mrmr_selector import MRMRSelector
 from realizer.english_nlg import EnglishRealizer
-from realizer.hungarian_morph import HungarianRealizer
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
 from pipeline.translator_pipeline import TwoWayTranslationPipeline, TranslationResult, RoundTripResult
@@ -38,7 +37,6 @@ __all__ = [
     "QuantaInformationProfiler",
     "MRMRSelector",
     "EnglishRealizer",
-    "HungarianRealizer",
     "FOLEmitter",
     "CodeEmitter",
     "TwoWayTranslationPipeline",

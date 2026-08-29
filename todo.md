@@ -356,20 +356,19 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 ### Context & Architectural Rationale
 To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta ASGs must be deterministically unrolled into diverse human and computational target languages:
 - **English Realizer (`EnglishRealizer`):** Unrolls thematic roles into natural SVO syntax with tense inflection and determiner selection.
-- **Hungarian Realizer (`HungarianRealizer`):** Implements morphophonological vowel harmony (back: `a,á,o,ó,u,ú` vs. front: `e,é,i,í,ö,ő,ü,ű`), agglutinative case suffixation (Accusative `-t/-ot/-et/-öt`, Inessive `-ban/-ben`, Instrumental `-val/-vel`), definite/indefinite conjugation, and verbal prefix split on negation (`nem harapta meg`).
 - **FOL Emitter (`FOLEmitter`):** Emits standard First-Order Logic syntax with correct operator precedence.
 - **Code Emitter (`CodeEmitter`):** Emits executable Python source code from AST topologies.
+- *(Note: Specific language realizers like Hungarian have been removed in favor of a future generalized multilingual architecture).*
 
 ### Implementation Guidelines
 - `english_nlg.py`: Construct grammatical English prose from ASG traversal.
-- `hungarian_morph.py`: Classify noun stem vowel harmony and attach appropriate case suffixes. Handle verbal prefix placement (`megharapta` vs. `nem harapta meg`).
 - `fol_emitter.py`: Traverse quantified sub-expressions and format formulas ($\forall x (\text{Dog}(x) \rightarrow \text{Animal}(x))$).
 - `code_emitter.py`: Format Python functions, loops, and recursive calls with proper indentation.
 
 ### Verification & Acceptance Criteria
-- Example A graph $\to$ English: *"A golden retriever bit the mailman in the garden."* | Hungarian: *"A golden retriever a kertben megharapta a postást."*
-- Example B graph $\to$ English: *"The dog did not bite the mailman."* | Hungarian: *"A kutya nem harapta meg a postást."*
-- Example C graph $\to$ English: *"Did the dog perhaps bite a mailman?"* | Hungarian: *"Vajon a kutya megharapott egy postást?"*
+- Example A graph $\to$ English: *"A golden retriever bit the mailman in the garden."*
+- Example B graph $\to$ English: *"The dog did not bite the mailman."*
+- Example C graph $\to$ English: *"Did the dog perhaps bite a mailman?"*
 - Example E graph $\to$ FOL string: `∀x(Dog(x) → Animal(x))`.
 - Example F graph $\to$ Executable Python code; running `factorial(5)` returns `120`.
 
@@ -384,16 +383,9 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - [x] **8A.7** 🧪 Test: Example B graph → "The dog did not bite the mailman."
 - [x] **8A.8** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
 
-#### 8B — Hungarian Realizer
-- [x] **8B.1** Implement vowel harmony classifier: back (`a,á,o,ó,u,ú`) vs front (`e,é,i,í,ö,ő,ü,ű`)
-- [x] **8B.2** Implement accusative suffix: `-t` / `-ot` / `-et` / `-öt` based on vowel harmony and final consonant
-- [x] **8B.3** Implement inessive suffix: `-ban` (back) / `-ben` (front)
-- [x] **8B.4** Implement instrumental suffix: `-val` (back) / `-vel` (front) with consonant assimilation
-- [x] **8B.5** Implement definite/indefinite conjugation selection based on determiner slots
-- [x] **8B.6** Implement verbal prefix handling (`meg-`, `el-`, `ki-`) with negation splitting (`nem harapta meg`)
-- [x] **8B.7** 🧪 Test: Example A graph → "A golden retriever a kertben megharapta a postást."
-- [x] **8B.8** 🧪 Test: Example B graph → "A kutya nem harapta meg a postást."
-- [x] **8B.9** 🧪 Test: Example C graph → "Vajon a kutya megharapott egy postást?"
+#### 8B — Generalized Multilingual Realizer Architecture (Future Extension)
+- [ ] **8B.1** Plan generalized cross-lingual morphology & syntax mapping framework
+- [ ] **8B.2** Design typologically diverse language adapters (agglutinative, fusional, isolating)
 
 #### 8C — FOL Emitter
 - [x] **8C.1** Implement ASG → FOL string conversion: quantifiers, connectives, predicates, variables
@@ -418,7 +410,7 @@ $$\text{Input} \xrightarrow{\text{Forward Parser}} \mathcal{G} \in \Sigma^{1024}
 If Mentalese captures true invariant semantics, transforming surface text into an ASG and unrolling it must preserve 100% of logical meaning, maintain Hamming distance $d_H(\mathbf{v}_{\text{orig}}, \mathbf{v}_{\text{rt}}) = 0$ over canonical slots, and preserve execution semantics for code.
 
 ### Implementation Guidelines
-- Construct round-trip test suites in `tests/test_round_trip.py` covering natural language (English/Hungarian), FOL formulas, and Python source code.
+- Construct round-trip test suites in `tests/test_round_trip.py` covering natural language (English), FOL formulas, and Python source code.
 - Compute quaternary Hamming distance across round-tripped ASG vectors to verify zero semantic slot drift.
 
 ### Verification & Acceptance Criteria
@@ -432,7 +424,7 @@ If Mentalese captures true invariant semantics, transforming surface text into a
 - [x] **9.2** 🧪 FOL round-trip: FOL string → forward parse → ASG → FOL emitter → exact string match
 - [x] **9.3** 🧪 Code round-trip: Python source → AST parser → ASG → Code emitter → exec both, compare output
 - [x] **9.4** 🧪 Quaternary Hamming distance test: round-tripped ASG vectors must have Hamming distance = 0 on canonical slots
-- [x] **9.5** 🧪 Cross-lingual test: English → ASG → Hungarian realizer → verify Hungarian output is semantically equivalent (manual gold set of 20 sentences)
+- [ ] **9.5** 🧪 Cross-lingual test: Reserved for future generalized multilingual framework
 - [x] **9.6** 🧪 Negation round-trip: "X did not Y" → ASG → English → verify negation preserved
 - [x] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
 
@@ -534,7 +526,7 @@ $$\text{Input (NL / FOL / Code)} \longrightarrow \text{Forward Parser} \longrigh
 It guarantees end-to-end type safety, structured logging, performance telemetry, and graceful error reporting with Minimal Unsatisfiable Core (MUC) diagnostics when invalid inputs are rejected.
 
 ### Implementation Guidelines
-- `translator_pipeline.py`: Build orchestration engine supporting `target_format ∈ {english, hungarian, fol, python}`.
+- `translator_pipeline.py`: Build orchestration engine supporting `target_format ∈ {english, fol, python}`.
 - Emit structured JSON log entries tracking stage latencies and memory usage.
 - Return explicit MUC diagnostic payloads upon validation rejection.
 
@@ -545,7 +537,7 @@ It guarantees end-to-end type safety, structured logging, performance telemetry,
 
 ### Checklist
 - [x] **12.1** Implement `TranslatorPipeline` class orchestrating: Input → Forward Parser → ASP Validation Gate → Merkle Addressing → Reverse Realizer
-- [x] **12.2** Add pipeline mode selection: `target_format ∈ {english, hungarian, fol, python}`
+- [x] **12.2** Add pipeline mode selection: `target_format ∈ {english, fol, python}`
 - [x] **12.3** Implement error handling: parser failure, validation rejection (return MUC diagnostic)
 - [ ] **12.4** Add pipeline logging: every stage emits structured log entry with timing
 - [x] **12.5** 🧪 End-to-end pipeline test: "A golden retriever bit the mailman" → English round-trip
@@ -942,7 +934,7 @@ Strategic dissemination across two high-impact conference targets:
 - [ ] **23.1** Draft primary paper abstract and introduction (NeSy / ACL target)
 - [ ] **23.2** Write representational grounding section (1024-dim layout, 8-band taxonomy, Belnap 4-valued logic, FSQ connection, empirical Pareto dimension sweep proof)
 - [ ] **23.3** Write neuro-symbolic gate section (LTN + s(CASP) + MUC repair)
-- [ ] **23.4** Write bidirectional surface realization section (English, Hungarian, FOL, Code)
+- [ ] **23.4** Write bidirectional surface realization section (English, FOL, Code)
 - [ ] **23.5** Compile benchmark results tables (FOLIO, ProofWriter, bAbI, CLUTRR, AR-LSAT)
 - [ ] **23.6** Write conclusion and AGI alignment discussion
 - [ ] **23.7** Draft secondary paper (NeurIPS / EMNLP target): Fast-dLLM engine + FSQ + Page-Table Attention

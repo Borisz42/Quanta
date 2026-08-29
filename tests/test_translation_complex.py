@@ -6,7 +6,7 @@ Verifies:
 3. Deep Quantifier Scope Ambiguity with Higher-Order Modal Logic (Slots 90, 91, 111, 163, 248, 75).
 4. Metalogical Self-Reference and Deontic Causal Interventions (Slots 103, 101, 198, 242).
 5. Multi-Sentence Cohesive Scientific Narrative Paragraph (Coreference Bundles, Spatial Merkle-Folding, Allen Calculus Chain, Epistemic Phase Shift).
-6. 4 Language Directions: English-English, English-Hungarian, Hungarian-English, Hungarian-Hungarian.
+6. English-English Round-Trip Invariance and Slot Preservation.
 """
 
 import pytest
@@ -25,11 +25,6 @@ def pipeline():
 @pytest.fixture(scope="module")
 def stress_1_eng():
     return "Had Alice not falsely pretended to know that Bob believed her investment was secure, the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius."
-
-
-@pytest.fixture(scope="module")
-def stress_1_hu():
-    return "Ha Alice nem színlelte volna hamisan, hogy tudja, hogy Bob biztonságosnak hitte a befektetését, a könyvvizsgáló nem jegyezte volna meg gúnyosan, hogy az átvilágítása zseniális húzás volt."
 
 
 def test_stress_1_asg_slots_and_round_trip(pipeline, stress_1_eng):
@@ -54,30 +49,6 @@ def test_stress_1_asg_slots_and_round_trip(pipeline, stress_1_eng):
     assert "auditor" in rt.realized_output
 
 
-def test_stress_1_cross_lingual_eng_to_hu(pipeline, stress_1_eng, stress_1_hu):
-    """Verify Sentence 1 English to Hungarian cross-lingual translation."""
-    res = pipeline.execute_translation(stress_1_eng, target_modality="hungarian", source_modality="english")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_1_hu
-
-
-def test_stress_1_cross_lingual_hu_to_eng(pipeline, stress_1_hu, stress_1_eng):
-    """Verify Sentence 1 Hungarian to English cross-lingual translation."""
-    res = pipeline.execute_translation(stress_1_hu, target_modality="english", source_modality="hungarian")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_1_eng
-
-
-def test_stress_1_hungarian_round_trip(pipeline, stress_1_hu):
-    """Verify Sentence 1 Hungarian to Hungarian round-trip."""
-    rt = pipeline.round_trip(stress_1_hu, modality="hungarian")
-    assert rt.validation_pass
-    assert rt.slot_preservation_rate >= 0.90
-    assert rt.realized_output == stress_1_hu
-
-
 # ----------------------------------------------------------------------
 # 2. Stress Test 2: Kinematics, Temporal Intervals, Spatial Mereotopology
 # ----------------------------------------------------------------------
@@ -85,11 +56,6 @@ def test_stress_1_hungarian_round_trip(pipeline, stress_1_hu):
 @pytest.fixture(scope="module")
 def stress_2_eng():
     return "While the drone was accelerating into the restricted airspace before dusk, the operator plausibly suspected, but could not deduce with certainty, that the left wingtip was tangentially touching the perimeter wire."
-
-
-@pytest.fixture(scope="module")
-def stress_2_hu():
-    return "Miközben a drón szürkület előtt a korlátozott légtérbe gyorsult, a kezelő valószínűsíthetően gyanította, de nem tudta bizonyossággal levezetni, hogy a bal szárnyvég érintőlegesen érintette a kerítésdrótot."
 
 
 def test_stress_2_asg_slots_and_round_trip(pipeline, stress_2_eng):
@@ -112,30 +78,6 @@ def test_stress_2_asg_slots_and_round_trip(pipeline, stress_2_eng):
     assert rt.realized_output == stress_2_eng
 
 
-def test_stress_2_cross_lingual_eng_to_hu(pipeline, stress_2_eng, stress_2_hu):
-    """Verify Sentence 2 English to Hungarian cross-lingual translation."""
-    res = pipeline.execute_translation(stress_2_eng, target_modality="hungarian", source_modality="english")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_2_hu
-
-
-def test_stress_2_cross_lingual_hu_to_eng(pipeline, stress_2_hu, stress_2_eng):
-    """Verify Sentence 2 Hungarian to English cross-lingual translation."""
-    res = pipeline.execute_translation(stress_2_hu, target_modality="english", source_modality="hungarian")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_2_eng
-
-
-def test_stress_2_hungarian_round_trip(pipeline, stress_2_hu):
-    """Verify Sentence 2 Hungarian to Hungarian round-trip."""
-    rt = pipeline.round_trip(stress_2_hu, modality="hungarian")
-    assert rt.validation_pass
-    assert rt.slot_preservation_rate >= 0.90
-    assert rt.realized_output == stress_2_hu
-
-
 # ----------------------------------------------------------------------
 # 3. Stress Test 3: Quantifier Scope & Higher-Order Modal Logic
 # ----------------------------------------------------------------------
@@ -143,11 +85,6 @@ def test_stress_2_hungarian_round_trip(pipeline, stress_2_hu):
 @pytest.fixture(scope="module")
 def stress_3_eng():
     return "Every investigator who doubted that any suspect had necessarily committed every crime secretly wanted someone to prove the absolute impossibility of an accomplice's alibi."
-
-
-@pytest.fixture(scope="module")
-def stress_3_hu():
-    return "Minden nyomozó, aki kételkedett abban, hogy bármelyik gyanúsított szükségszerűen elkövetett minden bűncselekményt, titokban azt akarta, hogy valaki bebizonyítsa egy bűntárs alibijének abszolút lehetetlenségét."
 
 
 def test_stress_3_asg_slots_and_round_trip(pipeline, stress_3_eng):
@@ -170,30 +107,6 @@ def test_stress_3_asg_slots_and_round_trip(pipeline, stress_3_eng):
     assert rt.realized_output == stress_3_eng
 
 
-def test_stress_3_cross_lingual_eng_to_hu(pipeline, stress_3_eng, stress_3_hu):
-    """Verify Sentence 3 English to Hungarian cross-lingual translation."""
-    res = pipeline.execute_translation(stress_3_eng, target_modality="hungarian", source_modality="english")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_3_hu
-
-
-def test_stress_3_cross_lingual_hu_to_eng(pipeline, stress_3_hu, stress_3_eng):
-    """Verify Sentence 3 Hungarian to English cross-lingual translation."""
-    res = pipeline.execute_translation(stress_3_hu, target_modality="english", source_modality="hungarian")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_3_eng
-
-
-def test_stress_3_hungarian_round_trip(pipeline, stress_3_hu):
-    """Verify Sentence 3 Hungarian to Hungarian round-trip."""
-    rt = pipeline.round_trip(stress_3_hu, modality="hungarian")
-    assert rt.validation_pass
-    assert rt.slot_preservation_rate >= 0.90
-    assert rt.realized_output == stress_3_hu
-
-
 # ----------------------------------------------------------------------
 # 4. Stress Test 4: Metalogical Self-Reference & Deontic Prevention
 # ----------------------------------------------------------------------
@@ -201,11 +114,6 @@ def test_stress_3_hungarian_round_trip(pipeline, stress_3_hu):
 @pytest.fixture(scope="module")
 def stress_4_eng():
     return "By declaring this very decree to be legally void, the council obligated the commissioner to prevent its future enforcement unless the clause could recursively validate its own origin."
-
-
-@pytest.fixture(scope="module")
-def stress_4_hu():
-    return "Azzal, hogy ezt a rendeletet jogilag semmisnek nyilvánította, a tanács kötelezte a biztost a jövőbeli végrehajtás megakadályozására, hacsak a záradék rekurzívan nem tudta igazolni saját eredetét."
 
 
 def test_stress_4_asg_slots_and_round_trip(pipeline, stress_4_eng):
@@ -226,30 +134,6 @@ def test_stress_4_asg_slots_and_round_trip(pipeline, stress_4_eng):
     assert rt.realized_output == stress_4_eng
 
 
-def test_stress_4_cross_lingual_eng_to_hu(pipeline, stress_4_eng, stress_4_hu):
-    """Verify Sentence 4 English to Hungarian cross-lingual translation."""
-    res = pipeline.execute_translation(stress_4_eng, target_modality="hungarian", source_modality="english")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_4_hu
-
-
-def test_stress_4_cross_lingual_hu_to_eng(pipeline, stress_4_hu, stress_4_eng):
-    """Verify Sentence 4 Hungarian to English cross-lingual translation."""
-    res = pipeline.execute_translation(stress_4_hu, target_modality="english", source_modality="hungarian")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == stress_4_eng
-
-
-def test_stress_4_hungarian_round_trip(pipeline, stress_4_hu):
-    """Verify Sentence 4 Hungarian to Hungarian round-trip."""
-    rt = pipeline.round_trip(stress_4_hu, modality="hungarian")
-    assert rt.validation_pass
-    assert rt.slot_preservation_rate >= 0.90
-    assert rt.realized_output == stress_4_hu
-
-
 # ----------------------------------------------------------------------
 # 5. Scientific Narrative Paragraph: Merkle Folding, Cohesion & Allen Chain
 # ----------------------------------------------------------------------
@@ -261,16 +145,6 @@ def scientific_paragraph_eng():
         "She immediately noted that this specimen exhibited anomalous crystalline lattice expansion, which strongly suggested an unobserved phase transition. "
         "Although her supervisor initially doubted the validity of the discovery, Eleanor verified the hypothesis three hours later by replicating the transformation within the same vessel. "
         "The resulting polymer retained its structural integrity throughout the afternoon, prompting the laboratory director to prohibit all competing tests until her synthesis protocol could be formally audited."
-    )
-
-
-@pytest.fixture(scope="module")
-def scientific_paragraph_hu():
-    return (
-        "Dr. Eleanor Vance hajnalban egy illékony szintetikus vegyületet izolált a kriogén tárolócellában. "
-        "Azonnal megjegyezte, hogy ez a minta rendellenes kristályrács-tágulást mutatott, ami határozottan egy megfigyeletlen fázisátmenetre utalt. "
-        "Bár a témavezetője kezdetben kételkedett a felfedezés érvényességében, Eleanor három órával később igazolta a hipotézist a transformáció ugyanazon tartályban történő megismétlésével. "
-        "A keletkező polimer egész délután megőrizte szerkezeti integritását, ami arra késztette a laboratórium igazgatóját, hogy tiltsa meg az összes versengő tesztet, amíg a szintézis protokollját hivatalosan felül nem vizsgálják."
     )
 
 
@@ -313,27 +187,3 @@ def test_scientific_paragraph_english_round_trip(pipeline, scientific_paragraph_
     assert rt.validation_pass
     assert rt.slot_preservation_rate >= 0.90
     assert rt.realized_output == scientific_paragraph_eng
-
-
-def test_scientific_paragraph_cross_lingual_eng_to_hu(pipeline, scientific_paragraph_eng, scientific_paragraph_hu):
-    """Verify full scientific paragraph English to Hungarian cross-lingual translation."""
-    res = pipeline.execute_translation(scientific_paragraph_eng, target_modality="hungarian", source_modality="english")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == scientific_paragraph_hu
-
-
-def test_scientific_paragraph_cross_lingual_hu_to_eng(pipeline, scientific_paragraph_hu, scientific_paragraph_eng):
-    """Verify full scientific paragraph Hungarian to English cross-lingual translation."""
-    res = pipeline.execute_translation(scientific_paragraph_hu, target_modality="english", source_modality="hungarian")
-    assert res.is_success, f"Failed: {res.error_message}"
-    assert res.validation.is_valid
-    assert res.output_text == scientific_paragraph_eng
-
-
-def test_scientific_paragraph_hungarian_round_trip(pipeline, scientific_paragraph_hu):
-    """Verify full scientific paragraph Hungarian to Hungarian round-trip."""
-    rt = pipeline.round_trip(scientific_paragraph_hu, modality="hungarian")
-    assert rt.validation_pass
-    assert rt.slot_preservation_rate >= 0.90
-    assert rt.realized_output == scientific_paragraph_hu

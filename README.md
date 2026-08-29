@@ -51,7 +51,7 @@ QUANTA establishes an end-to-end synthesis spanning language design, a non-autor
                  ▼                   ▼                       │
     ┌──────────────────────────┐   ┌─────────────────────────┴─────────┐
     │ Closed-Loop Repair Loop  │   │ Reverse Realization & Execution   │
-    │ - Isolate Minimal        │   │ - Natural English / Hungarian NLG │
+    │ - Isolate Minimal        │   │ - Natural English NLG             │
     │   Unsatisfiable Core     │   │ - Standard First-Order Logic (FOL)│
     │ - Targeted Re-Denoising  │   │ - Executable Python / C++ Code    │
     └──────────────────────────┘   └───────────────────────────────────┘
@@ -377,9 +377,8 @@ Human and software interaction occurs through a deterministic bidirectional tran
 * **Forward Translator (Natural Language / Intent $\to$ Mentalese):** Integrates an instruction-tuned small model with pure-Python Parsing Expression Grammar (`camxes-py`), spaCy, and WordNet/FrameNet resolvers to convert natural language into canonical NSM explication schemas and Lojban-anchored ASGs.
 * **Structural Validation Gate ($s(\text{CASP})$ / PyClingo):** Checks domain/range violations (e.g., `+ABSTRACT_CONCEPT` acting as `+AGENT_CAPABLE`) and validates Merkle hash integrity.
 * **Virtual Page-Table Graph RAG:** Bitwise Hamming distance matching on host CPU inlines referenced schemas (e.g., importing `python.builtins.list.sort`).
-* **Reverse Realizer (Mentalese $\to$ English / Hungarian / FOL / Code):** Converts verified ASGs back into human languages or code via deterministic rule-based surface realization engines:
+* **Reverse Realizer (Mentalese $\to$ English / FOL / Code):** Converts verified ASGs back into human languages or code via deterministic rule-based surface realization engines:
   * `EnglishRealizer`: Thematic role unrolling into natural SVO English prose.
-  * `HungarianRealizer`: Morphophonological vowel harmony engine (back vs. front, rounded vs. unrounded) and agglutinative case suffix generator (`-t`, `-ban/-ben`, `-val/-vel`).
   * `FOLEmitter`: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$).
   * `CodeEmitter`: Executable Python / C++ code generation from AST topology.
 * **Complete Human Inspectability:** Internal Merkle hashes can be unrolled into plain-language NSM prime scripts, and every decision is accompanied by a readable $s(\text{CASP})$ execution proof trace.
@@ -403,7 +402,7 @@ Human and software interaction occurs through a deterministic bidirectional tran
    - Inlines schemas (e.g., importing python.builtins.list.sort).
          │
          ▼
-4. Reverse Realizer (English, Hungarian Morph, FOL Emitter, Code Emitter)
+4. Reverse Realizer (English NLG, FOL Emitter, Code Emitter)
    - Deterministic unrolling of Merkle pointers.
    - Outputs human syntax or executable code (Python, C++).
 ```
@@ -430,8 +429,7 @@ Every concept in QUANTA is encoded into an Abstract Syntax Graph (ASG) over the 
 
 ### Example A: Affirmative Action with Modifiers & Spatial Location (Value `1` Focus)
 
-**Input:** *"A golden retriever bit the mailman in the garden."*  
-**Hungarian Realization:** *"A golden retriever a kertben megharapta a postást."*
+**Input:** *"A golden retriever bit the mailman in the garden."*
 
 ```text
 Node [3d09497c] Concept: 'wn:bite.v.01' = "bit" (Root Action Predicate)
@@ -471,8 +469,7 @@ Node [3d09497c] Concept: 'wn:bite.v.01' = "bit" (Root Action Predicate)
 
 ### Example B: Explicit Epistemic Negation (Value `2` Focus)
 
-**Input:** *"The dog did not bite the mailman."*  
-**Hungarian Realization:** *"A kutya nem harapta meg a postást."*
+**Input:** *"The dog did not bite the mailman."*
 
 ```text
 Node [e12a4f67] Concept: 'wn:bite.v.01' = "did not bite" (Negated Action Predicate)
@@ -506,8 +503,7 @@ Node [e12a4f67] Concept: 'wn:bite.v.01' = "did not bite" (Negated Action Predica
 
 ### Example C: Epistemic Uncertainty & Question Query (Value `3` Focus)
 
-**Input:** *"Did the dog perhaps bite a mailman?"*  
-**Hungarian Realization:** *"Vajon a kutya megharapott egy postást?"*
+**Input:** *"Did the dog perhaps bite a mailman?"*
 
 ```text
 Node [9b77ac31] Concept: 'wn:bite.v.01' = "bite" (Hypothetical / Interrogative Query)
@@ -698,7 +694,6 @@ quanta/
 │   │   └── mrmr_selector.py  # Minimal Redundancy Maximal Relevance selector
 │   ├── realizer/
 │   │   ├── english_nlg.py    # Quanta ASG -> SVO English NLG realizer
-│   │   ├── hungarian_morph.py # Quanta ASG -> Agglutinative Hungarian realizer
 │   │   ├── fol_emitter.py    # Quanta ASG -> First-Order Logic formula emitter
 │   │   └── code_emitter.py   # Quanta ASG -> Executable Python code emitter
 │   ├── pipeline/
@@ -718,7 +713,7 @@ quanta/
 │   ├── test_nlp_forward.py       # Forward sentence parsing to ASG
 │   ├── test_quaternary_tensors.py # Quaternary lattice algebra tests
 │   ├── test_type_constraints.py  # ASP contradiction catching & MUC extraction
-│   ├── test_realizers.py         # Reverse realizers (English, Hungarian, FOL, Code)
+│   ├── test_realizers.py         # Reverse realizers (English, FOL, Code)
 │   ├── test_round_trip.py        # English/FOL/Code -> QUANTA -> Target round-trip
 │   └── test_validation_pipeline.py # End-to-end translation & validation pipeline
 └── README.md
@@ -737,7 +732,6 @@ quanta/
 * **Phase 2: Bidirectional Realizers, Extended Invariants & Verification Pipeline** *(Active)*
   * **Reverse Realizer Suite (`quanta.realizer`)**:
     * `EnglishRealizer`: ASG traversal unrolling thematic roles (`VAL_X1_AGENT`, `VAL_X2_PATIENT`), tense inflection (`LJB_PU_PAST_TENSE`), modals (`EPIST_DEONTIC_*`), negation (`LJB_NA_NEGATION`), and descriptors into natural SVO English.
-    * `HungarianRealizer`: Morphophonological vowel harmony engine (back vs. front, rounded vs. unrounded) and agglutinative case suffix generator (Accusative `-t`, Inessive `-ban/-ben`, Instrumental `-val/-vel`).
     * `FOLEmitter`: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg, \oplus, P(x, y)$).
     * `CodeEmitter`: Executable Python AST/code reconstruction from `GRAPH_*` program topology.
   * **Extended Neuro-Symbolic Invariants (`scasp_rules.lp` / `scasp_rules.pl`)**:

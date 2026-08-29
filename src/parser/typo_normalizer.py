@@ -162,32 +162,6 @@ class TypoNormalizer:
         "who": 10, "whom": 10, "whose": 10, "what": 10, "which": 10, "where": 10, "when": 10, "how": 10, "why": 10,
     }
 
-    HUNGARIAN_CORE_LEXICON: Dict[str, int] = {
-        "kutya": 10, "kutyát": 10, "kutyának": 10,
-        "macska": 10, "macskát": 10,
-        "postás": 10, "postást": 10, "postásot": 10, "postásnak": 10,
-        "ember": 10, "embert": 10, "embernek": 10,
-        "kő": 10, "követ": 10, "kőt": 10,
-        "kert": 10, "kertet": 10, "kertben": 10, "kertbe": 10, "kertből": 10,
-        "ház": 10, "házat": 10, "házot": 10, "házba": 10, "házban": 10,
-        "könyv": 10, "könyvet": 10, "könyvöt": 10,
-        "autó": 10, "autót": 10, "autóba": 10,
-        "fa": 10, "fát": 10, "víz": 10, "vizet": 10, "bot": 10, "bottal": 10, "labda": 10, "labdát": 10,
-        "harap": 10, "harapott": 10, "harapja": 10, "harapta": 10, "megharapta": 10, "megharapott": 10,
-        "kerget": 10, "kergetett": 10, "kergette": 10, "kergeti": 10,
-        "fut": 10, "futott": 10, "elfutott": 10, "befutott": 10, "sétál": 10, "sétált": 10, "elsétált": 10, "elsétálott": 10,
-        "lát": 10, "látott": 10, "látta": 10, "látja": 10, "meglátott": 10, "meglátta": 10, "meglátja": 10,
-        "hall": 10, "hallott": 10,
-        "gondol": 10, "gondolt": 10, "gondolkodik": 10, "gondolkozik": 10, "tud": 10, "tudott": 10,
-        "ad": 10, "adott": 10, "adta": 10, "vesz": 10, "vett": 10,
-        "mond": 10, "mondott": 10, "akar": 10, "akart": 10, "akarja": 10, "akarta": 10,
-        "érint": 10, "érintett": 10, "érez": 10, "érzett": 10, "él": 10, "élt": 10,
-        "van": 10, "volt": 10, "nem": 10, "egy": 10, "a": 10, "az": 10, "vajon": 10,
-        "minden": 10, "két": 10, "kettő": 10,
-        "nagy": 10, "kis": 10, "kicsi": 10, "jó": 10, "rossz": 10, "barna": 10, "gyors": 10, "gyorsan": 10,
-        "golden retriever": 10, "golden": 10, "retriever": 10,
-    }
-
     COMPOUND_CORRECTIONS: Dict[str, str] = {
         "glden retreiver": "golden retriever",
         "goldn retriever": "golden retriever",
@@ -252,17 +226,16 @@ class TypoNormalizer:
         if w_clean.isdigit() or "_" in w_clean:
             return word
 
-        lexicon = self.HUNGARIAN_CORE_LEXICON if lang in ("hu", "hungarian") else self.ENGLISH_CORE_LEXICON
+        lexicon = self.ENGLISH_CORE_LEXICON
 
         # 1. Exact match in core lexicon
         if w_clean in lexicon:
             return w_clean
 
         # 2. Exact match in WordNet
-        if lang in ("en", "english"):
-            wn_lemmas = self._get_all_wn_lemmas()
-            if w_clean in wn_lemmas:
-                return w_clean
+        wn_lemmas = self._get_all_wn_lemmas()
+        if w_clean in wn_lemmas:
+            return w_clean
 
         # 3. Candidate search with Damerau-Levenshtein against core lexicon
         best_candidate: Optional[str] = None
@@ -285,7 +258,7 @@ class TypoNormalizer:
             return best_candidate
 
         # 4. Fallback search over indexed WordNet lemma buckets (O(1) bucket lookup, max distance 1)
-        if lang in ("en", "english") and len(w_clean) >= 3:
+        if len(w_clean) >= 3:
             first_char = w_clean[0]
             bucket = self._get_wn_bucket_candidates(first_char, len(w_clean))
             for wn_word in bucket:
@@ -324,7 +297,7 @@ class TypoNormalizer:
 
         for tok in tokens:
             # Strip non-alphanumeric temporarily
-            m = re.match(r"^([^\w]*)([\w\-\'\á\é\í\ó\ö\ő\ú\ü\ű]+)([^\w]*)$", tok, re.UNICODE)
+            m = re.match(r"^([^\w]*)([\w\-\']+)([^\w]*)$", tok, re.UNICODE)
             if m:
                 pre, core, post = m.groups()
                 core_corr = self.correct_word(core, lang=lang)

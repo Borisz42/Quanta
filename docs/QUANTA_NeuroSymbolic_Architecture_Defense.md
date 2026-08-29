@@ -205,7 +205,6 @@ Interaction between human natural language, software execution environments, and
 2. **Structural Validation & Grounding**: The graph is routed to the structural validation gate for $s(\text{CASP})$ constraint verification, BLAKE3 Merkle CID generation, and host RAM schema inlining via Virtual Page-Table Attention.
 3. **Deterministic Reverse Realization**: The verified canonical Quanta Mentalese graph ($\mathcal{G} \in \Sigma^{256}$) is dispatched to the reverse realizer suite, which includes:
    * **`EnglishRealizer`**: Thematic role unrolling into natural SVO English prose.
-   * **`HungarianRealizer`**: Morphophonological vowel harmony engine (back vs. front, rounded vs. unrounded) and agglutinative case suffix generator (`-t`, `-ban/-ben`, `-val/-vel`).
    * **`FOLEmitter`**: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$).
    * **`CodeEmitter`**: Executable Python / C++ code generation from AST topology.
 
@@ -334,7 +333,7 @@ To maximize impact across machine learning, computational linguistics, and neuro
 1. **Primary Submission (Target: NeSy or ACL)**:
    * **Title**: *The Mentalese Paradigm: Epistemic 4-Valued Metalanguage for Verifiable Neuro-Symbolic Reasoning*
    * **Framing**: Frames QUANTA as a representational bridge resolving the formal versus functional linguistic competence divide. Highlights the integration of Natural Semantic Metalanguage (NSM) primes, Lojban valency grammar, and top-down coinductive $s(\text{CASP})$ validation as a foundation for verifiable AI.
-   * **Core Results**: Demonstrates 100% formal accuracy on FOLIO and ProofWriter, zero-hallucination guarantees via MUC repair, and bidirectional surface realization across English and agglutinative Hungarian.
+   * **Core Results**: Demonstrates 100% formal accuracy on FOLIO and ProofWriter, zero-hallucination guarantees via MUC repair, and bidirectional surface realization across natural English, First-Order Logic, and Python code.
 
 2. **Secondary Submission (Target: NeurIPS or EMNLP)**:
    * **Title**: *Hardware-Aligned Discrete Quaternary Graph Diffusion and Information Bottleneck Optimization over 1024-Dimensional Semantic Vectors*
@@ -351,7 +350,7 @@ The primary publication deliverable (*The Mentalese Paradigm: Epistemic 4-Valued
 * **Introduction & Related Work**: Reviews Fodorian Language of Thought[^2], the Platonic Representation Hypothesis[^3], Probabilistic Languages of Thought[^6], and non-NL reasoning formats[^5], explicitly contrasting formal versus functional competence in LLMs[^1].
 * **Representational Grounding**: Details the 1024-dimension canonical slot layout across 8 isolated bands (NSM Primes, Valencies/Topology, Logic Quantifiers/Variables, Ontological Signatures, Tool Affordances, Theory of Mind, Epistemic Bounds/Solvers, Spatio-Temporal/Causal Calculi) and explains cryptographic Merkle-tree sub-graph folding via BLAKE3.
 * **Neuro-Symbolic Gate & Verification**: Presents top-down coinductive ASP solving with $s(\text{CASP})$[^13][^14] and Clingo, detailing Minimal Unsatisfiable Core (MUC) extraction and automated graph repair.
-* **Bidirectional Surface Realization**: Presents deterministic conversion to natural SVO English, agglutinative Hungarian (with morphophonological vowel harmony), First-Order Logic formulas, and Python AST code.
+* **Bidirectional Surface Realization**: Presents deterministic conversion to natural SVO English, First-Order Logic formulas, and Python AST code.
 * **Empirical Evaluation**: Reports benchmark performance across FOLIO[^16], ProofWriter[^17], bAbI[^18], CLUTRR[^19], and AR-LSAT[^20], presenting the 4 empirical dimension sweep curves.
 * **Conclusion**: Synthesizes key findings and outlines broader implications for verifiable Artificial General Intelligence.
 
