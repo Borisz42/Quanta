@@ -178,3 +178,147 @@ def test_quantanode_aliases_and_polymorphic_edges():
     assert g.aggregate_vector()["NSM_DO"] == 1
 
 
+def test_example_a_canonical_affirmative_graph():
+    """Verify Phase 3 Item 3B.6: Canonical Example A (Affirmative Action with Modifiers & Spatial Location).
+
+    Sentence: 'A golden retriever bit the mailman in the garden.'
+    """
+    # 1. Root Predicate Node (wn:bite.v.01, literal: "bit")
+    root_node = QuantaNode(
+        vector={
+            "NSM_DO": 1,
+            "NSM_TOUCH": 1,
+            "NSM_TRUE": 1,
+            "VAL_X1_AGENT": 1,
+            "VAL_X2_PATIENT": 1,
+            "VAL_LOCATION_SLOT": 1,
+            "LJB_PU_PAST_TENSE": 1,
+            "GRAPH_ROOT_NODE": 1,
+            "TYPE_EVENT": 1,
+            "MODALITY_LITERAL": 1,
+            "WN_ACT_ACTION": 1,
+            "EPIST_DIRECT_OBSERVATION": 1,
+            "EPIST_PROB_CERTAIN": 1,
+        },
+        anchor="wn:bite.v.01",
+        literal="bit",
+    )
+
+    # 2. Agent Child Node (wn:golden_retriever.n.01, literal: "golden retriever")
+    agent_node = QuantaNode(
+        vector={
+            "NSM_ONE": 1,
+            "VAL_X1_AGENT": 1,
+            "GRAPH_LEAF": 1,
+            "TYPE_ANIMATE": 1,
+            "ROLE_AGENT_CAPABLE": 1,
+            "ROLE_SENTIENT": 1,
+            "ROLE_MOVEABLE": 1,
+            "WN_ANIMAL_FAUNA": 1,
+            "EPIST_PROB_CERTAIN": 1,
+        },
+        anchor="wn:golden_retriever.n.01",
+        literal="golden retriever",
+    )
+
+    # 3. Patient Child Node (wn:mailman.n.01, literal: "mailman")
+    patient_node = QuantaNode(
+        vector={
+            "NSM_THIS": 1,
+            "VAL_X2_PATIENT": 1,
+            "GRAPH_LEAF": 1,
+            "TYPE_HUMAN": 1,
+            "TYPE_ANIMATE": 1,
+            "ROLE_COMMUNICATOR": 1,
+            "ROLE_SENTIENT": 1,
+            "ROLE_PATIENT_TARGET": 1,
+            "WN_PERSON_HUMAN": 1,
+            "EPIST_PROB_CERTAIN": 1,
+        },
+        anchor="wn:mailman.n.01",
+        literal="mailman",
+    )
+
+    # 4. Location Child Node (wn:garden.n.01, literal: "garden")
+    location_node = QuantaNode(
+        vector={
+            "NSM_THIS": 1,
+            "NSM_INSIDE": 1,
+            "VAL_LOCATION_SLOT": 1,
+            "GRAPH_LEAF": 1,
+            "TYPE_SPATIAL_REGION": 1,
+            "WN_LOCATION_PLACE": 1,
+            "SPATIAL_RCC_NON_TANG_PART": 1,
+        },
+        anchor="wn:garden.n.01",
+        literal="garden",
+    )
+
+    graph = QuantaGraph()
+    root_cid = graph.add_node(root_node, set_as_root=True)
+    agent_cid = graph.add_node(agent_node)
+    patient_cid = graph.add_node(patient_node)
+    loc_cid = graph.add_node(location_node)
+
+    graph.add_edge(root_cid, "VAL_X1_AGENT", agent_cid)
+    graph.add_edge(root_cid, "VAL_X2_PATIENT", patient_cid)
+    graph.add_edge(root_cid, "VAL_LOCATION_SLOT", loc_cid)
+
+    assert len(graph) == 4
+    assert graph.root_cid is not None
+
+    # Verify children retrieval
+    agent_children = graph.get_children(graph.root_cid, relation="VAL_X1_AGENT")
+    assert len(agent_children) == 1
+    assert agent_children[0].anchor == "wn:golden_retriever.n.01"
+
+    patient_children = graph.get_children(graph.root_cid, relation="VAL_X2_PATIENT")
+    assert len(patient_children) == 1
+    assert patient_children[0].anchor == "wn:mailman.n.01"
+
+    location_children = graph.get_children(graph.root_cid, relation="VAL_LOCATION_SLOT")
+    assert len(location_children) == 1
+    assert location_children[0].anchor == "wn:garden.n.01"
+
+    # Compute whole-tree proposition vector via lattice join (⊔_k)
+    v_tree = graph.to_proposition_vector()
+
+    # Verify Band 0 slots
+    assert v_tree["NSM_DO"] == 1
+    assert v_tree["NSM_TOUCH"] == 1
+    assert v_tree["NSM_TRUE"] == 1
+    assert v_tree["NSM_ONE"] == 1
+    assert v_tree["NSM_THIS"] == 1
+    assert v_tree["NSM_INSIDE"] == 1
+
+    # Verify Band 1 slots
+    assert v_tree["VAL_X1_AGENT"] == 1
+    assert v_tree["VAL_X2_PATIENT"] == 1
+    assert v_tree["VAL_LOCATION_SLOT"] == 1
+    assert v_tree["LJB_PU_PAST_TENSE"] == 1
+    assert v_tree["GRAPH_ROOT_NODE"] == 1
+    assert v_tree["GRAPH_LEAF"] == 1
+
+    # Verify Band 2 slots
+    assert v_tree["TYPE_EVENT"] == 1
+    assert v_tree["TYPE_ANIMATE"] == 1
+    assert v_tree["TYPE_HUMAN"] == 1
+    assert v_tree["TYPE_SPATIAL_REGION"] == 1
+    assert v_tree["ROLE_AGENT_CAPABLE"] == 1
+    assert v_tree["ROLE_SENTIENT"] == 1
+    assert v_tree["ROLE_COMMUNICATOR"] == 1
+    assert v_tree["ROLE_PATIENT_TARGET"] == 1
+    assert v_tree["ROLE_MOVEABLE"] == 1
+    assert v_tree["MODALITY_LITERAL"] == 1
+    assert v_tree["WN_ACT_ACTION"] == 1
+    assert v_tree["WN_ANIMAL_FAUNA"] == 1
+    assert v_tree["WN_PERSON_HUMAN"] == 1
+    assert v_tree["WN_LOCATION_PLACE"] == 1
+
+    # Verify Band 3 slots
+    assert v_tree["EPIST_DIRECT_OBSERVATION"] == 1
+    assert v_tree["EPIST_PROB_CERTAIN"] == 1
+    assert v_tree["SPATIAL_RCC_NON_TANG_PART"] == 1
+
+
+
