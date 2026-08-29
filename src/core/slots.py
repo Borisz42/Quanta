@@ -10,7 +10,9 @@ Partitions the 256 dimensions into four isolated 64-slot bands:
 from __future__ import annotations
 from dataclasses import dataclass
 import enum
-from typing import Dict, List, Optional
+import json
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
 
 class SlotBand(enum.IntEnum):
@@ -382,3 +384,45 @@ def get_slot_by_index(index: int) -> SlotDefinition:
 def get_slot_names() -> List[str]:
     """Returns an ordered list of all 256 canonical slot names."""
     return [slot.name for slot in CANONICAL_SLOTS]
+
+
+# Expose all 256 slot definitions as module-level immutable integer constants
+for _slot in CANONICAL_SLOTS:
+    globals()[_slot.name] = _slot.index
+
+
+def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canonical_slots_layout.json") -> Path:
+    """Exports the 256 canonical slot definitions to a JSON file."""
+    p = Path(output_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    slots_layout = [
+        {
+            "index": s.index,
+            "name": s.name,
+            "band_id": int(s.band),
+            "band_name": s.band.name,
+            "category": s.category,
+            "description": s.description,
+        }
+        for s in CANONICAL_SLOTS
+    ]
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(slots_layout, f, indent=2)
+    return p
+
+
+__all__ = [
+    "SlotBand",
+    "SlotDefinition",
+    "BAND_0_SLOTS",
+    "BAND_1_SLOTS",
+    "BAND_2_SLOTS",
+    "BAND_3_SLOTS",
+    "CANONICAL_SLOTS",
+    "SLOT_NAME_TO_INDEX",
+    "SLOT_INDEX_TO_NAME",
+    "get_slot_by_name",
+    "get_slot_by_index",
+    "get_slot_names",
+    "export_canonical_slots_layout",
+] + [slot.name for slot in CANONICAL_SLOTS]
