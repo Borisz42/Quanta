@@ -136,7 +136,27 @@ class CodeEmitter:
         # 5. Return Statement
         elif node.get_slot("GRAPH_RETURN_VALUE") == 1:
             ret_val = ""
-            if "VAL_X2_PATIENT" in node.edges and node.edges["VAL_X2_PATIENT"]:
+            # Check for recursive call reconstruction via GRAPH_RECURSIVE_REF
+            if "GRAPH_RECURSIVE_REF" in node.edges and node.edges["GRAPH_RECURSIVE_REF"]:
+                target_cid = node.edges["GRAPH_RECURSIVE_REF"][0]
+                target_node = graph.get_node(target_cid)
+                rec_func_name = "func"
+                if target_node:
+                    if target_node.anchor and target_node.anchor.startswith("func:"):
+                        rec_func_name = target_node.anchor[5:]
+                    elif target_node.literal and str(target_node.literal).startswith("def "):
+                        parts = str(target_node.literal).split()
+                        if len(parts) >= 2:
+                            rec_func_name = parts[1].split("(")[0]
+
+                if node.literal:
+                    ret_val = str(node.literal)
+                else:
+                    if node.get_slot("NSM_MUCH") == 1 and node.get_slot("NSM_PART") == 1:
+                        ret_val = f"n * {rec_func_name}(n - 1)"
+                    else:
+                        ret_val = f"{rec_func_name}(n - 1)"
+            elif "VAL_X2_PATIENT" in node.edges and node.edges["VAL_X2_PATIENT"]:
                 val_node = graph.get_node(node.edges["VAL_X2_PATIENT"][0])
                 if val_node:
                     if val_node.anchor and val_node.anchor.startswith("var:"):
@@ -151,15 +171,30 @@ class CodeEmitter:
 
             return f"{indent}return {ret_val}".rstrip()
 
-        # 6. Function / Method Calls
-        elif node.get_slot("GRAPH_INVOCATION_CALL") == 1:
+        # 6. Function / Method Calls & Recursive Invocations
+        elif node.get_slot("GRAPH_INVOCATION_CALL") == 1 or node.get_slot("GRAPH_RECURSIVE_REF") == 1:
             call_target = "call_func"
-            if node.anchor and node.anchor.startswith("call:"):
+            if "GRAPH_RECURSIVE_REF" in node.edges and node.edges["GRAPH_RECURSIVE_REF"]:
+                target_cid = node.edges["GRAPH_RECURSIVE_REF"][0]
+                target_node = graph.get_node(target_cid)
+                if target_node and target_node.anchor and target_node.anchor.startswith("func:"):
+                    call_target = target_node.anchor[5:]
+            elif node.anchor and node.anchor.startswith("call:"):
                 call_target = node.anchor[5:]
             elif node.literal:
                 call_target = str(node.literal).replace("call ", "")
 
-            return f"{indent}{call_target}()"
+            args = []
+            if "VAL_X1_AGENT" in node.edges:
+                for a_cid in node.edges["VAL_X1_AGENT"]:
+                    a_node = graph.get_node(a_cid)
+                    if a_node:
+                        if a_node.anchor and a_node.anchor.startswith("var:"):
+                            args.append(a_node.anchor[4:])
+                        elif a_node.literal:
+                            args.append(str(a_node.literal))
+            args_str = ", ".join(args)
+            return f"{indent}{call_target}({args_str})"
 
         # Fallback to literal representation
         if node.literal:

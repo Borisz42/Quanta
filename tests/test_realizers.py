@@ -263,3 +263,59 @@ def test_code_emitter(code_emitter):
     assert "def factorial(n):" in code
     assert "if " in code
     assert "return 1" in code
+
+
+def test_code_emitter_recursive_reconstruction(code_emitter):
+    """Verify Phase 8 Item 8D.2: Reconstructing recursive calls via GRAPH_RECURSIVE_REF."""
+    root = QuantaNode(
+        vector={"GRAPH_FUNCTION_DEF": 1, "TYPE_PROCESS": 1},
+        anchor="func:factorial",
+    )
+    arg_n = QuantaNode(vector={"GRAPH_VARIABLE_BIND": 1}, literal="arg:n")
+    rec_ret = QuantaNode(
+        vector={"GRAPH_RETURN_VALUE": 1, "GRAPH_RECURSIVE_REF": 1, "NSM_MUCH": 1, "NSM_PART": 1},
+    )
+
+    graph = QuantaGraph()
+    r_cid = graph.add_node(root, set_as_root=True)
+    a_cid = graph.add_node(arg_n)
+    ret_cid = graph.add_node(rec_ret)
+
+    graph.add_edge(r_cid, "VAL_X1_AGENT", a_cid)
+    graph.add_edge(r_cid, "GRAPH_IS_SUB_EXP", ret_cid)
+    graph.add_edge(ret_cid, "GRAPH_RECURSIVE_REF", r_cid)
+
+    code = code_emitter.emit_code(graph)
+    assert "def factorial(n):" in code
+    assert "return n * factorial(n - 1)" in code
+
+
+def test_code_emitter_canonical_example_f_execution(code_emitter):
+    """Verify Phase 8 Item 8D.4 & 8D.5: Example F graph -> executable Python code and factorial(5) == 120."""
+    from parser.ast_parser import ASTForwardParser
+    parser = ASTForwardParser()
+    source_code = """
+def factorial(n):
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+""".strip()
+
+    graph = parser.parse_ast_node(source_code)
+    emitted = code_emitter.emit_code(graph)
+
+    # Verify syntactically valid code emitted
+    assert "def factorial(n):" in emitted
+    assert "if " in emitted
+    assert "return 1" in emitted
+    assert "factorial(n - 1)" in emitted
+
+    # Verify code is executable and factorial(5) == 120
+    env = {}
+    exec(emitted, env)
+    assert "factorial" in env
+    fact_fn = env["factorial"]
+    assert fact_fn(0) == 1
+    assert fact_fn(1) == 1
+    assert fact_fn(5) == 120
+    assert fact_fn(6) == 720
