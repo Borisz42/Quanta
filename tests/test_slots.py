@@ -1,9 +1,9 @@
-"""Tests for Canonical Slot Layout (Phase 2A).
+"""Tests for Canonical Slot Layout (1024 Dimensions).
 
 Verifies:
-- 256 canonical slot definitions and module-level integer constants
+- 1024 canonical slot definitions and module-level integer constants
 - No duplicate indices or names
-- Strict 64-slot band partitioning (Bands 0, 1, 2, 3)
+- Strict 128-slot band partitioning (8 Bands: Bands 0 to 7)
 - JSON export integrity of output/canonical_slots_layout.json
 """
 
@@ -19,6 +19,10 @@ from core.slots import (
     BAND_1_SLOTS,
     BAND_2_SLOTS,
     BAND_3_SLOTS,
+    BAND_4_SLOTS,
+    BAND_5_SLOTS,
+    BAND_6_SLOTS,
+    BAND_7_SLOTS,
     CANONICAL_SLOTS,
     SLOT_NAME_TO_INDEX,
     SLOT_INDEX_TO_NAME,
@@ -30,48 +34,43 @@ from core.slots import (
 
 
 def test_slot_count_and_uniqueness():
-    """Verify exactly 256 slots, unique indices, and unique names."""
-    assert len(CANONICAL_SLOTS) == 256
-    assert len(SLOT_NAME_TO_INDEX) == 256
-    assert len(SLOT_INDEX_TO_NAME) == 256
+    """Verify exactly 1024 slots, unique indices, and unique names."""
+    assert len(CANONICAL_SLOTS) == 1024
+    assert len(SLOT_INDEX_TO_NAME) == 1024
+    assert len(SLOT_NAME_TO_INDEX) >= 1024
 
     indices = [slot.index for slot in CANONICAL_SLOTS]
-    assert indices == list(range(256)), "Slot indices must be sequential from 0 to 255"
+    assert indices == list(range(1024)), "Slot indices must be sequential from 0 to 1023"
 
     names = [slot.name for slot in CANONICAL_SLOTS]
-    assert len(set(names)) == 256, "All slot names must be unique"
+    assert len(set(names)) == 1024, "All slot names must be unique"
 
 
 def test_band_boundaries_and_sizes():
-    """Verify each band contains exactly 64 slots within expected index intervals."""
-    assert len(BAND_0_SLOTS) == 64
-    assert len(BAND_1_SLOTS) == 64
-    assert len(BAND_2_SLOTS) == 64
-    assert len(BAND_3_SLOTS) == 64
+    """Verify each of the 8 bands contains exactly 128 slots within expected index intervals."""
+    all_bands = [
+        (BAND_0_SLOTS, 0, SlotBand.BAND_0_NSM_KINEMATICS),
+        (BAND_1_SLOTS, 1, SlotBand.BAND_1_VALENCIES_TOPOLOGY),
+        (BAND_2_SLOTS, 2, SlotBand.BAND_2_LOGIC_VARIABLES),
+        (BAND_3_SLOTS, 3, SlotBand.BAND_3_ONTOLOGY_STRUCTURES),
+        (BAND_4_SLOTS, 4, SlotBand.BAND_4_AFFORDANCES_OPERATIONS),
+        (BAND_5_SLOTS, 5, SlotBand.BAND_5_TOM_PRAGMATICS),
+        (BAND_6_SLOTS, 6, SlotBand.BAND_6_PROOF_DEONTICS),
+        (BAND_7_SLOTS, 7, SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL),
+    ]
 
-    for i, s in enumerate(BAND_0_SLOTS):
-        assert s.index == i
-        assert s.band == SlotBand.BAND_0_NSM_KINEMATICS
-        assert 0 <= s.index < 64
-
-    for i, s in enumerate(BAND_1_SLOTS):
-        assert s.index == 64 + i
-        assert s.band == SlotBand.BAND_1_VALENCIES_TOPOLOGY
-        assert 64 <= s.index < 128
-
-    for i, s in enumerate(BAND_2_SLOTS):
-        assert s.index == 128 + i
-        assert s.band == SlotBand.BAND_2_ONTOLOGY_MODALITY
-        assert 128 <= s.index < 192
-
-    for i, s in enumerate(BAND_3_SLOTS):
-        assert s.index == 192 + i
-        assert s.band == SlotBand.BAND_3_EPISTEMIC_METARULES
-        assert 192 <= s.index < 256
+    for band_slots, band_idx, expected_band in all_bands:
+        assert len(band_slots) == 128, f"Band {band_idx} must contain 128 slots, got {len(band_slots)}"
+        start_idx = band_idx * 128
+        end_idx = start_idx + 128
+        for i, s in enumerate(band_slots):
+            assert s.index == start_idx + i
+            assert s.band == expected_band
+            assert start_idx <= s.index < end_idx
 
 
 def test_module_level_slot_constants():
-    """Verify that all 256 slot names are exposed as module-level integer constants."""
+    """Verify that all 1024 slot names are exposed as module-level integer constants."""
     for slot in CANONICAL_SLOTS:
         assert hasattr(slots, slot.name), f"slots module missing constant {slot.name}"
         assert getattr(slots, slot.name) == slot.index
@@ -80,16 +79,17 @@ def test_module_level_slot_constants():
     assert slots.NSM_I == 0
     assert slots.NSM_DO == 32
     assert slots.NSM_MAYBE == 63
-    assert slots.VAL_X1_AGENT == 64
-    assert slots.LJB_NA_NEGATION == 75
-    assert slots.GRAPH_IMMUTABLE_HASH_LOCK == 127
-    assert slots.TYPE_ANIMATE == 128
-    assert slots.ROLE_AGENT_CAPABLE == 148
-    assert slots.WN_RELATION_LINK == 191
-    assert slots.EPIST_DIRECT_OBSERVATION == 192
-    assert slots.SOLVER_CWA_CLOSED_WORLD == 208
-    assert slots.SPATIAL_RCC_DISCONNECTED == 232
-    assert slots.LOGIC_TEMPORAL_UNTIL_U == 255
+    assert slots.VAL_X1_AGENT == 128
+    assert slots.GRAPH_IMMUTABLE_HASH_LOCK == 197
+    assert slots.QUANT_UNIVERSAL_FORALL == 256
+    assert slots.VAR_SLOT_X0 == 280
+    assert slots.TYPE_ANIMATE == 384
+    assert slots.AFFORD_INCISED_CUTTING == 512
+    assert slots.TOM_FIRST_ORDER_BELIEF == 640
+    assert slots.EPIST_DIRECT_OBSERVATION == 768
+    assert slots.SOLVER_CWA_CLOSED_WORLD == 832
+    assert slots.TEMP_ALLEN_BEFORE == 896
+    assert slots.MODEL_CHECK_PROBABILISTIC_PRISM == 1023
 
 
 def test_get_slot_helpers():
@@ -99,20 +99,20 @@ def test_get_slot_helpers():
 
     s_agent = get_slot_by_name("VAL_X1_AGENT")
     assert s_agent is not None
-    assert s_agent.index == 64
+    assert s_agent.index == 128
 
     assert get_slot_by_name("NON_EXISTENT_SLOT") is None
 
     with pytest.raises(IndexError):
-        get_slot_by_index(256)
+        get_slot_by_index(1024)
 
     with pytest.raises(IndexError):
         get_slot_by_index(-1)
 
     all_names = get_slot_names()
-    assert len(all_names) == 256
+    assert len(all_names) == 1024
     assert all_names[0] == "NSM_I"
-    assert all_names[255] == "LOGIC_TEMPORAL_UNTIL_U"
+    assert all_names[1023] == "MODEL_CHECK_PROBABILISTIC_PRISM"
 
 
 def test_canonical_slots_json_export(tmp_path):
@@ -124,7 +124,7 @@ def test_canonical_slots_json_export(tmp_path):
     with open(result_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    assert len(data) == 256
+    assert len(data) == 1024
     for i, entry in enumerate(data):
         assert entry["index"] == i
         assert entry["name"] == CANONICAL_SLOTS[i].name
@@ -142,7 +142,7 @@ def test_output_canonical_slots_layout_file_exists():
     with open(output_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    assert len(data) == 256
+    assert len(data) == 1024
     for i, item in enumerate(data):
         assert item["index"] == i
         assert item["name"] == CANONICAL_SLOTS[i].name

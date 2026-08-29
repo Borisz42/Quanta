@@ -46,7 +46,7 @@ def build_candidate_pool() -> List[CandidateDimension]:
         ))
         curr_id += 1
 
-    # 1. First 256: Canonical Slots (Bands 0-3)
+    # 1. Canonical Slots (1024 Slots across Bands 0-7)
     for slot in CANONICAL_SLOTS:
         add(
             name=slot.name,
@@ -216,8 +216,9 @@ def build_candidate_pool() -> List[CandidateDimension]:
     for name, cat, desc in logic_and_ast:
         add(name, "Logic/Calculi", cat, desc)
 
-    # Pad with structured auxiliary formal dimensions if needed to reach exactly 512 total
-    while len(candidates) < 512:
+    # Pad with structured auxiliary formal dimensions if needed to reach target over-complete pool
+    target_pool_size = max(len(CANONICAL_SLOTS), 2048)
+    while len(candidates) < target_pool_size:
         idx = len(candidates)
         add(
             name=f"EXT_FORMAL_DIM_{idx}",
@@ -230,13 +231,15 @@ def build_candidate_pool() -> List[CandidateDimension]:
 
 
 def project_canonical_to_candidates(canonical_matrix: np.ndarray, candidates: List[CandidateDimension]) -> np.ndarray:
-    """Projects an (N, 256) canonical quaternary matrix onto an (N, K) candidate matrix."""
+    """Projects an (N, D) canonical quaternary matrix onto an (N, K) candidate matrix."""
     num_samples = canonical_matrix.shape[0]
+    num_canon = canonical_matrix.shape[1]
     num_candidates = len(candidates)
     candidate_matrix = np.zeros((num_samples, num_candidates), dtype=np.uint8)
 
-    # 1. Directly copy first 256 canonical slots
-    candidate_matrix[:, :256] = canonical_matrix
+    # 1. Directly copy available canonical slots
+    k_copy = min(num_canon, num_candidates)
+    candidate_matrix[:, :k_copy] = canonical_matrix[:, :k_copy]
 
     def get_c(name: str) -> np.ndarray:
         idx = SLOT_NAME_TO_INDEX.get(name)

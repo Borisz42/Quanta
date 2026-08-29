@@ -92,18 +92,16 @@ def test_resolve_synset_and_hypernyms():
     assert any("animal.n.01" in h for h in hyp_path)
     assert any("canine.n.02" in h or "domestic_animal.n.01" in h for h in hyp_path)
 
-    # 5A.4: get_wordnet_root_category mapping to Band 2 slot index
-    # WN_ANIMAL_FAUNA index is 172
+    # 5A.4: get_wordnet_root_category mapping to Band 3 slot index
+    from core.slots import get_slot_by_name
     cat_idx = grounder.get_wordnet_root_category("dog.n.01")
-    assert cat_idx == 172
+    assert cat_idx == get_slot_by_name("WN_ANIMAL_FAUNA").index
 
-    # WN_PERSON_HUMAN index is 185
     person_idx = grounder.get_wordnet_root_category("mailman.n.01")
-    assert person_idx == 185
+    assert person_idx == get_slot_by_name("WN_PERSON_HUMAN").index
 
-    # WN_ARTIFACT_OBJECT index is 173
     artifact_idx = grounder.get_wordnet_root_category("hammer.n.02")
-    assert artifact_idx == 173
+    assert artifact_idx == get_slot_by_name("WN_ARTIFACT_OBJECT").index
 
 
 def test_framenet_valency_resolution():

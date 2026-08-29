@@ -98,8 +98,10 @@ class ValidationGate:
         for cid, node in current_nodes.items():
             active = node.vector.active_slots()
             for idx, qval in active.items():
-                slot_def = get_slot_by_index(idx)
-                slot_name = slot_def.name
+                if 0 <= idx < 1024:
+                    slot_name = get_slot_by_index(idx).name
+                else:
+                    slot_name = f"DIM_{idx}"
                 val_int = int(qval)
 
                 candidates.append(f'candidate_slot("{cid}", "{slot_name}", {val_int}).')

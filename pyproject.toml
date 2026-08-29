@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "quanta"
 version = "0.1.0"
-description = "QUANTA: Neuro-Symbolic 256-Dimension Quaternary Vector Architecture"
+description = "QUANTA: Neuro-Symbolic 1024-Dimension Quaternary Vector Architecture"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -43,4 +43,7 @@ testpaths = [
 pythonpath = [
     ".",
     "src"
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]

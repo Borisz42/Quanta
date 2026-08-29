@@ -74,9 +74,11 @@ class MRMRSelector:
         elif len(f1_scores) < K:
             padded_f1 = np.zeros(K, dtype=np.float64)
             padded_f1[:len(f1_scores)] = f1_scores
-            # For projected candidate dimensions beyond 256, approximate F1 from their source slots
+            # For projected candidate dimensions beyond canonical, approximate F1 from their source slots
             padded_f1[len(f1_scores):] = norm_entropies[len(f1_scores):]
             f1_scores = padded_f1
+        elif len(f1_scores) > K:
+            f1_scores = f1_scores[:K]
 
         if causal_necessity is None:
             causal_necessity = norm_entropies
@@ -85,6 +87,8 @@ class MRMRSelector:
             padded_nec[:len(causal_necessity)] = causal_necessity
             padded_nec[len(causal_necessity):] = norm_entropies[len(causal_necessity):]
             causal_necessity = padded_nec
+        elif len(causal_necessity) > K:
+            causal_necessity = causal_necessity[:K]
 
         if violation_rates is None:
             violation_rates = np.zeros(K, dtype=np.float64)
@@ -92,6 +96,8 @@ class MRMRSelector:
             padded_v = np.zeros(K, dtype=np.float64)
             padded_v[:len(violation_rates)] = violation_rates
             violation_rates = padded_v
+        elif len(violation_rates) > K:
+            violation_rates = violation_rates[:K]
 
         # 3. Base static relevance score per candidate
         base_relevance = (
@@ -101,56 +107,55 @@ class MRMRSelector:
             w_violation * violation_rates
         )
 
-        # Precompute pairwise mutual information cache on demand
-        mi_cache: Dict[Tuple[int, int], float] = {}
+        # Precompute one-hot matrix for ultra-fast vectorized joint count & MI calculation
+        one_hot = np.zeros((N, K, 4), dtype=np.float32)
+        for v in range(4):
+            one_hot[:, :, v] = (X_int == v).astype(np.float32)
+        flat_one_hot = one_hot.reshape(N, K * 4)
 
-        def get_mi(i: int, j: int) -> float:
-            if i == j:
-                return discrete_entropy(X_int[:, i], num_states=4)
-            key = (min(i, j), max(i, j))
-            if key not in mi_cache:
-                mi_cache[key] = fast_discrete_mutual_info(X_int[:, i], X_int[:, j], num_x=4, num_y=4)
-            return mi_cache[key]
+        def compute_all_mi_with(feat_idx: int) -> np.ndarray:
+            # (4, N) @ (N, K * 4) -> (4, K * 4) -> (K, 4, 4)
+            joint_counts = np.dot(one_hot[:, feat_idx, :].T, flat_one_hot).reshape(4, K, 4).transpose(1, 0, 2)
+            p_xy = joint_counts / float(N)
+            p_x = p_xy.sum(axis=2, keepdims=True)  # (K, 4, 1)
+            p_y = p_xy.sum(axis=1, keepdims=True)  # (K, 1, 4)
+            denom = p_x * p_y
+            mask = (p_xy > 0) & (denom > 0)
+            log_terms = np.zeros_like(p_xy)
+            log_terms[mask] = p_xy[mask] * np.log2(p_xy[mask] / denom[mask])
+            return np.maximum(0.0, np.sum(log_terms, axis=(1, 2)))
 
         selected_indices: List[int] = []
         selected_scores: List[float] = []
-        remaining_indices = set(range(K))
+        remaining_mask = np.ones(K, dtype=bool)
 
         # Pick first feature: highest base relevance
         first_feat = int(np.argmax(base_relevance))
         selected_indices.append(first_feat)
         selected_scores.append(float(base_relevance[first_feat]))
-        remaining_indices.remove(first_feat)
+        remaining_mask[first_feat] = False
 
-        # Running sum of redundancies to selected features for fast O(1) update
-        sum_redundancy = np.zeros(K, dtype=np.float64)
-        for cand in remaining_indices:
-            sum_redundancy[cand] = get_mi(cand, first_feat)
+        # Running sum of redundancies to selected features for fast vectorized O(1) update
+        sum_redundancy = compute_all_mi_with(first_feat)
 
-        while len(selected_indices) < target_k and remaining_indices:
+        while len(selected_indices) < target_k and np.any(remaining_mask):
             n_sel = len(selected_indices)
-            best_feat = -1
-            best_score = -float("inf")
+            mean_red = sum_redundancy / float(n_sel)
+            norm_red = mean_red / 2.0
+            scores = base_relevance - w_redundancy * norm_red
+            scores[~remaining_mask] = -np.inf
 
-            for cand in remaining_indices:
-                mean_red = sum_redundancy[cand] / n_sel
-                # Normalize redundancy relative to 2.0 bits max
-                norm_red = mean_red / 2.0
-                score = base_relevance[cand] - w_redundancy * norm_red
+            best_feat = int(np.argmax(scores))
+            best_score = float(scores[best_feat])
 
-                if score > best_score:
-                    best_score = score
-                    best_feat = cand
-
-            if best_feat == -1:
+            if scores[best_feat] == -np.inf:
                 break
 
             selected_indices.append(best_feat)
-            selected_scores.append(float(best_score))
-            remaining_indices.remove(best_feat)
+            selected_scores.append(best_score)
+            remaining_mask[best_feat] = False
 
-            for cand in remaining_indices:
-                sum_redundancy[cand] += get_mi(cand, best_feat)
+            sum_redundancy += compute_all_mi_with(best_feat)
 
         return [
             (idx, self.candidate_names[idx], score)
@@ -194,8 +199,8 @@ class MRMRSelector:
 def export_optimal_dimensions(
     selected_dims: List[Tuple[int, str, float]],
     candidates: Sequence[Any],
-    json_path: Union[str, Path] = "output/optimal_256_dimensions.json",
-    csv_path: Optional[Union[str, Path]] = "output/optimal_256_dimensions.csv",
+    json_path: Union[str, Path] = "output/optimal_dimensions.json",
+    csv_path: Optional[Union[str, Path]] = "output/optimal_dimensions.csv",
 ) -> Dict[str, Path]:
     """Exports multi-objective selected optimal dimensions to JSON and CSV formats."""
     cand_by_name = {c.name: c for c in candidates}

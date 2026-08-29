@@ -1,7 +1,7 @@
 """Hungarian Forward Parser for QUANTA.
 
 Translates Hungarian natural language sentences into Content-Addressed Abstract Syntax Graphs (ASGs)
-and 256-dimensional quaternary semantic vectors using morphological case analysis.
+and 1024-dimensional quaternary semantic vectors using morphological case analysis.
 """
 
 from __future__ import annotations

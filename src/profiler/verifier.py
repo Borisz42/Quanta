@@ -22,18 +22,19 @@ from solver.validator_gate import ValidationGate, ValidationResult
 class SlotFidelityReport:
     """Per-dimension and macro alignment metrics against gold semantic vectors."""
     num_samples: int
-    precision: np.ndarray  # (256,)
-    recall: np.ndarray     # (256,)
-    f1_score: np.ndarray   # (256,)
+    precision: np.ndarray  # (1024,)
+    recall: np.ndarray     # (1024,)
+    f1_score: np.ndarray   # (1024,)
     macro_precision: float
     macro_recall: float
     macro_f1: float
-    accuracy_per_slot: np.ndarray  # (256,)
-    active_slots_count: np.ndarray # (256,)
+    accuracy_per_slot: np.ndarray  # (1024,)
+    active_slots_count: np.ndarray # (1024,)
 
     def to_dict(self) -> Dict[str, Any]:
         slot_details = []
-        for i in range(256):
+        num_slots = len(self.precision)
+        for i in range(num_slots):
             name = SLOT_INDEX_TO_NAME.get(i, f"SLOT_{i}")
             slot_details.append({
                 "index": i,
@@ -59,7 +60,7 @@ class VerificationSummary:
     gold_alignment: SlotFidelityReport
     cycle_consistency_score: float
     symbolic_soundness_rate: float
-    causal_necessity_scores: np.ndarray  # (256,)
+    causal_necessity_scores: np.ndarray  # (1024,)
     dead_slots_deficiency_type: Dict[str, str]  # slot_name -> "PARSER_DEFICIENT" | "INHERENT_LOW_UTILITY"
 
     def to_dict(self) -> Dict[str, Any]:
@@ -88,21 +89,22 @@ class SemanticVectorVerifier:
         """Computes per-slot Precision, Recall, F1, and Exact Match between predicted and gold vectors."""
         n = len(pairs)
         if n == 0:
-            zeros = np.zeros(256, dtype=np.float64)
+            zeros = np.zeros(len(CANONICAL_SLOTS), dtype=np.float64)
             return SlotFidelityReport(0, zeros, zeros, zeros, 0.0, 0.0, 0.0, zeros, zeros)
 
-        gold_matrix = np.stack([p.gold_vector.to_numpy() for p in pairs], axis=0)  # (N, 256)
+        gold_matrix = np.stack([p.gold_vector.to_numpy() for p in pairs], axis=0)
         pred_matrix = np.stack([
             (p.predicted_vector or p.gold_vector).to_numpy() for p in pairs
-        ], axis=0)  # (N, 256)
+        ], axis=0)
+        dim = gold_matrix.shape[1]
 
-        tp = np.zeros(256, dtype=np.float64)
-        fp = np.zeros(256, dtype=np.float64)
-        fn = np.zeros(256, dtype=np.float64)
-        correct_exact = np.zeros(256, dtype=np.float64)
-        gold_active = np.zeros(256, dtype=np.int64)
+        tp = np.zeros(dim, dtype=np.float64)
+        fp = np.zeros(dim, dtype=np.float64)
+        fn = np.zeros(dim, dtype=np.float64)
+        correct_exact = np.zeros(dim, dtype=np.float64)
+        gold_active = np.zeros(dim, dtype=np.int64)
 
-        for col in range(256):
+        for col in range(dim):
             g_col = gold_matrix[:, col]
             p_col = pred_matrix[:, col]
 
@@ -123,11 +125,11 @@ class SemanticVectorVerifier:
             # Exact match (including 0 == 0)
             correct_exact[col] = np.sum(g_col == p_col)
 
-        precision = np.zeros(256, dtype=np.float64)
-        recall = np.zeros(256, dtype=np.float64)
-        f1 = np.zeros(256, dtype=np.float64)
+        precision = np.zeros(dim, dtype=np.float64)
+        recall = np.zeros(dim, dtype=np.float64)
+        f1 = np.zeros(dim, dtype=np.float64)
 
-        for col in range(256):
+        for col in range(dim):
             p_denom = tp[col] + fp[col]
             precision[col] = (tp[col] / p_denom) if p_denom > 0 else 1.0
 
@@ -177,19 +179,11 @@ class SemanticVectorVerifier:
         total_eval = 0
 
         for pair in pairs:
-            text = pair.source_text
-            domain = pair.domain
-
             try:
-                # 1. Start from gold vector or parse
                 gold_vec = pair.gold_vector
-
-                # 2. Check if key semantic slots match expectations
-                # Measure Hamming distance between gold vector and predicted vector
                 pred_vec = pair.predicted_vector or gold_vec
                 h_dist = gold_vec.hamming_distance(pred_vec)
-                # Normalized similarity: 1.0 - (h_dist / 256.0)
-                sim = 1.0 - (h_dist / 256.0)
+                sim = 1.0 - (h_dist / float(len(gold_vec)))
                 score_sum += sim
                 total_eval += 1
             except Exception:
@@ -224,29 +218,27 @@ class SemanticVectorVerifier:
         """Measures causal necessity of each slot by testing whether ablating D_i (D_i <- 0)
         perturbs semantic disambiguation or task validity.
         """
-        necessity = np.zeros(256, dtype=np.float64)
         if not pairs:
-            return necessity
+            return np.zeros(len(CANONICAL_SLOTS), dtype=np.float64)
 
-        gold_matrix = np.stack([p.gold_vector.to_numpy() for p in pairs], axis=0)  # (N, 256)
+        gold_matrix = np.stack([p.gold_vector.to_numpy() for p in pairs], axis=0)
+        dim = gold_matrix.shape[1]
+        necessity = np.zeros(dim, dtype=np.float64)
         active_counts = np.sum(gold_matrix > 0, axis=0)
 
-        for col in range(256):
+        for col in range(dim):
             if active_counts[col] == 0:
                 necessity[col] = 0.0
                 continue
 
-            # Information content / discriminative power:
-            # Active frequency normalized by corpus size
             freq = active_counts[col] / len(pairs)
-            # High utility peaks when a slot discriminates subsets (freq ~ 0.1 to 0.5)
-            # and is active in formal proofs
-            slot_def = CANONICAL_SLOTS[col]
             base_weight = 1.0
-            if slot_def.band.name == "BAND_3_EPISTEMIC_METARULES":
-                base_weight = 1.2
-            elif slot_def.band.name == "BAND_1_VALENCIES_TOPOLOGY":
-                base_weight = 1.1
+            if col < len(CANONICAL_SLOTS):
+                slot_def = CANONICAL_SLOTS[col]
+                if slot_def.band.name in ("BAND_6_PROOF_DEONTICS", "BAND_3_EPISTEMIC_METARULES"):
+                    base_weight = 1.2
+                elif slot_def.band.name == "BAND_1_VALENCIES_TOPOLOGY":
+                    base_weight = 1.1
 
             necessity[col] = min(1.0, float(freq * 2.0 * base_weight))
 
@@ -289,8 +281,9 @@ class SemanticVectorVerifier:
         
         causal_nec = self.evaluate_causal_necessity(gold_pairs)
 
+        num_slots = len(fidelity.f1_score)
         dead_indices = [
-            i for i in range(256)
+            i for i in range(num_slots)
             if fidelity.active_slots_count[i] == 0 or fidelity.f1_score[i] < dead_threshold
         ]
         diagnosis = self.diagnose_dead_slots(dead_indices, fidelity)

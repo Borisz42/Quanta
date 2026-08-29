@@ -93,8 +93,12 @@ class ASGVisualizer:
     BAND_TITLES: Dict[SlotBand, str] = {
         SlotBand.BAND_0_NSM_KINEMATICS: "Band 0 (NSM Primes & Kinematics)",
         SlotBand.BAND_1_VALENCIES_TOPOLOGY: "Band 1 (Valencies & Topology)",
-        SlotBand.BAND_2_ONTOLOGY_MODALITY: "Band 2 (Ontology & Modality)",
-        SlotBand.BAND_3_EPISTEMIC_METARULES: "Band 3 (Epistemics & Meta-Calculi)",
+        SlotBand.BAND_2_LOGIC_VARIABLES: "Band 2 (Logic & Variables)",
+        SlotBand.BAND_3_ONTOLOGY_STRUCTURES: "Band 3 (Ontology & Structures)",
+        SlotBand.BAND_4_AFFORDANCES_OPERATIONS: "Band 4 (Affordances & Operations)",
+        SlotBand.BAND_5_TOM_PRAGMATICS: "Band 5 (Theory of Mind & Pragmatics)",
+        SlotBand.BAND_6_PROOF_DEONTICS: "Band 6 (Proof Solvers & Deontics)",
+        SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL: "Band 7 (Spatiotemporal & Causal)",
     }
 
     @classmethod

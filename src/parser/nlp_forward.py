@@ -1,7 +1,7 @@
 """Natural Language Forward Parser for QUANTA.
 
 Translates English sentences into Content-Addressed Abstract Syntax Graphs (ASGs)
-and 256-dimensional quaternary semantic vectors.
+and 1024-dimensional quaternary semantic vectors.
 """
 
 from __future__ import annotations
@@ -1109,7 +1109,7 @@ class NLPForwardParser:
         return graph
 
     def sentence_to_vector(self, text: str, domain_context: Optional[str] = None) -> QuantaVector:
-        """Helper to parse sentence and return the 256-d vector aggregating the entire proposition ASG."""
+        """Helper to parse sentence and return the 1024-d vector aggregating the entire proposition ASG."""
         graph = self.parse_sentence(text, domain_context=domain_context)
         return graph.to_proposition_vector()
 

@@ -1,4 +1,4 @@
-"""Script to export all 256 canonical slot definitions to output/canonical_slots_layout.json."""
+"""Script to export all 1024 canonical slot definitions to output/canonical_slots_layout.json."""
 
 from __future__ import annotations
 from pathlib import Path

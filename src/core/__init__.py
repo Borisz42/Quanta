@@ -1,4 +1,4 @@
-"""QUANTA Core: Quaternary logic, 256-dimensional canonical slots, and Merkle-addressed ASG."""
+"""QUANTA Core: Quaternary logic, 1024-dimensional canonical slots, and Merkle-addressed ASG."""
 
 from core.types import QuaternaryValue, QuantaVector
 from core.slots import (

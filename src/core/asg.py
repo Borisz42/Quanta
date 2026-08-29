@@ -15,7 +15,7 @@ def _blake3_hash(data: bytes) -> str:
 
 
 class QuantaNode:
-    """Atomic Abstract Syntax Graph node with a 256-dim quaternary vector,
+    """Atomic Abstract Syntax Graph node with a 1024-dim quaternary vector,
 
     directed relation edges, and optional lexical/literal payloads.
     """
@@ -95,13 +95,13 @@ class QuantaNode:
         """Computes the deterministic 256-bit BLAKE3 Content Identifier (CID).
         
         The hash incorporates:
-        1. 64-byte packed quaternary semantic vector
+        1. 256-byte packed quaternary semantic vector
         2. Lexical anchor string (UTF-8)
         3. Canonical JSON-serialized literal payload
         4. Deterministically sorted relation edges: (relation, sorted child CIDs)
         """
         hasher = blake3.blake3()
-        # 1. Quaternary vector (64 bytes)
+        # 1. Quaternary vector (256 bytes)
         hasher.update(self.vector.to_bytes())
 
         # 2. Lexical Anchor

@@ -14,7 +14,7 @@ from profiler.verifier import VerificationSummary
 
 class QuantaInformationProfiler:
     """Evaluates channel capacity, individual slot entropy, pairwise redundancy,
-    translator grounding fidelity, and causal reasoning necessity for 256-dimensional quaternary state spaces.
+    translator grounding fidelity, and causal reasoning necessity for 1024-dimensional quaternary state spaces.
     """
 
     def __init__(
@@ -23,16 +23,22 @@ class QuantaInformationProfiler:
         dimension_labels: Optional[List[str]] = None,
         verification_summary: Optional[VerificationSummary] = None,
     ):
-        """data_matrix: (N, 256) array with values in {0, 1, 2, 3}
-        dimension_labels: List of 256 human-readable dimension names
+        """data_matrix: (N, D) array with values in {0, 1, 2, 3}
+        dimension_labels: List of human-readable dimension names
         verification_summary: Optional verification suite output
         """
         self.X = data_matrix.astype(np.uint8)
         self.N, self.D = data_matrix.shape
-        self.labels = dimension_labels or get_slot_names()
+        if dimension_labels is not None:
+            self.labels = dimension_labels
+        else:
+            all_names = get_slot_names()
+            if self.D <= len(all_names):
+                self.labels = all_names[:self.D]
+            else:
+                self.labels = all_names + [f"DIM_{i}" for i in range(len(all_names), self.D)]
         self.verification = verification_summary
-        assert self.D == 256, f"Matrix must contain exactly 256 dimensions, got {self.D}"
-        assert len(self.labels) == 256, f"Labels must contain 256 names, got {len(self.labels)}"
+        assert len(self.labels) == self.D, f"Labels must contain {self.D} names, got {len(self.labels)}"
 
     def compute_entropies(self) -> np.ndarray:
         """Calculates Shannon entropy H(D_i) for each dimension in bits.
@@ -49,7 +55,7 @@ class QuantaInformationProfiler:
         return entropies
 
     def compute_joint_entropy(self) -> float:
-        """Calculates empirical joint Shannon entropy H(D_0, ..., D_255) in bits across observed vectors."""
+        """Calculates empirical joint Shannon entropy H(D_0, ..., D_{D-1}) in bits across observed vectors."""
         if self.N == 0:
             return 0.0
         _, counts = np.unique(self.X, axis=0, return_counts=True)
@@ -59,7 +65,7 @@ class QuantaInformationProfiler:
 
     def compute_total_correlation(self) -> float:
         """Calculates Total Correlation (Watanabe multi-information):
-        TC(D) = sum_{i=0}^{255} H(D_i) - H(D_0, ..., D_255)
+        TC(D) = sum_{i=0}^{D-1} H(D_i) - H(D_0, ..., D_{D-1})
         in bits. Measures total multivariate redundancy across all dimensions.
         """
         marginal_entropies = self.compute_entropies()
@@ -74,30 +80,47 @@ class QuantaInformationProfiler:
         subsample_dim_pairs: Optional[int] = None,
     ) -> List[Tuple[str, str, float]]:
         """Finds the most redundant pairs of dimensions using Mutual Information I(D_i; D_j)."""
-        redundant_pairs = []
+        if self.D < 2 or self.N == 0:
+            return []
+
+        D = self.D
+        N = self.N
         X_int = self.X.astype(np.int32)
-        n = float(self.N)
 
-        for i in range(self.D):
-            col_i = X_int[:, i]
-            col_i_scaled = col_i * 4
-            for j in range(i + 1, self.D):
-                col_j = X_int[:, j]
-                flat_idx = col_i_scaled + col_j
-                joint_counts = np.bincount(flat_idx, minlength=16).reshape((4, 4)).astype(np.float64)
-                p_ij = joint_counts / n
+        # One-hot encoding of shape (N, D, 4)
+        one_hot = np.zeros((N, D, 4), dtype=np.float32)
+        for v in range(4):
+            one_hot[:, :, v] = (X_int == v).astype(np.float32)
 
-                p_i = np.sum(p_ij, axis=1, keepdims=True)
-                p_j = np.sum(p_ij, axis=0, keepdims=True)
+        flat_one_hot = one_hot.reshape(N, D * 4)
+        # Fast BLAS GEMM joint count matrix: shape (D, 4, D, 4) -> transpose to (D, D, 4, 4)
+        joint_matrix = np.dot(flat_one_hot.T, flat_one_hot).reshape(D, 4, D, 4).transpose(0, 2, 1, 3)
 
-                denom = p_i @ p_j
-                mask = (p_ij > 0) & (denom > 0)
-                mi = np.sum(p_ij[mask] * np.log2(p_ij[mask] / denom[mask]))
+        p_xy = joint_matrix / float(N)
+        p_x = p_xy.sum(axis=3, keepdims=True)  # shape (D, D, 4, 1)
+        p_y = p_xy.sum(axis=2, keepdims=True)  # shape (D, D, 1, 4)
+        denom = p_x * p_y
+        mask = (p_xy > 0) & (denom > 0)
 
-                redundant_pairs.append((self.labels[i], self.labels[j], float(max(0.0, mi))))
+        log_ratio = np.zeros_like(p_xy)
+        log_ratio[mask] = p_xy[mask] * np.log2(p_xy[mask] / denom[mask])
+        mi_matrix = np.maximum(0.0, np.sum(log_ratio, axis=(2, 3)))  # shape (D, D)
 
-        redundant_pairs.sort(key=lambda x: x[2], reverse=True)
-        return redundant_pairs[:top_k_pairs]
+        # Extract upper triangle (i < j)
+        tri_i, tri_j = np.triu_indices(D, k=1)
+        pair_mis = mi_matrix[tri_i, tri_j]
+
+        # Top-K selection
+        if len(pair_mis) > top_k_pairs:
+            top_indices = np.argpartition(pair_mis, -top_k_pairs)[-top_k_pairs:]
+            top_sorted = top_indices[np.argsort(-pair_mis[top_indices])]
+        else:
+            top_sorted = np.argsort(-pair_mis)
+
+        return [
+            (self.labels[tri_i[idx]], self.labels[tri_j[idx]], float(pair_mis[idx]))
+            for idx in top_sorted
+        ]
 
     def compute_collision_rate(self, concept_ids: Optional[Sequence[str]] = None) -> float:
         """Measures whether two distinctly labeled concepts share the exact same vector.
@@ -113,15 +136,32 @@ class QuantaInformationProfiler:
         return float(duplicate_pairs / total_pairs) if total_pairs > 0 else 0.0
 
     def compute_band_entropies(self) -> Dict[str, float]:
-        """Calculates average entropy for each of the 4 bands."""
+        """Calculates average entropy for each band."""
         entropies = self.compute_entropies()
-        return {
-            "Band 0 (NSM & Kinematics)": float(np.mean(entropies[0:64])),
-            "Band 1 (Valencies & Topology)": float(np.mean(entropies[64:128])),
-            "Band 2 (Ontology & Modality)": float(np.mean(entropies[128:192])),
-            "Band 3 (Epistemics & Metarules)": float(np.mean(entropies[192:256])),
-            "Total Mean Entropy": float(np.mean(entropies)),
-        }
+        if self.D == 1024:
+            return {
+                "Band 0 (NSM & Kinematics)": float(np.mean(entropies[0:128])),
+                "Band 1 (Valencies & Topology)": float(np.mean(entropies[128:256])),
+                "Band 2 (Logic & Variables)": float(np.mean(entropies[256:384])),
+                "Band 3 (Ontology & Structures)": float(np.mean(entropies[384:512])),
+                "Band 4 (Affordances & Operations)": float(np.mean(entropies[512:640])),
+                "Band 5 (ToM & Pragmatics)": float(np.mean(entropies[640:768])),
+                "Band 6 (Proof & Deontics)": float(np.mean(entropies[768:896])),
+                "Band 7 (Spatiotemporal & Causal)": float(np.mean(entropies[896:1024])),
+                "Total Mean Entropy": float(np.mean(entropies)),
+            }
+        elif self.D == 256:
+            return {
+                "Band 0 (NSM & Kinematics)": float(np.mean(entropies[0:64])),
+                "Band 1 (Valencies & Topology)": float(np.mean(entropies[64:128])),
+                "Band 2 (Ontology & Modality)": float(np.mean(entropies[128:192])),
+                "Band 3 (Epistemics & Metarules)": float(np.mean(entropies[192:256])),
+                "Total Mean Entropy": float(np.mean(entropies)),
+            }
+        else:
+            return {
+                "Total Mean Entropy": float(np.mean(entropies)),
+            }
 
     def run_diagnostic_suite(
         self,

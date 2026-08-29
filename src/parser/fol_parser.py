@@ -419,7 +419,7 @@ class FOLParser:
         return graph
 
     def formula_to_vector(self, fol_str: str, is_query: bool = False) -> QuantaVector:
-        """Helper returning the 256-d vector of the parsed FOL proposition ASG."""
+        """Helper returning the 1024-d vector of the parsed FOL proposition ASG."""
         graph = self.parse_formula(fol_str, is_query=is_query)
         return graph.to_proposition_vector()
 

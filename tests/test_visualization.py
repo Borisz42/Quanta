@@ -57,7 +57,7 @@ def test_asg_visualizer_connected_nodes():
     assert "TRUE (1)" in table
     assert "Band 0 (NSM Primes & Kinematics)" in table
     assert "Band 1 (Valencies & Topology)" in table
-    assert "Band 2 (Ontology & Modality)" in table
+    assert "Band 3 (Ontology & Structures)" in table
     assert "Node CID" not in table
     assert "Concept / Anchor" in table
     assert "Active Semantic Slots (Grouped by Band)" in table

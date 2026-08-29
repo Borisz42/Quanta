@@ -67,7 +67,7 @@ def test_semantic_verifier_full_suite():
     assert summary.gold_alignment.num_samples == len(pairs)
     assert 0.0 <= summary.cycle_consistency_score <= 1.0
     assert 0.0 <= summary.symbolic_soundness_rate <= 1.0
-    assert len(summary.causal_necessity_scores) == 256
+    assert len(summary.causal_necessity_scores) == 1024
     assert isinstance(summary.dead_slots_deficiency_type, dict)
 
 
