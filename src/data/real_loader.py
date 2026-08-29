@@ -330,6 +330,19 @@ class RealDatasetLoader:
             labels.append(3)
             propositions.append(f"CLUTRR: {sent}")
 
+        # 5. Code AST (Domain 4)
+        print(f"  Ingesting {samples_per_domain} real Python AST propositions...")
+        ast_items = self.load_python_ast_samples(max_samples=samples_per_domain)
+        for desc, ast_node in ast_items:
+            try:
+                graph = self.ast_parser.parse_ast_node(ast_node)
+                vec = graph.to_proposition_vector().to_numpy()
+            except Exception:
+                vec = self.nlp_parser.sentence_to_vector(desc, domain_context="CodeAST").to_numpy()
+            canonical_rows.append(vec)
+            labels.append(4)
+            propositions.append(desc)
+
         canonical_matrix = np.stack(canonical_rows, axis=0)
         candidate_matrix = project_canonical_to_candidates(canonical_matrix, self.candidates)
 
