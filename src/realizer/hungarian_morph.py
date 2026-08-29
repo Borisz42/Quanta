@@ -51,7 +51,7 @@ class HungarianRealizer:
         "walk": "sétál",
         "see": "lát",
         "hear": "hall",
-        "think": "gondol",
+        "think": "gondolkodik",
         "know": "tud",
         "say": "mond",
         "tell": "mesél",
@@ -83,7 +83,6 @@ class HungarianRealizer:
         "harap": "meg",
         "hal": "meg",
         "öl": "meg",
-        "lát": "meg",
         "ért": "meg",
         "tud": "meg",
         "mond": "meg",
@@ -92,8 +91,6 @@ class HungarianRealizer:
         "iszik": "meg",
         "lép": "be",
         "megy": "el",
-        "fut": "el",
-        "sétál": "el",
     }
 
     def realize_graph(self, graph: QuantaGraph) -> str:
@@ -111,6 +108,9 @@ class HungarianRealizer:
         is_future = root.get_slot("LJB_BA_FUTURE_TENSE") == 1
         is_negated = root.get_slot("LJB_NA_NEGATION") == 2
         is_query = root.get_slot("GRAPH_QUERY_TARGET") == 3 or root.get_slot("NSM_MAYBE") == 3
+
+        # Modals
+        is_obligation = root.get_slot("EPIST_DEONTIC_OBLIGATION") == 1
 
         # Check if direct object is definite
         is_definite = False
@@ -131,7 +131,8 @@ class HungarianRealizer:
         )
 
         # 3. Resolve Arguments
-        subject_str = self._resolve_entity_with_case(graph, root, "VAL_X1_AGENT", case="nom")
+        subject_case = "dat" if is_obligation else "nom"
+        subject_str = self._resolve_entity_with_case(graph, root, "VAL_X1_AGENT", case=subject_case)
         patient_str = self._resolve_entity_with_case(graph, root, "VAL_X2_PATIENT", case="acc")
         experiencer_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="dat")
         if not patient_str and not experiencer_str and "VAL_EXPERIENCER" in root.edges:
@@ -160,8 +161,14 @@ class HungarianRealizer:
         elif root.get_slot("NSM_CONTINUOUS_RATE") == 1:
             manner_str = "folyamatosan"
 
-        # 4. Form Verb Phrase with Prefix Placement
-        if verb_base == "van":
+        # 4. Form Verb Phrase with Prefix Placement and Modal Handling
+        if is_obligation:
+            inf_verb = self._form_inflected_infinitive(verb_base)
+            if is_negated:
+                verb_phrase = f"nem kell {inf_verb}"
+            else:
+                verb_phrase = f"{inf_verb} kell"
+        elif verb_base == "van":
             if is_past:
                 verb_phrase = "volt"
             elif not pred_adj:
@@ -330,6 +337,31 @@ class HungarianRealizer:
 
         return noun
 
+    def _form_inflected_infinitive(self, verb_base: str) -> str:
+        """Forms the 3sg inflected infinitive (-nia/-nie/-ania/-enie) for modal constructions."""
+        harmony = self.get_vowel_harmony(verb_base)
+        if verb_base == "van":
+            return "lennie"
+        if verb_base == "gondolkodik":
+            return "gondolkodnia"
+
+        consonants = set("bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ")
+        ends_cc = len(verb_base) >= 2 and verb_base[-1] in consonants and verb_base[-2] in consonants
+        ends_it = verb_base.endswith("ít")
+
+        if ends_cc or ends_it:
+            if harmony == "back":
+                return verb_base + "ania"
+            elif harmony == "front_rounded":
+                return verb_base + "enie"
+            else:
+                return verb_base + "enie"
+        else:
+            if harmony == "back":
+                return verb_base + "nia"
+            else:
+                return verb_base + "nie"
+
     def _conjugate_verb(
         self,
         verb_base: str,
@@ -338,6 +370,13 @@ class HungarianRealizer:
         is_definite: bool = False,
     ) -> Tuple[str, str]:
         """Conjugates a Hungarian verb stem in 3rd person singular with verbal prefixes."""
+        if verb_base == "gondolkodik":
+            if is_future:
+                return "fog gondolkodni", ""
+            if is_past:
+                return "gondolkodott", ""
+            return "gondolkodik", ""
+
         prefix = self.VERB_PREFIXES.get(verb_base, "")
         harmony = self.get_vowel_harmony(verb_base)
 
@@ -349,7 +388,7 @@ class HungarianRealizer:
                 suffix = "ta" if harmony == "back" else "te"
                 return verb_base + suffix, prefix
             else:
-                if verb_base in ("él", "kér", "vár", "áll", "sír", "fúj", "ül"):
+                if verb_base.endswith(("ál", "él", "ul", "ül", "ír")) or verb_base in ("él", "kér", "vár", "áll", "sír", "fúj", "ül"):
                     suffix = "t"
                 elif harmony == "back":
                     suffix = "ott"
@@ -388,7 +427,7 @@ class HungarianRealizer:
         if node.get_slot("NSM_HEAR") != 0:
             return "hall"
         if node.get_slot("NSM_THINK") != 0:
-            return "gondol"
+            return "gondolkodik"
         if node.get_slot("NSM_DO") != 0:
             return "tesz"
 
@@ -444,7 +483,10 @@ class HungarianRealizer:
             article = "minden"
         elif target_node.get_slot("NSM_TWO") == 1:
             article = "két"
-        elif (target_node.get_slot("NSM_ONE") == 1 or target_node.get_slot("NSM_SOME") == 1) and case != "nom":
+        elif target_node.get_slot("NSM_THIS") == 1:
+            first_word = adj if adj else inflected_noun
+            article = "az" if first_word and first_word[0].lower() in "aáeéoóiíuúöőüű" else "a"
+        elif target_node.get_slot("NSM_ONE") == 1 or target_node.get_slot("NSM_SOME") == 1:
             article = "egy"
         else:
             first_word = adj if adj else inflected_noun

@@ -39,6 +39,8 @@ class HungarianForwardParser:
         "lát": "see",
         "hall": "hear",
         "gondol": "think",
+        "gondolkodik": "think",
+        "gondolkozik": "think",
         "tud": "know",
         "mond": "say",
         "mesél": "tell",
@@ -81,8 +83,9 @@ class HungarianForwardParser:
         words = clean_text.split()
         graph = QuantaGraph()
 
-        # 1. Identify Verb, Tense & Negation
+        # 1. Identify Verb, Tense, Modals & Negation
         has_negation = False
+        has_obligation = any(w.lower() in ("kell", "kellene", "muszáj") for w in words)
         verb_stem = None
         is_past = False
 
@@ -123,6 +126,9 @@ class HungarianForwardParser:
             root_node.set_slot("LJB_NA_NEGATION", 2)
         else:
             root_node.set_slot("NSM_TRUE", 1)
+
+        if has_obligation:
+            root_node.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
 
         # Apply NSM prime mapping to Root
         self._apply_verb_primes(root_node, en_verb, polarity)
@@ -165,9 +171,15 @@ class HungarianForwardParser:
                 root_node.set_slot("VAL_X4_SOURCE", 1)
                 graph.add_edge(root_node, "VAL_X4_SOURCE", entity_node)
             elif case == "dat":
-                entity_node.set_slot("VAL_EXPERIENCER", 1)
-                root_node.set_slot("VAL_EXPERIENCER", 1)
-                graph.add_edge(root_node, "VAL_EXPERIENCER", entity_node)
+                if has_obligation and "VAL_X1_AGENT" not in root_node.edges:
+                    entity_node.set_slot("VAL_X1_AGENT", 1)
+                    entity_node.set_slot("ROLE_AGENT_CAPABLE", 1)
+                    root_node.set_slot("VAL_X1_AGENT", 1)
+                    graph.add_edge(root_node, "VAL_X1_AGENT", entity_node)
+                else:
+                    entity_node.set_slot("VAL_EXPERIENCER", 1)
+                    root_node.set_slot("VAL_EXPERIENCER", 1)
+                    graph.add_edge(root_node, "VAL_EXPERIENCER", entity_node)
             elif case == "ins":
                 entity_node.set_slot("VAL_X5_INSTRUMENT", 1)
                 entity_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
@@ -194,7 +206,11 @@ class HungarianForwardParser:
             return "van", True
         if w in ("van", "vannak"):
             return "van", False
-        if w in ("gondolkodik", "gondolkozik", "gondol"):
+        if w in ("gondolkodott", "gondolkozott"):
+            return "gondolkodik", True
+        if w in ("gondolkodik", "gondolkozik"):
+            return "gondolkodik", False
+        if w in ("gondol",):
             return "gondol", False
         if w in self.HU_TO_EN_DICTIONARY:
             return w, False
@@ -220,6 +236,15 @@ class HungarianForwardParser:
                 if w in ("adta", "adták"):
                     return "ad", True
                 break
+
+        # Inflected infinitive: -nia, -nie, -ania, -enie, -ni
+        for inf_suff in ("ania", "enie", "nia", "nie", "ni"):
+            if w.endswith(inf_suff) and len(w) > len(inf_suff) + 1:
+                stem = w[:-len(inf_suff)]
+                if stem in self.HU_TO_EN_DICTIONARY:
+                    return stem, False
+                if stem.endswith("t") and stem[:-1] in self.HU_TO_EN_DICTIONARY:
+                    return stem[:-1], False
 
         # Definite past: -ta, -te, -tta, -tte
         for def_suff in ("tta", "tte", "ta", "te"):
@@ -254,11 +279,13 @@ class HungarianForwardParser:
         nps = []
         current_np: List[str] = []
 
+        skip_words = {"nem", "kell", "kellene", "muszáj", "vajon"}
+
         for word in words:
             w_lower = word.lower()
             stem, _ = self._stem_verb(w_lower)
 
-            if w_lower == "nem" or stem == verb_stem or w_lower.startswith(verb_stem):
+            if w_lower in skip_words or stem == verb_stem or w_lower.startswith(verb_stem):
                 if current_np:
                     case = self._detect_case(current_np[-1])
                     nps.append((list(current_np), case))

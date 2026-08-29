@@ -168,12 +168,12 @@ def test_hungarian_sentence_realization(hungarian_realizer):
 
 
 def test_hungarian_canonical_example_a(hungarian_realizer):
-    """Verify Phase 8 Item 8B.7: Example A graph -> 'A golden retriever a kertben megharapta a postást.'"""
+    """Verify Phase 8 Item 8B.7: Example A graph -> 'Egy golden retriever a kertben megharapta a postást.'"""
     from parser.nlp_forward import NLPForwardParser
     parser = NLPForwardParser()
     graph = parser.parse_sentence("A golden retriever bit the mailman in the garden.")
     hu_text = hungarian_realizer.realize_graph(graph)
-    assert hu_text == "A golden retriever a kertben megharapta a postást."
+    assert hu_text == "Egy golden retriever a kertben megharapta a postást."
 
 
 def test_hungarian_canonical_example_b(hungarian_realizer):
