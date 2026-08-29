@@ -43,11 +43,14 @@ class CodeEmitter:
                     for cid in node.edges[rel]:
                         arg_node = graph.get_node(cid)
                         if arg_node:
+                            arg_name = None
                             if arg_node.anchor and arg_node.anchor.startswith("var:"):
-                                args.append(arg_node.anchor[4:])
+                                arg_name = arg_node.anchor[4:]
                             elif arg_node.literal:
                                 lit = str(arg_node.literal)
-                                args.append(lit.replace("arg:", ""))
+                                arg_name = lit.replace("arg:", "")
+                            if arg_name and arg_name not in args:
+                                args.append(arg_name)
 
             args_str = ", ".join(args) if args else "n"
 
@@ -93,6 +96,11 @@ class CodeEmitter:
                 cond_node = graph.get_node(node.edges["GRAPH_BRANCH_COND"][0])
                 if cond_node and cond_node.literal:
                     cond_expr = str(cond_node.literal)
+            elif node.literal:
+                cond_expr = str(node.literal)
+
+            if cond_expr.startswith("if "):
+                cond_expr = cond_expr[3:]
 
             then_body = f"{indent}    return True"
             if "GRAPH_BRANCH_THEN" in node.edges and node.edges["GRAPH_BRANCH_THEN"]:
@@ -137,6 +145,9 @@ class CodeEmitter:
                         ret_val = str(val_node.literal)
             elif node.literal:
                 ret_val = str(node.literal)
+
+            if ret_val.startswith("return "):
+                ret_val = ret_val[7:]
 
             return f"{indent}return {ret_val}".rstrip()
 

@@ -288,10 +288,10 @@ The forward parser transforms heterogeneous surface expressions (natural languag
 - [x] **6D.3** Map `If` → `GRAPH_BRANCH_COND`, `GRAPH_BRANCH_THEN`, `GRAPH_BRANCH_ELSE`
 - [x] **6D.4** Map `Return` → `GRAPH_RETURN_VALUE=1`
 - [x] **6D.5** Map function arguments → `GRAPH_VARIABLE_BIND=1`, `GRAPH_ARGUMENT_LIST=1`
-- [ ] **6D.6** Detect recursive calls → `GRAPH_RECURSIVE_REF=1` with self-CID pointer
+- [x] **6D.6** Detect recursive calls → `GRAPH_RECURSIVE_REF=1` with self-CID pointer
 - [x] **6D.7** Map loops → `GRAPH_CONTROL_LOOP=1`
-- [ ] **6D.8** Map exception handling → `GRAPH_EXCEPTION_HANDLE=1`
-- [ ] **6D.9** 🧪 Test: `factorial(n)` function → QuantaGraph matching README Example F
+- [x] **6D.8** Map exception handling → `GRAPH_EXCEPTION_HANDLE=1`
+- [x] **6D.9** 🧪 Test: `factorial(n)` function → QuantaGraph matching README Example F
 
 ---
 
