@@ -143,3 +143,38 @@ def test_subgraph_folding_and_unfolding_roundtrip():
     assert graph.get_node(dog_cid) is not None
     assert graph.compute_merkle_root() == initial_merkle
 
+
+def test_quantanode_aliases_and_polymorphic_edges():
+    """Verify QuantaNode aliases (semantic_vector, concept_label, node_cid, edge_table) and polymorphic edge init."""
+    child_cid_bytes = bytes.fromhex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+    child_cid_hex = child_cid_bytes.hex()
+
+    node = QuantaNode(
+        semantic_vector={"NSM_DO": 1, "TYPE_EVENT": 1},
+        concept_label="wn:chase.v.01",
+        edges=[("VAL_X1_AGENT", child_cid_hex), ("VAL_X2_PATIENT", child_cid_bytes)],
+    )
+
+    # Verify properties and aliases
+    assert node.concept_label == "wn:chase.v.01"
+    assert node.semantic_vector["NSM_DO"] == 1
+    assert node.node_cid == node.cid
+    assert isinstance(node.node_cid_bytes, bytes)
+    assert len(node.node_cid_bytes) == 32
+    assert node.node_cid_bytes.hex() == node.cid
+    assert ("VAL_X1_AGENT", child_cid_hex) in node.edge_table
+    assert ("VAL_X2_PATIENT", child_cid_hex) in node.edge_table
+
+    # Verify setters
+    old_cid = node.cid
+    node.concept_label = "wn:run.v.01"
+    assert node.anchor == "wn:run.v.01"
+    assert node.cid != old_cid
+
+    # Verify QuantaGraph tree_aggregate_vector and aggregate_vector aliases
+    g = QuantaGraph()
+    g.add_node(node)
+    assert g.tree_aggregate_vector["NSM_DO"] == 1
+    assert g.aggregate_vector()["NSM_DO"] == 1
+
+

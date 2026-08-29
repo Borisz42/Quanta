@@ -32,27 +32,40 @@ class QuantaNode:
     def __init__(
         self,
         vector: Optional[Union[QuantaVector, Sequence[int], bytes, Dict[Union[int, str], int]]] = None,
-        edges: Optional[Dict[str, List[str]]] = None,
+        edges: Optional[Union[Dict[str, List[str]], Sequence[Tuple[str, Union[str, bytes]]]]] = None,
         anchor: Optional[str] = None,
         literal: Optional[Any] = None,
         parent_cid: Optional[str] = None,
+        concept_label: Optional[str] = None,
+        semantic_vector: Optional[Union[QuantaVector, Sequence[int], bytes, Dict[Union[int, str], int]]] = None,
     ):
-        if vector is None:
+        raw_vec = semantic_vector if vector is None else vector
+        if raw_vec is None:
             self.vector = QuantaVector.zeros()
-        elif isinstance(vector, QuantaVector):
-            self.vector = vector.copy()
-        elif isinstance(vector, dict):
-            self.vector = QuantaVector(vector)
+        elif isinstance(raw_vec, QuantaVector):
+            self.vector = raw_vec.copy()
+        elif isinstance(raw_vec, dict):
+            self.vector = QuantaVector(raw_vec)
         else:
-            self.vector = QuantaVector(vector)
+            self.vector = QuantaVector(raw_vec)
 
         # Edges: Map relation name -> list of child CIDs
         self.edges: Dict[str, List[str]] = {}
         if edges is not None:
-            for rel, targets in edges.items():
-                self.edges[rel] = list(targets)
+            if isinstance(edges, dict):
+                for rel, targets in edges.items():
+                    self.edges[rel] = list(targets)
+            else:
+                for item in edges:
+                    if isinstance(item, (tuple, list)) and len(item) == 2:
+                        rel, target = item
+                        target_str = target.hex() if isinstance(target, bytes) else str(target)
+                        if rel not in self.edges:
+                            self.edges[rel] = []
+                        if target_str not in self.edges[rel]:
+                            self.edges[rel].append(target_str)
 
-        self.anchor: Optional[str] = anchor
+        self.anchor: Optional[str] = anchor if concept_label is None else concept_label
         self.literal: Optional[Any] = literal
         self.parent_cid: Optional[str] = parent_cid
         self._cid_cache: Optional[str] = None
@@ -126,6 +139,50 @@ class QuantaNode:
         if self._cid_cache is None:
             return self.compute_cid()
         return self._cid_cache
+
+    @property
+    def node_cid(self) -> str:
+        """Hexadecimal 256-bit BLAKE3 Content Identifier."""
+        return self.cid
+
+    @property
+    def node_cid_bytes(self) -> bytes:
+        """32-byte binary representation of the BLAKE3 Content Identifier."""
+        return bytes.fromhex(self.cid)
+
+    @property
+    def semantic_vector(self) -> QuantaVector:
+        """Semantic vector representation of this node."""
+        return self.vector
+
+    @semantic_vector.setter
+    def semantic_vector(self, value: Union[QuantaVector, Sequence[int], bytes, Dict[Union[int, str], int]]):
+        if isinstance(value, QuantaVector):
+            self.vector = value.copy()
+        elif isinstance(value, dict):
+            self.vector = QuantaVector(value)
+        else:
+            self.vector = QuantaVector(value)
+        self.invalidate_cache()
+
+    @property
+    def concept_label(self) -> Optional[str]:
+        """Lexical anchor or concept label."""
+        return self.anchor
+
+    @concept_label.setter
+    def concept_label(self, value: Optional[str]):
+        self.anchor = value
+        self.invalidate_cache()
+
+    @property
+    def edge_table(self) -> List[Tuple[str, str]]:
+        """Edge table as a list of (relation_type, child_cid) tuples."""
+        table: List[Tuple[str, str]] = []
+        for rel in sorted(self.edges.keys()):
+            for child_cid in self.edges[rel]:
+                table.append((rel, child_cid))
+        return table
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes node to dictionary format."""
@@ -507,6 +564,15 @@ class QuantaGraph:
         for node in self.nodes.values():
             vec = vec.join(node.vector)
         return vec
+
+    @property
+    def tree_aggregate_vector(self) -> QuantaVector:
+        """Whole-tree proposition vector aggregated via quaternary lattice join (⊔_k)."""
+        return self.to_proposition_vector()
+
+    def aggregate_vector(self) -> QuantaVector:
+        """Returns the aggregated whole-tree proposition vector."""
+        return self.to_proposition_vector()
 
     def __len__(self) -> int:
         return len(self._node_list)
