@@ -1,4 +1,6 @@
-"""Discrete Information Bottleneck profiler and entropy evaluation suite for QUANTA."""
+"""Discrete Information Bottleneck profiler and entropy evaluation suite for QUANTA,
+integrating translator verification, symbolic soundness, and causal reasoning utility diagnostics.
+"""
 
 from __future__ import annotations
 import json
@@ -7,20 +9,28 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 from core.slots import get_slot_names
+from profiler.verifier import VerificationSummary
 
 
 class QuantaInformationProfiler:
-    """Evaluates channel capacity, individual slot entropy, and pairwise redundancy
-    for 256-dimensional quaternary state spaces.
+    """Evaluates channel capacity, individual slot entropy, pairwise redundancy,
+    translator grounding fidelity, and causal reasoning necessity for 256-dimensional quaternary state spaces.
     """
 
-    def __init__(self, data_matrix: np.ndarray, dimension_labels: Optional[List[str]] = None):
+    def __init__(
+        self,
+        data_matrix: np.ndarray,
+        dimension_labels: Optional[List[str]] = None,
+        verification_summary: Optional[VerificationSummary] = None,
+    ):
         """data_matrix: (N, 256) array with values in {0, 1, 2, 3}
         dimension_labels: List of 256 human-readable dimension names
+        verification_summary: Optional verification suite output
         """
         self.X = data_matrix.astype(np.uint8)
         self.N, self.D = data_matrix.shape
         self.labels = dimension_labels or get_slot_names()
+        self.verification = verification_summary
         assert self.D == 256, f"Matrix must contain exactly 256 dimensions, got {self.D}"
         assert len(self.labels) == 256, f"Labels must contain 256 names, got {len(self.labels)}"
 
@@ -86,7 +96,6 @@ class QuantaInformationProfiler:
 
                 redundant_pairs.append((self.labels[i], self.labels[j], float(max(0.0, mi))))
 
-        # Sort by highest mutual information
         redundant_pairs.sort(key=lambda x: x[2], reverse=True)
         return redundant_pairs[:top_k_pairs]
 
@@ -98,9 +107,7 @@ class QuantaInformationProfiler:
         if self.N < 2:
             return 0.0
 
-        # Find duplicate rows
         unique_rows, counts = np.unique(self.X, axis=0, return_counts=True)
-        # Pairs of duplicates: sum(c * (c - 1) / 2)
         duplicate_pairs = int(np.sum(counts * (counts - 1) // 2))
         total_pairs = (self.N * (self.N - 1)) // 2
         return float(duplicate_pairs / total_pairs) if total_pairs > 0 else 0.0
@@ -142,6 +149,10 @@ class QuantaInformationProfiler:
             if mi >= redundancy_threshold
         ]
 
+        verification_data: Dict[str, Any] = {}
+        if self.verification is not None:
+            verification_data = self.verification.to_dict()
+
         report = {
             "num_samples": self.N,
             "mean_entropy": float(np.mean(entropies)),
@@ -153,6 +164,7 @@ class QuantaInformationProfiler:
             "band_entropies": band_stats,
             "dead_slots": dead_slots,
             "high_redundancy_pairs": high_redundancy_pairs,
+            "verification": verification_data,
         }
 
         if verbose:
@@ -162,6 +174,11 @@ class QuantaInformationProfiler:
             print(f"Joint State Entropy: {report['joint_entropy']:.3f} bits")
             print(f"Total Correlation TC(D): {report['total_correlation']:.3f} bits")
             print(f"Concept Collision Rate: {report['collision_rate']:.6f}")
+            if self.verification is not None:
+                print(f"Translator Macro F1 Score: {self.verification.gold_alignment.macro_f1:.3f}")
+                print(f"Cycle-Consistency Fidelity: {self.verification.cycle_consistency_score:.3f}")
+                print(f"Symbolic Soundness Pass Rate: {self.verification.symbolic_soundness_rate*100:.1f}%")
+
             print("\n--- Band-wise Mean Entropy ---")
             for band_name, val in band_stats.items():
                 print(f"  {band_name}: {val:.3f} bits")
@@ -171,7 +188,10 @@ class QuantaInformationProfiler:
                 print("  None! All dimensions meet minimum entropy requirements.")
             else:
                 for idx, label, h in dead_slots:
-                    print(f"  Slot {idx:03d} [{label}]: Entropy = {h:.4f} bits (Candidate for pruning/replacement)")
+                    diag = ""
+                    if self.verification and label in self.verification.dead_slots_deficiency_type:
+                        diag = f" -> [{self.verification.dead_slots_deficiency_type[label]}]"
+                    print(f"  Slot {idx:03d} [{label}]: Entropy = {h:.4f} bits{diag}")
 
             print(f"\n--- 2. High Redundancy Pairs (Mutual Information > {redundancy_threshold} bits) ---")
             if not high_redundancy_pairs:
@@ -201,8 +221,16 @@ class QuantaInformationProfiler:
             f.write(f"Average Dimension Entropy: {report['mean_entropy']:.3f} / 2.000 bits\n")
             f.write(f"Joint State Entropy: {report.get('joint_entropy', 0.0):.3f} bits\n")
             f.write(f"Total Correlation TC(D): {report.get('total_correlation', 0.0):.3f} bits\n")
-            f.write(f"Concept Collision Rate: {report['collision_rate']:.6f}\n\n")
-            f.write("--- Band-wise Mean Entropy ---\n")
+            f.write(f"Concept Collision Rate: {report['collision_rate']:.6f}\n")
+
+            ver = report.get("verification")
+            if ver and "gold_alignment" in ver:
+                f.write(f"Translator Macro F1 Score: {ver['gold_alignment']['macro_f1']:.3f}\n")
+                f.write(f"Cycle-Consistency Fidelity: {ver['cycle_consistency_score']:.3f}\n")
+                f.write(f"Symbolic Soundness Pass Rate: {ver['symbolic_soundness_rate']*100:.1f}%\n")
+                f.write(f"Causal Reasoning Necessity Mean: {ver['causal_necessity_mean']:.3f}\n")
+
+            f.write("\n--- Band-wise Mean Entropy ---\n")
             for band_name, val in report["band_entropies"].items():
                 f.write(f"  {band_name}: {val:.3f} bits\n")
 
@@ -210,8 +238,10 @@ class QuantaInformationProfiler:
             if not report["dead_slots"]:
                 f.write("  None! All dimensions meet minimum entropy requirements.\n")
             else:
+                diag_map = ver.get("dead_slots_diagnosis", {}) if ver else {}
                 for idx, label, h in report["dead_slots"]:
-                    f.write(f"  Slot {idx:03d} [{label}]: Entropy = {h:.4f} bits\n")
+                    diag_str = f" [{diag_map[label]}]" if label in diag_map else ""
+                    f.write(f"  Slot {idx:03d} [{label}]: Entropy = {h:.4f} bits{diag_str}\n")
 
             f.write(f"\n--- High Redundancy Pairs ---\n")
             if not report["high_redundancy_pairs"]:
@@ -230,4 +260,3 @@ class QuantaInformationProfiler:
             exported_paths["json"] = json_file
 
         return exported_paths
-

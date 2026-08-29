@@ -1,4 +1,4 @@
-"""Minimal Redundancy Maximal Relevance (mRMR) dimension selector for discrete quaternary state spaces."""
+"""Multi-Objective Minimal Redundancy Maximal Relevance (mRMR) dimension selector for discrete quaternary state spaces."""
 
 from __future__ import annotations
 import json
@@ -33,42 +33,73 @@ def fast_discrete_mutual_info(x: np.ndarray, y: np.ndarray, num_x: int = 4, num_
 
 
 class MRMRSelector:
-    """Selects an optimal subset of dimensions using mRMR optimization."""
+    """Selects an optimal subset of dimensions using Multi-Objective Information Utility Optimization."""
 
     def __init__(self, candidate_names: Sequence[str]):
         self.candidate_names = list(candidate_names)
         self.K = len(self.candidate_names)
 
-    def select_dimensions(
+    def select_dimensions_multi_objective(
         self,
         X: np.ndarray,
-        y: np.ndarray,
+        f1_scores: Optional[np.ndarray] = None,
+        causal_necessity: Optional[np.ndarray] = None,
+        violation_rates: Optional[np.ndarray] = None,
         num_to_select: int = 256,
-        alpha_redundancy: float = 1.0,
+        w_f1: float = 0.35,
+        w_entropy: float = 0.25,
+        w_necessity: float = 0.20,
+        w_redundancy: float = 0.15,
+        w_violation: float = 0.05,
     ) -> List[Tuple[int, str, float]]:
-        """Executes forward greedy mRMR selection.
-        
-        Args:
-            X: (N, K) array of discrete candidate slot activations in {0, 1, 2, 3}.
-            y: (N,) target class/topic semantic vector.
-            num_to_select: Number of dimensions to select (e.g. 256).
-            alpha_redundancy: Scaling weight for the redundancy penalty term.
-            
-        Returns:
-            List of (selected_index, feature_name, mrmr_score).
+        """Selects optimal dimensions using the Universal Neuro-Symbolic Information Utility function:
+        U(D_i) = w_f1 * F1(D_i) + w_entropy * H(D_i) + w_nec * Nec(D_i) - w_red * Red(D_i) - w_viol * Viol(D_i)
         """
         N, K = X.shape
         assert K == self.K, f"Matrix shape mismatch: expected {self.K} features, got {K}"
         target_k = min(num_to_select, K)
-
-        num_y_classes = int(np.max(y)) + 1
         X_int = X.astype(np.int32)
-        y_int = y.astype(np.int32)
 
-        # 1. Compute relevance I(f_i; Y) for each candidate feature
-        relevance = np.zeros(K, dtype=np.float64)
+        # 1. Compute individual entropies H(D_i)
+        entropies = np.zeros(K, dtype=np.float64)
         for i in range(K):
-            relevance[i] = fast_discrete_mutual_info(X_int[:, i], y_int, num_x=4, num_y=num_y_classes)
+            entropies[i] = discrete_entropy(X_int[:, i], num_states=4)
+        # Normalize entropy to [0, 1] relative to max possible 2.0 bits
+        norm_entropies = np.clip(entropies / 2.0, 0.0, 1.0)
+
+        # 2. Defaults for auxiliary signals
+        if f1_scores is None:
+            # If no gold F1 provided, use normalized entropy as baseline fidelity
+            f1_scores = norm_entropies
+        elif len(f1_scores) < K:
+            padded_f1 = np.zeros(K, dtype=np.float64)
+            padded_f1[:len(f1_scores)] = f1_scores
+            # For projected candidate dimensions beyond 256, approximate F1 from their source slots
+            padded_f1[len(f1_scores):] = norm_entropies[len(f1_scores):]
+            f1_scores = padded_f1
+
+        if causal_necessity is None:
+            causal_necessity = norm_entropies
+        elif len(causal_necessity) < K:
+            padded_nec = np.zeros(K, dtype=np.float64)
+            padded_nec[:len(causal_necessity)] = causal_necessity
+            padded_nec[len(causal_necessity):] = norm_entropies[len(causal_necessity):]
+            causal_necessity = padded_nec
+
+        if violation_rates is None:
+            violation_rates = np.zeros(K, dtype=np.float64)
+        elif len(violation_rates) < K:
+            padded_v = np.zeros(K, dtype=np.float64)
+            padded_v[:len(violation_rates)] = violation_rates
+            violation_rates = padded_v
+
+        # 3. Base static relevance score per candidate
+        base_relevance = (
+            w_f1 * f1_scores +
+            w_entropy * norm_entropies +
+            w_necessity * causal_necessity -
+            w_violation * violation_rates
+        )
 
         # Precompute pairwise mutual information cache on demand
         mi_cache: Dict[Tuple[int, int], float] = {}
@@ -85,15 +116,13 @@ class MRMRSelector:
         selected_scores: List[float] = []
         remaining_indices = set(range(K))
 
-        # First feature: highest relevance
-        first_feat = int(np.argmax(relevance))
+        # Pick first feature: highest base relevance
+        first_feat = int(np.argmax(base_relevance))
         selected_indices.append(first_feat)
-        selected_scores.append(float(relevance[first_feat]))
+        selected_scores.append(float(base_relevance[first_feat]))
         remaining_indices.remove(first_feat)
 
-        # Greedily select subsequent features
-        # Keep running sum of redundancies to selected features for fast O(1) update
-        # sum_redundancy[cand] = sum_{s in selected} I(cand; s)
+        # Running sum of redundancies to selected features for fast O(1) update
         sum_redundancy = np.zeros(K, dtype=np.float64)
         for cand in remaining_indices:
             sum_redundancy[cand] = get_mi(cand, first_feat)
@@ -105,7 +134,9 @@ class MRMRSelector:
 
             for cand in remaining_indices:
                 mean_red = sum_redundancy[cand] / n_sel
-                score = relevance[cand] - alpha_redundancy * mean_red
+                # Normalize redundancy relative to 2.0 bits max
+                norm_red = mean_red / 2.0
+                score = base_relevance[cand] - w_redundancy * norm_red
 
                 if score > best_score:
                     best_score = score
@@ -118,7 +149,6 @@ class MRMRSelector:
             selected_scores.append(float(best_score))
             remaining_indices.remove(best_feat)
 
-            # Update running sum of redundancies with the newly added feature
             for cand in remaining_indices:
                 sum_redundancy[cand] += get_mi(cand, best_feat)
 
@@ -127,6 +157,39 @@ class MRMRSelector:
             for idx, score in zip(selected_indices, selected_scores)
         ]
 
+    def select_dimensions(
+        self,
+        X: np.ndarray,
+        y: Optional[np.ndarray] = None,
+        num_to_select: int = 256,
+        alpha_redundancy: float = 0.5,
+    ) -> List[Tuple[int, str, float]]:
+        """Backward-compatible selection method using Multi-Objective utility or relevance target."""
+        if y is None or len(np.unique(y)) <= 1:
+            return self.select_dimensions_multi_objective(
+                X=X,
+                num_to_select=num_to_select,
+                w_redundancy=alpha_redundancy,
+            )
+
+        # If y provided, compute mutual info I(X; Y)
+        N, K = X.shape
+        num_y_classes = int(np.max(y)) + 1
+        X_int = X.astype(np.int32)
+        y_int = y.astype(np.int32)
+
+        relevance = np.zeros(K, dtype=np.float64)
+        for i in range(K):
+            relevance[i] = fast_discrete_mutual_info(X_int[:, i], y_int, num_x=4, num_y=num_y_classes)
+
+        norm_rel = np.clip(relevance / (np.max(relevance) + 1e-8), 0.0, 1.0)
+        return self.select_dimensions_multi_objective(
+            X=X,
+            f1_scores=norm_rel,
+            num_to_select=num_to_select,
+            w_redundancy=alpha_redundancy,
+        )
+
 
 def export_optimal_dimensions(
     selected_dims: List[Tuple[int, str, float]],
@@ -134,7 +197,7 @@ def export_optimal_dimensions(
     json_path: Union[str, Path] = "output/optimal_256_dimensions.json",
     csv_path: Optional[Union[str, Path]] = "output/optimal_256_dimensions.csv",
 ) -> Dict[str, Path]:
-    """Exports mRMR selected optimal dimensions to JSON and CSV formats."""
+    """Exports multi-objective selected optimal dimensions to JSON and CSV formats."""
     cand_by_name = {c.name: c for c in candidates}
     cand_by_id = {c.id: c for c in candidates}
 
@@ -152,6 +215,7 @@ def export_optimal_dimensions(
             "category": getattr(cand_obj, "category", "General"),
             "description": getattr(cand_obj, "description", name),
             "mrmr_score": float(score),
+            "utility_score": float(score),
         })
 
     with open(json_file, "w", encoding="utf-8") as f:
@@ -179,4 +243,3 @@ def export_optimal_dimensions(
         result_paths["csv"] = csv_file
 
     return result_paths
-
