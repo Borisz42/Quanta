@@ -114,6 +114,29 @@ def test_python_code_round_trip_execution_equivalence(pipeline):
         assert rt_env_2["factorial"](n) == [1, 1, 2, 6, 120, 720, 5040][[0, 1, 2, 3, 5, 6, 7].index(n)]
 
 
+def test_quaternary_hamming_distance_zero_canonical_slots(pipeline):
+    """Verify Phase 9 Item 9.4: Round-tripped ASG vectors must have Hamming distance = 0 on canonical slots."""
+    test_cases = [
+        ("A golden retriever bit the mailman in the garden.", "english"),
+        (r"\forall x (Dog(x) \rightarrow Animal(x))", "fol"),
+        (r"\exists y (\neg Cat(y) \land Dog(y))", "fol"),
+        ("def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)", "python"),
+        ("A person must touch a rock.", "english"),
+    ]
+
+    for input_data, modality in test_cases:
+        res = pipeline.round_trip(input_data, modality=modality)
+        assert res.validation_pass, f"Validation failed for '{input_data}': {res.muc_errors}"
+
+        orig_v = res.original_vector
+        reparsed_v = res.reparsed_vector
+        active_slots = orig_v.active_slots()
+
+        # Verify Hamming distance on all active canonical slots is strictly 0
+        canonical_hamming = sum(1 for slot_idx, val in active_slots.items() if reparsed_v[slot_idx] != val)
+        assert canonical_hamming == 0, f"Canonical slot drift on '{input_data}': {[slot_idx for slot_idx, val in active_slots.items() if reparsed_v[slot_idx] != val]}"
+
+
 def test_multi_sentence_preservation_rates(pipeline):
     # Test across multiple sentence archetypes
     test_cases = [
