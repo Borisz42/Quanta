@@ -529,3 +529,272 @@ def get_wordnet_root_category(synset_id: str, grounder: Optional[WordNetLexicalG
     g = grounder or WordNetLexicalGrounder.get_default()
     return g.get_wordnet_root_category(synset_id)
 
+
+@dataclass
+class FrameNetTemplate:
+    frame_name: str
+    frame_id: str
+    core_elements: List[str]
+    slot_mapping: Dict[str, str]
+    semantic_types: Dict[str, List[str]]
+    lemmas: List[str] = field(default_factory=list)
+
+
+class FrameNetValencyResolver:
+    """Resolves verbs into FrameNet semantic frames and maps frame roles to Band 1 valency slots."""
+
+    _instance: Optional[FrameNetValencyResolver] = None
+
+    VERB_LEMMA_TO_FRAME: Dict[str, str] = {
+        # Ingestion
+        "bite": "Ingestion", "eat": "Ingestion", "drink": "Ingestion",
+        "chew": "Ingestion", "swallow": "Ingestion", "taste": "Ingestion", "consume": "Ingestion",
+        # Motion
+        "move": "Motion", "run": "Motion", "walk": "Motion", "go": "Motion",
+        "travel": "Motion", "fly": "Motion", "jump": "Motion", "chase": "Motion",
+        "pursue": "Motion", "flee": "Motion", "arrive": "Motion", "leave": "Motion",
+        # Statement
+        "say": "Statement", "tell": "Statement", "speak": "Statement", "talk": "Statement",
+        "claim": "Statement", "declare": "Statement", "state": "Statement", "report": "Statement",
+        "announce": "Statement",
+        # Perception_active
+        "see": "Perception_active", "look": "Perception_active", "watch": "Perception_active",
+        "observe": "Perception_active", "hear": "Perception_active", "listen": "Perception_active",
+        # Causation
+        "cause": "Causation", "make": "Causation", "force": "Causation", "trigger": "Causation",
+        "produce": "Causation",
+        # Giving
+        "give": "Giving", "gift": "Giving", "offer": "Giving", "donate": "Giving", "provide": "Giving",
+        # Taking
+        "take": "Taking", "grab": "Taking", "seize": "Taking", "acquire": "Taking",
+        # Impact / Contact
+        "touch": "Impact", "hit": "Impact", "strike": "Impact", "press": "Impact", "rub": "Impact",
+        # Cognition / Mental
+        "think": "Cogitation", "know": "Awareness", "want": "Desiring", "feel": "Feeling",
+    }
+
+    BUILTIN_FRAMES: Dict[str, Dict[str, Any]] = {
+        "Motion": {
+            "frame_id": "frame:Motion.01",
+            "core_elements": ["Theme", "Source", "Goal", "Path", "Carrier", "Manner", "Distance"],
+            "slot_mapping": {
+                "Theme": "VAL_X1_AGENT",
+                "Source": "VAL_X4_SOURCE",
+                "Goal": "VAL_X3_DESTINATION",
+                "Manner": "VAL_MANNER_SLOT",
+            },
+            "semantic_types": {
+                "Theme": ["TYPE_ANIMATE", "TYPE_INANIMATE_PHYSICAL"],
+                "Source": ["TYPE_SPATIAL_REGION", "TYPE_INANIMATE_PHYSICAL"],
+                "Goal": ["TYPE_SPATIAL_REGION", "TYPE_INANIMATE_PHYSICAL"],
+            },
+        },
+        "Statement": {
+            "frame_id": "frame:Statement.01",
+            "core_elements": ["Speaker", "Message", "Topic", "Addressee", "Medium"],
+            "slot_mapping": {
+                "Speaker": "VAL_X1_AGENT",
+                "Message": "VAL_X2_PATIENT",
+                "Addressee": "VAL_EXPERIENCER",
+            },
+            "semantic_types": {
+                "Speaker": ["TYPE_HUMAN", "TYPE_ORGANIZATION", "ROLE_COMMUNICATOR"],
+                "Message": ["TYPE_COMMUNICATION_MSG", "TYPE_PROPOSITION"],
+                "Addressee": ["TYPE_HUMAN", "ROLE_SENTIENT"],
+            },
+        },
+        "Perception_active": {
+            "frame_id": "frame:Perception_active.01",
+            "core_elements": ["Perceiver_agentive", "Phenomenon", "Body_part", "Direction"],
+            "slot_mapping": {
+                "Perceiver_agentive": "VAL_X1_AGENT",
+                "Phenomenon": "VAL_X2_PATIENT",
+                "Body_part": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Perceiver_agentive": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+                "Phenomenon": ["TYPE_EVENT", "TYPE_INANIMATE_PHYSICAL", "TYPE_ANIMATE"],
+            },
+        },
+        "Ingestion": {
+            "frame_id": "frame:Ingestion.01",
+            "core_elements": ["Ingestor", "Ingestibles", "Manner", "Instrument"],
+            "slot_mapping": {
+                "Ingestor": "VAL_X1_AGENT",
+                "Ingestibles": "VAL_X2_PATIENT",
+                "Instrument": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Ingestor": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Ingestibles": ["TYPE_SUBSTANCE_MASS", "ROLE_CONSUMABLE"],
+                "Instrument": ["ROLE_INSTRUMENT_USABLE"],
+            },
+        },
+        "Causation": {
+            "frame_id": "frame:Causation.01",
+            "core_elements": ["Cause", "Effect", "Actor", "Affected"],
+            "slot_mapping": {
+                "Cause": "VAL_X1_AGENT",
+                "Effect": "VAL_RESULT_SLOT",
+                "Affected": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Cause": ["TYPE_EVENT", "TYPE_PROCESS", "ROLE_AGENT_CAPABLE"],
+                "Effect": ["TYPE_EVENT", "TYPE_STATE"],
+            },
+        },
+        "Giving": {
+            "frame_id": "frame:Giving.01",
+            "core_elements": ["Donor", "Theme", "Recipient"],
+            "slot_mapping": {
+                "Donor": "VAL_X1_AGENT",
+                "Theme": "VAL_X2_PATIENT",
+                "Recipient": "VAL_EXPERIENCER",
+            },
+            "semantic_types": {
+                "Donor": ["TYPE_HUMAN", "TYPE_ORGANIZATION", "ROLE_AGENT_CAPABLE"],
+                "Theme": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT"],
+                "Recipient": ["TYPE_HUMAN", "ROLE_SENTIENT"],
+            },
+        },
+        "Taking": {
+            "frame_id": "frame:Taking.01",
+            "core_elements": ["Agent", "Theme", "Source"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Theme": "VAL_X2_PATIENT",
+                "Source": "VAL_X4_SOURCE",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Theme": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT"],
+                "Source": ["TYPE_HUMAN", "TYPE_SPATIAL_REGION"],
+            },
+        },
+        "Impact": {
+            "frame_id": "frame:Impact.01",
+            "core_elements": ["Impactor", "Impactee", "Instrument"],
+            "slot_mapping": {
+                "Impactor": "VAL_X1_AGENT",
+                "Impactee": "VAL_X2_PATIENT",
+                "Instrument": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Impactor": ["TYPE_ANIMATE", "TYPE_INANIMATE_PHYSICAL"],
+                "Impactee": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ANIMATE"],
+                "Instrument": ["ROLE_INSTRUMENT_USABLE"],
+            },
+        },
+        "Cogitation": {
+            "frame_id": "frame:Cogitation.01",
+            "core_elements": ["Cognizer", "Topic"],
+            "slot_mapping": {
+                "Cognizer": "VAL_X1_AGENT",
+                "Topic": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Cognizer": ["TYPE_HUMAN", "ROLE_SENTIENT"],
+                "Topic": ["TYPE_ABSTRACT_CONCEPT", "TYPE_PROPOSITION"],
+            },
+        },
+        "Desiring": {
+            "frame_id": "frame:Desiring.01",
+            "core_elements": ["Experiencer", "Event"],
+            "slot_mapping": {
+                "Experiencer": "VAL_X1_AGENT",
+                "Event": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Experiencer": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+                "Event": ["TYPE_EVENT", "TYPE_STATE", "TYPE_ABSTRACT_CONCEPT"],
+            },
+        },
+    }
+
+    def __init__(self, templates_path: Optional[Union[str, Path]] = None):
+        self._templates: Dict[str, FrameNetTemplate] = {}
+        path = Path(templates_path) if templates_path else Path("data/framenet_valency.json")
+        if path.exists():
+            self.load_templates(path)
+        else:
+            self._init_builtins()
+
+    @classmethod
+    def get_instance(cls) -> FrameNetValencyResolver:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def _init_builtins(self):
+        for frame_name, f_data in self.BUILTIN_FRAMES.items():
+            self._templates[frame_name] = FrameNetTemplate(
+                frame_name=frame_name,
+                frame_id=f_data.get("frame_id", f"frame:{frame_name}.01"),
+                core_elements=f_data.get("core_elements", []),
+                slot_mapping=f_data.get("slot_mapping", {}),
+                semantic_types=f_data.get("semantic_types", {}),
+                lemmas=[v for v, fr in self.VERB_LEMMA_TO_FRAME.items() if fr == frame_name],
+            )
+
+    def load_templates(self, path: Union[str, Path]):
+        """Loads FrameNet valency and role template matrices from JSON."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            frames = data.get("frames", {})
+            for frame_name, f_data in frames.items():
+                self._templates[frame_name] = FrameNetTemplate(
+                    frame_name=frame_name,
+                    frame_id=f_data.get("frame_id", f"frame:{frame_name}.01"),
+                    core_elements=f_data.get("core_elements", []),
+                    slot_mapping=f_data.get("slot_mapping", {}),
+                    semantic_types=f_data.get("semantic_types", {}),
+                    lemmas=[v for v, fr in self.VERB_LEMMA_TO_FRAME.items() if fr == frame_name],
+                )
+        # Ensure built-ins fill any missing frames
+        for frame_name in self.BUILTIN_FRAMES:
+            if frame_name not in self._templates:
+                f_data = self.BUILTIN_FRAMES[frame_name]
+                self._templates[frame_name] = FrameNetTemplate(
+                    frame_name=frame_name,
+                    frame_id=f_data.get("frame_id", f"frame:{frame_name}.01"),
+                    core_elements=f_data.get("core_elements", []),
+                    slot_mapping=f_data.get("slot_mapping", {}),
+                    semantic_types=f_data.get("semantic_types", {}),
+                    lemmas=[v for v, fr in self.VERB_LEMMA_TO_FRAME.items() if fr == frame_name],
+                )
+
+    def get_frame(self, frame_name: str) -> Optional[FrameNetTemplate]:
+        return self._templates.get(frame_name)
+
+    def resolve_frame_roles(self, verb_lemma: str) -> Dict[str, str]:
+        """Maps a verb lemma to its FrameNet roles and corresponding Band 1 valency slots."""
+        lemma = verb_lemma.strip().lower()
+        frame_name = self.VERB_LEMMA_TO_FRAME.get(lemma)
+        if not frame_name or frame_name not in self._templates:
+            return {
+                "Agent": "VAL_X1_AGENT",
+                "Patient": "VAL_X2_PATIENT",
+            }
+
+        template = self._templates[frame_name]
+        role_map = dict(template.slot_mapping)
+
+        # Synthesize standard Agent and Patient aliases
+        for role, slot in template.slot_mapping.items():
+            if slot == "VAL_X1_AGENT":
+                role_map["Agent"] = "VAL_X1_AGENT"
+            elif slot == "VAL_X2_PATIENT":
+                role_map["Patient"] = "VAL_X2_PATIENT"
+
+        if frame_name == "Motion":
+            role_map["Agent"] = "VAL_X1_AGENT"
+
+        return role_map
+
+
+def resolve_frame_roles(verb_lemma: str, resolver: Optional[FrameNetValencyResolver] = None) -> Dict[str, str]:
+    """Module-level helper to resolve a verb lemma to its FrameNet role-to-Band1-slot mapping."""
+    r = resolver or FrameNetValencyResolver.get_instance()
+    return r.resolve_frame_roles(verb_lemma)
+
+

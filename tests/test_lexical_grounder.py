@@ -1,7 +1,10 @@
-"""Tests for WordNet lexical grounding and ontological slot assignment."""
-
 import pytest
-from parser.lexical_grounder import WordNetLexicalGrounder, NLTK_WN_AVAILABLE
+from parser.lexical_grounder import (
+    WordNetLexicalGrounder,
+    NLTK_WN_AVAILABLE,
+    FrameNetValencyResolver,
+    resolve_frame_roles,
+)
 
 
 @pytest.mark.skipif(not NLTK_WN_AVAILABLE, reason="NLTK WordNet not available")
@@ -101,4 +104,49 @@ def test_resolve_synset_and_hypernyms():
     # WN_ARTIFACT_OBJECT index is 173
     artifact_idx = grounder.get_wordnet_root_category("hammer.n.02")
     assert artifact_idx == 173
+
+
+def test_framenet_valency_resolution():
+    resolver = FrameNetValencyResolver.get_instance()
+
+    # 5B.3: Test: "bite" maps to frame with Agent, Patient roles → VAL_X1_AGENT, VAL_X2_PATIENT
+    bite_roles = resolver.resolve_frame_roles("bite")
+    assert bite_roles["Agent"] == "VAL_X1_AGENT"
+    assert bite_roles["Patient"] == "VAL_X2_PATIENT"
+    assert bite_roles["Ingestor"] == "VAL_X1_AGENT"
+    assert bite_roles["Ingestibles"] == "VAL_X2_PATIENT"
+    assert bite_roles["Instrument"] == "VAL_X5_INSTRUMENT"
+
+    # Module helper check
+    bite_helper = resolve_frame_roles("bite")
+    assert bite_helper == bite_roles
+
+    # Motion: "run"
+    run_roles = resolver.resolve_frame_roles("run")
+    assert run_roles["Agent"] == "VAL_X1_AGENT"
+    assert run_roles["Source"] == "VAL_X4_SOURCE"
+    assert run_roles["Goal"] == "VAL_X3_DESTINATION"
+    assert run_roles["Manner"] == "VAL_MANNER_SLOT"
+
+    # Statement: "say"
+    say_roles = resolver.resolve_frame_roles("say")
+    assert say_roles["Agent"] == "VAL_X1_AGENT"
+    assert say_roles["Patient"] == "VAL_X2_PATIENT"
+    assert say_roles["Speaker"] == "VAL_X1_AGENT"
+    assert say_roles["Message"] == "VAL_X2_PATIENT"
+    assert say_roles["Addressee"] == "VAL_EXPERIENCER"
+
+    # Perception: "see"
+    see_roles = resolver.resolve_frame_roles("see")
+    assert see_roles["Agent"] == "VAL_X1_AGENT"
+    assert see_roles["Patient"] == "VAL_X2_PATIENT"
+    assert see_roles["Perceiver_agentive"] == "VAL_X1_AGENT"
+    assert see_roles["Phenomenon"] == "VAL_X2_PATIENT"
+
+    # Causation: "cause"
+    cause_roles = resolver.resolve_frame_roles("cause")
+    assert cause_roles["Agent"] == "VAL_X1_AGENT"
+    assert cause_roles["Patient"] == "VAL_X2_PATIENT"
+    assert cause_roles["Cause"] == "VAL_X1_AGENT"
+    assert cause_roles["Effect"] == "VAL_RESULT_SLOT"
 
