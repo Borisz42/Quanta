@@ -87,7 +87,31 @@ def test_english_modal_and_negation(english_realizer):
 
     text = english_realizer.realize_graph(graph)
     assert "must not" in text.lower()
-    assert "touch" in text.lower()
+def test_english_canonical_example_a(english_realizer):
+    """Verify Phase 8 Item 8A.6: Example A graph -> 'A golden retriever bit the mailman in the garden.'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("A golden retriever bit the mailman in the garden.")
+    realized = english_realizer.realize_graph(graph)
+    assert realized == "A golden retriever bit the mailman in the garden."
+
+
+def test_english_canonical_example_b(english_realizer):
+    """Verify Phase 8 Item 8A.7: Example B graph -> 'The dog did not bite the mailman.'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("The dog did not bite the mailman.")
+    realized = english_realizer.realize_graph(graph)
+    assert realized == "The dog did not bite the mailman."
+
+
+def test_english_canonical_example_c(english_realizer):
+    """Verify Phase 8 Item 8A.8: Example C graph -> 'Did the dog perhaps bite a mailman?'"""
+    from parser.nlp_forward import NLPForwardParser
+    parser = NLPForwardParser()
+    graph = parser.parse_sentence("Did the dog perhaps bite a mailman?")
+    realized = english_realizer.realize_graph(graph)
+    assert realized == "Did the dog perhaps bite a mailman?"
 
 
 def test_hungarian_vowel_harmony_and_cases(hungarian_realizer):

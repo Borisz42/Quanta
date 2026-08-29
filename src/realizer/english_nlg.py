@@ -175,6 +175,65 @@ class EnglishRealizer:
         time_str = self._resolve_temporal_phrase(predicate_node)
         manner_str = self._resolve_manner_phrase(predicate_node)
 
+        # 7. Check if Interrogative / Question
+        is_query = predicate_node.get_slot("GRAPH_QUERY_TARGET") == 3
+        if is_query:
+            is_copula = verb_base in ("be", "is", "are")
+            aux = ""
+            modal_adv = ""
+            main_verb = verb_base
+
+            if is_possibility:
+                modal_adv = "perhaps"
+
+            if is_obligation:
+                aux = "must"
+            elif is_permission:
+                aux = "can"
+            elif is_future:
+                aux = "will"
+            elif is_past:
+                if is_copula:
+                    aux = "was"
+                    main_verb = ""
+                else:
+                    aux = "did"
+            else:  # present
+                if is_copula:
+                    aux = "is"
+                    main_verb = ""
+                else:
+                    aux = "does"
+
+            if is_negated:
+                aux = f"{aux} not" if aux else "not"
+
+            tokens = [aux, agent_str]
+            if modal_adv:
+                tokens.append(modal_adv)
+            if main_verb:
+                tokens.append(main_verb)
+            if manner_str:
+                tokens.append(manner_str)
+            if patient_str:
+                tokens.append(patient_str)
+            if experiencer_str:
+                tokens.append(experiencer_str)
+            if dest_str:
+                tokens.append(dest_str)
+            if source_str:
+                tokens.append(source_str)
+            if inst_str:
+                tokens.append(inst_str)
+            if loc_str:
+                tokens.append(loc_str)
+            if purpose_str:
+                tokens.append(purpose_str)
+            if time_str:
+                tokens.append(time_str)
+
+            return " ".join(t for t in tokens if t).strip()
+
         # Assemble clause tokens in canonical SVO order
         tokens = [agent_str] if agent_str else []
         if verb_phrase:
@@ -397,7 +456,7 @@ class EnglishRealizer:
         elif node.get_slot("NSM_SOME") == 1 or node.get_slot("LJB_SUO_AT_LEAST_ONE") == 1:
             determiner = "a"
         elif node.get_slot("NSM_THIS") == 1:
-            determiner = "this"
+            determiner = "the"
         elif node.get_slot("NSM_OTHER") == 1:
             determiner = "another"
         else:
