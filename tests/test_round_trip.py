@@ -51,13 +51,30 @@ def test_english_round_trip_modal_obligation(pipeline):
 
 
 def test_fol_round_trip_implication(pipeline):
-    # FOL implication
-    fol_input = "\\forall x (Dog(x) -> Animal(x))"
+    """Verify Phase 9 Item 9.2: Canonical Example E FOL implication exact string match round-trip."""
+    fol_input = r"\forall x (Dog(x) \rightarrow Animal(x))"
     result = pipeline.round_trip(fol_input, modality="fol")
 
-    assert result.validation_pass
-    assert "\\forall" in result.realized_output or "Dog" in result.realized_output
-    assert result.slot_preservation_rate >= 0.80
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert result.realized_output == r"\forall x (Dog(x) \rightarrow Animal(x))"
+    assert result.slot_preservation_rate == 1.0
+    assert result.original_vector["NSM_ALL"] == 1
+    assert result.original_vector["LJB_RO_ALL_QUANT"] == 1
+    assert result.original_vector["LJB_GANAI_IF_THEN"] == 1
+
+
+def test_fol_round_trip_existential_negation(pipeline):
+    """Verify Phase 9 Item 9.2: Existential conjunction and negation FOL exact string match round-trip."""
+    fol_input = r"\exists y (\neg Cat(y) \land Dog(y))"
+    result = pipeline.round_trip(fol_input, modality="fol")
+
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert result.realized_output == r"\exists y (\neg Cat(y) \land Dog(y))"
+    assert result.slot_preservation_rate == 1.0
+    assert result.original_vector["NSM_SOME"] == 1
+    assert result.original_vector["LJB_SUO_AT_LEAST_ONE"] == 1
+    assert result.original_vector["LJB_JE_AND"] == 1
+    assert result.original_vector["LJB_NA_NEGATION"] == 2
 
 
 def test_python_code_round_trip(pipeline):
