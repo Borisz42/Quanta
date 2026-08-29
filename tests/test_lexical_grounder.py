@@ -150,3 +150,47 @@ def test_framenet_valency_resolution():
     assert cause_roles["Cause"] == "VAL_X1_AGENT"
     assert cause_roles["Effect"] == "VAL_RESULT_SLOT"
 
+    # Placing: "put"
+    put_roles = resolver.resolve_frame_roles("put")
+    assert put_roles["Agent"] == "VAL_X1_AGENT"
+    assert put_roles["Theme"] == "VAL_X2_PATIENT"
+    assert put_roles["Goal"] == "VAL_X3_DESTINATION"
+
+    # Commerce: "buy"
+    buy_roles = resolver.resolve_frame_roles("buy")
+    assert buy_roles["Agent"] == "VAL_X1_AGENT"
+    assert buy_roles["Goods"] == "VAL_X2_PATIENT"
+    assert buy_roles["Buyer"] == "VAL_X1_AGENT"
+
+    # Assistance: "help"
+    help_roles = resolver.resolve_frame_roles("help")
+    assert help_roles["Agent"] == "VAL_X1_AGENT"
+    assert help_roles["Helper"] == "VAL_X1_AGENT"
+    assert help_roles["Benefited_party"] == "VAL_X2_PATIENT"
+
+    # Creating: "create"
+    create_roles = resolver.resolve_frame_roles("create")
+    assert create_roles["Agent"] == "VAL_X1_AGENT"
+    assert create_roles["Creator"] == "VAL_X1_AGENT"
+    assert create_roles["Created_entity"] == "VAL_X2_PATIENT"
+
+
+@pytest.mark.skipif(not NLTK_WN_AVAILABLE, reason="NLTK WordNet not available")
+def test_ground_extended_domain_concepts():
+    grounder = WordNetLexicalGrounder()
+
+    # Kinship
+    father_concept = grounder.ground_synset("father.n.01")
+    assert father_concept.active_slots.get("TYPE_HUMAN") == 1
+    assert father_concept.active_slots.get("WN_PERSON_HUMAN") == 1
+
+    # Animals
+    lion_concept = grounder.ground_synset("lion.n.01")
+    assert lion_concept.active_slots.get("TYPE_ANIMATE") == 1
+    assert lion_concept.active_slots.get("WN_ANIMAL_FAUNA") == 1
+
+    # Places
+    kitchen_concept = grounder.ground_synset("kitchen.n.01")
+    assert kitchen_concept.active_slots.get("WN_ARTIFACT_OBJECT") == 1 or kitchen_concept.active_slots.get("WN_LOCATION_PLACE") == 1
+
+

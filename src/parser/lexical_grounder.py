@@ -553,24 +553,57 @@ class FrameNetValencyResolver:
         "move": "Motion", "run": "Motion", "walk": "Motion", "go": "Motion",
         "travel": "Motion", "fly": "Motion", "jump": "Motion", "chase": "Motion",
         "pursue": "Motion", "flee": "Motion", "arrive": "Motion", "leave": "Motion",
+        "step": "Motion", "swim": "Motion", "climb": "Motion", "fall": "Motion",
+        "enter": "Motion", "exit": "Motion", "cross": "Motion", "return": "Motion",
         # Statement
         "say": "Statement", "tell": "Statement", "speak": "Statement", "talk": "Statement",
         "claim": "Statement", "declare": "Statement", "state": "Statement", "report": "Statement",
-        "announce": "Statement",
+        "announce": "Statement", "ask": "Statement", "answer": "Statement", "reply": "Statement",
+        "explain": "Statement", "describe": "Statement", "whisper": "Statement", "shout": "Statement",
         # Perception_active
         "see": "Perception_active", "look": "Perception_active", "watch": "Perception_active",
         "observe": "Perception_active", "hear": "Perception_active", "listen": "Perception_active",
+        "notice": "Perception_active", "smell": "Perception_active", "inspect": "Perception_active",
         # Causation
         "cause": "Causation", "make": "Causation", "force": "Causation", "trigger": "Causation",
-        "produce": "Causation",
+        "produce": "Causation", "prevent": "Causation",
         # Giving
         "give": "Giving", "gift": "Giving", "offer": "Giving", "donate": "Giving", "provide": "Giving",
+        "hand": "Giving", "pass": "Giving", "grant": "Giving",
         # Taking
         "take": "Taking", "grab": "Taking", "seize": "Taking", "acquire": "Taking",
+        "catch": "Taking", "pick_up": "Taking",
         # Impact / Contact
         "touch": "Impact", "hit": "Impact", "strike": "Impact", "press": "Impact", "rub": "Impact",
+        "slap": "Impact", "push": "Impact", "pull": "Impact",
         # Cognition / Mental
         "think": "Cogitation", "know": "Awareness", "want": "Desiring", "feel": "Feeling",
+        "understand": "Cogitation", "believe": "Cogitation", "suppose": "Cogitation",
+        "imagine": "Cogitation", "remember": "Cogitation", "forget": "Cogitation",
+        "learn": "Cogitation", "study": "Cogitation", "need": "Desiring", "wish": "Desiring",
+        "hope": "Desiring",
+        # Placing / Putting
+        "put": "Placing", "place": "Placing", "set": "Placing", "lay": "Placing",
+        "drop": "Placing", "install": "Placing", "position": "Placing",
+        # Removing
+        "remove": "Removing", "extract": "Removing", "clear": "Removing",
+        # Manipulation
+        "hold": "Manipulation", "grasp": "Manipulation", "grip": "Manipulation", "carry": "Manipulation",
+        # Commerce
+        "buy": "Commerce_buy", "purchase": "Commerce_buy", "sell": "Commerce_buy", "pay": "Commerce_buy",
+        # Social Interaction
+        "meet": "Social_interaction", "visit": "Social_interaction", "greet": "Social_interaction",
+        "hug": "Social_interaction", "kiss": "Social_interaction",
+        # Seeking
+        "search": "Seeking", "seek": "Seeking", "hunt": "Seeking", "find": "Seeking",
+        # Assistance
+        "help": "Assistance", "assist": "Assistance", "support": "Assistance", "aid": "Assistance",
+        # Intentionally Affect / Destroy / Repair
+        "kill": "Intentionally_affect", "destroy": "Intentionally_affect", "damage": "Intentionally_affect",
+        "break": "Intentionally_affect", "repair": "Intentionally_affect", "fix": "Intentionally_affect",
+        # Creating
+        "create": "Creating", "build": "Creating", "construct": "Creating", "write": "Creating",
+        "design": "Creating", "generate": "Creating",
     }
 
     BUILTIN_FRAMES: Dict[str, Dict[str, Any]] = {
@@ -707,6 +740,122 @@ class FrameNetValencyResolver:
             "semantic_types": {
                 "Experiencer": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
                 "Event": ["TYPE_EVENT", "TYPE_STATE", "TYPE_ABSTRACT_CONCEPT"],
+            },
+        },
+        "Placing": {
+            "frame_id": "frame:Placing.01",
+            "core_elements": ["Agent", "Theme", "Goal"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Theme": "VAL_X2_PATIENT",
+                "Goal": "VAL_X3_DESTINATION",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Theme": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT"],
+                "Goal": ["TYPE_SPATIAL_REGION", "TYPE_INANIMATE_PHYSICAL"],
+            },
+        },
+        "Removing": {
+            "frame_id": "frame:Removing.01",
+            "core_elements": ["Agent", "Theme", "Source"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Theme": "VAL_X2_PATIENT",
+                "Source": "VAL_X4_SOURCE",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Theme": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT"],
+                "Source": ["TYPE_SPATIAL_REGION", "TYPE_INANIMATE_PHYSICAL"],
+            },
+        },
+        "Manipulation": {
+            "frame_id": "frame:Manipulation.01",
+            "core_elements": ["Agent", "Entity", "Instrument"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Entity": "VAL_X2_PATIENT",
+                "Instrument": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Entity": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT"],
+            },
+        },
+        "Commerce_buy": {
+            "frame_id": "frame:Commerce_buy.01",
+            "core_elements": ["Buyer", "Goods", "Seller", "Money"],
+            "slot_mapping": {
+                "Buyer": "VAL_X1_AGENT",
+                "Goods": "VAL_X2_PATIENT",
+                "Seller": "VAL_X4_SOURCE",
+                "Money": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Buyer": ["TYPE_HUMAN", "TYPE_ORGANIZATION", "ROLE_AGENT_CAPABLE"],
+                "Goods": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ARTIFACT", "TYPE_SUBSTANCE_MASS"],
+            },
+        },
+        "Social_interaction": {
+            "frame_id": "frame:Social_interaction.01",
+            "core_elements": ["Agent", "Co_agent", "Topic"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Co_agent": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+                "Co_agent": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+            },
+        },
+        "Seeking": {
+            "frame_id": "frame:Seeking.01",
+            "core_elements": ["Cognizer_agent", "Sought_entity"],
+            "slot_mapping": {
+                "Cognizer_agent": "VAL_X1_AGENT",
+                "Sought_entity": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Cognizer_agent": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+                "Sought_entity": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ANIMATE", "TYPE_HUMAN"],
+            },
+        },
+        "Assistance": {
+            "frame_id": "frame:Assistance.01",
+            "core_elements": ["Helper", "Benefited_party"],
+            "slot_mapping": {
+                "Helper": "VAL_X1_AGENT",
+                "Benefited_party": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Helper": ["TYPE_HUMAN", "TYPE_ORGANIZATION", "ROLE_AGENT_CAPABLE"],
+                "Benefited_party": ["TYPE_HUMAN", "TYPE_ANIMATE", "ROLE_SENTIENT"],
+            },
+        },
+        "Intentionally_affect": {
+            "frame_id": "frame:Intentionally_affect.01",
+            "core_elements": ["Agent", "Patient", "Means"],
+            "slot_mapping": {
+                "Agent": "VAL_X1_AGENT",
+                "Patient": "VAL_X2_PATIENT",
+                "Means": "VAL_X5_INSTRUMENT",
+            },
+            "semantic_types": {
+                "Agent": ["TYPE_ANIMATE", "ROLE_AGENT_CAPABLE"],
+                "Patient": ["TYPE_INANIMATE_PHYSICAL", "TYPE_ANIMATE", "TYPE_HUMAN"],
+            },
+        },
+        "Creating": {
+            "frame_id": "frame:Creating.01",
+            "core_elements": ["Creator", "Created_entity"],
+            "slot_mapping": {
+                "Creator": "VAL_X1_AGENT",
+                "Created_entity": "VAL_X2_PATIENT",
+            },
+            "semantic_types": {
+                "Creator": ["TYPE_HUMAN", "TYPE_ORGANIZATION", "ROLE_AGENT_CAPABLE"],
+                "Created_entity": ["TYPE_ARTIFACT", "TYPE_ABSTRACT_CONCEPT", "TYPE_PROPOSITION"],
             },
         },
     }
