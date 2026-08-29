@@ -10,6 +10,7 @@ from core.slots import (
     export_canonical_slots_layout,
 )
 from core.asg import QuantaNode, QuantaGraph
+from core.valency import TypeConstraintRegistry, ValencyConstraint, validate_valency
 
 __all__ = [
     "QuaternaryValue",
@@ -22,4 +23,7 @@ __all__ = [
     "export_canonical_slots_layout",
     "QuantaNode",
     "QuantaGraph",
+    "TypeConstraintRegistry",
+    "ValencyConstraint",
+    "validate_valency",
 ]
