@@ -141,3 +141,40 @@ def test_rcc8_spatial_contradiction(validator):
     assert "SPATIAL_RCC_DISCONNECTED" in violated_slots
     assert "SPATIAL_RCC_CONGRUENT_EQ" in violated_slots
 
+
+def test_validate_valency_function():
+    """Verify fast validate_valency function for ontological constraints."""
+    from src.parser.lexical_grounder import validate_valency
+
+    # Predicate: THINK
+    think_node = QuantaNode(
+        vector={"NSM_THINK": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:think.v.01"
+    )
+
+    # Valid agent: Human
+    human_node = QuantaNode(
+        vector={"TYPE_HUMAN": 1, "TYPE_ANIMATE": 1, "ROLE_SENTIENT": 1, "ROLE_AGENT_CAPABLE": 1},
+        anchor="wn:human.n.01"
+    )
+
+    # Invalid agent: Rock (inanimate physical)
+    rock_node = QuantaNode(
+        vector={"TYPE_INANIMATE_PHYSICAL": 1, "WN_OBJECT_NATURAL": 1},
+        anchor="wn:rock.n.01"
+    )
+
+    # THINK(human) -> True
+    assert validate_valency(think_node, "VAL_X1_AGENT", human_node) is True
+
+    # THINK(rock) -> False (inanimate physical cannot be agent of cognitive verb)
+    assert validate_valency(think_node, "VAL_X1_AGENT", rock_node) is False
+
+    # Variable binding bypasses check
+    var_node = QuantaNode(
+        vector={"GRAPH_VARIABLE_BIND": 1},
+        literal="x"
+    )
+    assert validate_valency(think_node, "VAL_X1_AGENT", var_node) is True
+
+

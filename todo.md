@@ -54,7 +54,7 @@
 ### 2B — Strongly-typed valency signatures
 
 - [x] **2B.1** Define type constraint registry mapping predicate argument slots to required ontological types (e.g., `VAL_X1_AGENT` → `+ANIMATE_AGENT`)
-- [ ] **2B.2** Implement `validate_valency(node, slot, child_vector) → bool` checking type constraints
+- [x] **2B.2** Implement `validate_valency(node, slot, child_vector) → bool` checking type constraints
 - [x] **2B.3** 🧪 Write test: `THINK(rock)` should be rejected (rock is `INANIMATE`), `THINK(human)` should pass
 
 ---
