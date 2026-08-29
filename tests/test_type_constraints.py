@@ -178,3 +178,168 @@ def test_validate_valency_function():
     assert validate_valency(think_node, "VAL_X1_AGENT", var_node) is True
 
 
+def test_pearl_causal_contradictions(validator):
+    """Test Pearl's causal hierarchy exclusivity rules (7B.3)."""
+    # Direct mechanism vs Preventive blocker
+    causal_conflict = QuantaNode(
+        vector={
+            "CAUSAL_DIRECT_MECHANISM": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+    )
+    res1 = validator.validate_node(causal_conflict)
+    assert not res1.is_valid
+    slots1 = [s for _, s, _ in res1.muc_slots]
+    assert "CAUSAL_DIRECT_MECHANISM" in slots1
+    assert "CAUSAL_PREVENTIVE_BLOCK" in slots1
+
+    # Common Confounder vs Collider Effect
+    confounder_collider = QuantaNode(
+        vector={
+            "CAUSAL_COMMON_CONFOUNDER": 1,
+            "CAUSAL_COLLIDER_EFFECT": 1,
+        },
+    )
+    res2 = validator.validate_node(confounder_collider)
+    assert not res2.is_valid
+    slots2 = [s for _, s, _ in res2.muc_slots]
+    assert "CAUSAL_COMMON_CONFOUNDER" in slots2
+    assert "CAUSAL_COLLIDER_EFFECT" in slots2
+
+
+def test_structural_topology_invariants(validator):
+    """Test Band 1 structural topology rules (7B.4)."""
+    # Root vs Leaf on same node
+    root_leaf_conflict = QuantaNode(
+        vector={
+            "GRAPH_ROOT_NODE": 1,
+            "GRAPH_LEAF": 1,
+        },
+    )
+    res1 = validator.validate_node(root_leaf_conflict)
+    assert not res1.is_valid
+    slots1 = [s for _, s, _ in res1.muc_slots]
+    assert "GRAPH_ROOT_NODE" in slots1
+    assert "GRAPH_LEAF" in slots1
+
+    # Branch then vs else
+    branch_conflict = QuantaNode(
+        vector={
+            "GRAPH_BRANCH_THEN": 1,
+            "GRAPH_BRANCH_ELSE": 1,
+        },
+    )
+    res2 = validator.validate_node(branch_conflict)
+    assert not res2.is_valid
+
+    # Logical connectives: AND vs XOR
+    connective_conflict = QuantaNode(
+        vector={
+            "LJB_JE_AND": 1,
+            "LJB_JON_XOR": 1,
+        },
+    )
+    res3 = validator.validate_node(connective_conflict)
+    assert not res3.is_valid
+
+
+def test_rock_thinks_asp_graph_rejection(validator):
+    """Test 7A.4: 'The rock thinks' ASP graph triggers violation; 'The human thinks' passes."""
+    # 1. "The rock thinks" -> Rejection
+    think_event = QuantaNode(
+        vector={"NSM_THINK": 1, "TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:think.v.01",
+    )
+    rock_entity = QuantaNode(
+        vector={"TYPE_INANIMATE_PHYSICAL": 1, "TYPE_NATURAL_OBJECT": 1},
+        anchor="wn:rock.n.01",
+    )
+    g_invalid = QuantaGraph()
+    t_cid = g_invalid.add_node(think_event, set_as_root=True)
+    r_cid = g_invalid.add_node(rock_entity)
+    g_invalid.add_edge(t_cid, "VAL_X1_AGENT", r_cid)
+
+    res_invalid = validator.validate_graph(g_invalid)
+    assert not res_invalid.is_valid
+    assert len(res_invalid.errors) > 0
+
+    # 2. "The human thinks" -> Valid
+    think_event_valid = QuantaNode(
+        vector={"NSM_THINK": 1, "TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:think.v.01",
+    )
+    human_entity = QuantaNode(
+        vector={"TYPE_HUMAN": 1, "TYPE_ANIMATE": 1, "ROLE_AGENT_CAPABLE": 1, "ROLE_SENTIENT": 1},
+        anchor="wn:human.n.01",
+    )
+    g_valid = QuantaGraph()
+    t2_cid = g_valid.add_node(think_event_valid, set_as_root=True)
+    h_cid = g_valid.add_node(human_entity)
+    g_valid.add_edge(t2_cid, "VAL_X1_AGENT", h_cid)
+
+    res_valid = validator.validate_graph(g_valid)
+    assert res_valid.is_valid
+
+
+def test_multi_node_isolated_muc_pinpointing(validator):
+    """Test 7C.4: Create a graph with one invalid node among valid ones; verify MUC pinpoints exactly the invalid node."""
+    event_node = QuantaNode(
+        vector={"NSM_DO": 1, "TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:chase.v.01",
+    )
+    dog_node = QuantaNode(
+        vector={"TYPE_ANIMATE": 1, "ROLE_AGENT_CAPABLE": 1},
+        anchor="wn:dog.n.01",
+    )
+    ball_node = QuantaNode(
+        vector={"TYPE_INANIMATE_PHYSICAL": 1, "TYPE_ARTIFACT": 1},
+        anchor="wn:ball.n.01",
+    )
+    garden_node = QuantaNode(
+        vector={"TYPE_SPATIAL_REGION": 1, "WN_LOCATION_PLACE": 1},
+        anchor="wn:garden.n.01",
+    )
+    # The single flawed node
+    flawed_node = QuantaNode(
+        vector={"TEMP_ALLEN_BEFORE": 1, "TEMP_ALLEN_DURING": 1},
+    )
+
+    graph = QuantaGraph()
+    e_cid = graph.add_node(event_node, set_as_root=True)
+    d_cid = graph.add_node(dog_node)
+    b_cid = graph.add_node(ball_node)
+    g_cid = graph.add_node(garden_node)
+    flawed_cid = graph.add_node(flawed_node)
+
+    graph.add_edge(e_cid, "VAL_X1_AGENT", d_cid)
+    graph.add_edge(e_cid, "VAL_X2_PATIENT", b_cid)
+    graph.add_edge(e_cid, "VAL_LOCATION_SLOT", g_cid)
+    graph.add_edge(e_cid, "VAL_TIME_SLOT", flawed_cid)
+
+    is_valid, muc = validator.validate(graph)
+    assert not is_valid
+    assert muc is not None
+    assert flawed_cid in muc
+    # Valid nodes should not be blamed in the MUC
+    assert d_cid not in muc
+    assert b_cid not in muc
+    assert g_cid not in muc
+
+
+def test_validator_gate_alias_and_unpacking():
+    """Test ValidatorGate alias (7C.1) and tuple return API (7C.3)."""
+    from solver import ValidatorGate, ValidationGate
+
+    assert ValidatorGate is ValidationGate
+    gate = ValidatorGate()
+
+    g = QuantaGraph()
+    node = QuantaNode(vector={"NSM_DO": 1, "TYPE_EVENT": 1})
+    g.add_node(node)
+
+    is_valid, muc = gate.validate(g)
+    assert is_valid is True
+    assert muc is None
+
+
+
