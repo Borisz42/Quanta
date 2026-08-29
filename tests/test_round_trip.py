@@ -76,6 +76,33 @@ def test_negation_round_trip(pipeline):
     assert res_2.slot_preservation_rate >= 0.90
 
 
+def test_uncertainty_round_trip(pipeline):
+    """Verify Phase 9 Item 9.7: Uncertainty round-trip 'Did X perhaps Y?' -> ASG -> English -> verify modal/query preserved."""
+    # 1. Canonical Example C: Question & epistemic uncertainty
+    input_c = "Did the dog perhaps bite a mailman?"
+    res_c = pipeline.round_trip(input_c, modality="english")
+
+    assert res_c.validation_pass, f"Validation failed: {res_c.muc_errors}"
+    assert res_c.realized_output == "Did the dog perhaps bite a mailman?"
+    assert res_c.original_vector["GRAPH_QUERY_TARGET"] == 3
+    assert res_c.original_vector["NSM_MAYBE"] == 3
+    assert res_c.original_vector["MODALITY_HYPOTHETICAL"] == 3
+    assert res_c.original_vector["NSM_DO"] == 3
+    assert res_c.reparsed_vector["GRAPH_QUERY_TARGET"] == 3
+    assert res_c.reparsed_vector["NSM_MAYBE"] == 3
+    assert res_c.slot_preservation_rate == 1.0
+
+    # 2. Epistemic modal possibility
+    input_2 = "A person might touch a rock."
+    res_2 = pipeline.round_trip(input_2, modality="english")
+
+    assert res_2.validation_pass, f"Validation failed: {res_2.muc_errors}"
+    assert "might" in res_2.realized_output.lower()
+    assert res_2.original_vector["NSM_MAYBE"] == 3
+    assert res_2.reparsed_vector["NSM_MAYBE"] == 3
+    assert res_2.slot_preservation_rate == 1.0
+
+
 def test_fol_round_trip_implication(pipeline):
     """Verify Phase 9 Item 9.2: Canonical Example E FOL implication exact string match round-trip."""
     fol_input = r"\forall x (Dog(x) \rightarrow Animal(x))"

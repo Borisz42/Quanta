@@ -426,7 +426,7 @@ If Mentalese captures true invariant semantics, transforming surface text into a
 - [x] **9.4** 🧪 Quaternary Hamming distance test: round-tripped ASG vectors must have Hamming distance = 0 on canonical slots
 - [x] **9.5** 🧪 Cross-lingual test: English → ASG → Hungarian realizer → verify Hungarian output is semantically equivalent (manual gold set of 20 sentences)
 - [x] **9.6** 🧪 Negation round-trip: "X did not Y" → ASG → English → verify negation preserved
-- [ ] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
+- [x] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
 
 ---
 
