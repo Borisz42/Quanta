@@ -105,8 +105,8 @@
 ### 5B — FrameNet valency templates
 
 - [x] **5B.1** Write script to export FrameNet frames and roles to `data/framenet_valency.json`
-- [ ] **5B.2** Implement `resolve_frame_roles(verb_lemma) → dict[role_name, Band1_slot]` mapping
-- [ ] **5B.3** 🧪 Test: "bite" maps to frame with Agent, Patient roles → `VAL_X1_AGENT`, `VAL_X2_PATIENT`
+- [x] **5B.2** Implement `resolve_frame_roles(verb_lemma) → dict[role_name, Band1_slot]` mapping
+- [x] **5B.3** 🧪 Test: "bite" maps to frame with Agent, Patient roles → `VAL_X1_AGENT`, `VAL_X2_PATIENT`
 
 ### 5C — Typo-tolerant lexical grounding
 
