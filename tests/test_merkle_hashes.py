@@ -423,5 +423,112 @@ def test_example_b_canonical_negated_graph():
     assert v_tree["EPIST_PROB_CERTAIN"] == 1
 
 
+def test_example_c_canonical_uncertainty_graph():
+    """Verify Phase 3 Item 3B.8: Canonical Example C (Epistemic Uncertainty & Question Query).
+
+    Sentence: 'Did the dog perhaps bite a mailman?'
+    """
+    # 1. Root Predicate Node (wn:bite.v.01, literal: "bite", Polarity 3)
+    root_node = QuantaNode(
+        vector={
+            "NSM_DO": 3,
+            "NSM_TOUCH": 3,
+            "NSM_MAYBE": 3,
+            "VAL_X1_AGENT": 1,
+            "VAL_X2_PATIENT": 1,
+            "GRAPH_QUERY_TARGET": 3,
+            "LJB_PU_PAST_TENSE": 1,
+            "GRAPH_ROOT_NODE": 1,
+            "TYPE_EVENT": 1,
+            "TYPE_PROPOSITION": 3,
+            "MODALITY_HYPOTHETICAL": 3,
+            "EPIST_PROB_MARGINAL": 3,
+            "EPIST_FUZZY_PLAUSIBILITY": 3,
+        },
+        anchor="wn:bite.v.01",
+        literal="bite",
+    )
+
+    # 2. Agent Child Node (wn:dog.n.01, literal: "dog")
+    agent_node = QuantaNode(
+        vector={
+            "NSM_THIS": 1,
+            "VAL_X1_AGENT": 1,
+            "GRAPH_LEAF": 1,
+            "TYPE_ANIMATE": 1,
+            "ROLE_AGENT_CAPABLE": 1,
+            "ROLE_SENTIENT": 1,
+            "WN_ANIMAL_FAUNA": 1,
+            "EPIST_PROB_CERTAIN": 1,
+        },
+        anchor="wn:dog.n.01",
+        literal="dog",
+    )
+
+    # 3. Patient Child Node (wn:mailman.n.01, literal: "mailman")
+    patient_node = QuantaNode(
+        vector={
+            "NSM_ONE": 1,
+            "VAL_X2_PATIENT": 1,
+            "GRAPH_LEAF": 1,
+            "TYPE_HUMAN": 1,
+            "TYPE_ANIMATE": 1,
+            "ROLE_COMMUNICATOR": 1,
+            "ROLE_SENTIENT": 1,
+            "WN_PERSON_HUMAN": 1,
+            "EPIST_PROB_CERTAIN": 1,
+        },
+        anchor="wn:mailman.n.01",
+        literal="mailman",
+    )
+
+    graph = QuantaGraph()
+    root_cid = graph.add_node(root_node, set_as_root=True)
+    agent_cid = graph.add_node(agent_node)
+    patient_cid = graph.add_node(patient_node)
+
+    graph.add_edge(root_cid, "VAL_X1_AGENT", agent_cid)
+    graph.add_edge(root_cid, "VAL_X2_PATIENT", patient_cid)
+
+    assert len(graph) == 3
+    assert graph.root_cid is not None
+
+    # Compute whole-tree proposition vector via lattice join (⊔_k)
+    v_tree = graph.to_proposition_vector()
+
+    # Verify Band 0 slots (uncertainty/modal value 3)
+    assert v_tree["NSM_DO"] == 3
+    assert v_tree["NSM_TOUCH"] == 3
+    assert v_tree["NSM_MAYBE"] == 3
+    assert v_tree["NSM_THIS"] == 1
+    assert v_tree["NSM_ONE"] == 1
+
+    # Verify Band 1 slots
+    assert v_tree["VAL_X1_AGENT"] == 1
+    assert v_tree["VAL_X2_PATIENT"] == 1
+    assert v_tree["GRAPH_QUERY_TARGET"] == 3
+    assert v_tree["LJB_PU_PAST_TENSE"] == 1
+    assert v_tree["GRAPH_ROOT_NODE"] == 1
+    assert v_tree["GRAPH_LEAF"] == 1
+
+    # Verify Band 2 slots
+    assert v_tree["TYPE_EVENT"] == 1
+    assert v_tree["TYPE_ANIMATE"] == 1
+    assert v_tree["TYPE_HUMAN"] == 1
+    assert v_tree["TYPE_PROPOSITION"] == 3
+    assert v_tree["ROLE_AGENT_CAPABLE"] == 1
+    assert v_tree["ROLE_SENTIENT"] == 1
+    assert v_tree["ROLE_COMMUNICATOR"] == 1
+    assert v_tree["MODALITY_HYPOTHETICAL"] == 3
+    assert v_tree["WN_ANIMAL_FAUNA"] == 1
+    assert v_tree["WN_PERSON_HUMAN"] == 1
+
+    # Verify Band 3 slots
+    assert v_tree["EPIST_PROB_CERTAIN"] == 1
+    assert v_tree["EPIST_PROB_MARGINAL"] == 3
+    assert v_tree["EPIST_FUZZY_PLAUSIBILITY"] == 3
+
+
+
 
 
