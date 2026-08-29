@@ -75,3 +75,42 @@ def test_negated_past_sentence_parsing(nlp_parser):
     assert "VAL_X1_AGENT" in root.edges
     assert "VAL_X2_PATIENT" in root.edges
 
+
+def test_example_c_uncertainty_question_parsing(nlp_parser):
+    """Verify Example C forward parse: 'Did the dog perhaps bite a mailman?'."""
+    graph = nlp_parser.parse_sentence("Did the dog perhaps bite a mailman?")
+    assert graph.root is not None
+    root = graph.root
+
+    # Verifies epistemic uncertainty / query slot values
+    assert root.get_slot("GRAPH_QUERY_TARGET") == QuaternaryValue.UNKNOWN
+    assert root.get_slot("NSM_DO") == QuaternaryValue.UNKNOWN
+    assert root.get_slot("NSM_MAYBE") == QuaternaryValue.UNKNOWN
+    assert root.get_slot("MODALITY_HYPOTHETICAL") == QuaternaryValue.UNKNOWN
+
+    # Aggregate proposition vector check
+    prop_vec = graph.to_proposition_vector()
+    assert prop_vec["GRAPH_QUERY_TARGET"] == QuaternaryValue.UNKNOWN
+    assert prop_vec["NSM_DO"] == QuaternaryValue.UNKNOWN
+
+
+def test_quanta_graph_get_children(nlp_parser):
+    """Verify QuantaGraph get_children helper method."""
+    graph = nlp_parser.parse_sentence("A golden retriever bit the mailman in the garden.")
+    assert graph.root is not None
+    root = graph.root
+
+    # Get all children of root
+    all_children = graph.get_children(root.cid)
+    assert len(all_children) >= 2
+
+    # Get children filtered by relation
+    agent_children = graph.get_children(root.cid, relation="VAL_X1_AGENT")
+    assert len(agent_children) == 1
+    assert agent_children[0].anchor == "wn:golden_retriever.n.01"
+
+    patient_children = graph.get_children(root.cid, relation="VAL_X2_PATIENT")
+    assert len(patient_children) == 1
+    assert patient_children[0].anchor == "wn:mailman.n.01"
+
+

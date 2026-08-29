@@ -73,12 +73,12 @@
 
 - [x] **3B.1** Define `QuantaGraph` class: stores `dict[bytes, QuantaNode]` keyed by CID, with a `root_cid` field
 - [x] **3B.2** Implement `add_node()` that computes CID and inserts into graph
-- [ ] **3B.3** Implement `get_children(node_cid) → list[QuantaNode]`
+- [x] **3B.3** Implement `get_children(node_cid) → list[QuantaNode]`
 - [x] **3B.4** Implement tree-aggregate vector: `v_tree = ⊔ (join) of all node vectors in the graph`
 - [x] **3B.5** Implement graph serialization to JSON and deserialization
 - [x] **3B.6** 🧪 Build the "golden retriever bit the mailman" example graph from README Example A; verify aggregate vector matches documented values
 - [x] **3B.7** 🧪 Build the negated example (Example B: "The dog did not bite the mailman"); verify `NSM_DO=2`, `LJB_NA_NEGATION=2` in aggregate
-- [ ] **3B.8** 🧪 Build the uncertainty example (Example C: "Did the dog perhaps bite a mailman?"); verify `NSM_DO=3`, `GRAPH_QUERY_TARGET=3` in aggregate
+- [x] **3B.8** 🧪 Build the uncertainty example (Example C: "Did the dog perhaps bite a mailman?"); verify `NSM_DO=3`, `GRAPH_QUERY_TARGET=3` in aggregate
 
 ---
 

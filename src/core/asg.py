@@ -319,29 +319,37 @@ class QuantaGraph:
         """Deserializes graph from JSON string."""
         return cls.from_dict(json.loads(json_str))
 
+    def get_children(self, node_cid_or_node: Union[str, QuantaNode], relation: Optional[str] = None) -> List[QuantaNode]:
+        """Retrieves child QuantaNode instances connected from the given node, optionally filtered by relation type."""
+        if isinstance(node_cid_or_node, QuantaNode):
+            src_cid = node_cid_or_node.cid
+        else:
+            src_cid = node_cid_or_node
+
+        src_node = self.get_node(src_cid)
+        if src_node is None:
+            return []
+
+        children: List[QuantaNode] = []
+        if relation is not None:
+            target_cids = src_node.edges.get(relation, [])
+            for cid in target_cids:
+                child = self.get_node(cid)
+                if child is not None:
+                    children.append(child)
+        else:
+            for rel, target_cids in src_node.edges.items():
+                for cid in target_cids:
+                    child = self.get_node(cid)
+                    if child is not None and child not in children:
+                        children.append(child)
+        return children
+
     def to_proposition_vector(self) -> QuantaVector:
-        """Aggregates all active slot values across the entire ASG graph into a single proposition vector.
-        
-        Follows quaternary lattice algebra:
-        - 0 (IRRELEVANT) + X -> X
-        - 1 (TRUE) + 1 -> 1
-        - 2 (FALSE) + 2 -> 2
-        - 1 (TRUE) + 2 (FALSE) -> 3 (UNKNOWN / CONFLICT)
-        - X + 3 (UNKNOWN) -> 3
-        """
+        """Aggregates all active slot values across the entire ASG graph into a single proposition vector via lattice join (⊔_k)."""
         vec = QuantaVector.zeros()
         for node in self.nodes.values():
-            for slot_idx, val in node.vector.active_slots().items():
-                curr = vec[slot_idx]
-                if curr == QuaternaryValue.IRRELEVANT:
-                    vec[slot_idx] = val
-                elif curr == val:
-                    continue
-                elif (curr == QuaternaryValue.TRUE and val == QuaternaryValue.FALSE) or \
-                     (curr == QuaternaryValue.FALSE and val == QuaternaryValue.TRUE):
-                    vec[slot_idx] = QuaternaryValue.UNKNOWN
-                elif curr == QuaternaryValue.UNKNOWN or val == QuaternaryValue.UNKNOWN:
-                    vec[slot_idx] = QuaternaryValue.UNKNOWN
+            vec = vec.join(node.vector)
         return vec
 
     def __len__(self) -> int:
@@ -349,3 +357,4 @@ class QuantaGraph:
 
     def __repr__(self) -> str:
         return f"QuantaGraph(nodes={len(self._node_list)}, root_cid={self.root_cid[:8] if self.root_cid else 'None'})"
+
