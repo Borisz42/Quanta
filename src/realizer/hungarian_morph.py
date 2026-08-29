@@ -41,6 +41,7 @@ class HungarianRealizer:
         "book": "könyv",
         "city": "város",
         "stick": "bot",
+        "ball": "labda",
         "bite": "harap",
         "chase": "kerget",
         "run": "fut",
@@ -68,6 +69,8 @@ class HungarianRealizer:
         "bad": "rossz",
         "brown": "barna",
         "quick": "gyors",
+        "fast": "gyors",
+        "rapidly": "gyorsan",
     }
 
     VERB_PREFIXES = {
@@ -143,6 +146,13 @@ class HungarianRealizer:
         elif root.get_slot("NSM_BAD") == 1:
             pred_adj = "rossz"
 
+        # Manner adverbials
+        manner_str = ""
+        if root.get_slot("NSM_ACCELERATING_RATE") == 1:
+            manner_str = "gyorsan"
+        elif root.get_slot("NSM_CONTINUOUS_RATE") == 1:
+            manner_str = "folyamatosan"
+
         # 4. Form Verb Phrase with Prefix Placement
         if verb_base == "van":
             if is_past:
@@ -184,14 +194,17 @@ class HungarianRealizer:
         if inst_str:
             tokens.append(inst_str)
 
+        if manner_str:
+            tokens.append(manner_str)
+
+        if pred_adj:
+            tokens.append(pred_adj)
+
         if verb_phrase:
             tokens.append(verb_phrase)
 
         if patient_str:
             tokens.append(patient_str)
-
-        if pred_adj:
-            tokens.append(pred_adj)
 
         raw = " ".join(tokens).strip()
         if not raw:
@@ -243,6 +256,8 @@ class HungarianRealizer:
 
         # 2. Accusative (acc: -t / -ot / -et / -öt / -at)
         elif case == "acc":
+            if noun == "kő":
+                return "követ"
             if ends_with_vowel:
                 return stem + "t"
             if noun.endswith(("ás", "és", "ár", "ér", "úr", "őr", "os", "es", "ös")):
@@ -311,7 +326,9 @@ class HungarianRealizer:
                 suffix = "ta" if harmony == "back" else "te"
                 return verb_base + suffix, prefix
             else:
-                if harmony == "back":
+                if verb_base in ("él", "kér", "vár", "áll", "sír", "fúj", "ül"):
+                    suffix = "t"
+                elif harmony == "back":
                     suffix = "ott"
                 elif harmony == "front_rounded":
                     suffix = "ött"

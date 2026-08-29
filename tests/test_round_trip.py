@@ -152,7 +152,7 @@ def test_multi_sentence_preservation_rates(pipeline):
 
 
 def test_hungarian_round_trip(pipeline):
-    # Hungarian round trip
+    """Hungarian round trip test."""
     hu_input = "A kutya kergetett a macskát."
     result = pipeline.round_trip(hu_input, modality="hungarian")
 
@@ -160,4 +160,38 @@ def test_hungarian_round_trip(pipeline):
     assert "kutya" in result.realized_output.lower()
     assert "macskát" in result.realized_output.lower()
     assert result.slot_preservation_rate >= 0.85
+
+
+def test_cross_lingual_english_hungarian_gold_set_20(pipeline):
+    """Verify Phase 9 Item 9.5: Manual gold set of 20 English-Hungarian parallel propositions."""
+    gold_pairs = [
+        ("A golden retriever bit the mailman in the garden.", "A golden retriever a kertben megharapta a postást."),
+        ("The dog did not bite the mailman.", "A kutya nem harapta meg a postást."),
+        ("Did the dog perhaps bite a mailman?", "Vajon a kutya megharapott egy postást?"),
+        ("A cat chased a dog.", "A macska kergetett egy kutyát."),
+        ("The person saw a garden.", "Az ember meglátott egy kertet."),
+        ("A dog ran into the house.", "A kutya a házba elfutott."),
+        ("The cat was in the house.", "A macska a házban volt."),
+        ("A person touched a rock.", "Az ember érintett egy követ."),
+        ("The dog walked from the garden.", "A kutya a kertből elsétálott."),
+        ("A mailman saw a dog.", "A postás meglátott egy kutyát."),
+        ("A dog did not chase a cat.", "A kutya nem kergetett egy macskát."),
+        ("The cat ran rapidly.", "A macska gyorsan elfutott."),
+        ("Every dog chased a ball.", "Minden kutya kergetett egy labdát."),
+        ("Two dogs were in the garden.", "Két kutya a kertben volt."),
+        ("A dog lived in the garden.", "A kutya a kertben élt."),
+        ("The rock was big.", "A kő nagy volt."),
+        ("Did a person see a cat?", "Vajon az ember meglátott egy macskát?"),
+        ("The mailman walked into the garden.", "A postás a kertbe elsétálott."),
+        ("A person saw a cat in the house.", "Az ember a házban meglátott egy macskát."),
+        ("The dog was in the garden.", "A kutya a kertben volt."),
+    ]
+
+    assert len(gold_pairs) == 20
+
+    for en_text, expected_hu in gold_pairs:
+        res = pipeline.execute_translation(en_text, target_modality="hungarian")
+        assert res.is_success, f"Failed on '{en_text}': {res.error_message}"
+        assert res.output_text == expected_hu, f"Mismatch on '{en_text}': got '{res.output_text}', expected '{expected_hu}'"
+
 

@@ -189,19 +189,23 @@ class NLPForwardParser:
     def _get_determiner_slot(self, token: Any, doc: Any) -> Optional[str]:
         """Detects determiner modifying token and maps to Band 0 NSM prime slot name."""
         for child in token.children:
-            if child.dep_ == "det" or child.pos_ == "DET":
+            if child.dep_ in ("det", "nummod") or child.pos_ in ("DET", "NUM"):
                 det_text = child.text.lower()
-                if det_text in ("a", "an", "one"):
+                if det_text in ("a", "an", "one", "1"):
                     return "NSM_ONE"
+                elif det_text in ("two", "2"):
+                    return "NSM_TWO"
                 elif det_text in ("the", "this", "that", "these", "those"):
                     return "NSM_THIS"
                 elif det_text in ("all", "every", "each"):
                     return "NSM_ALL"
         for i in range(max(0, token.i - 3), token.i):
             det_text = doc[i].text.lower()
-            if doc[i].dep_ == "det" or doc[i].pos_ == "DET":
-                if det_text in ("a", "an", "one"):
+            if doc[i].dep_ in ("det", "nummod") or doc[i].pos_ in ("DET", "NUM"):
+                if det_text in ("a", "an", "one", "1"):
                     return "NSM_ONE"
+                elif det_text in ("two", "2"):
+                    return "NSM_TWO"
                 elif det_text in ("the", "this", "that", "these", "those"):
                     return "NSM_THIS"
                 elif det_text in ("all", "every", "each"):
@@ -319,7 +323,7 @@ class NLPForwardParser:
                     break
 
         patient_node = None
-        if patient_token:
+        if patient_token and patient_token.pos_ != "ADJ":
             compounds = [c for c in patient_token.children if c.dep_ in ("compound", "amod") and c.i < patient_token.i]
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [patient_token.text])
