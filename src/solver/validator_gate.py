@@ -18,10 +18,33 @@ class ValidationResult:
     muc_slots: List[Tuple[str, str, int]] = field(default_factory=list)  # (node_cid, slot_name, val)
     models: List[List[str]] = field(default_factory=list)
 
+    @property
+    def muc_nodes(self) -> List[str]:
+        """Returns the distinct list of node CIDs identified in the Minimal Unsatisfiable Core (MUC)."""
+        seen: Set[str] = set()
+        nodes: List[str] = []
+        for cid, _, _ in self.muc_slots:
+            if cid not in seen:
+                seen.add(cid)
+                nodes.append(cid)
+        return nodes
+
+    @property
+    def muc(self) -> Optional[List[str]]:
+        """Minimal Unsatisfiable Core node CIDs if invalid, else None."""
+        if not self.is_valid:
+            return self.muc_nodes
+        return None
+
+    def __iter__(self):
+        """Allows unpacking as (is_valid, muc_nodes)."""
+        yield self.is_valid
+        yield self.muc
+
     def __repr__(self) -> str:
         if self.is_valid:
             return "ValidationResult(VALID)"
-        return f"ValidationResult(INVALID, errors={self.errors}, muc_slots={self.muc_slots})"
+        return f"ValidationResult(INVALID, errors={self.errors}, muc_slots={self.muc_slots}, muc_nodes={self.muc_nodes})"
 
 
 class ValidationGate:
@@ -39,6 +62,11 @@ class ValidationGate:
                     self.rules_content = f.read()
             else:
                 self.rules_content = ""
+
+    def validate(self, graph: QuantaGraph) -> Tuple[bool, Optional[List[str]]]:
+        """Validates a graph and returns (is_valid: bool, muc: list[node_cid] | None) conforming to 7C.3 API."""
+        result = self.validate_graph(graph)
+        return result.is_valid, result.muc
 
     def validate_node(self, node: QuantaNode, node_id: str = "node_0") -> ValidationResult:
         """Validates an isolated QuantaNode against ontological integrity rules."""
@@ -84,10 +112,12 @@ class ValidationGate:
 
             for rel, targets in node.edges.items():
                 for t_cid in targets:
-                    candidates.append(f'candidate_edge("{cid}", "{rel}", "{t_cid}").')
+                    t_node = graph.get_node(t_cid)
+                    canonical_t = t_node.cid if t_node is not None else t_cid
+                    candidates.append(f'candidate_edge("{cid}", "{rel}", "{canonical_t}").')
                     edge_sym = clingo.Function(
                         "edge",
-                        [clingo.String(cid), clingo.String(rel), clingo.String(t_cid)],
+                        [clingo.String(cid), clingo.String(rel), clingo.String(canonical_t)],
                     )
                     assumptions.append((edge_sym, True))
 
@@ -97,33 +127,47 @@ class ValidationGate:
         ctl.ground([("base", [])])
 
         # 4. Solve with assumptions and extract MUC if UNSAT
-        with ctl.solve(assumptions=assumptions, yield_=True) as handle:
-            solve_res = handle.get()
+        solve_res = ctl.solve(assumptions=assumptions)
 
-            if solve_res.satisfiable:
-                return ValidationResult(is_valid=True)
-            else:
-                core_lits = set(handle.core())
-                abs_core_lits = {abs(lit) for lit in core_lits}
-                muc_slots: List[Tuple[str, str, int]] = []
-                muc_symbols: List[str] = []
+        if solve_res.satisfiable:
+            return ValidationResult(is_valid=True)
+        else:
+            # Extract Minimal Unsatisfiable Core (MUC) using deletion filter
+            current_core = list(assumptions)
+            for i in range(len(current_core) - 1, -1, -1):
+                test_assumptions = current_core[:i] + current_core[i + 1 :]
+                test_res = ctl.solve(assumptions=test_assumptions)
+                if not test_res.satisfiable:
+                    current_core = test_assumptions
 
-                for atom in ctl.symbolic_atoms:
-                    if atom.literal in core_lits or atom.literal in abs_core_lits:
-                        sym_str = str(atom.symbol)
-                        muc_symbols.append(sym_str)
-                        if sym_str in slot_map:
-                            muc_slots.append(slot_map[sym_str])
+            muc_slots: List[Tuple[str, str, int]] = []
+            muc_symbols: List[str] = []
 
-                errors = [
-                    f"Ontological contradiction in node '{cid}' for slot '{slot}' (value={val})"
-                    for cid, slot, val in muc_slots
-                ]
-                if not errors and muc_symbols:
-                    errors = [f"ASP constraint violation in core: {s}" for s in muc_symbols]
+            for sym, _ in current_core:
+                sym_str = str(sym)
+                muc_symbols.append(sym_str)
+                if sym_str in slot_map:
+                    muc_slots.append(slot_map[sym_str])
 
-                return ValidationResult(
-                    is_valid=False,
-                    errors=errors,
-                    muc_slots=muc_slots,
-                )
+            errors = [
+                f"Ontological contradiction in node '{cid}' for slot '{slot}' (value={val})"
+                for cid, slot, val in muc_slots
+            ]
+            if not errors and muc_symbols:
+                errors = [f"ASP constraint violation in core: {s}" for s in muc_symbols]
+
+            return ValidationResult(
+                is_valid=False,
+                errors=errors,
+                muc_slots=muc_slots,
+            )
+
+
+# Alias ValidatorGate to ValidationGate for 7C.1 specification compliance
+ValidatorGate = ValidationGate
+
+__all__ = [
+    "ValidationResult",
+    "ValidationGate",
+    "ValidatorGate",
+]

@@ -531,8 +531,14 @@ class QuantaGraph:
                 errors.append(f"Node CID mismatch: index key is {cid}, but payload hashes to {expected_cid}")
             for rel, targets in node.edges.items():
                 for target_cid in targets:
-                    if target_cid not in current_nodes:
+                    target_node = self.get_node(target_cid)
+                    if target_node is None:
                         errors.append(f"Dangling edge in {cid}: relation '{rel}' points to missing CID {target_cid}")
+                    elif target_node.compute_cid() != target_cid:
+                        if rel not in ("GRAPH_RECURSIVE_REF", "GRAPH_CYCLIC_BACKLINK", "GRAPH_MERKLE_FOLD_POINT"):
+                            errors.append(
+                                f"Tampered target node or CID mismatch: edge '{rel}' in {cid} expects CID {target_cid}, but target payload hashes to {target_node.compute_cid()}"
+                            )
         return len(errors) == 0, errors
 
     def topological_order(self) -> List[QuantaNode]:
