@@ -77,16 +77,41 @@ def test_fol_round_trip_existential_negation(pipeline):
     assert result.original_vector["LJB_NA_NEGATION"] == 2
 
 
-def test_python_code_round_trip(pipeline):
-    # Python code snippet
-    code_input = """def process(x):\n    return x"""
-    result = pipeline.round_trip(code_input, modality="python")
+def test_python_code_round_trip_execution_equivalence(pipeline):
+    """Verify Phase 9 Item 9.3: Python source -> AST -> ASG -> Code emitter -> exec both and compare output."""
+    # 1. Linear process function
+    code_identity = "def process(x):\n    return x"
+    res_ident = pipeline.round_trip(code_identity, modality="python")
+    assert res_ident.validation_pass, f"Validation failed: {res_ident.muc_errors}"
+    assert "def process" in res_ident.realized_output
+    assert "return" in res_ident.realized_output
+    assert res_ident.original_vector["GRAPH_FUNCTION_DEF"] == 1
+    assert res_ident.reparsed_vector["GRAPH_FUNCTION_DEF"] == 1
+    assert res_ident.slot_preservation_rate == 1.0
 
-    assert result.validation_pass
-    assert "def process" in result.realized_output
-    assert "return" in result.realized_output
-    assert result.original_vector["GRAPH_FUNCTION_DEF"] == 1
-    assert result.reparsed_vector["GRAPH_FUNCTION_DEF"] == 1
+    orig_env_1, rt_env_1 = {}, {}
+    exec(code_identity, orig_env_1)
+    exec(res_ident.realized_output, rt_env_1)
+    for test_val in [0, 42, -5, "hello", [1, 2, 3], {"a": 1}]:
+        assert orig_env_1["process"](test_val) == rt_env_1["process"](test_val)
+
+    # 2. Canonical Example F: Recursive Factorial
+    code_factorial = "def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)"
+    res_fact = pipeline.round_trip(code_factorial, modality="python")
+    assert res_fact.validation_pass, f"Validation failed: {res_fact.muc_errors}"
+    assert "def factorial" in res_fact.realized_output
+    assert "return n * factorial(n - 1)" in res_fact.realized_output
+    assert res_fact.original_vector["GRAPH_FUNCTION_DEF"] == 1
+    assert res_fact.original_vector["GRAPH_RECURSIVE_REF"] == 1
+    assert res_fact.reparsed_vector["GRAPH_RECURSIVE_REF"] == 1
+    assert res_fact.slot_preservation_rate == 1.0
+
+    orig_env_2, rt_env_2 = {}, {}
+    exec(code_factorial, orig_env_2)
+    exec(res_fact.realized_output, rt_env_2)
+    for n in [0, 1, 2, 3, 5, 6, 7]:
+        assert orig_env_2["factorial"](n) == rt_env_2["factorial"](n)
+        assert rt_env_2["factorial"](n) == [1, 1, 2, 6, 120, 720, 5040][[0, 1, 2, 3, 5, 6, 7].index(n)]
 
 
 def test_multi_sentence_preservation_rates(pipeline):
