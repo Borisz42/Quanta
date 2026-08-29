@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import sqlite3
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
@@ -16,6 +17,31 @@ except ImportError:
 from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
 from core.asg import QuantaNode
+
+
+LEXNAME_TO_WN_ROOT_SLOT: Dict[str, str] = {
+    "noun.act": "WN_ACT_ACTION",
+    "noun.animal": "WN_ANIMAL_FAUNA",
+    "noun.artifact": "WN_ARTIFACT_OBJECT",
+    "noun.attribute": "WN_ATTRIBUTE_PROP",
+    "noun.body": "WN_BODY_PART",
+    "noun.cognition": "WN_COGNITION_THOUGHT",
+    "noun.communication": "WN_COMMUNICATION_INFO",
+    "noun.event": "WN_EVENT_OCCURRENCE",
+    "noun.feeling": "WN_FEELING_EMOTION",
+    "noun.food": "WN_FOOD_NUTRITION",
+    "noun.group": "WN_GROUP_SOCIAL",
+    "noun.location": "WN_LOCATION_PLACE",
+    "noun.motive": "WN_MOTIVE_REASON",
+    "noun.object": "WN_OBJECT_NATURAL",
+    "noun.person": "WN_PERSON_HUMAN",
+    "noun.phenomenon": "WN_PHENOMENON_NATURE",
+    "noun.plant": "WN_PLANT_FLORA",
+    "noun.possession": "WN_POSSESSION_ASSET",
+    "noun.process": "WN_PROCESS_SERIES",
+    "noun.quantity": "WN_QUANTITY_NUMBER",
+    "noun.relation": "WN_RELATION_LINK",
+}
 
 
 @dataclass
@@ -32,6 +58,8 @@ class GroundedLexicalConcept:
 class WordNetLexicalGrounder:
     """Resolves lexical entities into canonical QUANTA ontological vectors using WordNet hypernym paths."""
 
+    _default_instance: Optional[WordNetLexicalGrounder] = None
+
     def __init__(self, offline_cache_path: Optional[Union[str, Path]] = None):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self.offline_cache_path = Path(offline_cache_path) if offline_cache_path else None
@@ -39,15 +67,194 @@ class WordNetLexicalGrounder:
         if self.offline_cache_path and self.offline_cache_path.exists():
             self.load_cache(self.offline_cache_path)
 
+    @classmethod
+    def get_default(cls) -> WordNetLexicalGrounder:
+        if cls._default_instance is None:
+            default_db = Path("data/wordnet_offline.db")
+            cls._default_instance = cls(offline_cache_path=default_db if default_db.exists() else None)
+        return cls._default_instance
+
     def load_cache(self, path: Union[str, Path]):
-        """Loads offline precomputed grounding cache from JSON."""
-        with open(path, "r", encoding="utf-8") as f:
-            self._cache = json.load(f)
+        """Loads offline precomputed grounding cache from JSON or SQLite database."""
+        p = Path(path)
+        if p.suffix in (".db", ".sqlite"):
+            conn = sqlite3.connect(str(p))
+            cur = conn.cursor()
+            cur.execute("SELECT key, lemma, synset_name, definition, pos, hypernym_path, active_slots FROM synsets")
+            for row in cur.fetchall():
+                key, lemma, synset_name, definition, pos, hyp_path, active_slots = row
+                self._cache[key] = {
+                    "lemma": lemma,
+                    "synset_name": synset_name,
+                    "definition": definition,
+                    "pos": pos,
+                    "hypernym_path": json.loads(hyp_path) if isinstance(hyp_path, str) else hyp_path,
+                    "active_slots": json.loads(active_slots) if isinstance(active_slots, str) else active_slots,
+                }
+            conn.close()
+        else:
+            with open(p, "r", encoding="utf-8") as f:
+                self._cache = json.load(f)
 
     def save_cache(self, path: Union[str, Path]):
-        """Saves current grounding cache to JSON for O(1) offline deployment."""
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._cache, f, indent=2)
+        """Saves current grounding cache to JSON or SQLite database for O(1) offline deployment."""
+        p = Path(path)
+        if p.suffix in (".db", ".sqlite"):
+            conn = sqlite3.connect(str(p))
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS synsets (
+                    key TEXT PRIMARY KEY,
+                    lemma TEXT,
+                    synset_name TEXT,
+                    definition TEXT,
+                    pos TEXT,
+                    hypernym_path TEXT,
+                    active_slots TEXT,
+                    packed_bytes_hex TEXT
+                )
+            """)
+            for key, entry in self._cache.items():
+                slots = entry["active_slots"]
+                vec = QuantaVector(slots)
+                cur.execute("""
+                    INSERT OR REPLACE INTO synsets (key, lemma, synset_name, definition, pos, hypernym_path, active_slots, packed_bytes_hex)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    key,
+                    entry["lemma"],
+                    entry["synset_name"],
+                    entry["definition"],
+                    entry["pos"],
+                    json.dumps(entry["hypernym_path"]),
+                    json.dumps(slots),
+                    vec.to_bytes().hex(),
+                ))
+            conn.commit()
+            conn.close()
+        else:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(self._cache, f, indent=2)
+
+    def resolve_synset(self, word: str, pos: Optional[str] = None) -> Optional[str]:
+        """Resolves a word and optional POS to a canonical WordNet synset ID (e.g. 'wn:dog.n.01')."""
+        w_clean = word.strip()
+        if w_clean.startswith("wn:"):
+            return w_clean
+        if "." in w_clean and len(w_clean.split(".")) == 3:
+            return f"wn:{w_clean}"
+
+        key = w_clean.lower().replace(" ", "_")
+        if key in self._cache:
+            return self._cache[key]["synset_name"]
+
+        if not NLTK_WN_AVAILABLE:
+            return None
+
+        try:
+            s = wn.synset(key)
+            return f"wn:{s.name()}"
+        except Exception:
+            pass
+
+        wn_pos = None
+        if pos:
+            pos_map = {
+                "n": wn.NOUN, "noun": wn.NOUN,
+                "v": wn.VERB, "verb": wn.VERB,
+                "a": wn.ADJ, "adj": wn.ADJ, "s": wn.ADJ_SAT,
+                "r": wn.ADV, "adv": wn.ADV,
+            }
+            wn_pos = pos_map.get(pos.lower(), pos)
+
+        synsets = wn.synsets(key, pos=wn_pos) if wn_pos else wn.synsets(key)
+        if synsets:
+            return f"wn:{synsets[0].name()}"
+
+        try:
+            from parser.typo_normalizer import TypoNormalizer
+            norm = TypoNormalizer.get_instance()
+            corr = norm.normalize_text(w_clean, lang="en")
+            corr_key = corr.lower().replace(" ", "_")
+            if corr_key in self._cache:
+                return self._cache[corr_key]["synset_name"]
+            synsets = wn.synsets(corr_key, pos=wn_pos) if wn_pos else wn.synsets(corr_key)
+            if synsets:
+                return f"wn:{synsets[0].name()}"
+
+            corr_w = norm.correct_word(w_clean, lang="en")
+            corr_w_key = corr_w.lower().replace(" ", "_")
+            if corr_w_key in self._cache:
+                return self._cache[corr_w_key]["synset_name"]
+            synsets = wn.synsets(corr_w_key, pos=wn_pos) if wn_pos else wn.synsets(corr_w_key)
+            if synsets:
+                return f"wn:{synsets[0].name()}"
+        except Exception:
+            pass
+
+        return None
+
+    def get_hypernym_path(self, synset_id: str) -> List[str]:
+        """Returns the recursive hypernym path (ancestor synset IDs) for a synset."""
+        key = synset_id[3:] if synset_id.startswith("wn:") else synset_id
+        if key in self._cache and "hypernym_path" in self._cache[key]:
+            return list(self._cache[key]["hypernym_path"])
+
+        if not NLTK_WN_AVAILABLE:
+            return []
+
+        try:
+            synset = wn.synset(key)
+        except Exception:
+            return []
+
+        all_hypernyms: Set[str] = set()
+        hypernym_path: List[str] = []
+
+        def traverse(s):
+            for h in s.hypernyms() + s.instance_hypernyms():
+                name = h.name()
+                if name not in all_hypernyms:
+                    all_hypernyms.add(name)
+                    hypernym_path.append(name)
+                    traverse(h)
+
+        traverse(synset)
+        return hypernym_path
+
+    def get_wordnet_root_category(self, synset_id: str) -> Optional[int]:
+        """Maps a WordNet synset to its canonical Band 2 root category slot index (171-191)."""
+        key = synset_id[3:] if synset_id.startswith("wn:") else synset_id
+
+        if key in self._cache:
+            for slot_name in LEXNAME_TO_WN_ROOT_SLOT.values():
+                if self._cache[key].get("active_slots", {}).get(slot_name) == 1:
+                    return get_slot_by_name(slot_name).index
+
+        if not NLTK_WN_AVAILABLE:
+            return None
+
+        try:
+            synset = wn.synset(key)
+            lexname = synset.lexname()
+            if lexname in LEXNAME_TO_WN_ROOT_SLOT:
+                slot_name = LEXNAME_TO_WN_ROOT_SLOT[lexname]
+                return get_slot_by_name(slot_name).index
+
+            hyp_path = self.get_hypernym_path(key)
+            for h_name in hyp_path:
+                try:
+                    h_syn = wn.synset(h_name)
+                    h_lex = h_syn.lexname()
+                    if h_lex in LEXNAME_TO_WN_ROOT_SLOT:
+                        slot_name = LEXNAME_TO_WN_ROOT_SLOT[h_lex]
+                        return get_slot_by_name(slot_name).index
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        return None
 
     def ground_synset(self, synset_or_name: Any) -> GroundedLexicalConcept:
         """Grounds a WordNet synset (e.g. 'dog.n.01' or wn.synset('dog.n.01')) to QUANTA slots."""
@@ -87,11 +294,16 @@ class WordNetLexicalGrounder:
             if not synsets:
                 # Try fuzzy typo correction
                 from parser.typo_normalizer import TypoNormalizer
-                corr = TypoNormalizer.get_instance().correct_word(key.replace("_", " "), lang="en")
-                corr_key = corr.replace(" ", "_")
+                norm = TypoNormalizer.get_instance()
+                corr = norm.normalize_text(key.replace("_", " "), lang="en")
+                corr_key = corr.lower().replace(" ", "_")
                 synsets = wn.synsets(corr_key)
                 if not synsets:
-                    raise KeyError(f"WordNet synset not found for '{key}'")
+                    corr_w = norm.correct_word(key.replace("_", " "), lang="en")
+                    corr_key = corr_w.lower().replace(" ", "_")
+                    synsets = wn.synsets(corr_key)
+                    if not synsets:
+                        raise KeyError(f"WordNet synset not found for '{key}'")
                 key = corr_key
             synset = synsets[0]
             key = synset.name()
@@ -298,3 +510,22 @@ def validate_valency(
             return False
 
     return True
+
+
+def resolve_synset(word: str, pos: Optional[str] = None, grounder: Optional[WordNetLexicalGrounder] = None) -> Optional[str]:
+    """Module-level helper to resolve a word/lemma to a canonical WordNet synset ID."""
+    g = grounder or WordNetLexicalGrounder.get_default()
+    return g.resolve_synset(word, pos=pos)
+
+
+def get_hypernym_path(synset_id: str, grounder: Optional[WordNetLexicalGrounder] = None) -> List[str]:
+    """Module-level helper to retrieve the hypernym path for a synset."""
+    g = grounder or WordNetLexicalGrounder.get_default()
+    return g.get_hypernym_path(synset_id)
+
+
+def get_wordnet_root_category(synset_id: str, grounder: Optional[WordNetLexicalGrounder] = None) -> Optional[int]:
+    """Module-level helper to map a synset to its Band 2 WordNet root category slot index."""
+    g = grounder or WordNetLexicalGrounder.get_default()
+    return g.get_wordnet_root_category(synset_id)
+
