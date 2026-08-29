@@ -14,14 +14,29 @@ def pipeline():
 
 
 def test_english_round_trip_action_sentence(pipeline):
-    # Action sentence
+    """Verify Phase 9 Item 9.1: Action sentence round-trip semantic equivalence."""
     input_text = "A dog chased a cat."
     result = pipeline.round_trip(input_text, modality="english")
 
     assert result.validation_pass, f"Validation failed: {result.muc_errors}"
     assert "dog" in result.realized_output.lower()
+    assert "chased" in result.realized_output.lower()
     assert "cat" in result.realized_output.lower()
     assert result.slot_preservation_rate >= 0.85
+
+
+def test_english_canonical_example_a_round_trip(pipeline):
+    """Verify Phase 9 Item 9.1: Canonical Example A sentence round-trip semantic equivalence."""
+    input_text = "A golden retriever bit the mailman in the garden."
+    result = pipeline.round_trip(input_text, modality="english")
+
+    assert result.validation_pass, f"Validation failed: {result.muc_errors}"
+    assert result.realized_output == "A golden retriever bit the mailman in the garden."
+    assert result.slot_preservation_rate == 1.0
+    assert result.original_vector["NSM_DO"] == 1
+    assert result.original_vector["NSM_TOUCH"] == 1
+    assert result.original_vector["VAL_X1_AGENT"] == 1
+    assert result.original_vector["VAL_LOCATION_SLOT"] == 1
 
 
 def test_english_round_trip_modal_obligation(pipeline):
