@@ -31,10 +31,10 @@
 ### 1B — QuantaVector (256-dimension quaternary array)
 
 - [x] **1B.1** Define `QuantaVector` class wrapping a 256-element `numpy.uint8` array (values constrained to `{0,1,2,3}`)
-- [ ] **1B.2** Implement slot-wise `join` and `meet` between two `QuantaVector` instances
+- [x] **1B.2** Implement slot-wise `join` and `meet` between two `QuantaVector` instances
 - [x] **1B.3** Implement Hamming distance computation between two `QuantaVector` instances
 - [x] **1B.4** Implement `to_bytes()` / `from_bytes()` serialization (64-byte compact form: 2 bits per value)
-- [ ] **1B.5** Implement `__eq__`, `__hash__`, and `__repr__` for `QuantaVector`
+- [x] **1B.5** Implement `__eq__`, `__hash__`, and `__repr__` for `QuantaVector`
 - [x] **1B.6** 🧪 Write unit tests: zero vector, full-TRUE vector, mixed vectors, round-trip serialization
 - [x] **1B.7** 🧪 Test that Hamming distance is 0 only for identical vectors and symmetric
 

@@ -135,3 +135,50 @@ def test_lattice_algebraic_properties():
         for b in values:
             assert (a | (a & b)) == a
             assert (a & (a | b)) == a
+
+
+def test_quanta_vector_join_and_meet():
+    """Verify QuantaVector slot-wise join and meet."""
+    from src.core.types import QuantaVector
+
+    # Create v1 with alternating 0, 1, 2, 3
+    arr1 = [i % 4 for i in range(256)]
+    # Create v2 with blocks of 0, 1, 2, 3
+    arr2 = [(i // 64) % 4 for i in range(256)]
+
+    v1 = QuantaVector(arr1)
+    v2 = QuantaVector(arr2)
+
+    v_join = v1.join(v2)
+    v_meet = v1.meet(v2)
+
+    assert v_join == (v1 | v2)
+    assert v_meet == (v1 & v2)
+
+    for i in range(256):
+        q1 = QuaternaryValue(arr1[i])
+        q2 = QuaternaryValue(arr2[i])
+        assert v_join[i] == (q1 | q2)
+        assert v_meet[i] == (q1 & q2)
+
+
+def test_quanta_vector_hashability():
+    """Verify QuantaVector __hash__ and usage in sets/dicts."""
+    from src.core.types import QuantaVector
+
+    v1 = QuantaVector([1] * 256)
+    v2 = QuantaVector([1] * 256)
+    v3 = QuantaVector([2] * 256)
+
+    assert hash(v1) == hash(v2)
+    assert hash(v1) != hash(v3)
+
+    # Set membership
+    s = {v1, v3}
+    assert len(s) == 2
+    assert v2 in s
+
+    # Dictionary key
+    d = {v1: "all_true", v3: "all_false"}
+    assert d[v2] == "all_true"
+

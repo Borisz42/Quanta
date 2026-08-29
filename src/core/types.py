@@ -102,6 +102,21 @@ class QuaternaryValue(enum.IntEnum):
         return self.meet(other)
 
 
+_LATTICE_JOIN_TABLE = np.array([
+    [0, 1, 2, 3],
+    [1, 1, 3, 3],
+    [2, 3, 2, 3],
+    [3, 3, 3, 3]
+], dtype=np.uint8)
+
+_LATTICE_MEET_TABLE = np.array([
+    [0, 0, 0, 0],
+    [0, 1, 0, 1],
+    [0, 0, 2, 2],
+    [0, 1, 2, 3]
+], dtype=np.uint8)
+
+
 def pack_quaternary_array(arr: Union[Sequence[int], np.ndarray]) -> bytes:
     """Packs 256 quaternary values (in 0..3) into a 64-byte bytes payload.
     
@@ -277,9 +292,33 @@ class QuantaVector:
             return False
         return bool(np.array_equal(self._data, other._data))
 
+    def join(self, other: QuantaVector) -> QuantaVector:
+        """Computes element-wise lattice join (⊔_k) across all 256 dimensions."""
+        if not isinstance(other, QuantaVector):
+            raise TypeError(f"Cannot join QuantaVector with {type(other)}")
+        joined_data = _LATTICE_JOIN_TABLE[self._data, other._data]
+        return QuantaVector(joined_data)
+
+    def meet(self, other: QuantaVector) -> QuantaVector:
+        """Computes element-wise lattice meet (⊓_k) across all 256 dimensions."""
+        if not isinstance(other, QuantaVector):
+            raise TypeError(f"Cannot meet QuantaVector with {type(other)}")
+        met_data = _LATTICE_MEET_TABLE[self._data, other._data]
+        return QuantaVector(met_data)
+
+    def __or__(self, other: QuantaVector) -> QuantaVector:
+        return self.join(other)
+
+    def __and__(self, other: QuantaVector) -> QuantaVector:
+        return self.meet(other)
+
+    def __hash__(self) -> int:
+        return hash(self.to_bytes())
+
     def __repr__(self) -> str:
         active = self.active_slots()
         active_str = ", ".join(f"{k}:{v.name}" for k, v in list(active.items())[:8])
         if len(active) > 8:
             active_str += f", ... ({len(active)} active)"
         return f"QuantaVector({active_str if active else 'EMPTY'})"
+
