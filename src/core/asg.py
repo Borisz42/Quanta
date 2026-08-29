@@ -322,15 +322,16 @@ class QuantaGraph:
         """Folds a reachable subtree into a cryptographic Merkle pointer node.
         
         Args:
-            subtree_root_cid: Root CID of the subtree to fold.
+            subtree_root_cid: Root CID of the subtree to fold (or historical alias CID).
             storage: Optional dictionary or storage backend to preserve the folded sub-graph.
             
         Returns:
             Tuple of (pointer_node_cid, sub_merkle_cid).
         """
-        current_nodes = self.nodes
-        if subtree_root_cid not in current_nodes:
+        root_node = self.get_node(subtree_root_cid)
+        if root_node is None:
             raise KeyError(f"Subtree root CID '{subtree_root_cid}' not found in graph")
+        actual_subtree_root_cid = root_node.cid
 
         # 1. Identify all reachable nodes in the subtree
         visited: Set[str] = set()
@@ -338,18 +339,20 @@ class QuantaGraph:
             if curr in visited:
                 return
             visited.add(curr)
-            n = current_nodes.get(curr)
+            n = self.get_node(curr)
             if n:
                 for targets in n.edges.values():
                     for t in targets:
                         collect_reachable(t)
 
-        collect_reachable(subtree_root_cid)
+        collect_reachable(actual_subtree_root_cid)
 
         # 2. Build isolated sub-graph
-        sub_graph = QuantaGraph(root_cid=subtree_root_cid)
+        sub_graph = QuantaGraph(root_cid=actual_subtree_root_cid)
         for cid in visited:
-            node = current_nodes[cid]
+            node = self.get_node(cid)
+            if node is None:
+                continue
             new_node = QuantaNode(
                 vector=node.vector.copy(),
                 anchor=node.anchor,
@@ -387,9 +390,9 @@ class QuantaGraph:
         self._cid_to_node[pointer_cid] = pointer_node
 
         # 6. Rewire incoming edges and propagate CID updates bottom-up across ancestors
-        if self.root_cid == subtree_root_cid:
+        if self.root_cid == actual_subtree_root_cid or self.root_cid == subtree_root_cid:
             self.root_cid = pointer_cid
-        self._propagate_cid_updates({subtree_root_cid: pointer_cid})
+        self._propagate_cid_updates({actual_subtree_root_cid: pointer_cid, subtree_root_cid: pointer_cid})
 
         return pointer_cid, sub_merkle_cid
 
