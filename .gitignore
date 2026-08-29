@@ -187,7 +187,8 @@ output/*
 /data/*
 !/data/.gitkeep
 !/data/raw/
+/data/raw/*
+!/data/raw/.gitkeep
 !/data/raw/python_ast_samples.jsonl
-!/data/framenet_valency.json
 
 
