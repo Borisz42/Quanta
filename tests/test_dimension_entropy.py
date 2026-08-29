@@ -5,7 +5,7 @@ import pytest
 
 from data.corpus_generator import ValidationCorpusGenerator
 from profiler.info_profiler import QuantaInformationProfiler
-from profiler.mrmr_selector import MRMRSelector
+from profiler.mrmr_selector import MRMRSelector, export_optimal_dimensions
 from profiler.candidate_pool import build_candidate_pool, export_candidate_pool
 
 
@@ -131,3 +131,52 @@ def test_mrmr_selector_feature_ranking(validation_corpus):
     # Ensure no duplicates in selected set
     selected_indices = [s[0] for s in selected]
     assert len(set(selected_indices)) == 256
+
+
+def test_mrmr_optimal_dimensions_verification_and_export(validation_corpus, tmp_path):
+    """10C.4 Verification: verify selected dimensions, export to JSON/CSV, and profile selected subspace."""
+    candidates = build_candidate_pool()
+    candidate_names = [c.name for c in candidates]
+
+    selector = MRMRSelector(candidate_names)
+    selected = selector.select_dimensions(
+        X=validation_corpus.candidate_matrix,
+        y=validation_corpus.labels,
+        num_to_select=256,
+        alpha_redundancy=0.5,
+    )
+
+    # 1. Verify export to JSON and CSV
+    json_path = tmp_path / "optimal_256_dimensions.json"
+    csv_path = tmp_path / "optimal_256_dimensions.csv"
+    export_paths = export_optimal_dimensions(selected, candidates, json_path=json_path, csv_path=csv_path)
+
+    assert export_paths["json"].exists()
+    assert export_paths["csv"].exists()
+
+    import json
+    import csv
+    with open(export_paths["json"], "r", encoding="utf-8") as f:
+        dims_json = json.load(f)
+    assert len(dims_json) == 256
+    assert dims_json[0]["rank"] == 1
+    assert "mrmr_score" in dims_json[0]
+
+    with open(export_paths["csv"], "r", encoding="utf-8") as f:
+        reader = list(csv.reader(f))
+    assert len(reader) == 257  # header + 256 rows
+    assert reader[0] == ["Rank", "Candidate_ID", "Name", "Source", "Category", "MRMR_Score", "Description"]
+
+    # 2. Profile the selected 256-dimensional sub-tensor
+    selected_indices = [s[0] for s in selected]
+    selected_labels = [s[1] for s in selected]
+    X_selected = validation_corpus.candidate_matrix[:, selected_indices]
+
+    profiler = QuantaInformationProfiler(X_selected, dimension_labels=selected_labels)
+    report = profiler.run_diagnostic_suite(dead_threshold=0.01, redundancy_threshold=0.8, verbose=False)
+
+    assert report["num_samples"] == 5000
+    assert report["mean_entropy"] > 0.05
+    assert report["collision_rate"] < 0.10
+    assert report["total_correlation"] >= 0.0
+

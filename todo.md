@@ -459,12 +459,12 @@ We frame the QUANTA 256-dimension space as a **Discrete Information Bottleneck**
 - [x] **10A.3** Enumerate FrameNet thematic roles as candidates
 - [x] **10A.4** Enumerate formal modal/temporal/spatial operators as candidates
 - [x] **10A.5** Combine into over-complete pool (`K = 512–1024` candidates)
-- [ ] **10A.6** Export pool to `output/candidate_pool.json`
+- [x] **10A.6** Export pool to `output/candidate_pool.json`
 
 #### 10B — Information Profiler
 - [x] **10B.1** Implement slot entropy computation: `H(D_i) = -Σ P(D_i=s) log₂ P(D_i=s)` over parsed corpus vectors
 - [x] **10B.2** Implement pairwise mutual information computation: `I(D_i; D_j)` for all slot pairs
-- [ ] **10B.3** Implement total correlation computation: `TC(D) = Σ H(D_i) - H(D_0,...,D_255)`
+- [x] **10B.3** Implement total correlation computation: `TC(D) = Σ H(D_i) - H(D_0,...,D_255)`
 - [x] **10B.4** Implement collision rate computation: count distinct concept pairs mapping to identical vectors
 - [x] **10B.5** Implement report generator: flag slots with `H(D_i) < 0.1 bits` (dead), pairs with `I(D_i;D_j) > 0.5 bits` (redundant)
 - [x] **10B.6** Export report to `output/information_profiler_report.txt`

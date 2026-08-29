@@ -1,7 +1,9 @@
 """Minimal Redundancy Maximal Relevance (mRMR) dimension selector for discrete quaternary state spaces."""
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Sequence, Tuple
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 
@@ -124,3 +126,57 @@ class MRMRSelector:
             (idx, self.candidate_names[idx], score)
             for idx, score in zip(selected_indices, selected_scores)
         ]
+
+
+def export_optimal_dimensions(
+    selected_dims: List[Tuple[int, str, float]],
+    candidates: Sequence[Any],
+    json_path: Union[str, Path] = "output/optimal_256_dimensions.json",
+    csv_path: Optional[Union[str, Path]] = "output/optimal_256_dimensions.csv",
+) -> Dict[str, Path]:
+    """Exports mRMR selected optimal dimensions to JSON and CSV formats."""
+    cand_by_name = {c.name: c for c in candidates}
+    cand_by_id = {c.id: c for c in candidates}
+
+    json_file = Path(json_path)
+    json_file.parent.mkdir(parents=True, exist_ok=True)
+
+    dims_data = []
+    for rank, (cand_idx, name, score) in enumerate(selected_dims, start=1):
+        cand_obj = cand_by_name.get(name) or cand_by_id.get(cand_idx)
+        dims_data.append({
+            "rank": rank,
+            "id": getattr(cand_obj, "id", cand_idx),
+            "name": name,
+            "source": getattr(cand_obj, "source", "Unknown"),
+            "category": getattr(cand_obj, "category", "General"),
+            "description": getattr(cand_obj, "description", name),
+            "mrmr_score": float(score),
+        })
+
+    with open(json_file, "w", encoding="utf-8") as f:
+        json.dump(dims_data, f, indent=2)
+
+    result_paths = {"json": json_file}
+
+    if csv_path is not None:
+        import csv
+        csv_file = Path(csv_path)
+        csv_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Rank", "Candidate_ID", "Name", "Source", "Category", "MRMR_Score", "Description"])
+            for item in dims_data:
+                writer.writerow([
+                    item["rank"],
+                    item["id"],
+                    item["name"],
+                    item["source"],
+                    item["category"],
+                    f"{item['mrmr_score']:.6f}",
+                    item["description"],
+                ])
+        result_paths["csv"] = csv_file
+
+    return result_paths
+
