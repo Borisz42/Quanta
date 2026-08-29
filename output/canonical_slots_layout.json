@@ -1,0 +1,2050 @@
+[
+  {
+    "index": 0,
+    "name": "NSM_I",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "First-person speaker prime"
+  },
+  {
+    "index": 1,
+    "name": "NSM_YOU",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "Second-person addressee prime"
+  },
+  {
+    "index": 2,
+    "name": "NSM_SOMEONE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "Indefinite person/agent prime"
+  },
+  {
+    "index": 3,
+    "name": "NSM_SOMETHING",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "Inanimate entity or thing prime"
+  },
+  {
+    "index": 4,
+    "name": "NSM_PEOPLE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "Plural humans prime"
+  },
+  {
+    "index": 5,
+    "name": "NSM_BODY",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Substantives",
+    "description": "Physical organism body prime"
+  },
+  {
+    "index": 6,
+    "name": "NSM_THIS",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Determiners",
+    "description": "Proximal deictic determiner"
+  },
+  {
+    "index": 7,
+    "name": "NSM_SAME",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Determiners",
+    "description": "Identity relation prime"
+  },
+  {
+    "index": 8,
+    "name": "NSM_OTHER",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Determiners",
+    "description": "Alterior / difference prime"
+  },
+  {
+    "index": 9,
+    "name": "NSM_ONE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Singular count prime"
+  },
+  {
+    "index": 10,
+    "name": "NSM_TWO",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Dual count prime"
+  },
+  {
+    "index": 11,
+    "name": "NSM_MUCH",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Large quantity / mass prime"
+  },
+  {
+    "index": 12,
+    "name": "NSM_LITTLE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Small quantity / mass prime"
+  },
+  {
+    "index": 13,
+    "name": "NSM_SOME",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Existential partition prime"
+  },
+  {
+    "index": 14,
+    "name": "NSM_ALL",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Universal quantifier prime"
+  },
+  {
+    "index": 15,
+    "name": "NSM_MORE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Additive / comparative excess prime"
+  },
+  {
+    "index": 16,
+    "name": "NSM_FEW",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Paucal quantifier prime"
+  },
+  {
+    "index": 17,
+    "name": "NSM_PART",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Quantifiers",
+    "description": "Mereological part prime"
+  },
+  {
+    "index": 18,
+    "name": "NSM_GOOD",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Evaluators",
+    "description": "Positive evaluation prime"
+  },
+  {
+    "index": 19,
+    "name": "NSM_BAD",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Evaluators",
+    "description": "Negative evaluation prime"
+  },
+  {
+    "index": 20,
+    "name": "NSM_BIG",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Descriptors",
+    "description": "Large magnitude prime"
+  },
+  {
+    "index": 21,
+    "name": "NSM_SMALL",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Descriptors",
+    "description": "Small magnitude prime"
+  },
+  {
+    "index": 22,
+    "name": "NSM_VERY",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Augmentatives",
+    "description": "Intensifier prime"
+  },
+  {
+    "index": 23,
+    "name": "NSM_TRUE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Evaluators",
+    "description": "Truthfulness / verity prime"
+  },
+  {
+    "index": 24,
+    "name": "NSM_THINK",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Mental Predicates",
+    "description": "Cognition prime"
+  },
+  {
+    "index": 25,
+    "name": "NSM_KNOW",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Mental Predicates",
+    "description": "Knowledge prime"
+  },
+  {
+    "index": 26,
+    "name": "NSM_WANT",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Mental Predicates",
+    "description": "Volition / desire prime"
+  },
+  {
+    "index": 27,
+    "name": "NSM_FEEL",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Mental Predicates",
+    "description": "Sensation / affect prime"
+  },
+  {
+    "index": 28,
+    "name": "NSM_SEE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Perception",
+    "description": "Visual perception prime"
+  },
+  {
+    "index": 29,
+    "name": "NSM_HEAR",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Perception",
+    "description": "Auditory perception prime"
+  },
+  {
+    "index": 30,
+    "name": "NSM_SAY",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Communication",
+    "description": "Speech act prime"
+  },
+  {
+    "index": 31,
+    "name": "NSM_WORDS",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Communication",
+    "description": "Lexical / linguistic payload prime"
+  },
+  {
+    "index": 32,
+    "name": "NSM_DO",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Action",
+    "description": "Active agentive action prime"
+  },
+  {
+    "index": 33,
+    "name": "NSM_HAPPEN",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Events",
+    "description": "Spontaneous occurrence prime"
+  },
+  {
+    "index": 34,
+    "name": "NSM_MOVE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Action",
+    "description": "Kinematic motion prime"
+  },
+  {
+    "index": 35,
+    "name": "NSM_TOUCH",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Action",
+    "description": "Physical contact prime"
+  },
+  {
+    "index": 36,
+    "name": "NSM_BE_SOMEWHERE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Location",
+    "description": "Locative presence prime"
+  },
+  {
+    "index": 37,
+    "name": "NSM_THERE_IS",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Existence",
+    "description": "Existential ontic presence prime"
+  },
+  {
+    "index": 38,
+    "name": "NSM_HAVE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Possession",
+    "description": "Possessive association prime"
+  },
+  {
+    "index": 39,
+    "name": "NSM_LIVE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Life",
+    "description": "Biological animation prime"
+  },
+  {
+    "index": 40,
+    "name": "NSM_DIE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Life",
+    "description": "Cessation of life prime"
+  },
+  {
+    "index": 41,
+    "name": "NSM_BORN",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Life",
+    "description": "Inception of life prime"
+  },
+  {
+    "index": 42,
+    "name": "NSM_GROW",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Life",
+    "description": "Developmental expansion prime"
+  },
+  {
+    "index": 43,
+    "name": "NSM_NOW",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Temporal present prime"
+  },
+  {
+    "index": 44,
+    "name": "NSM_BEFORE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Temporal precedence prime"
+  },
+  {
+    "index": 45,
+    "name": "NSM_AFTER",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Temporal succession prime"
+  },
+  {
+    "index": 46,
+    "name": "NSM_A_LONG_TIME",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Extended temporal duration"
+  },
+  {
+    "index": 47,
+    "name": "NSM_A_SHORT_TIME",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Brief temporal duration"
+  },
+  {
+    "index": 48,
+    "name": "NSM_FOR_SOME_TIME",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Bounded temporal interval"
+  },
+  {
+    "index": 49,
+    "name": "NSM_MOMENT",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Time",
+    "description": "Instantaneous point in time"
+  },
+  {
+    "index": 50,
+    "name": "NSM_HERE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Proximal spatial location"
+  },
+  {
+    "index": 51,
+    "name": "NSM_ABOVE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Superior vertical spatial relation"
+  },
+  {
+    "index": 52,
+    "name": "NSM_BELOW",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Inferior vertical spatial relation"
+  },
+  {
+    "index": 53,
+    "name": "NSM_FAR",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Distal spatial relation"
+  },
+  {
+    "index": 54,
+    "name": "NSM_NEAR",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Proximal spatial relation"
+  },
+  {
+    "index": 55,
+    "name": "NSM_SIDE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Lateral spatial relation"
+  },
+  {
+    "index": 56,
+    "name": "NSM_INSIDE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Interior topological containment"
+  },
+  {
+    "index": 57,
+    "name": "NSM_OUTSIDE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Exterior spatial exclusion"
+  },
+  {
+    "index": 58,
+    "name": "NSM_TOUCHING",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Contiguous boundary contact"
+  },
+  {
+    "index": 59,
+    "name": "NSM_BETWEEN",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Space",
+    "description": "Intermediate spatial placement"
+  },
+  {
+    "index": 60,
+    "name": "NSM_CONTINUOUS_RATE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Kinematics",
+    "description": "Constant velocity / rate of change"
+  },
+  {
+    "index": 61,
+    "name": "NSM_ACCELERATING_RATE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Kinematics",
+    "description": "Second-order accelerating rate"
+  },
+  {
+    "index": 62,
+    "name": "NSM_CAN",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Logical Modality",
+    "description": "Possibility / dynamic ability prime"
+  },
+  {
+    "index": 63,
+    "name": "NSM_MAYBE",
+    "band_id": 0,
+    "band_name": "BAND_0_NSM_KINEMATICS",
+    "category": "Logical Modality",
+    "description": "Epistemic possibility prime"
+  },
+  {
+    "index": 64,
+    "name": "VAL_X1_AGENT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Actor / initiator place x1"
+  },
+  {
+    "index": 65,
+    "name": "VAL_X2_PATIENT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Patient / theme / undergoer place x2"
+  },
+  {
+    "index": 66,
+    "name": "VAL_X3_DESTINATION",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Goal / recipient / destination place x3"
+  },
+  {
+    "index": 67,
+    "name": "VAL_X4_SOURCE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Origin / source place x4"
+  },
+  {
+    "index": 68,
+    "name": "VAL_X5_INSTRUMENT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Instrument / medium place x5"
+  },
+  {
+    "index": 69,
+    "name": "VAL_EXPERIENCER",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Experiencer / sentient recipient"
+  },
+  {
+    "index": 70,
+    "name": "VAL_LOCATION_SLOT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Spatial frame argument"
+  },
+  {
+    "index": 71,
+    "name": "VAL_TIME_SLOT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Temporal anchor argument"
+  },
+  {
+    "index": 72,
+    "name": "VAL_MANNER_SLOT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Manner / qualitative modification argument"
+  },
+  {
+    "index": 73,
+    "name": "VAL_PURPOSE_SLOT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Teleological goal argument"
+  },
+  {
+    "index": 74,
+    "name": "VAL_RESULT_SLOT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Valency",
+    "description": "Result / output state argument"
+  },
+  {
+    "index": 75,
+    "name": "LJB_NA_NEGATION",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Brute truth-functional negation"
+  },
+  {
+    "index": 76,
+    "name": "LJB_JE_AND",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Conjunction / logical AND"
+  },
+  {
+    "index": 77,
+    "name": "LJB_JA_OR",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Inclusive disjunction / logical OR"
+  },
+  {
+    "index": 78,
+    "name": "LJB_JON_XOR",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Exclusive disjunction / logical XOR"
+  },
+  {
+    "index": 79,
+    "name": "LJB_GANAI_IF_THEN",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Material implication / conditional"
+  },
+  {
+    "index": 80,
+    "name": "LJB_DU_IDENTITY",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Strict logical identity (=)"
+  },
+  {
+    "index": 81,
+    "name": "LJB_SOI_RECIPROCAL",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Connectives",
+    "description": "Reciprocal / mutual relation marker"
+  },
+  {
+    "index": 82,
+    "name": "LJB_PU_PAST_TENSE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Tense",
+    "description": "Past tense grammatical marker"
+  },
+  {
+    "index": 83,
+    "name": "LJB_CA_PRESENT_TENSE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Tense",
+    "description": "Present tense grammatical marker"
+  },
+  {
+    "index": 84,
+    "name": "LJB_BA_FUTURE_TENSE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Tense",
+    "description": "Future tense grammatical marker"
+  },
+  {
+    "index": 85,
+    "name": "LJB_VI_SHORT_DISTANCE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Spatial Tense",
+    "description": "Near distance spatial marker"
+  },
+  {
+    "index": 86,
+    "name": "LJB_VA_MEDIUM_DISTANCE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Spatial Tense",
+    "description": "Medium distance spatial marker"
+  },
+  {
+    "index": 87,
+    "name": "LJB_VU_LONG_DISTANCE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Spatial Tense",
+    "description": "Far distance spatial marker"
+  },
+  {
+    "index": 88,
+    "name": "LJB_ZI_SHORT_PAST",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Temporal Interval",
+    "description": "Recent past marker"
+  },
+  {
+    "index": 89,
+    "name": "LJB_ZA_MEDIUM_PAST",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Temporal Interval",
+    "description": "Intermediate past marker"
+  },
+  {
+    "index": 90,
+    "name": "LJB_RO_ALL_QUANT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Quantifiers",
+    "description": "All / every formal universal quantifier"
+  },
+  {
+    "index": 91,
+    "name": "LJB_SUO_AT_LEAST_ONE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Quantifiers",
+    "description": "At least one existential quantifier"
+  },
+  {
+    "index": 92,
+    "name": "LJB_NO_NONE_QUANT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Quantifiers",
+    "description": "Zero / none formal quantifier"
+  },
+  {
+    "index": 93,
+    "name": "LJB_MOI_ORDINAL",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Quantifiers",
+    "description": "Ordinal modifier"
+  },
+  {
+    "index": 94,
+    "name": "LJB_MEI_CARDINAL",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Quantifiers",
+    "description": "Cardinal group converter"
+  },
+  {
+    "index": 95,
+    "name": "LJB_ZU_LONG_PAST",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Temporal Interval",
+    "description": "Ancient/distant past marker"
+  },
+  {
+    "index": 96,
+    "name": "LJB_ASYNC_CONCURRENT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Concurrency",
+    "description": "Concurrent non-blocking execution"
+  },
+  {
+    "index": 97,
+    "name": "LJB_MUTEX_DEPENDENCY",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Concurrency",
+    "description": "Mutual exclusion synchronization dependency"
+  },
+  {
+    "index": 98,
+    "name": "LJB_RACE_CONDITION",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Concurrency",
+    "description": "Non-deterministic race order flag"
+  },
+  {
+    "index": 99,
+    "name": "GRAPH_ROOT_NODE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Root proposition node of ASG"
+  },
+  {
+    "index": 100,
+    "name": "GRAPH_LEAF",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Terminal leaf entity in ASG"
+  },
+  {
+    "index": 101,
+    "name": "GRAPH_RECURSIVE_REF",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Self-referential recursive backlink"
+  },
+  {
+    "index": 102,
+    "name": "GRAPH_IS_SUB_EXP",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Nested sub-expression / sub-graph"
+  },
+  {
+    "index": 103,
+    "name": "GRAPH_CYCLIC_BACKLINK",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Cyclic co-inductive edge pointer"
+  },
+  {
+    "index": 104,
+    "name": "GRAPH_ORDERED_SEQ",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Ordered sequence child relation"
+  },
+  {
+    "index": 105,
+    "name": "GRAPH_BRANCH_COND",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Branch condition evaluation head"
+  },
+  {
+    "index": 106,
+    "name": "GRAPH_BRANCH_THEN",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Branch true evaluation branch"
+  },
+  {
+    "index": 107,
+    "name": "GRAPH_BRANCH_ELSE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Branch false evaluation branch"
+  },
+  {
+    "index": 108,
+    "name": "GRAPH_CONTROL_LOOP",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Iteration loop construct (while/for)"
+  },
+  {
+    "index": 109,
+    "name": "GRAPH_FUNCTION_DEF",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Function or method definition"
+  },
+  {
+    "index": 110,
+    "name": "GRAPH_INVOCATION_CALL",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Function or operator invocation"
+  },
+  {
+    "index": 111,
+    "name": "GRAPH_VARIABLE_BIND",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Variable assignment / lexical binding"
+  },
+  {
+    "index": 112,
+    "name": "GRAPH_ARGUMENT_LIST",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Variadic argument sequence head"
+  },
+  {
+    "index": 113,
+    "name": "GRAPH_RETURN_VALUE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Evaluation outcome / return sink"
+  },
+  {
+    "index": 114,
+    "name": "GRAPH_SCOPED_CONTEXT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Lexical scope block container"
+  },
+  {
+    "index": 115,
+    "name": "GRAPH_CLOSURE_CAPTURE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Captured environment closure"
+  },
+  {
+    "index": 116,
+    "name": "GRAPH_TYPE_SIGNATURE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Static type assertion / signature"
+  },
+  {
+    "index": 117,
+    "name": "GRAPH_EXCEPTION_HANDLE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "AST: Error / exception catch handler"
+  },
+  {
+    "index": 118,
+    "name": "GRAPH_ANAPHORA_TARGET",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Pronoun / anaphora referent link"
+  },
+  {
+    "index": 119,
+    "name": "GRAPH_COREF_BUNDLE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Co-reference equivalence cluster"
+  },
+  {
+    "index": 120,
+    "name": "GRAPH_ASSERTION_CLAIM",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Logical assertion proposition head"
+  },
+  {
+    "index": 121,
+    "name": "GRAPH_QUERY_TARGET",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Goal / query variable target"
+  },
+  {
+    "index": 122,
+    "name": "GRAPH_ENTAILMENT_EDGE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Deductive derivation edge"
+  },
+  {
+    "index": 123,
+    "name": "GRAPH_CONTRADICTION_EDGE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Mutual exclusivity constraint edge"
+  },
+  {
+    "index": 124,
+    "name": "GRAPH_MERKLE_FOLD_POINT",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Merkle tree folding boundary"
+  },
+  {
+    "index": 125,
+    "name": "GRAPH_EXT_REFERENCE",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "External CID reference pointer"
+  },
+  {
+    "index": 126,
+    "name": "GRAPH_VIRTUAL_PAGE_LINK",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Host RAM virtual page-table pointer"
+  },
+  {
+    "index": 127,
+    "name": "GRAPH_IMMUTABLE_HASH_LOCK",
+    "band_id": 1,
+    "band_name": "BAND_1_VALENCIES_TOPOLOGY",
+    "category": "Graph Topology",
+    "description": "Cryptographically locked sub-graph CID"
+  },
+  {
+    "index": 128,
+    "name": "TYPE_ANIMATE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Biological living being"
+  },
+  {
+    "index": 129,
+    "name": "TYPE_HUMAN",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Human person"
+  },
+  {
+    "index": 130,
+    "name": "TYPE_INANIMATE_PHYSICAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Non-living physical entity"
+  },
+  {
+    "index": 131,
+    "name": "TYPE_NATURAL_OBJECT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Non-manufactured physical object (rock, star)"
+  },
+  {
+    "index": 132,
+    "name": "TYPE_ARTIFACT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Manufactured tool or object"
+  },
+  {
+    "index": 133,
+    "name": "TYPE_SUBSTANCE_MASS",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Continuous uncounted material / matter"
+  },
+  {
+    "index": 134,
+    "name": "TYPE_COLLECTION_SET",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Plural set or aggregated group"
+  },
+  {
+    "index": 135,
+    "name": "TYPE_ABSTRACT_CONCEPT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Intangible / mathematical / theoretical concept"
+  },
+  {
+    "index": 136,
+    "name": "TYPE_PROPOSITION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Declarative statement with truth value"
+  },
+  {
+    "index": 137,
+    "name": "TYPE_EVENT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Bounded temporal transition / occurrence"
+  },
+  {
+    "index": 138,
+    "name": "TYPE_STATE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Static condition or enduring property"
+  },
+  {
+    "index": 139,
+    "name": "TYPE_PROCESS",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Continuous ongoing activity"
+  },
+  {
+    "index": 140,
+    "name": "TYPE_TEMPORAL_INTERVAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Time span / duration / era"
+  },
+  {
+    "index": 141,
+    "name": "TYPE_SPATIAL_REGION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Geometric location or zone"
+  },
+  {
+    "index": 142,
+    "name": "TYPE_MEASURE_SCALAR",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Quantitative magnitude with unit"
+  },
+  {
+    "index": 143,
+    "name": "TYPE_NUMERIC_VALUE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Pure mathematical number or constant"
+  },
+  {
+    "index": 144,
+    "name": "TYPE_ORGANIZATION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Institutional or corporate body"
+  },
+  {
+    "index": 145,
+    "name": "TYPE_COMMUNICATION_MSG",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Message, utterance, or document"
+  },
+  {
+    "index": 146,
+    "name": "TYPE_ATTRIBUTE_PROPERTY",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Inherent trait, quality, or descriptor"
+  },
+  {
+    "index": 147,
+    "name": "TYPE_RELATION_ROLE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Entity Types",
+    "description": "Relational association or bridge"
+  },
+  {
+    "index": 148,
+    "name": "ROLE_AGENT_CAPABLE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Capable of intentional volition / action"
+  },
+  {
+    "index": 149,
+    "name": "ROLE_SENTIENT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Capable of subjective perception and feeling"
+  },
+  {
+    "index": 150,
+    "name": "ROLE_MOVEABLE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Capable of physical translation in space"
+  },
+  {
+    "index": 151,
+    "name": "ROLE_COMMUNICATOR",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Capable of transmitting linguistic symbols"
+  },
+  {
+    "index": 152,
+    "name": "ROLE_CONSUMABLE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Can be ingested, depleted, or absorbed"
+  },
+  {
+    "index": 153,
+    "name": "ROLE_CONTAINER",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Can enclose other physical/abstract entities"
+  },
+  {
+    "index": 154,
+    "name": "ROLE_INSTRUMENT_USABLE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Can be utilized by an agent as an instrument"
+  },
+  {
+    "index": 155,
+    "name": "ROLE_VOLITIONAL_SOURCE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Capabilities",
+    "description": "Origin of willful command or purpose"
+  },
+  {
+    "index": 156,
+    "name": "ROLE_COGNITIVE_SUBJECT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Thematic Roles",
+    "description": "Subject of internal cognition or belief"
+  },
+  {
+    "index": 157,
+    "name": "ROLE_AFFECTIVE_TARGET",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Thematic Roles",
+    "description": "Object of emotional valence"
+  },
+  {
+    "index": 158,
+    "name": "ROLE_EPISTEMIC_AUTHORITY",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Thematic Roles",
+    "description": "Source of truth / authoritative claim"
+  },
+  {
+    "index": 159,
+    "name": "ROLE_PATIENT_TARGET",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Thematic Roles",
+    "description": "Entity targeted for state transition"
+  },
+  {
+    "index": 160,
+    "name": "TOM_BELIEF_FIRST_ORDER",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Agent belief about world state (A believes X)"
+  },
+  {
+    "index": 161,
+    "name": "TOM_BELIEF_SECOND_ORDER",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Agent belief about other belief (A believes B believes X)"
+  },
+  {
+    "index": 162,
+    "name": "TOM_INTENTION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Agent teleological commitment to an action"
+  },
+  {
+    "index": 163,
+    "name": "TOM_DESIRE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Agent appetitive / goal preference"
+  },
+  {
+    "index": 164,
+    "name": "TOM_SHARED_ATTENTION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Intersubjective mutual focus"
+  },
+  {
+    "index": 165,
+    "name": "ROLE_DECEPTIVE_PROJECTION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Deceptive or manipulative communicative intent"
+  },
+  {
+    "index": 166,
+    "name": "ROLE_SARCASM_IRONY",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Theory of Mind",
+    "description": "Pragmatic irony or sarcastic reversal"
+  },
+  {
+    "index": 167,
+    "name": "MODALITY_LITERAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Modality",
+    "description": "Strict literal compositional interpretation"
+  },
+  {
+    "index": 168,
+    "name": "MODALITY_FIGURATIVE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Modality",
+    "description": "Metaphorical or allegorical interpretation"
+  },
+  {
+    "index": 169,
+    "name": "MODALITY_HYPOTHETICAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Modality",
+    "description": "Conditional / hypothetical scenario premise"
+  },
+  {
+    "index": 170,
+    "name": "MODALITY_COUNTERFACTUAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "Modality",
+    "description": "Counterfactual world branch (contrary to fact)"
+  },
+  {
+    "index": 171,
+    "name": "WN_ACT_ACTION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:act - actions, deeds"
+  },
+  {
+    "index": 172,
+    "name": "WN_ANIMAL_FAUNA",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:animal - zoological fauna"
+  },
+  {
+    "index": 173,
+    "name": "WN_ARTIFACT_OBJECT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:artifact - manufactured artifacts"
+  },
+  {
+    "index": 174,
+    "name": "WN_ATTRIBUTE_PROP",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:attribute - traits and characteristics"
+  },
+  {
+    "index": 175,
+    "name": "WN_BODY_PART",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:body - anatomical parts and organs"
+  },
+  {
+    "index": 176,
+    "name": "WN_COGNITION_THOUGHT",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:cognition - cognitive concepts and ideas"
+  },
+  {
+    "index": 177,
+    "name": "WN_COMMUNICATION_INFO",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:communication - linguistic exchanges"
+  },
+  {
+    "index": 178,
+    "name": "WN_EVENT_OCCURRENCE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:event - phenomena and incidents"
+  },
+  {
+    "index": 179,
+    "name": "WN_FEELING_EMOTION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:feeling - affective feelings and states"
+  },
+  {
+    "index": 180,
+    "name": "WN_FOOD_NUTRITION",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:food - edible items and nutrient substance"
+  },
+  {
+    "index": 181,
+    "name": "WN_GROUP_SOCIAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:group - social collectives and groupings"
+  },
+  {
+    "index": 182,
+    "name": "WN_LOCATION_PLACE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:location - geographical sites"
+  },
+  {
+    "index": 183,
+    "name": "WN_MOTIVE_REASON",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:motive - reasons and motivational causes"
+  },
+  {
+    "index": 184,
+    "name": "WN_OBJECT_NATURAL",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:object - natural inanimate physical objects"
+  },
+  {
+    "index": 185,
+    "name": "WN_PERSON_HUMAN",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:person - individual humans"
+  },
+  {
+    "index": 186,
+    "name": "WN_PHENOMENON_NATURE",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:phenomenon - natural atmospheric/physical events"
+  },
+  {
+    "index": 187,
+    "name": "WN_PLANT_FLORA",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:plant - botanical flora and vegetation"
+  },
+  {
+    "index": 188,
+    "name": "WN_POSSESSION_ASSET",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:possession - financial assets and holdings"
+  },
+  {
+    "index": 189,
+    "name": "WN_PROCESS_SERIES",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:process - dynamic multi-step procedures"
+  },
+  {
+    "index": 190,
+    "name": "WN_QUANTITY_NUMBER",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:quantity - amounts and quantitative measures"
+  },
+  {
+    "index": 191,
+    "name": "WN_RELATION_LINK",
+    "band_id": 2,
+    "band_name": "BAND_2_ONTOLOGY_MODALITY",
+    "category": "WordNet Roots",
+    "description": "wn:relation - ontological and conceptual relations"
+  },
+  {
+    "index": 192,
+    "name": "EPIST_DIRECT_OBSERVATION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Empirically verified direct sensory observation"
+  },
+  {
+    "index": 193,
+    "name": "EPIST_DEDUCTIVE_INFERENCE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Sound deductive entailment from known axioms"
+  },
+  {
+    "index": 194,
+    "name": "EPIST_INDUCTIVE_GENERAL",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Inductive statistical generalization"
+  },
+  {
+    "index": 195,
+    "name": "EPIST_ABDUCTIVE_BEST_EXPL",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Abductive inference to best explanation"
+  },
+  {
+    "index": 196,
+    "name": "EPIST_HEARSAY_TESTIMONY",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Indirect hearsay or second-hand testimony"
+  },
+  {
+    "index": 197,
+    "name": "EPIST_AXIOMATIC_PREMISE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Epistemic Context",
+    "description": "Given ground truth or assumed premise"
+  },
+  {
+    "index": 198,
+    "name": "EPIST_DEONTIC_OBLIGATION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Deontic Modality",
+    "description": "Strict normative duty / requirement (Must)"
+  },
+  {
+    "index": 199,
+    "name": "EPIST_DEONTIC_PERMISSION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Deontic Modality",
+    "description": "Normative permission (May)"
+  },
+  {
+    "index": 200,
+    "name": "EPIST_DEONTIC_PROHIBITION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Deontic Modality",
+    "description": "Normative prohibition (Must Not)"
+  },
+  {
+    "index": 201,
+    "name": "EPIST_PROB_CERTAIN",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "P = 1.0 (Deterministic certainty)"
+  },
+  {
+    "index": 202,
+    "name": "EPIST_PROB_HIGH",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "P >= 0.8 (Strong probabilistic confidence)"
+  },
+  {
+    "index": 203,
+    "name": "EPIST_PROB_MARGINAL",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "P ~ 0.5 (Equi-probable or marginal)"
+  },
+  {
+    "index": 204,
+    "name": "EPIST_PROB_DISTRIBUTED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "Multi-modal probability distribution"
+  },
+  {
+    "index": 205,
+    "name": "EPIST_STATISTICAL_EDGE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "Plausible correlation with statistical edge"
+  },
+  {
+    "index": 206,
+    "name": "EPIST_FUZZY_PLAUSIBILITY",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "Possibilistic fuzzy truth degree"
+  },
+  {
+    "index": 207,
+    "name": "EPIST_DEFAULT_HEURISTIC",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Probability",
+    "description": "Non-monotonic default presumption"
+  },
+  {
+    "index": 208,
+    "name": "SOLVER_CWA_CLOSED_WORLD",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Closed World Assumption flag for s(CASP)"
+  },
+  {
+    "index": 209,
+    "name": "SOLVER_MUC_TARGETED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Minimal Unsatisfiable Core candidate target"
+  },
+  {
+    "index": 210,
+    "name": "SOLVER_PROOF_VALIDATED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Verified stable model theorem"
+  },
+  {
+    "index": 211,
+    "name": "SOLVER_CONTRADICTION_FLAG",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Integrity constraint contradiction identified"
+  },
+  {
+    "index": 212,
+    "name": "SOLVER_ABDUCIBLE_PREDICATE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Abducible open predicate flag"
+  },
+  {
+    "index": 213,
+    "name": "SOLVER_COINDUCTION_COLOOP",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Co-inductive greatest fixed point hypothesis"
+  },
+  {
+    "index": 214,
+    "name": "SOLVER_EVEN_LOOP_OVER_NEG",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Even loop over negation choice branching"
+  },
+  {
+    "index": 215,
+    "name": "SOLVER_GLOBAL_CONSTRAINT",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Global headless integrity constraint"
+  },
+  {
+    "index": 216,
+    "name": "SOLVER_DUAL_RULE_APPLIED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Dual program rule negation verification"
+  },
+  {
+    "index": 217,
+    "name": "SOLVER_INCONSISTENCY_CORE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Active membership in inconsistency core"
+  },
+  {
+    "index": 218,
+    "name": "SOLVER_EXPLANATION_REQUIRED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Proof justification tree requested"
+  },
+  {
+    "index": 219,
+    "name": "SOLVER_RE_DENOISE_REQUIRED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "MUC triggers diffusion re-denoising cycle"
+  },
+  {
+    "index": 220,
+    "name": "SOLVER_ENTAILMENT_VERIFIED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Formally proven entailed conclusion"
+  },
+  {
+    "index": 221,
+    "name": "SOLVER_COUNTEREXAMPLE_FOUND",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Counterexample model constructed"
+  },
+  {
+    "index": 222,
+    "name": "SOLVER_STABLE_MODEL_MEMBER",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "Atom belongs to active answer set"
+  },
+  {
+    "index": 223,
+    "name": "SOLVER_PARTIAL_INTERPRETATION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Solver Flags",
+    "description": "3-valued partial model assignment"
+  },
+  {
+    "index": 224,
+    "name": "TEMP_ALLEN_BEFORE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X strictly precedes Y (X < Y)"
+  },
+  {
+    "index": 225,
+    "name": "TEMP_ALLEN_MEETS",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X touches start of Y at boundary"
+  },
+  {
+    "index": 226,
+    "name": "TEMP_ALLEN_OVERLAPS",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X starts before Y and overlaps"
+  },
+  {
+    "index": 227,
+    "name": "TEMP_ALLEN_STARTS",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X shares start boundary with Y"
+  },
+  {
+    "index": 228,
+    "name": "TEMP_ALLEN_DURING",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X strictly contained within Y interval"
+  },
+  {
+    "index": 229,
+    "name": "TEMP_ALLEN_FINISHES",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X shares end boundary with Y"
+  },
+  {
+    "index": 230,
+    "name": "TEMP_ALLEN_EQUALS",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Allen: X and Y are temporally congruent"
+  },
+  {
+    "index": 231,
+    "name": "TEMP_SYNCHRONOUS_COINCIDE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Temporal Calculus",
+    "description": "Simultaneous synchronous occurrence"
+  },
+  {
+    "index": 232,
+    "name": "SPATIAL_RCC_DISCONNECTED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Disconnected regions (DC)"
+  },
+  {
+    "index": 233,
+    "name": "SPATIAL_RCC_EXT_CONNECTED",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Externally connected / boundary touching (EC)"
+  },
+  {
+    "index": 234,
+    "name": "SPATIAL_RCC_PARTIAL_OVERLAP",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Partially overlapping regions (PO)"
+  },
+  {
+    "index": 235,
+    "name": "SPATIAL_RCC_TANGENTIAL_PART",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Tangential proper part (TPP)"
+  },
+  {
+    "index": 236,
+    "name": "SPATIAL_RCC_NON_TANG_PART",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Non-tangential proper interior part (NTPP)"
+  },
+  {
+    "index": 237,
+    "name": "SPATIAL_RCC_CONGRUENT_EQ",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "RCC-8: Geometrically congruent regions (EQ)"
+  },
+  {
+    "index": 238,
+    "name": "MEREOLOGY_HOLONYM_WHOLE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "Mereological composite whole entity"
+  },
+  {
+    "index": 239,
+    "name": "MEREOLOGY_MERONYM_PART",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Spatial Mereotopology",
+    "description": "Mereological constituent part"
+  },
+  {
+    "index": 240,
+    "name": "CAUSAL_DIRECT_MECHANISM",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Direct physical causal link (X -> Y)"
+  },
+  {
+    "index": 241,
+    "name": "CAUSAL_ENABLING_CONDITION",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Necessary enabling background precondition"
+  },
+  {
+    "index": 242,
+    "name": "CAUSAL_PREVENTIVE_BLOCK",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Active causal inhibitor or blocker"
+  },
+  {
+    "index": 243,
+    "name": "CAUSAL_INTERVENTION_DO",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Pearl: Active intervention do(X)"
+  },
+  {
+    "index": 244,
+    "name": "CAUSAL_COUNTERFACTUAL_NEC",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Counterfactual necessity (but-for clause)"
+  },
+  {
+    "index": 245,
+    "name": "CAUSAL_COUNTERFACTUAL_SUFF",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Counterfactual sufficient cause"
+  },
+  {
+    "index": 246,
+    "name": "CAUSAL_COMMON_CONFOUNDER",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Fork structure: Unobserved/common confounder"
+  },
+  {
+    "index": 247,
+    "name": "CAUSAL_COLLIDER_EFFECT",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Causal Calculus",
+    "description": "Collider structure: Joint effect sink"
+  },
+  {
+    "index": 248,
+    "name": "LOGIC_NECESSITY_BOX",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Formal Modal Logic",
+    "description": "Alethic necessity: Box P (Necessarily True)"
+  },
+  {
+    "index": 249,
+    "name": "LOGIC_POSSIBILITY_DIAMOND",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Formal Modal Logic",
+    "description": "Alethic possibility: Diamond P (Possibly True)"
+  },
+  {
+    "index": 250,
+    "name": "LOGIC_COMMON_KNOWLEDGE",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Formal Modal Logic",
+    "description": "Epistemic logic: Common knowledge in group C_G(P)"
+  },
+  {
+    "index": 251,
+    "name": "LOGIC_DISTRIBUTED_KNOW",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Formal Modal Logic",
+    "description": "Epistemic logic: Distributed knowledge D_G(P)"
+  },
+  {
+    "index": 252,
+    "name": "LOGIC_TEMPORAL_ALWAYS_G",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Linear Temporal Logic",
+    "description": "LTL: Globally / Always operator (G P)"
+  },
+  {
+    "index": 253,
+    "name": "LOGIC_TEMPORAL_EVENTUALLY_F",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Linear Temporal Logic",
+    "description": "LTL: Eventually / Finally operator (F P)"
+  },
+  {
+    "index": 254,
+    "name": "LOGIC_TEMPORAL_NEXT_X",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Linear Temporal Logic",
+    "description": "LTL: Next state operator (X P)"
+  },
+  {
+    "index": 255,
+    "name": "LOGIC_TEMPORAL_UNTIL_U",
+    "band_id": 3,
+    "band_name": "BAND_3_EPISTEMIC_METARULES",
+    "category": "Linear Temporal Logic",
+    "description": "LTL: Strong until operator (P U Q)"
+  }
+]

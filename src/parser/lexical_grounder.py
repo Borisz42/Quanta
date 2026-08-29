@@ -17,6 +17,7 @@ except ImportError:
 from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
 from core.asg import QuantaNode
+from core.valency import validate_valency, TypeConstraintRegistry, ValencyConstraint
 
 
 LEXNAME_TO_WN_ROOT_SLOT: Dict[str, str] = {
@@ -430,86 +431,9 @@ class WordNetLexicalGrounder:
         return node
 
 
-def validate_valency(
-    parent_node_or_vector: Union[QuantaNode, QuantaVector],
-    relation_slot: str,
-    child_node_or_vector: Union[QuantaNode, QuantaVector],
-) -> bool:
-    """Validates compile-time type constraints and valency signatures.
-    
-    Checks whether a child argument satisfies the ontological requirements of the predicate slot.
-    Returns True if valid, False if rejected by constraint violation.
-    """
-    p_vec = parent_node_or_vector.vector if isinstance(parent_node_or_vector, QuantaNode) else parent_node_or_vector
-    c_vec = child_node_or_vector.vector if isinstance(child_node_or_vector, QuantaNode) else child_node_or_vector
+# Re-export validate_valency from core.valency for backward compatibility
+# validate_valency = validate_valency
 
-    # Figurative language suspends strict physical valency constraints
-    if p_vec["MODALITY_FIGURATIVE"] == QuaternaryValue.TRUE or c_vec["MODALITY_FIGURATIVE"] == QuaternaryValue.TRUE:
-        return True
-
-    # Variable bindings (e.g. FOL x, y) bypass static valency checks
-    if c_vec["GRAPH_VARIABLE_BIND"] == QuaternaryValue.TRUE:
-        return True
-
-    # Agent slot validation
-    if relation_slot == "VAL_X1_AGENT":
-        # If predicate is a mental/cognitive action (THINK, KNOW, WANT, FEEL), agent MUST be sentient/animate
-        is_mental = (
-            p_vec["NSM_THINK"] == QuaternaryValue.TRUE
-            or p_vec["NSM_KNOW"] == QuaternaryValue.TRUE
-            or p_vec["NSM_WANT"] == QuaternaryValue.TRUE
-            or p_vec["NSM_FEEL"] == QuaternaryValue.TRUE
-        )
-        if is_mental:
-            is_sentient = (
-                c_vec["ROLE_SENTIENT"] == QuaternaryValue.TRUE
-                or c_vec["TYPE_HUMAN"] == QuaternaryValue.TRUE
-                or c_vec["TYPE_ANIMATE"] == QuaternaryValue.TRUE
-                or c_vec["WN_ANIMAL_FAUNA"] == QuaternaryValue.TRUE
-                or c_vec["WN_PERSON_HUMAN"] == QuaternaryValue.TRUE
-            )
-            if not is_sentient:
-                return False
-
-        # General Agent check: Must be animate, human, organization, or explicitly agent-capable
-        is_agent_capable = (
-            c_vec["ROLE_AGENT_CAPABLE"] == QuaternaryValue.TRUE
-            or c_vec["TYPE_HUMAN"] == QuaternaryValue.TRUE
-            or c_vec["TYPE_ANIMATE"] == QuaternaryValue.TRUE
-            or c_vec["TYPE_ORGANIZATION"] == QuaternaryValue.TRUE
-            or c_vec["WN_ANIMAL_FAUNA"] == QuaternaryValue.TRUE
-            or c_vec["WN_PERSON_HUMAN"] == QuaternaryValue.TRUE
-        )
-        if not is_agent_capable:
-            # Inanimate physical or abstract concept cannot be an agent in literal context
-            if (
-                c_vec["TYPE_INANIMATE_PHYSICAL"] == QuaternaryValue.TRUE
-                or c_vec["TYPE_ABSTRACT_CONCEPT"] == QuaternaryValue.TRUE
-            ):
-                return False
-
-    # Experiencer slot validation
-    elif relation_slot == "VAL_EXPERIENCER":
-        is_sentient = (
-            c_vec["ROLE_SENTIENT"] == QuaternaryValue.TRUE
-            or c_vec["TYPE_HUMAN"] == QuaternaryValue.TRUE
-            or c_vec["TYPE_ANIMATE"] == QuaternaryValue.TRUE
-            or c_vec["WN_ANIMAL_FAUNA"] == QuaternaryValue.TRUE
-            or c_vec["WN_PERSON_HUMAN"] == QuaternaryValue.TRUE
-        )
-        if not is_sentient:
-            return False
-
-    # Temporal slot validation
-    elif relation_slot == "VAL_TIME_SLOT":
-        is_temporal = (
-            c_vec["TYPE_TEMPORAL_INTERVAL"] == QuaternaryValue.TRUE
-            or c_vec["NSM_TIME"] == QuaternaryValue.TRUE
-        )
-        if not is_temporal and c_vec["TYPE_ANIMATE"] == QuaternaryValue.TRUE:
-            return False
-
-    return True
 
 
 def resolve_synset(word: str, pos: Optional[str] = None, grounder: Optional[WordNetLexicalGrounder] = None) -> Optional[str]:
