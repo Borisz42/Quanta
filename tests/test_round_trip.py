@@ -50,6 +50,32 @@ def test_english_round_trip_modal_obligation(pipeline):
     assert result.reparsed_vector["EPIST_DEONTIC_OBLIGATION"] == 1
 
 
+def test_negation_round_trip(pipeline):
+    """Verify Phase 9 Item 9.6: Negation round-trip 'X did not Y' -> ASG -> English -> verify negation preserved."""
+    # 1. Canonical Example B: Negated action
+    input_b = "The dog did not bite the mailman."
+    res_b = pipeline.round_trip(input_b, modality="english")
+
+    assert res_b.validation_pass, f"Validation failed: {res_b.muc_errors}"
+    assert res_b.realized_output == "The dog did not bite the mailman."
+    assert res_b.original_vector["LJB_NA_NEGATION"] == 2
+    assert res_b.original_vector["NSM_DO"] == 2
+    assert res_b.original_vector["NSM_TOUCH"] == 2
+    assert res_b.reparsed_vector["LJB_NA_NEGATION"] == 2
+    assert res_b.reparsed_vector["NSM_DO"] == 2
+    assert res_b.slot_preservation_rate == 1.0
+
+    # 2. General transitive negation
+    input_2 = "A person did not touch a rock."
+    res_2 = pipeline.round_trip(input_2, modality="english")
+
+    assert res_2.validation_pass, f"Validation failed: {res_2.muc_errors}"
+    assert "did not" in res_2.realized_output.lower()
+    assert res_2.original_vector["LJB_NA_NEGATION"] == 2
+    assert res_2.reparsed_vector["LJB_NA_NEGATION"] == 2
+    assert res_2.slot_preservation_rate >= 0.90
+
+
 def test_fol_round_trip_implication(pipeline):
     """Verify Phase 9 Item 9.2: Canonical Example E FOL implication exact string match round-trip."""
     fol_input = r"\forall x (Dog(x) \rightarrow Animal(x))"
