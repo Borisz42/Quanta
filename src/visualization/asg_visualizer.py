@@ -12,7 +12,7 @@ from rich.box import ROUNDED, ASCII
 from rich.markup import escape
 
 from core.asg import QuantaGraph, QuantaNode
-from core.slots import get_slot_by_index
+from core.slots import get_slot_by_index, SlotBand
 from core.types import QuaternaryValue
 
 
@@ -90,49 +90,115 @@ class ASGVisualizer:
 
         return string_io.getvalue().rstrip()
 
+    BAND_TITLES: Dict[SlotBand, str] = {
+        SlotBand.BAND_0_NSM_KINEMATICS: "Band 0 (NSM Primes & Kinematics)",
+        SlotBand.BAND_1_VALENCIES_TOPOLOGY: "Band 1 (Valencies & Topology)",
+        SlotBand.BAND_2_ONTOLOGY_MODALITY: "Band 2 (Ontology & Modality)",
+        SlotBand.BAND_3_EPISTEMIC_METARULES: "Band 3 (Epistemics & Meta-Calculi)",
+    }
+
     @classmethod
     def render_node_details_table(cls, graph: QuantaGraph, style: str = "unicode") -> str:
-        """Renders a structured ASCII table describing each node and its slot assignments."""
+        """Renders a structured ASCII/Unicode table describing each node and its slot assignments grouped by band."""
         if not graph or not graph.nodes:
             return "No nodes in graph."
 
         string_io = io.StringIO()
         console = Console(file=string_io, width=120, color_system=None)
         box_style = ASCII if style == "ascii" else ROUNDED
+        arrow = "──>" if style != "ascii" else "-->"
+        bullet = "•" if style != "ascii" else "*"
 
-        table = Table(title="QUANTA ASG Node Inspection", box=box_style, show_header=True, header_style="bold")
-        table.add_column("Node CID", style="bold", width=12)
-        table.add_column("Anchor / Literal", width=22)
-        table.add_column("Outgoing Edges", width=34)
-        table.add_column("Active Semantic Slots (Top / All)", width=44)
+        table = Table(
+            title="QUANTA ASG Node Specifications & Semantic Slots",
+            box=box_style,
+            show_header=True,
+            header_style="bold",
+            show_lines=True,
+        )
+        table.add_column("Concept / Anchor", width=28, style="bold")
+        table.add_column("Outgoing Edges / Valencies", width=38)
+        table.add_column("Active Semantic Slots (Grouped by Band)", width=50)
 
+        # Order nodes: ROOT first, then BFS traversal of reachable nodes, then unvisited
+        ordered_cids: List[str] = []
+        visited: Set[str] = set()
+        root_node = graph.root
+        root_cid = root_node.cid if root_node else (graph.root_cid if graph.root_cid in graph.nodes else (next(iter(graph.nodes.keys())) if graph.nodes else None))
+
+        if root_cid and root_cid in graph.nodes:
+            queue = [root_cid]
+            while queue:
+                curr = queue.pop(0)
+                if curr not in visited:
+                    visited.add(curr)
+                    ordered_cids.append(curr)
+                    node = graph.nodes.get(curr)
+                    if node:
+                        for rel in sorted(node.edges.keys()):
+                            for tgt in sorted(node.edges[rel]):
+                                if tgt not in visited and tgt in graph.nodes:
+                                    queue.append(tgt)
         for cid in sorted(graph.nodes.keys()):
+            if cid not in visited:
+                ordered_cids.append(cid)
+
+        for cid in ordered_cids:
             node = graph.nodes[cid]
-            is_root = " (ROOT)" if cid == graph.root_cid else ""
-            short_cid = f"{cid[:8]}...{is_root}"
-            
-            anchor_text = f"Anchor: '{node.anchor}'" if node.anchor else "(None)"
+            is_root = " [ROOT]" if (node is root_node or cid == root_cid) else ""
+
+            anchor_lines = []
+            if node.anchor:
+                anchor_lines.append(f"Anchor: '{node.anchor}'{is_root}")
+            else:
+                anchor_lines.append(f"(No Anchor){is_root}")
             if node.literal is not None:
-                anchor_text += f"\nLiteral: {node.literal}"
+                lit_str = f'"{node.literal}"' if isinstance(node.literal, str) else f"{node.literal}"
+                anchor_lines.append(f"Literal: {lit_str}")
+            active_slots = node.vector.active_slots()
+            anchor_lines.append(f"Active Slots: {len(active_slots)}")
+            concept_text = "\n".join(anchor_lines)
 
             edges_lines = []
             for rel in sorted(node.edges.keys()):
                 for tgt in sorted(node.edges[rel]):
                     tgt_node = graph.nodes.get(tgt)
-                    tgt_name = f"'{tgt_node.anchor}'" if tgt_node and tgt_node.anchor else tgt[:8]
-                    edges_lines.append(f"• {rel} ──> [{tgt[:8]}] {tgt_name}")
-            edges_text = "\n".join(edges_lines) if edges_lines else "(No outgoing edges)"
+                    if tgt_node:
+                        if tgt_node.anchor:
+                            tgt_desc = f"'{tgt_node.anchor}'"
+                            if tgt_node.literal:
+                                tgt_desc += f' ("{tgt_node.literal}")'
+                        elif tgt_node.literal:
+                            tgt_desc = f'"{tgt_node.literal}"'
+                        else:
+                            tgt_desc = f"Node [{tgt[:8]}]"
+                    else:
+                        tgt_desc = f"Node [{tgt[:8]}]"
+                    edges_lines.append(f"{bullet} {rel} {arrow} {tgt_desc}")
+            edges_text = "\n".join(edges_lines) if edges_lines else "(No outgoing edges / Leaf)"
+
+            # Group active slots by Band (0-3)
+            slots_by_band: Dict[SlotBand, List[Any]] = {}
+            for k, v in active_slots.items():
+                slot_meta = get_slot_by_index(k)
+                band = slot_meta.band
+                if band not in slots_by_band:
+                    slots_by_band[band] = []
+                slots_by_band[band].append((slot_meta, v))
 
             slots_lines = []
-            active = node.vector.active_slots()
-            for k, v in active.items():
-                slot_meta = get_slot_by_index(k)
-                slots_lines.append(f"• {slot_meta.name}: {cls._val_name(v)}")
-            slots_text = "\n".join(slots_lines) if slots_lines else "(Empty / All Irrelevant)"
+            if not slots_by_band:
+                slots_text = "(Empty / All Irrelevant)"
+            else:
+                for band in sorted(slots_by_band.keys()):
+                    band_title = cls.BAND_TITLES.get(band, f"Band {int(band)}")
+                    slots_lines.append(f"[{band_title}]")
+                    for s_def, val in slots_by_band[band]:
+                        slots_lines.append(f"  {bullet} {s_def.name}: {cls._val_name(val)}")
+                slots_text = "\n".join(slots_lines)
 
             table.add_row(
-                escape(short_cid),
-                escape(anchor_text),
+                escape(concept_text),
                 escape(edges_text),
                 escape(slots_text),
             )

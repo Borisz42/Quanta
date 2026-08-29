@@ -55,6 +55,19 @@ def test_asg_visualizer_connected_nodes():
     assert "wn:chase.v.01" in table
     assert "VAL_X1_AGENT" in table
     assert "TRUE (1)" in table
+    assert "Band 0 (NSM Primes & Kinematics)" in table
+    assert "Band 1 (Valencies & Topology)" in table
+    assert "Band 2 (Ontology & Modality)" in table
+    assert "Node CID" not in table
+    assert "Concept / Anchor" in table
+    assert "Active Semantic Slots (Grouped by Band)" in table
+    # Check for horizontal line dividers
+    assert "┼" in table or "─" in table
+
+    table_ascii = ASGVisualizer.render_node_details_table(graph, style="ascii")
+    assert "wn:chase.v.01" in table_ascii
+    assert "Band 0 (NSM Primes & Kinematics)" in table_ascii
+    assert "+" in table_ascii and "-" in table_ascii
     
     mermaid = ASGVisualizer.render_mermaid(graph)
     assert "flowchart TD" in mermaid
