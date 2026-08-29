@@ -184,5 +184,10 @@ cython_debug/
 output/*
 !output/canonical_slots_layout.json
 !output/.gitkeep
-data/
+/data/*
+!/data/.gitkeep
+!/data/raw/
+!/data/raw/python_ast_samples.jsonl
+!/data/framenet_valency.json
+
 
