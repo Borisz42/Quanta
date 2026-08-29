@@ -6,13 +6,43 @@ import pytest
 from data.corpus_generator import ValidationCorpusGenerator
 from profiler.info_profiler import QuantaInformationProfiler
 from profiler.mrmr_selector import MRMRSelector
-from profiler.candidate_pool import build_candidate_pool
+from profiler.candidate_pool import build_candidate_pool, export_candidate_pool
 
 
 @pytest.fixture(scope="module")
 def validation_corpus():
     gen = ValidationCorpusGenerator(seed=42)
     return gen.generate_corpus(num_samples=5000)
+
+
+def test_candidate_pool_structure_and_export(tmp_path):
+    candidates = build_candidate_pool()
+    assert len(candidates) >= 512
+
+    # Verify first 256 are canonical slots
+    for i in range(256):
+        assert candidates[i].id == i
+        assert candidates[i].source.startswith("Band")
+
+    # Verify no duplicate candidate names or IDs
+    names = [c.name for c in candidates]
+    ids = [c.id for c in candidates]
+    assert len(set(names)) == len(candidates)
+    assert len(set(ids)) == len(candidates)
+
+    # Test export to JSON
+    json_path = tmp_path / "candidate_pool.json"
+    exported_path = export_candidate_pool(candidates, json_path)
+    assert exported_path.exists()
+
+    import json
+    with open(exported_path, "r", encoding="utf-8") as f:
+        loaded = json.load(f)
+
+    assert len(loaded) == len(candidates)
+    assert loaded[0]["name"] == candidates[0].name
+    assert "description" in loaded[0]
+
 
 
 def test_validation_corpus_generation(validation_corpus):
