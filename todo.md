@@ -325,8 +325,8 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 #### 7B — Extended invariant rules
 - [x] **7B.1** Write RCC-8 spatial mereotopology consistency rules (e.g., `DISCONNECTED` and `NON_TANG_PART` are mutually exclusive)
 - [x] **7B.2** Write Allen interval temporal calculus consistency rules (e.g., `BEFORE` and `AFTER` are inverses)
-- [ ] **7B.3** Write Pearl causal hierarchy exclusivity rules
-- [ ] **7B.4** Write Band 1 structural topology rules (e.g., `GRAPH_ROOT_NODE` and `GRAPH_LEAF` are mutually exclusive on same node)
+- [x] **7B.3** Write Pearl causal hierarchy exclusivity rules
+- [x] **7B.4** Write Band 1 structural topology rules (e.g., `GRAPH_ROOT_NODE` and `GRAPH_LEAF` are mutually exclusive on same node)
 - [x] **7B.5** 🧪 Test each rule category with valid and invalid graph inputs
 
 #### 7C — Validator gate & MUC extraction
@@ -336,10 +336,10 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 - [x] **7C.4** 🧪 Test MUC extraction: create a graph with one invalid node among valid ones; verify MUC pinpoints exactly the invalid node
 
 #### 7D — s(CASP) / SWI-Prolog integration (optional advanced path)
-- [ ] **7D.1** Install SWI-Prolog with s(CASP) pack
-- [ ] **7D.2** Write s(CASP) Prolog equivalents of the Clingo rules in `scasp_rules.pl`
-- [ ] **7D.3** Implement Python↔Prolog subprocess bridge for s(CASP) invocation
-- [ ] **7D.4** 🧪 Test coinductive reasoning: validate a cyclic graph (recursive function ASG) that standard grounding would reject
+- [x] **7D.1** Install SWI-Prolog with s(CASP) pack
+- [x] **7D.2** Write s(CASP) Prolog equivalents of the Clingo rules in `scasp_rules.pl`
+- [x] **7D.3** Implement Python↔Prolog subprocess bridge for s(CASP) invocation
+- [x] **7D.4** 🧪 Test coinductive reasoning: validate a cyclic graph (recursive function ASG) that standard grounding would reject
 
 ---
 
