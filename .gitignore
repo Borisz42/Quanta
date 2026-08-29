@@ -181,6 +181,8 @@ cython_debug/
 .cursorindexingignore
 
 # QUANTA generated artifacts and datasets
-output/
+output/*
+!output/canonical_slots_layout.json
+!output/.gitkeep
 data/
 
