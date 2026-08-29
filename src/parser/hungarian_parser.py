@@ -164,6 +164,10 @@ class HungarianForwardParser:
                 entity_node.set_slot("TYPE_SPATIAL_REGION", 1)
                 root_node.set_slot("VAL_X4_SOURCE", 1)
                 graph.add_edge(root_node, "VAL_X4_SOURCE", entity_node)
+            elif case == "dat":
+                entity_node.set_slot("VAL_EXPERIENCER", 1)
+                root_node.set_slot("VAL_EXPERIENCER", 1)
+                graph.add_edge(root_node, "VAL_EXPERIENCER", entity_node)
             elif case == "ins":
                 entity_node.set_slot("VAL_X5_INSTRUMENT", 1)
                 entity_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
@@ -190,17 +194,56 @@ class HungarianForwardParser:
             return "van", True
         if w in ("van", "vannak"):
             return "van", False
+        if w in ("gondolkodik", "gondolkozik", "gondol"):
+            return "gondol", False
         if w in self.HU_TO_EN_DICTIONARY:
             return w, False
 
-        # Past tense suffixes: -ott, -ett, -ött, -t
+        # Irregular definite past forms
+        if w in ("látta", "látták", "meglátta", "meglátták"):
+            return "lát", True
+        if w in ("adta", "adták", "megadta", "megadták"):
+            return "ad", True
+        if w in ("kergette", "kergették", "megkergette", "megkergették"):
+            return "kerget", True
+
+        # Check verbal prefixes (meg-, el-, be-, ki-, le-, fel-, át-)
+        for pfx in ("meg", "el", "be", "ki", "le", "fel", "át"):
+            if w.startswith(pfx) and len(w) > len(pfx) + 2:
+                w = w[len(pfx):]
+                if w in self.HU_TO_EN_DICTIONARY:
+                    return w, False
+                if w in ("volt", "voltak"):
+                    return "van", True
+                if w in ("látta", "látták"):
+                    return "lát", True
+                if w in ("adta", "adták"):
+                    return "ad", True
+                break
+
+        # Definite past: -ta, -te, -tta, -tte
+        for def_suff in ("tta", "tte", "ta", "te"):
+            if w.endswith(def_suff) and len(w) > len(def_suff) + 1:
+                stem = w[:-len(def_suff)]
+                if stem in self.HU_TO_EN_DICTIONARY:
+                    return stem, True
+                if stem.endswith("t") and stem[:-1] in self.HU_TO_EN_DICTIONARY:
+                    return stem[:-1], True
+                if stem.endswith("g") and (stem + "et") in self.HU_TO_EN_DICTIONARY:
+                    return stem + "et", True
+
+        # Indefinite past: -ott, -ett, -ött, -t
         past_suffixes = ["ott", "ett", "ött", "t"]
         for suff in past_suffixes:
-            if w.endswith(suff) and len(w) > len(suff) + 2:
+            if w.endswith(suff) and len(w) > len(suff) + 1:
                 stem = w[:-len(suff)]
                 if stem in self.HU_TO_EN_DICTIONARY:
                     return stem, True
-                # Check doubled consonant reduction (e.g. kergetett -> kerget)
+                # Check doubled consonant reduction (e.g. kergetett -> kerget, adott -> ad, látott -> lát, futott -> fut)
+                if len(stem) >= 2 and stem[-1] == stem[-2]:
+                    single_c = stem[:-1]
+                    if single_c in self.HU_TO_EN_DICTIONARY:
+                        return single_c, True
                 if stem.endswith("t") and stem[:-1] in self.HU_TO_EN_DICTIONARY:
                     return stem[:-1], True
 
@@ -213,12 +256,19 @@ class HungarianForwardParser:
 
         for word in words:
             w_lower = word.lower()
-            if w_lower == "nem" or w_lower.startswith(verb_stem):
+            stem, _ = self._stem_verb(w_lower)
+
+            if w_lower == "nem" or stem == verb_stem or w_lower.startswith(verb_stem):
                 if current_np:
                     case = self._detect_case(current_np[-1])
                     nps.append((list(current_np), case))
                     current_np = []
                 continue
+
+            if w_lower in self.ARTICLES and current_np:
+                case = self._detect_case(current_np[-1])
+                nps.append((list(current_np), case))
+                current_np = []
 
             current_np.append(word)
 
@@ -247,6 +297,8 @@ class HungarianForwardParser:
             return "sub"
         if w.endswith(("hoz", "hez", "höz")):
             return "all"
+        if w.endswith(("nak", "nek")):
+            return "dat"
         if w.endswith(("val", "vel")) or (len(w) > 3 and w.endswith("al") and w[-3] == w[-4]) or (len(w) > 3 and w.endswith("el") and w[-3] == w[-4]):
             return "ins"
         if w.endswith("t") or w.endswith(("ot", "et", "öt", "at", "át", "ét")):
@@ -270,8 +322,10 @@ class HungarianForwardParser:
             ("ból", "ela"), ("ből", "ela"),
             ("ra", "sub"), ("re", "sub"),
             ("hoz", "all"), ("hez", "all"), ("höz", "all"),
+            ("nak", "dat"), ("nek", "dat"),
             ("val", "ins"), ("vel", "ins"),
             ("ot", "acc"), ("et", "acc"), ("öt", "acc"), ("at", "acc"),
+            ("át", "acc"), ("ét", "acc"),
             ("t", "acc"),
         ]
 
@@ -305,10 +359,13 @@ class HungarianForwardParser:
         if all(t.lower() in self.ADJECTIVES or t.lower() in ("volt", "van", "nem", "a", "az") for t in tokens):
             return None
 
-        # Separate article, adjectives, head noun
-        head_word = tokens[-1]
-        stem = self._stem_noun(head_word)
-        en_lemma = self.HU_TO_EN_DICTIONARY.get(stem, stem)
+        # Check for multi-word compounds like golden retriever
+        if len(tokens) >= 2 and tokens[-2].lower() == "golden" and tokens[-1].lower().startswith("retriever"):
+            en_lemma = "golden retriever"
+        else:
+            head_word = tokens[-1]
+            stem = self._stem_noun(head_word)
+            en_lemma = self.HU_TO_EN_DICTIONARY.get(stem, stem)
 
         try:
             concept = self.grounder.ground_synset(en_lemma)
@@ -318,9 +375,19 @@ class HungarianForwardParser:
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
             node.anchor = f"wn:{en_lemma}.n.01"
 
-        # Apply adjectives
+        # Apply articles and determiners
         for token in tokens[:-1]:
             t_lower = token.lower()
+            if t_lower in ("a", "az"):
+                node.set_slot("NSM_THIS", 1)
+            elif t_lower in ("minden", "mindegyik"):
+                node.set_slot("NSM_ALL", 1)
+                node.set_slot("LJB_RO_ALL_QUANT", 1)
+            elif t_lower in ("két", "kettő"):
+                node.set_slot("NSM_TWO", 1)
+            elif t_lower == "egy":
+                node.set_slot("NSM_ONE", 1)
+
             if t_lower in self.ADJECTIVES:
                 en_adj = self.ADJECTIVES[t_lower]
                 if en_adj == "big":
@@ -331,15 +398,6 @@ class HungarianForwardParser:
                     node.set_slot("NSM_GOOD", 1)
                 elif en_adj == "bad":
                     node.set_slot("NSM_BAD", 1)
-
-            # Quantifiers
-            if t_lower in ("minden", "mindegyik"):
-                node.set_slot("NSM_ALL", 1)
-                node.set_slot("LJB_RO_ALL_QUANT", 1)
-            elif t_lower in ("két", "kettő"):
-                node.set_slot("NSM_TWO", 1)
-            elif t_lower == "egy":
-                node.set_slot("NSM_ONE", 1)
 
         return node
 
@@ -374,6 +432,14 @@ class HungarianForwardParser:
             node.set_slot("NSM_DO", polarity)
             node.set_slot("NSM_TOUCH", polarity)
             node.set_slot("TYPE_EVENT", 1)
+        elif en_verb == "be":
+            node.set_slot("TYPE_STATE", 1)
+        elif en_verb in ("want", "wish"):
+            node.set_slot("NSM_WANT", polarity)
+            node.set_slot("TYPE_STATE", 1)
+        elif en_verb in ("feel",):
+            node.set_slot("NSM_FEEL", polarity)
+            node.set_slot("TYPE_STATE", 1)
         else:
             node.set_slot("NSM_DO", polarity)
             node.set_slot("TYPE_EVENT", 1)

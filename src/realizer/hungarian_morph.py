@@ -31,6 +31,9 @@ class HungarianRealizer:
         "postman": "postás",
         "person": "ember",
         "human": "ember",
+        "homo": "ember",
+        "homo sapiens": "ember",
+        "human being": "ember",
         "rock": "kő",
         "stone": "kő",
         "garden": "kert",
@@ -63,6 +66,9 @@ class HungarianRealizer:
         "move": "mozog",
         "enter": "belép",
         "touch": "érint",
+        "be": "van",
+        "is": "van",
+        "was": "van",
         "big": "nagy",
         "small": "kis",
         "good": "jó",
@@ -127,7 +133,8 @@ class HungarianRealizer:
         # 3. Resolve Arguments
         subject_str = self._resolve_entity_with_case(graph, root, "VAL_X1_AGENT", case="nom")
         patient_str = self._resolve_entity_with_case(graph, root, "VAL_X2_PATIENT", case="acc")
-        if not patient_str and "VAL_EXPERIENCER" in root.edges:
+        experiencer_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="dat")
+        if not patient_str and not experiencer_str and "VAL_EXPERIENCER" in root.edges:
             patient_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="acc")
 
         dest_str = self._resolve_entity_with_case(graph, root, "VAL_X3_DESTINATION", case="ill")
@@ -197,14 +204,22 @@ class HungarianRealizer:
         if manner_str:
             tokens.append(manner_str)
 
-        if pred_adj:
-            tokens.append(pred_adj)
-
-        if verb_phrase:
-            tokens.append(verb_phrase)
+        if is_negated and verb_base == "van":
+            if verb_phrase:
+                tokens.append(verb_phrase)
+            if pred_adj:
+                tokens.append(pred_adj)
+        else:
+            if pred_adj:
+                tokens.append(pred_adj)
+            if verb_phrase:
+                tokens.append(verb_phrase)
 
         if patient_str:
             tokens.append(patient_str)
+
+        if experiencer_str:
+            tokens.append(experiencer_str)
 
         raw = " ".join(tokens).strip()
         if not raw:
@@ -258,6 +273,10 @@ class HungarianRealizer:
         elif case == "acc":
             if noun == "kő":
                 return "követ"
+            if noun == "ház":
+                return "házat"
+            if noun in ("könyv", "föld"):
+                return stem + "et"
             if ends_with_vowel:
                 return stem + "t"
             if noun.endswith(("ás", "és", "ár", "ér", "úr", "őr", "os", "es", "ös")):
@@ -304,6 +323,10 @@ class HungarianRealizer:
                 return stem + "höz"
             else:
                 return stem + "hez"
+
+        # 9. Dative (dat: -nak / -nek)
+        elif case in ("dat", "all_dat"):
+            return stem + ("nak" if harmony == "back" else "nek")
 
         return noun
 
@@ -409,18 +432,6 @@ class HungarianRealizer:
         # Apply case suffix to head noun
         inflected_noun = self.apply_case_suffix(noun_base, case)
 
-        # Prepend determiner / article: 'a' / 'az' or quantifier
-        article = "a"
-        if inflected_noun and inflected_noun[0].lower() in "aáeéoóiíuúöőüű":
-            article = "az"
-
-        if target_node.get_slot("LJB_RO_ALL_QUANT") == 1 or target_node.get_slot("NSM_ALL") == 1:
-            article = "minden"
-        elif target_node.get_slot("NSM_TWO") == 1:
-            article = "két"
-        elif (target_node.get_slot("NSM_SOME") == 1 or target_node.get_slot("NSM_ONE") == 1) and case != "nom":
-            article = "egy"
-
         # Adjective
         adj = ""
         if target_node.get_slot("NSM_BIG") == 1:
@@ -428,7 +439,20 @@ class HungarianRealizer:
         elif target_node.get_slot("NSM_SMALL") == 1:
             adj = "kis"
 
-        tokens = [article]
+        # Prepend determiner / article: 'a' / 'az' or quantifier
+        if target_node.get_slot("LJB_RO_ALL_QUANT") == 1 or target_node.get_slot("NSM_ALL") == 1:
+            article = "minden"
+        elif target_node.get_slot("NSM_TWO") == 1:
+            article = "két"
+        elif (target_node.get_slot("NSM_ONE") == 1 or target_node.get_slot("NSM_SOME") == 1) and case != "nom":
+            article = "egy"
+        else:
+            first_word = adj if adj else inflected_noun
+            article = "az" if first_word and first_word[0].lower() in "aáeéoóiíuúöőüű" else "a"
+
+        tokens = []
+        if article:
+            tokens.append(article)
         if adj:
             tokens.append(adj)
         tokens.append(inflected_noun)

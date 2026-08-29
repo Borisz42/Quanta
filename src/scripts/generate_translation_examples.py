@@ -144,16 +144,16 @@ def generate_all_examples(output_dir: Path):
     # 3. Hungarian -> English (hu-eng)
     # ------------------------------------------------------------------
     hu_sentences = [
-        "A kutya kergetett a macskát.",
-        "A golden retriever harapott a postást a kertben.",
-        "Egy ember látott a kertet.",
-        "A kutya nem látott a macskát.",
-        "A kutya futott a házba.",
-        "A postás adott egy könyvet a embernek.",
-        "Egy ember gondol.",
+        "A kutya kergette a macskát.",
+        "A golden retriever a kertben megharapta a postást.",
+        "Az ember látta a kertet.",
+        "A kutya nem látta a macskát.",
+        "A kutya a házba futott.",
+        "A postás adott egy könyvet az embernek.",
+        "Az ember gondolkodik.",
         "Minden ember akar egy házat.",
         "A kutya nem volt nagy.",
-        "Egy kutya látott egy kutyát.",
+        "A kutya látott egy kutyát.",
     ]
 
     print("\n3. Generating Hungarian -> English (hu-eng) cross-lingual examples...")

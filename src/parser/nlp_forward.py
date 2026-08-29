@@ -389,6 +389,8 @@ class NLPForwardParser:
                     else:
                         prep_node.set_slot("VAL_X3_DESTINATION", 1)
                         prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
+                        if prep_lemma == "into":
+                            prep_node.set_slot("NSM_INSIDE", 1)
                         root_node.set_slot("VAL_X3_DESTINATION", 1)
                         graph.add_node(prep_node)
                         graph.add_edge(root_node, "VAL_X3_DESTINATION", prep_node)

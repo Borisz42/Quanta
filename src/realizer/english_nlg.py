@@ -165,15 +165,34 @@ class EnglishRealizer:
                 patient_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_EXPERIENCER")
 
         # 5. Resolve Prepositional Arguments
-        dest_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X3_DESTINATION", prep="to")
+        dest_cids = predicate_node.edges.get("VAL_X3_DESTINATION", [])
+        dest_node = graph.get_node(dest_cids[0]) if dest_cids else None
+        dest_prep = "into" if dest_node and dest_node.get_slot("NSM_INSIDE") == 1 else "to"
+        dest_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X3_DESTINATION", prep=dest_prep)
         source_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X4_SOURCE", prep="from")
         inst_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_X5_INSTRUMENT", prep="with")
         loc_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_LOCATION_SLOT", prep="in")
         purpose_str = self._resolve_entity_by_edge(graph, predicate_node, "VAL_PURPOSE_SLOT", prep="for")
 
-        # 6. Resolve Temporal & Manner Adverbials
+        # 6. Resolve Temporal, Manner, & Predicate Adjective Phrases
         time_str = self._resolve_temporal_phrase(predicate_node)
         manner_str = self._resolve_manner_phrase(predicate_node)
+
+        pred_adj = ""
+        is_copula = verb_base in ("be", "is", "are", "was", "were")
+        if is_copula:
+            if predicate_node.get_slot("NSM_BIG") == 1:
+                pred_adj = "big"
+            elif predicate_node.get_slot("NSM_SMALL") == 1:
+                pred_adj = "small"
+            elif predicate_node.get_slot("NSM_GOOD") == 1:
+                pred_adj = "good"
+            elif predicate_node.get_slot("NSM_BAD") == 1:
+                pred_adj = "bad"
+            elif predicate_node.get_slot("NSM_FEEL") == 1 and predicate_node.get_slot("TYPE_ATTRIBUTE_PROPERTY") == 1:
+                pred_adj = "cold"
+            elif predicate_node.get_slot("NSM_TOUCH") == 1 and predicate_node.get_slot("TYPE_ATTRIBUTE_PROPERTY") == 1:
+                pred_adj = "hard"
 
         # 7. Check if Interrogative / Question
         is_query = predicate_node.get_slot("GRAPH_QUERY_TARGET") == 3
@@ -213,6 +232,8 @@ class EnglishRealizer:
                 tokens.append(modal_adv)
             if main_verb:
                 tokens.append(main_verb)
+            if pred_adj:
+                tokens.append(pred_adj)
             if manner_str:
                 tokens.append(manner_str)
             if patient_str:
@@ -238,6 +259,8 @@ class EnglishRealizer:
         tokens = [agent_str] if agent_str else []
         if verb_phrase:
             tokens.append(verb_phrase)
+        if pred_adj:
+            tokens.append(pred_adj)
         if manner_str:
             tokens.append(manner_str)
         if patient_str:
@@ -410,6 +433,16 @@ class EnglishRealizer:
             # If literal is a clean entity name
             head_noun = lit
 
+        if head_noun in ("homo", "homo sapiens", "human being"):
+            if node.literal and str(node.literal).lower() in ("human", "person", "man", "woman"):
+                head_noun = str(node.literal).lower()
+            else:
+                head_noun = "human"
+        elif node.literal and isinstance(node.literal, str):
+            lit = str(node.literal).strip().lower()
+            if lit in ("human", "person", "dog", "cat", "mailman", "rock", "garden", "house", "car", "tree", "water", "book", "city", "stick", "ball"):
+                head_noun = lit
+
         if not head_noun:
             if node.get_slot("TYPE_HUMAN") == 1:
                 head_noun = "person"
@@ -425,7 +458,7 @@ class EnglishRealizer:
                 head_noun = "entity"
 
         # Check if head noun is a proper noun or pronoun
-        if head_noun.istitle() and len(head_noun.split()) == 1 and head_noun.lower() not in ("person", "animal", "dog", "cat", "mailman"):
+        if head_noun.istitle() and len(head_noun.split()) == 1 and head_noun.lower() not in ("person", "human", "animal", "dog", "cat", "mailman"):
             return head_noun
         if head_noun.lower() in ("i", "you", "he", "she", "it", "we", "they", "someone", "something", "everyone", "nothing"):
             return head_noun.lower()
