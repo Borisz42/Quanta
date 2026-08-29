@@ -374,7 +374,7 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - [x] **8A.5** Implement prepositional phrase generation from location/temporal child nodes
 - [x] **8A.6** 🧪 Test: Example A graph → "A golden retriever bit the mailman in the garden."
 - [x] **8A.7** 🧪 Test: Example B graph → "The dog did not bite the mailman."
-- [ ] **8A.8** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
+- [x] **8A.8** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
 
 #### 8B — Hungarian Realizer
 - [x] **8B.1** Implement vowel harmony classifier: back (`a,á,o,ó,u,ú`) vs front (`e,é,i,í,ö,ő,ü,ű`)
@@ -382,10 +382,10 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - [x] **8B.3** Implement inessive suffix: `-ban` (back) / `-ben` (front)
 - [x] **8B.4** Implement instrumental suffix: `-val` (back) / `-vel` (front) with consonant assimilation
 - [x] **8B.5** Implement definite/indefinite conjugation selection based on determiner slots
-- [ ] **8B.6** Implement verbal prefix handling (`meg-`, `el-`, `ki-`) with negation splitting (`nem harapta meg`)
+- [x] **8B.6** Implement verbal prefix handling (`meg-`, `el-`, `ki-`) with negation splitting (`nem harapta meg`)
 - [x] **8B.7** 🧪 Test: Example A graph → "A golden retriever a kertben megharapta a postást."
-- [ ] **8B.8** 🧪 Test: Example B graph → "A kutya nem harapta meg a postást."
-- [ ] **8B.9** 🧪 Test: Example C graph → "Vajon a kutya megharapott egy postást?"
+- [x] **8B.8** 🧪 Test: Example B graph → "A kutya nem harapta meg a postást."
+- [x] **8B.9** 🧪 Test: Example C graph → "Vajon a kutya megharapott egy postást?"
 
 #### 8C — FOL Emitter
 - [x] **8C.1** Implement ASG → FOL string conversion: quantifiers, connectives, predicates, variables
@@ -395,10 +395,10 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 
 #### 8D — Code Emitter (Python)
 - [x] **8D.1** Implement ASG → Python source: function def, arguments, return, branches, loops
-- [ ] **8D.2** Implement recursive call reconstruction from `GRAPH_RECURSIVE_REF` edges
+- [x] **8D.2** Implement recursive call reconstruction from `GRAPH_RECURSIVE_REF` edges
 - [x] **8D.3** Implement indentation and formatting for readable output
 - [x] **8D.4** 🧪 Test: Example F graph → syntactically valid `factorial(n)` Python code
-- [ ] **8D.5** 🧪 Test: emitted code is executable and `factorial(5) == 120`
+- [x] **8D.5** 🧪 Test: emitted code is executable and `factorial(5) == 120`
 
 ---
 
