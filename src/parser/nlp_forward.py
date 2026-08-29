@@ -6,7 +6,7 @@ and 256-dimensional quaternary semantic vectors.
 
 from __future__ import annotations
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 import spacy
 
 try:
@@ -19,6 +19,14 @@ from core.asg import QuantaGraph, QuantaNode
 from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
 from parser.lexical_grounder import WordNetLexicalGrounder
+
+
+class SVOResult(NamedTuple):
+    """Container for Subject-Verb-Object and modifiers extracted from dependency tree."""
+    subject: Optional[str]
+    verb: Optional[str]
+    object: Optional[str]
+    modifiers: List[Dict[str, Any]]
 
 
 class NLPForwardParser:
@@ -71,11 +79,116 @@ class NLPForwardParser:
             "happen", "occur", "transpire", "arise", "unfold", "materialize",
         }
 
-    def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
-        """Parses a single natural language sentence into a validated QuantaGraph ASG."""
+    def parse_dependency_tree(self, text: str) -> Any:
+        """Parses text into a spaCy Doc dependency tree after typo normalization."""
         from parser.typo_normalizer import TypoNormalizer
         clean_text = TypoNormalizer.get_instance().normalize_text(text, lang="en")
-        doc = self.nlp(clean_text.strip())
+        return self.nlp(clean_text.strip())
+
+    def extract_subject_verb_object(self, doc: Any) -> SVOResult:
+        """Extracts (subject, verb, object, modifiers) from a spaCy dependency tree."""
+        known_verb_lemmas = {
+            "bit": "bite", "bites": "bite", "bite": "bite",
+            "chased": "chase", "chases": "chase", "chase": "chase",
+            "ran": "run", "runs": "run", "run": "run",
+            "saw": "see", "sees": "see", "see": "see",
+            "gave": "give", "gives": "give", "give": "give",
+            "walked": "walk", "walks": "walk", "walk": "walk",
+            "thought": "think", "thinks": "think", "think": "think",
+            "knew": "know", "knows": "know", "know": "know",
+            "wanted": "want", "wants": "want", "want": "want",
+            "felt": "feel", "feels": "feel", "feel": "feel",
+            "touched": "touch", "touches": "touch", "touch": "touch",
+        }
+
+        root_token = None
+        for token in doc:
+            if token.dep_ == "ROOT":
+                root_token = token
+                break
+
+        if root_token is not None and root_token.pos_ != "VERB":
+            for token in doc:
+                if token.text.lower() in known_verb_lemmas or token.pos_ == "VERB":
+                    root_token = token
+                    break
+
+        if root_token is None and len(doc) > 0:
+            root_token = doc[0]
+
+        # Extract Subject
+        agent_token = None
+        for token in doc:
+            if token.dep_ in ("nsubj", "nsubjpass", "csubj") and (token.head == root_token or token.i < root_token.i):
+                agent_token = token
+                break
+
+        if agent_token is None and root_token:
+            for token in doc:
+                if token.i < root_token.i and token.pos_ in ("NOUN", "PROPN", "PRON") and token.dep_ not in ("prep", "pobj", "det"):
+                    agent_token = token
+                    break
+
+        subject_str = None
+        if agent_token:
+            compounds = [c for c in agent_token.children if c.dep_ in ("compound", "amod") and c.i < agent_token.i]
+            if not compounds:
+                prev_tokens = [doc[i] for i in range(max(0, agent_token.i - 2), agent_token.i) if doc[i].pos_ in ("ADJ", "NOUN") and doc[i].dep_ not in ("det", "prep")]
+                compounds = prev_tokens
+            if compounds:
+                subject_str = " ".join([c.text for c in compounds] + [agent_token.text])
+            else:
+                subject_str = agent_token.text
+
+        # Extract Object
+        patient_token = None
+        for token in doc:
+            if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and (token.head == root_token or token.i > root_token.i):
+                patient_token = token
+                break
+
+        if patient_token is None and root_token:
+            for token in doc:
+                if token.i > root_token.i and token.dep_ in ("appos", "dobj", "attr", "dep") and token.pos_ in ("NOUN", "PROPN"):
+                    patient_token = token
+                    break
+
+        object_str = None
+        if patient_token:
+            compounds = [c for c in patient_token.children if c.dep_ in ("compound", "amod") and c.i < patient_token.i]
+            if compounds:
+                object_str = " ".join([c.text for c in compounds] + [patient_token.text])
+            else:
+                object_str = patient_token.text
+
+        # Extract Modifiers
+        modifiers = []
+        for token in doc:
+            if token.dep_ == "prep" or token.pos_ == "ADP":
+                prep_lemma = token.lemma_.lower()
+                pobj = [child for child in token.children if child.dep_ in ("pobj", "dobj")]
+                if not pobj:
+                    for next_tok in doc[token.i + 1:]:
+                        if next_tok.pos_ in ("NOUN", "PROPN"):
+                            pobj = [next_tok]
+                            break
+                if pobj:
+                    pobj_tok = pobj[0]
+                    pobj_text = pobj_tok.text
+                    full_span = doc[token.i : pobj_tok.i + 1].text
+                    modifiers.append({
+                        "type": "prepositional_phrase",
+                        "prep": prep_lemma,
+                        "pobj": pobj_text,
+                        "text": full_span,
+                    })
+
+        verb_str = root_token.text if root_token else None
+        return SVOResult(subject=subject_str, verb=verb_str, object=object_str, modifiers=modifiers)
+
+    def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
+        """Parses a single natural language sentence into a validated QuantaGraph ASG."""
+        doc = self.parse_dependency_tree(text)
         graph = QuantaGraph()
 
         # Disambiguate verb / root tokens (e.g. 'bit' misclassified as NOUN)

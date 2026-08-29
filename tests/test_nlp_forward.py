@@ -114,3 +114,21 @@ def test_quanta_graph_get_children(nlp_parser):
     assert patient_children[0].anchor == "wn:mailman.n.01"
 
 
+def test_parse_dependency_tree_and_extract_svo(nlp_parser):
+    """Verify Phase 6 Items 6A.2, 6A.3, 6A.4: SVO and location extraction."""
+    sentence = "A golden retriever bit the mailman in the garden."
+    doc = nlp_parser.parse_dependency_tree(sentence)
+    assert doc is not None
+    assert len(doc) > 0
+
+    svo = nlp_parser.extract_subject_verb_object(doc)
+    assert svo.subject == "golden retriever"
+    assert svo.verb == "bit"
+    assert svo.object == "mailman"
+    assert len(svo.modifiers) == 1
+    assert svo.modifiers[0]["prep"] == "in"
+    assert svo.modifiers[0]["pobj"] == "garden"
+    assert "garden" in svo.modifiers[0]["text"]
+
+
+
