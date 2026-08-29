@@ -21,12 +21,12 @@
 ### 1A — QuaternaryValue enum & lattice operations
 
 - [x] **1A.1** Define `QuaternaryValue` enum: `IRRELEVANT=0`, `TRUE=1`, `FALSE=2`, `UNKNOWN=3`
-- [ ] **1A.2** Implement knowledge ordering comparator: `0 ≤_k {1,2} ≤_k 3`
-- [ ] **1A.3** Implement truth ordering comparator: `2 ≤_t {0,3} ≤_t 1`
-- [ ] **1A.4** Implement lattice `join (⊔)` operation (slot-wise, element-wise max in knowledge order)
-- [ ] **1A.5** Implement lattice `meet (⊓)` operation (slot-wise, element-wise min in knowledge order)
-- [ ] **1A.6** 🧪 Write unit tests for all lattice algebra properties: commutativity, associativity, idempotency, absorption
-- [ ] **1A.7** 🧪 Write tests verifying `join`/`meet` produce correct results for all 16 pair combinations of `{0,1,2,3}`
+- [x] **1A.2** Implement knowledge ordering comparator: `0 ≤_k {1,2} ≤_k 3`
+- [x] **1A.3** Implement truth ordering comparator: `2 ≤_t {0,3} ≤_t 1`
+- [x] **1A.4** Implement lattice `join (⊔)` operation (slot-wise, element-wise max in knowledge order)
+- [x] **1A.5** Implement lattice `meet (⊓)` operation (slot-wise, element-wise min in knowledge order)
+- [x] **1A.6** 🧪 Write unit tests for all lattice algebra properties: commutativity, associativity, idempotency, absorption
+- [x] **1A.7** 🧪 Write tests verifying `join`/`meet` produce correct results for all 16 pair combinations of `{0,1,2,3}`
 
 ### 1B — QuantaVector (256-dimension quaternary array)
 

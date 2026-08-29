@@ -35,6 +35,72 @@ class QuaternaryValue(enum.IntEnum):
             return QuaternaryValue.TRUE
         return self
 
+    def knowledge_le(self, other: Union[QuaternaryValue, int]) -> bool:
+        """Knowledge ordering comparator: 0 ≤_k {1, 2} ≤_k 3.
+        
+        Returns True if self is less than or equal to other in information/knowledge order.
+        """
+        other_val = QuaternaryValue(other)
+        if self == other_val or self == QuaternaryValue.IRRELEVANT:
+            return True
+        if other_val == QuaternaryValue.UNKNOWN:
+            return True
+        return False
+
+    def truth_le(self, other: Union[QuaternaryValue, int]) -> bool:
+        """Truth ordering comparator: 2 ≤_t {0, 3} ≤_t 1.
+        
+        Returns True if self is less than or equal to other in truth order.
+        """
+        other_val = QuaternaryValue(other)
+        if self == other_val:
+            return True
+        if self == QuaternaryValue.FALSE:
+            return True
+        if other_val == QuaternaryValue.TRUE:
+            return True
+        return False
+
+    def join(self, other: Union[QuaternaryValue, int]) -> QuaternaryValue:
+        """Lattice join (⊔_k) operation in knowledge order (least upper bound).
+        
+        0 ⊔ x = x
+        x ⊔ x = x
+        1 ⊔ 2 = 3 (contradiction / overdetermined knowledge)
+        3 ⊔ x = 3
+        """
+        other_val = QuaternaryValue(other)
+        if self == other_val:
+            return self
+        if self == QuaternaryValue.IRRELEVANT:
+            return other_val
+        if other_val == QuaternaryValue.IRRELEVANT:
+            return self
+        return QuaternaryValue.UNKNOWN
+
+    def meet(self, other: Union[QuaternaryValue, int]) -> QuaternaryValue:
+        """Lattice meet (⊓_k) operation in knowledge order (greatest lower bound).
+        
+        3 ⊓ x = x
+        x ⊓ x = x
+        1 ⊓ 2 = 0 (no common information between TRUE and FALSE)
+        0 ⊓ x = 0
+        """
+        other_val = QuaternaryValue(other)
+        if self == other_val:
+            return self
+        if self == QuaternaryValue.UNKNOWN:
+            return other_val
+        if other_val == QuaternaryValue.UNKNOWN:
+            return self
+        return QuaternaryValue.IRRELEVANT
+
+    def __or__(self, other: Union[QuaternaryValue, int]) -> QuaternaryValue:
+        return self.join(other)
+
+    def __and__(self, other: Union[QuaternaryValue, int]) -> QuaternaryValue:
+        return self.meet(other)
+
 
 def pack_quaternary_array(arr: Union[Sequence[int], np.ndarray]) -> bytes:
     """Packs 256 quaternary values (in 0..3) into a 64-byte bytes payload.
