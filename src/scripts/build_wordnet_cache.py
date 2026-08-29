@@ -42,12 +42,34 @@ def build_wordnet_cache(
 
     # Seed with core English lexicon words and common reasoning concepts
     seed_words = list(TypoNormalizer.ENGLISH_CORE_LEXICON.keys()) + [
-        "dog", "cat", "mailman", "postman", "person", "human", "rock", "stone",
-        "garden", "house", "tree", "water", "book", "city", "stick", "ball",
-        "car", "animal", "golden_retriever", "hammer", "apple", "food", "table",
-        "bite", "chase", "run", "walk", "see", "hear", "think", "know", "want",
-        "feel", "touch", "give", "take", "move", "live", "die", "happen", "say",
-        "tell", "eat", "drink", "cause", "force",
+        # FOLIO & Logic concepts
+        "entity", "object", "concept", "proposition", "premise", "conclusion", "fact", "rule",
+        "axiom", "proof", "theorem", "hypothesis", "assumption", "implication", "negation",
+        # bAbI multi-hop & locations
+        "hallway", "kitchen", "garden", "bedroom", "bathroom", "office", "park", "school",
+        "football", "milk", "apple", "box", "chest", "container", "cup", "bottle",
+        "north", "south", "east", "west", "up", "down", "left", "right", "inside", "outside",
+        # ProofWriter traits & animals
+        "rough", "smooth", "quiet", "loud", "smart", "clever", "dull", "cold", "warm", "hot",
+        "red", "green", "blue", "yellow", "white", "black", "fur", "young", "old", "round",
+        "lion", "tiger", "bear", "squirrel", "cat", "dog", "mouse", "eagle", "bald_eagle",
+        # CLUTRR Kinship
+        "father", "mother", "son", "daughter", "brother", "sister", "grandfather", "grandmother",
+        "grandson", "granddaughter", "uncle", "aunt", "nephew", "niece", "cousin", "husband",
+        "wife", "parent", "child", "sibling", "ancestor", "descendant", "spouse", "relative",
+        # Natural Semantic Metalanguage (NSM) Concepts
+        "someone", "something", "people", "body", "kind", "part", "this", "the_same", "other",
+        "else", "one", "two", "much", "many", "little", "few", "all", "good", "bad", "big",
+        "small", "think", "know", "want", "feel", "see", "hear", "say", "words", "true",
+        "do", "happen", "move", "touch", "be", "there_is", "have", "live", "die", "when",
+        "time", "now", "before", "after", "a_long_time", "a_short_time", "for_some_time",
+        "moment", "where", "place", "here", "above", "below", "far", "near", "side", "inside",
+        "not", "maybe", "can", "because", "if", "very", "more", "like",
+        # Physical & Interpersonal Actions
+        "put", "place", "set", "lay", "drop", "hold", "grasp", "grip", "carry", "buy", "sell",
+        "pay", "meet", "visit", "greet", "search", "seek", "hunt", "find", "help", "assist",
+        "kill", "destroy", "damage", "repair", "fix", "create", "build", "write", "learn", "study",
+        "step", "swim", "climb", "fall", "enter", "exit", "cross", "return", "ask", "answer",
     ]
 
     # Collect distinct synsets

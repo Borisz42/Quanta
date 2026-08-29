@@ -40,9 +40,15 @@ def test_word_and_sentence_normalization(normalizer):
     assert normalizer.correct_word("maileman", lang="en") == "mailman"
     assert normalizer.correct_word("graden", lang="en") == "garden"
     assert normalizer.correct_word("chsed", lang="en") == "chased"
+    assert normalizer.correct_word("kichen", lang="en") == "kitchen"
+    assert normalizer.correct_word("fatther", lang="en") == "father"
+    assert normalizer.correct_word("tigre", lang="en") == "tiger"
 
     norm_sent = normalizer.normalize_text("A glden retreiver bit the maileman in the graden.", lang="en")
     assert norm_sent == "A golden retriever bit the mailman in the garden."
+
+    norm_compound = normalizer.normalize_text("The bald egle and polr bear saw the post offce.", lang="en")
+    assert norm_compound == "The bald eagle and polar bear saw the post office."
 
 
 def test_typo_asg_construction_and_location_preservation(nlp_parser):
