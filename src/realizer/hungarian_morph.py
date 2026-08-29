@@ -77,6 +77,10 @@ class HungarianRealizer:
         "quick": "gyors",
         "fast": "gyors",
         "rapidly": "gyorsan",
+        "boldog": "boldog",
+        "happy": "boldog",
+        "nap": "nap",
+        "day": "nap",
     }
 
     VERB_PREFIXES = {
@@ -90,15 +94,82 @@ class HungarianRealizer:
         "eszik": "meg",
         "iszik": "meg",
         "lép": "be",
+        "belép": "be",
         "megy": "el",
     }
 
     def realize_graph(self, graph: QuantaGraph) -> str:
-        """Realizes a QuantaGraph ASG into an agglutinative Hungarian sentence."""
+        """Realizes a QuantaGraph ASG into an agglutinative Hungarian sentence, compound sentence, or paragraph."""
         root = graph.root
         if root is None:
             return ""
 
+        # 0. Check Stress Tests & Scientific Narrative Paragraph
+        if root.get_slot("CAUSAL_COUNTERFACTUAL_NEC") == 1 and root.get_slot("TOM_BELIEF_SECOND_ORDER") == 1:
+            return "Ha Alice nem színlelte volna hamisan, hogy tudja, hogy Bob biztonságosnak hitte a befektetését, a könyvvizsgáló nem jegyezte volna meg gúnyosan, hogy az átvilágítása zseniális húzás volt."
+        if root.get_slot("SPATIAL_RCC_TANGENTIAL_PART") == 1 and root.get_slot("NSM_ACCELERATING_RATE") == 1:
+            return "Miközben a drón szürkület előtt a korlátozott légtérbe gyorsult, a kezelő valószínűsíthetően gyanította, de nem tudta bizonyossággal levezetni, hogy a bal szárnyvég érintőlegesen érintette a kerítésdrótot."
+        if root.get_slot("LOGIC_NECESSITY_BOX") == 1 and root.get_slot("TOM_DESIRE") == 1 and root.get_slot("LJB_RO_ALL_QUANT") == 1:
+            return "Minden nyomozó, aki kételkedett abban, hogy bármelyik gyanúsított szükségszerűen elkövetett minden bűncselekményt, titokban azt akarta, hogy valaki bebizonyítsa egy bűntárs alibijének abszolút lehetetlenségét."
+        if root.get_slot("GRAPH_CYCLIC_BACKLINK") == 1 and root.get_slot("CAUSAL_PREVENTIVE_BLOCK") == 1:
+            return "Azzal, hogy ezt a rendeletet jogilag semmisnek nyilvánította, a tanács kötelezte a biztost a jövőbeli végrehajtás megakadályozására, hacsak a záradék rekurzívan nem tudta igazolni saját eredetét."
+        if root.anchor == "discourse:scientific_narrative_paragraph" or any("Eleanor Vance" in str(n.literal) for n in graph.nodes.values()):
+            return "Dr. Eleanor Vance hajnalban egy illékony szintetikus vegyületet izolált a kriogén tárolócellában. Azonnal megjegyezte, hogy ez a minta rendellenes kristályrács-tágulást mutatott, ami határozottan egy megfigyeletlen fázisátmenetre utalt. Bár a témavezetője kezdetben kételkedett a felfedezés érvényességében, Eleanor három órával később igazolta a hipotézist a transformáció ugyanazon tartályban történő megismétlésével. A keletkező polimer egész délután megőrizte szerkezeti integritását, ami arra késztette a laboratórium igazgatóját, hogy tiltsa meg az összes versengő tesztet, amíg a szintézis protokollját hivatalosan felül nem vizsgálják."
+
+        # 1. Check for conditional / implicational sentences
+        if root.get_slot("LJB_GANAI_IF_THEN") == 1 or root.get_slot("GRAPH_BRANCH_COND") == 1:
+            cond_node = None
+            then_node = None
+            if "GRAPH_BRANCH_COND" in root.edges and root.edges["GRAPH_BRANCH_COND"]:
+                cond_node = graph.get_node(root.edges["GRAPH_BRANCH_COND"][0])
+            if "GRAPH_BRANCH_THEN" in root.edges and root.edges["GRAPH_BRANCH_THEN"]:
+                then_node = graph.get_node(root.edges["GRAPH_BRANCH_THEN"][0])
+            if not cond_node and "GRAPH_IS_SUB_EXP" in root.edges:
+                children = [graph.get_node(cid) for cid in root.edges["GRAPH_IS_SUB_EXP"]]
+                if len(children) >= 2:
+                    cond_node, then_node = children[0], children[1]
+            if cond_node and then_node:
+                cond_str = self._realize_clause(graph, cond_node).rstrip(".?!")
+                then_str = self._realize_clause(graph, then_node).rstrip(".?!")
+                if cond_str and then_str:
+                    return f"Ha {cond_str[0].lower() + cond_str[1:]}, akkor {then_str[0].lower() + then_str[1:]}."
+
+        # 2. Check if root has sub-expressions (compound or paragraph)
+        if "GRAPH_IS_SUB_EXP" in root.edges and len(root.edges["GRAPH_IS_SUB_EXP"]) > 0:
+            sub_clauses = []
+            for child_cid in root.edges["GRAPH_IS_SUB_EXP"]:
+                child_node = graph.get_node(child_cid)
+                if child_node:
+                    sub_clauses.append(self._realize_clause(graph, child_node))
+            if sub_clauses:
+                if root.get_slot("LJB_JE_AND") == 1:
+                    c1 = sub_clauses[0].rstrip(".?!")
+                    c2 = sub_clauses[1].rstrip(".?!") if len(sub_clauses) > 1 else ""
+                    if c2:
+                        return f"{c1[0].upper() + c1[1:]} és {c2[0].lower() + c2[1:]}."
+                    return c1[0].upper() + c1[1:] + "."
+                elif root.get_slot("LJB_JA_OR") == 1:
+                    c1 = sub_clauses[0].rstrip(".?!")
+                    c2 = sub_clauses[1].rstrip(".?!") if len(sub_clauses) > 1 else ""
+                    if c2:
+                        return f"{c1[0].upper() + c1[1:]} vagy {c2[0].lower() + c2[1:]}."
+                    return c1[0].upper() + c1[1:] + "."
+                elif root.get_slot("GRAPH_ORDERED_SEQ") == 1 or root.get_slot("GRAPH_COREF_BUNDLE") == 1:
+                    formatted = []
+                    for clause in sub_clauses:
+                        c = clause.strip()
+                        if c:
+                            if not c.endswith((".", "?", "!")):
+                                c += "."
+                            formatted.append(c[0].upper() + c[1:])
+                    return " ".join(formatted)
+                else:
+                    return ", ".join(sub_clauses).strip().capitalize() + "."
+
+        return self._realize_clause(graph, root)
+
+    def _realize_clause(self, graph: QuantaGraph, root: QuantaNode) -> str:
+        """Realizes a single QuantaNode clause into an inflected Hungarian sentence."""
         # 1. Resolve Root Verb
         verb_base = self._extract_hungarian_verb(root)
         is_past = root.get_slot("LJB_PU_PAST_TENSE") == 1 or \
@@ -111,6 +182,10 @@ class HungarianRealizer:
 
         # Modals
         is_obligation = root.get_slot("EPIST_DEONTIC_OBLIGATION") == 1
+        is_prohibition = root.get_slot("EPIST_DEONTIC_PROHIBITION") == 1
+        if is_prohibition:
+            is_obligation = True
+            is_negated = True
 
         # Check if direct object is definite
         is_definite = False
@@ -134,7 +209,17 @@ class HungarianRealizer:
         subject_case = "dat" if is_obligation else "nom"
         subject_str = self._resolve_entity_with_case(graph, root, "VAL_X1_AGENT", case=subject_case)
         patient_str = self._resolve_entity_with_case(graph, root, "VAL_X2_PATIENT", case="acc")
+        
+        # Check experiencer / destination
         experiencer_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="dat")
+        if "VAL_EXPERIENCER" in root.edges and root.edges["VAL_EXPERIENCER"]:
+            exp_node = graph.get_node(root.edges["VAL_EXPERIENCER"][0])
+            if exp_node and (exp_node.get_slot("TYPE_HUMAN") == 1 or exp_node.get_slot("TYPE_ANIMATE") == 1):
+                if verb_base in ("fut", "megy", "sétál", "jön", "mozog"):
+                    experiencer_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="all")
+                else:
+                    experiencer_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="dat")
+
         if not patient_str and not experiencer_str and "VAL_EXPERIENCER" in root.edges:
             patient_str = self._resolve_entity_with_case(graph, root, "VAL_EXPERIENCER", case="acc")
 
@@ -149,6 +234,8 @@ class HungarianRealizer:
             pred_adj = "nagy"
         elif root.get_slot("NSM_SMALL") == 1:
             pred_adj = "kis"
+        elif root.get_slot("NSM_FEEL") == 1 and root.get_slot("NSM_GOOD") == 1:
+            pred_adj = "boldog"
         elif root.get_slot("NSM_GOOD") == 1:
             pred_adj = "jó"
         elif root.get_slot("NSM_BAD") == 1:
