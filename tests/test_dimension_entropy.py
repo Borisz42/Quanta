@@ -60,11 +60,53 @@ def test_information_profiler_metrics(validation_corpus):
     assert report["num_samples"] == 5000
     assert report["mean_entropy"] > 0.1  # Across diverse propositions
     assert report["collision_rate"] < 0.05  # Highly resolvable
+    assert report["joint_entropy"] >= 0.0
+    assert report["total_correlation"] >= 0.0
 
     # Check band entropies
     band_stats = report["band_entropies"]
     for band_name, ent in band_stats.items():
         assert ent >= 0.0
+
+
+def test_total_correlation_and_report_export(validation_corpus, tmp_path):
+    profiler = QuantaInformationProfiler(validation_corpus.canonical_matrix)
+    
+    # 1. Test theoretical properties on synthetic matrices
+    # Case A: Perfectly correlated 256 dimensions
+    rng = np.random.default_rng(42)
+    single_col = rng.choice([0, 1, 2, 3], size=1000, p=[0.25, 0.25, 0.25, 0.25])
+    correlated_matrix = np.tile(single_col[:, np.newaxis], (1, 256))
+    prof_corr = QuantaInformationProfiler(correlated_matrix)
+    
+    joint_h = prof_corr.compute_joint_entropy()
+    marg_h = prof_corr.compute_entropies()
+    tc = prof_corr.compute_total_correlation()
+    
+    assert np.isclose(joint_h, 2.0, atol=0.05)
+    assert np.isclose(marg_h[0], 2.0, atol=0.05)
+    # TC = 256 * 2.0 - 2.0 = 255 * 2.0 = 510.0 bits
+    assert np.isclose(tc, 255.0 * 2.0, atol=10.0)
+
+    # 2. Test export functionality
+    txt_path = tmp_path / "profiler_report.txt"
+    json_path = tmp_path / "profiler_report.json"
+    paths = profiler.export_report(txt_path=txt_path, json_path=json_path)
+    
+    assert paths["txt"].exists()
+    assert paths["json"].exists()
+
+    txt_content = paths["txt"].read_text(encoding="utf-8")
+    assert "QUANTA INFORMATION PROFILER REPORT" in txt_content
+    assert "Total Correlation" in txt_content
+
+    import json
+    with open(paths["json"], "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+    assert json_data["num_samples"] == 5000
+    assert "total_correlation" in json_data
+    assert "band_entropies" in json_data
+
 
 
 def test_mrmr_selector_feature_ranking(validation_corpus):
