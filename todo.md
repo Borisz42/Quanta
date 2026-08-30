@@ -409,9 +409,9 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - [x] **8A.10** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
 - [x] **8A.11** 🧪 Test: Anchor-free 2-tier vector decoding (< 10 ms SIMD lookup) on 256-D ConceptNet vector
 
-#### 8B — Generalized Multilingual Realizer Architecture (Future Extension)
-- [ ] **8B.1** Plan generalized cross-lingual morphology & syntax mapping framework
-- [ ] **8B.2** Design typologically diverse language adapters (agglutinative, fusional, isolating)
+#### 8B — Generalized Multilingual Realizer Architecture
+- [x] **8B.1** Plan generalized cross-lingual morphology & syntax mapping framework
+- [x] **8B.2** Design typologically diverse language adapters (agglutinative, fusional, isolating)
 
 #### 8C — FOL Emitter
 - [x] **8C.1** Implement ASG → FOL string conversion: quantifiers, connectives, predicates, variables
