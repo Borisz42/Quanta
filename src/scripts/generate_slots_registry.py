@@ -1,12 +1,16 @@
 import json
 from pathlib import Path
+import re
 import sys
 
-# Ensure src is in python path
-src_dir = Path("src")
-sys.path.insert(0, str(src_dir.resolve()))
+slots_py_text = Path("src/core/slots.py").read_text(encoding="utf-8")
 
-from core.slots import BAND_0_SLOTS, BAND_1_SLOTS, BAND_2_SLOTS, BAND_5_SLOTS, BAND_6_SLOTS, BAND_7_SLOTS
+def extract_band_block(code: str, band_name: str) -> list:
+    pattern = rf"(# =+\s*\n# {band_name}\s*\n# =+\s*\n{band_name} = \[.*?^\s*\])"
+    m = re.search(pattern, code, re.MULTILINE | re.DOTALL)
+    if not m:
+        raise ValueError(f"Could not find {band_name} in slots.py")
+    return [m.group(1), ""]
 
 cn_slots = json.load(open('data/conceptnet_slots.json', 'r', encoding='utf-8'))
 b3_cn = [s for s in cn_slots if s['band'] == 3]
@@ -33,6 +37,12 @@ lines.append('import json')
 lines.append('from pathlib import Path')
 lines.append('from typing import Dict, List, Optional, Union')
 lines.append('')
+lines.append('class BandContract(str, enum.Enum):')
+lines.append('    """Polymorphic contract applied to dimensions depending on their Band."""')
+lines.append('    EPISTEMIC = "EPISTEMIC"      # Bands 0, 3, 4, 5, 6, 7: Truth & Uncertainty (Belnap FOUR)')
+lines.append('    STRUCTURAL = "STRUCTURAL"    # Band 1: Valencies, AST Topology, Concurrency Routing')
+lines.append('    REGISTER = "REGISTER"        # Band 2: Formal Logic Quantifiers & Variable Scoping')
+lines.append('')
 lines.append('')
 lines.append('class SlotBand(enum.IntEnum):')
 lines.append('    BAND_0_NSM_KINEMATICS = 0')
@@ -48,6 +58,18 @@ lines.append('    BAND_2_ONTOLOGY_MODALITY = 3')
 lines.append('    BAND_3_EPISTEMIC_METARULES = 6')
 lines.append('')
 lines.append('')
+lines.append('BAND_CONTRACTS: Dict[SlotBand, BandContract] = {')
+lines.append('    SlotBand.BAND_0_NSM_KINEMATICS: BandContract.EPISTEMIC,')
+lines.append('    SlotBand.BAND_1_VALENCIES_TOPOLOGY: BandContract.STRUCTURAL,')
+lines.append('    SlotBand.BAND_2_LOGIC_VARIABLES: BandContract.REGISTER,')
+lines.append('    SlotBand.BAND_3_ONTOLOGY_STRUCTURES: BandContract.EPISTEMIC,')
+lines.append('    SlotBand.BAND_4_AFFORDANCES_OPERATIONS: BandContract.EPISTEMIC,')
+lines.append('    SlotBand.BAND_5_TOM_PRAGMATICS: BandContract.EPISTEMIC,')
+lines.append('    SlotBand.BAND_6_PROOF_DEONTICS: BandContract.EPISTEMIC,')
+lines.append('    SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL: BandContract.EPISTEMIC,')
+lines.append('}')
+lines.append('')
+lines.append('')
 lines.append('@dataclass(frozen=True)')
 lines.append('class SlotDefinition:')
 lines.append('    index: int')
@@ -56,22 +78,13 @@ lines.append('    band: SlotBand')
 lines.append('    category: str')
 lines.append('    description: str')
 lines.append('')
-
-def format_band(band_name, band_enum, slots_list):
-    res = [f'# ==============================================================================']
-    res.append(f'# {band_name}')
-    res.append(f'# ==============================================================================')
-    res.append(f'{band_name} = [')
-    for s in slots_list:
-        desc_escaped = s.description.replace('"', '\\"')
-        res.append(f'    SlotDefinition({s.index}, "{s.name}", {band_enum}, "{s.category}", "{desc_escaped}"),')
-    res.append(']')
-    res.append('')
-    return res
-
-lines.extend(format_band('BAND_0_SLOTS', 'SlotBand.BAND_0_NSM_KINEMATICS', BAND_0_SLOTS))
-lines.extend(format_band('BAND_1_SLOTS', 'SlotBand.BAND_1_VALENCIES_TOPOLOGY', BAND_1_SLOTS))
-lines.extend(format_band('BAND_2_SLOTS', 'SlotBand.BAND_2_LOGIC_VARIABLES', BAND_2_SLOTS))
+lines.append('    @property')
+lines.append('    def contract(self) -> BandContract:')
+lines.append('        return BAND_CONTRACTS.get(self.band, BandContract.EPISTEMIC)')
+lines.append('')
+lines.extend(extract_band_block(slots_py_text, 'BAND_0_SLOTS'))
+lines.extend(extract_band_block(slots_py_text, 'BAND_1_SLOTS'))
+lines.extend(extract_band_block(slots_py_text, 'BAND_2_SLOTS'))
 
 # Format Band 3
 res_b3 = ['# ==============================================================================']
@@ -99,9 +112,9 @@ res_b4.append(']')
 res_b4.append('')
 lines.extend(res_b4)
 
-lines.extend(format_band('BAND_5_SLOTS', 'SlotBand.BAND_5_TOM_PRAGMATICS', BAND_5_SLOTS))
-lines.extend(format_band('BAND_6_SLOTS', 'SlotBand.BAND_6_PROOF_DEONTICS', BAND_6_SLOTS))
-lines.extend(format_band('BAND_7_SLOTS', 'SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL', BAND_7_SLOTS))
+lines.extend(extract_band_block(slots_py_text, 'BAND_5_SLOTS'))
+lines.extend(extract_band_block(slots_py_text, 'BAND_6_SLOTS'))
+lines.extend(extract_band_block(slots_py_text, 'BAND_7_SLOTS'))
 
 lines.append('# Combined canonical list of all 1024 slots')
 lines.append('CANONICAL_SLOTS: List[SlotDefinition] = (')
@@ -117,270 +130,294 @@ lines.append('SLOT_NAME_TO_INDEX: Dict[str, int] = {slot.name: slot.index for sl
 lines.append('SLOT_INDEX_TO_NAME: Dict[int, str] = {slot.index: slot.name for slot in CANONICAL_SLOTS}')
 lines.append('')
 
+slot_by_slug = {}
+for s in cn_slots:
+    raw_target = s.get("target", "")
+    slug = re.sub(r"[^\w\s]", "", raw_target).strip().upper().replace(" ", "_")
+    slot_by_slug.setdefault(slug, s["name"])
+    name_slug = s["name"].split("_", 2)[-1]
+    slot_by_slug.setdefault(name_slug, s["name"])
+    slot_by_slug.setdefault(s["name"], s["name"])
+
+def resolve_target_alias(hint: str) -> str:
+    h = hint.split("_", 2)[-1] if hint.startswith("CN_Q") else hint
+    if h in slot_by_slug:
+        return slot_by_slug[h]
+    for k, v in slot_by_slug.items():
+        if h in k or k in h:
+            return v
+    return cn_slots[0]["name"]
+
+RAW_LEGACY_ONTOLOGY_ALIASES = [
+    # Entity Types
+    ("TYPE_ANIMATE", "ANIMAL"),
+    ("TYPE_HUMAN", "PERSON"),
+    ("TYPE_INANIMATE_PHYSICAL", "TANGIBLE_THING"),
+    ("TYPE_NATURAL_OBJECT", "ORGANISM"),
+    ("TYPE_ARTIFACT", "DEVICE"),
+    ("TYPE_SUBSTANCE_MASS", "MASS"),
+    ("TYPE_COLLECTION_SET", "SET"),
+    ("TYPE_ABSTRACT_CONCEPT", "LOGIC"),
+    ("TYPE_PROPOSITION", "INFORMATION"),
+    ("TYPE_EVENT", "EVENT"),
+    ("TYPE_STATE", "STATE"),
+    ("TYPE_PROCESS", "ACTIVITY"),
+    ("TYPE_TEMPORAL_INTERVAL", "TIME"),
+    ("TYPE_SPATIAL_REGION", "AREA"),
+    ("TYPE_MEASURE_SCALAR", "UNIT"),
+    ("TYPE_NUMERIC_VALUE", "MATHEMATICS"),
+    ("TYPE_ORGANIZATION", "GROUP"),
+    ("TYPE_COMMUNICATION_MSG", "LANGUAGE"),
+    ("TYPE_ATTRIBUTE_PROPERTY", "QUALITY"),
+    ("TYPE_RELATION_ROLE", "LINE"),
+    ("TYPE_ALGORITHM_PROCEDURE", "PROGRAMMING"),
+    ("TYPE_LEGAL_CONTRACT", "LEGAL"),
+    ("TYPE_BIOLOGICAL_ORGANISM", "ORGANISM"),
+    ("TYPE_SOFTWARE_SYSTEM", "COMPUTING"),
+    ("TYPE_HARDWARE_DEVICE", "DEVICE"),
+    ("TYPE_ASTRONOMICAL_BODY", "ASTRONOMY"),
+    ("TYPE_GEOGRAPHICAL_LANDFORM", "LAND"),
+    # Capabilities & Roles
+    ("ROLE_AGENT_CAPABLE", "ABILITY"),
+    ("ROLE_SENTIENT", "SENSE"),
+    ("ROLE_MOVEABLE", "MOVE"),
+    ("ROLE_COMMUNICATOR", "SPEAK"),
+    ("ROLE_CONSUMABLE", "FOOD"),
+    ("ROLE_CONTAINER", "BOX"),
+    ("ROLE_INSTRUMENT_USABLE", "USE"),
+    ("ROLE_VOLITIONAL_SOURCE", "DESIRE"),
+    ("ROLE_COGNITIVE_SUBJECT", "MIND"),
+    ("ROLE_AFFECTIVE_TARGET", "HAPPY"),
+    ("ROLE_EPISTEMIC_AUTHORITY", "KNOWLEDGE"),
+    ("ROLE_PATIENT_TARGET", "TAKE"),
+    # Modalities
+    ("MODALITY_LITERAL", "TRUE"),
+    ("MODALITY_FIGURATIVE", "FORMAL"),
+    ("MODALITY_HYPOTHETICAL", "LOGIC"),
+    ("MODALITY_COUNTERFACTUAL", "LIE"),
+    # WordNet Roots
+    ("WN_ACT_ACTION", "ACT"),
+    ("WN_ANIMAL_FAUNA", "ANIMAL"),
+    ("WN_ARTIFACT_OBJECT", "DEVICE"),
+    ("WN_ATTRIBUTE_PROP", "QUALITY"),
+    ("WN_BODY_PART", "BODY"),
+    ("WN_COGNITION_THOUGHT", "MIND"),
+    ("WN_COMMUNICATION_INFO", "INFORMATION"),
+    ("WN_EVENT_OCCURRENCE", "EVENT"),
+    ("WN_FEELING_EMOTION", "HAPPY"),
+    ("WN_FOOD_NUTRITION", "FOOD"),
+    ("WN_GROUP_SOCIAL", "GROUP"),
+    ("WN_LOCATION_PLACE", "PLACE"),
+    ("WN_MOTIVE_REASON", "CAUSE"),
+    ("WN_OBJECT_NATURAL", "ORGANISM"),
+    ("WN_PERSON_HUMAN", "PERSON"),
+    ("WN_PHENOMENON_NATURE", "GEOLOGY"),
+    ("WN_PLANT_FLORA", "PLANT"),
+    ("WN_POSSESSION_ASSET", "MONEY"),
+    ("WN_PROCESS_SERIES", "ACTIVITY"),
+    ("WN_QUANTITY_NUMBER", "AMOUNT"),
+    ("WN_RELATION_LINK", "LINE"),
+    # Physical & Cyber Affordances
+    ("AFFORD_INCISED_CUTTING", "CUT"),
+    ("AFFORD_PERCUSSIVE_IMPACT", "FORCE"),
+    ("AFFORD_FLUID_CONTAINMENT", "WATER"),
+    ("AFFORD_MECHANICAL_GRIP", "HAND"),
+    ("AFFORD_PNEUMATIC_SUCTION", "WATER"),
+    ("AFFORD_THERMAL_EXCHANGE", "HOT"),
+    ("AFFORD_BALLISTIC_PROPULSION", "FORCE"),
+    ("AFFORD_ADHESIVE_BONDING", "MATERIAL"),
+    ("AFFORD_LEVERAGE_PRY", "FORCE"),
+    ("AFFORD_TORQUE_ROTATION", "MOVE"),
+    ("AFFORD_DRILL_PENETRATE", "CUT"),
+    ("AFFORD_ABRASIVE_GRINDING", "SURFACE"),
+    ("AFFORD_EXTRUSION_FORMING", "MATERIAL"),
+    ("AFFORD_FASTENER_BOLT_LATCH", "FIT"),
+    ("AFFORD_TENSION_CABLE_PULL", "LINE"),
+    ("AFFORD_SPRING_SUSPENSION", "MOVE"),
+    ("AFFORD_HYDRAULIC_ACTUATION", "WATER"),
+    ("AFFORD_ROLLING_WHEEL_BEARING", "MOVE"),
+    ("AFFORD_VALVE_FLOW_CONTROL", "STOP"),
+    ("AFFORD_FILTER_SEPARATION", "CUT"),
+    ("AFFORD_PUMP_FLUID_DISPLACEMENT", "WATER"),
+    ("AFFORD_NOZZLE_ATOMIZATION", "WATER"),
+    ("AFFORD_OPTICAL_MAGNIFICATION", "APPEARANCE"),
+    ("AFFORD_OPTICAL_REFLECTION", "APPEARANCE"),
+    ("AFFORD_ELECTRICAL_SWITCH_CONTACT", "POWER"),
+    ("AFFORD_ELECTROMAGNETIC_SOLENOID", "POWER"),
+    ("AFFORD_PIEZOELECTRIC_PRECISION", "POWER"),
+    ("AFFORD_THERMAL_INSULATION_SHIELD", "HOT"),
+    ("AFFORD_VIBRATION_DAMPING", "MOVE"),
+    ("AFFORD_FLOATATION_BUOYANT_HULL", "NAUTICAL"),
+    ("AFFORD_AERODYNAMIC_AIRFOIL_LIFT", "BIRD"),
+    ("AFFORD_PARACHUTE_DRAG_DECEL", "STOP"),
+    ("AFFORD_COMPUTE_EXECUTE", "COMPUTING"),
+    ("AFFORD_PERSIST_STORAGE", "PROGRAMMING"),
+    ("AFFORD_SOCKET_TRANSMIT", "INTERNET"),
+    ("AFFORD_SOCKET_RECEIVE", "INTERNET"),
+    ("AFFORD_ENCRYPT_CRYPTO", "PROGRAMMING"),
+    ("AFFORD_DECRYPT_CRYPTO", "PROGRAMMING"),
+    ("AFFORD_SIGN_CRYPTOGRAPHIC", "PROGRAMMING"),
+    ("AFFORD_VERIFY_SIGNATURE", "TRUE"),
+    ("AFFORD_QUERY_DATABASE", "COMPUTING"),
+    ("AFFORD_MUTATE_DATABASE", "COMPUTING"),
+    ("AFFORD_AUTHENTICATE_AUTH", "LEGAL"),
+    ("AFFORD_AUTHORIZE_RBAC", "LEGAL"),
+    ("AFFORD_SERIALIZE_BUFFER", "PROGRAMMING"),
+    ("AFFORD_DESERIALIZE_BUFFER", "PROGRAMMING"),
+    ("AFFORD_HTTP_REST_REQUEST", "INTERNET"),
+    ("AFFORD_GRPC_RPC_INVOKE", "COMPUTING"),
+    ("AFFORD_WEBSOCKET_DUPLEX", "INTERNET"),
+    ("AFFORD_PUBLISH_EVENT_BUS", "INFORMATION"),
+    ("AFFORD_SUBSCRIBE_EVENT_BUS", "INFORMATION"),
+    ("AFFORD_CACHE_LOOKUP_KV", "COMPUTING"),
+    ("AFFORD_CACHE_INVALIDATE", "COMPUTING"),
+    ("AFFORD_SPAWN_CONTAINER", "BOX"),
+    ("AFFORD_SCHEDULE_CRON_JOB", "TIME"),
+    ("AFFORD_LOG_DIAGNOSTIC", "INFORMATION"),
+    ("AFFORD_METRIC_GAUGE_EMIT", "UNIT"),
+    ("AFFORD_DISTRIBUTED_LOCK", "STOP"),
+    ("AFFORD_MAP_REDUCE_BATCH", "COMPUTING"),
+    ("AFFORD_GPU_TENSOR_FORWARD", "COMPUTING"),
+    ("AFFORD_VECTOR_INDEX_SEARCH", "COMPUTING"),
+    ("AFFORD_FILE_COMPRESSION_ZIP", "PROGRAMMING"),
+    ("AFFORD_FILE_DECOMPRESSION", "PROGRAMMING"),
+    ("AFFORD_SCHEMA_MIGRATION", "CHANGE"),
+    ("AFFORD_INGEST_NUTRIENT", "FOOD"),
+    ("AFFORD_CHEMICAL_CATALYSIS", "CHEMISTRY"),
+    ("AFFORD_OPTICAL_SENSE", "SENSE"),
+    ("AFFORD_ACOUSTIC_SENSE", "SOUND"),
+    ("AFFORD_TACTILE_SENSE", "SENSE"),
+    ("AFFORD_THERMAL_SENSE", "HOT"),
+    ("AFFORD_CHEMICAL_OLFACTION", "SENSE"),
+    ("AFFORD_CHEMICAL_GUSTATION", "FOOD"),
+    ("AFFORD_PROPRIOCEPTIVE_SENSE", "SENSE"),
+    ("AFFORD_VESTIBULAR_EQUILIBRIUM", "CALM"),
+    ("AFFORD_ELECTRORECEPTION_SENSE", "POWER"),
+    ("AFFORD_MAGNETORECEPTION_SENSE", "POWER"),
+    ("AFFORD_ECHOLOCATION_SONAR", "SOUND"),
+    ("AFFORD_LIDAR_TIME_OF_FLIGHT", "PHYSICS"),
+    ("AFFORD_RADAR_RF_REFLECTION", "PHYSICS"),
+    ("AFFORD_METABOLIC_RESPIRATION", "LIFE"),
+    ("AFFORD_PHOTOSYNTHESIS_LIGHT", "PLANT"),
+    ("AFFORD_DNA_REPLICATION_COPY", "GENETICS"),
+    ("AFFORD_RNA_TRANSCRIPTION", "GENETICS"),
+    ("AFFORD_PROTEIN_TRANSLATION", "GENETICS"),
+    ("AFFORD_IMMUNE_ANTIBODY_BIND", "MEDICINE"),
+    ("AFFORD_CELLULAR_MITOSIS_SPLIT", "BIOLOGY"),
+    ("AFFORD_CELLULAR_APOPTOSIS", "DEATH"),
+    ("AFFORD_MEMBRANE_ION_CHANNEL", "BIOLOGY"),
+    ("AFFORD_SYNAPTIC_NEUROTRANSMIT", "MIND"),
+    ("AFFORD_HORMONE_ENDOCRINE_SEC", "BODY"),
+    ("AFFORD_TOXIN_NEUTRALIZATION", "MEDICINE"),
+    ("AFFORD_WOUND_HEALING_CLOT", "MEDICINE"),
+    ("AFFORD_CIRCULATORY_PUMP_HEART", "BODY"),
+    ("AFFORD_NEURAL_PLASTICITY_LTP", "MIND"),
+    ("AFFORD_CIRCADIAN_RHYTHM_TICK", "TIME"),
+    ("AFFORD_SYMBIOTIC_MICROBIOME", "BIOLOGY"),
+    ("AFFORD_SPEECH_VOCALIZATION", "SPEAK"),
+    ("AFFORD_DISPLAY_PIXEL_EMIT", "APPEARANCE"),
+    ("AFFORD_HAPTIC_TACTILE_FEEDBACK", "SENSE"),
+    ("AFFORD_FERMENTATION_ANAEROBIC", "CHEMISTRY"),
+    ("AFFORD_PRECIPITATION_SOLID", "CHEMISTRY"),
+    ("AFFORD_COMBUSTION_OXIDATION", "CHEMISTRY"),
+    ("AFFORD_ELECTROLYSIS_SPLITTING", "CHEMISTRY"),
+    ("AFFORD_POLYMERIZATION_CHAIN", "CHEMISTRY"),
+    ("AFFORD_DISTILLATION_FRACTION", "CHEMISTRY"),
+    ("AFFORD_CHROMATOGRAPHY_SEPARATE", "CHEMISTRY"),
+    ("AFFORD_CRYSTALLIZATION_PURIFY", "CHEMISTRY"),
+    ("AFFORD_LYOPHILIZATION_FREEZE_DRY", "CHEMISTRY"),
+    ("AFFORD_CENTRIFUGATION_SPIN", "MOVE"),
+    ("AFFORD_ULTRASONIC_CLEAN_CAV", "SOUND"),
+    ("AFFORD_AUTOCLAVE_STERILIZATION", "MEDICINE"),
+    ("AFFORD_UV_GERMICIDAL_IRRAD", "MEDICINE"),
+    ("AFFORD_RADIATION_GAMMA_STERIL", "MEDICINE"),
+    ("AFFORD_CRYOGENIC_FREEZING", "CHEMISTRY"),
+    ("AFFORD_MAGNETIC_LEVITATION", "PHYSICS"),
+    ("AFFORD_ION_THRUST_PROPULSION", "PHYSICS"),
+    ("AFFORD_SOLAR_SAIL_PRESSURE", "ASTRONOMY"),
+    ("AFFORD_RADIO_ANTENNA_EMISSION", "PHYSICS"),
+    ("AFFORD_LASER_COHERENT_BEAM", "PHYSICS"),
+    ("AFFORD_FIBER_OPTIC_INTERNAL_REF", "PHYSICS"),
+    ("AFFORD_BATTERY_CHEMICAL_CHARGE", "POWER"),
+    ("AFFORD_FUEL_CELL_CONVERSION", "POWER"),
+    ("AFFORD_SUPERCAPACITOR_DISCHARGE", "POWER"),
+    ("AFFORD_THERMOELECTRIC_SEEBECK", "POWER"),
+    ("AFFORD_SOLAR_PHOTOVOLTAIC", "POWER"),
+    ("AFFORD_WIND_TURBINE_HARVEST", "POWER"),
+    ("AFFORD_HYDROELECTRIC_HARVEST", "POWER"),
+    ("AFFORD_NUCLEAR_FISSION_HEAT", "POWER"),
+    # Discrete Math, SI, Metric structures
+    ("STRUCT_SET_UNORDERED", "SET"),
+    ("STRUCT_SEQUENCE_ORDERED", "LINE"),
+    ("STRUCT_GRAPH_NETWORK", "LINE"),
+    ("STRUCT_TREE_HIERARCHY", "TREE"),
+    ("STRUCT_DIRECTED_ACYCLIC_DAG", "LINE"),
+    ("STRUCT_LATTICE_ALGEBRA", "MATHEMATICS"),
+    ("STRUCT_MONOID_SEMIGROUP", "MATHEMATICS"),
+    ("STRUCT_GROUP_ALGEBRA", "MATHEMATICS"),
+    ("STRUCT_RING_FIELD", "MATHEMATICS"),
+    ("STRUCT_VECTOR_SPACE", "MATHEMATICS"),
+    ("STRUCT_MATRIX_TENSOR", "MATHEMATICS"),
+    ("STRUCT_HILBERT_SPACE", "MATHEMATICS"),
+    ("STRUCT_BANACH_SPACE", "MATHEMATICS"),
+    ("STRUCT_TOPOLOGICAL_MANIFOLD", "GEOMETRY"),
+    ("STRUCT_FIBER_BUNDLE", "GEOMETRY"),
+    ("STRUCT_RIEMANNIAN_METRIC", "GEOMETRY"),
+    ("STRUCT_CATEGORY_THEORY", "MATHEMATICS"),
+    ("STRUCT_FUNCTOR_MAP", "MATHEMATICS"),
+    ("STRUCT_NATURAL_TRANSFORMATION", "MATHEMATICS"),
+    ("STRUCT_ADJUNCTION_MONAD", "MATHEMATICS"),
+    ("STRUCT_QUOTIENT_STRUCTURE", "MATHEMATICS"),
+    ("STRUCT_DIRECT_PRODUCT", "MATHEMATICS"),
+    ("STRUCT_COPRODUCT_DISJOINT_SUM", "MATHEMATICS"),
+    ("STRUCT_HOMOMORPHISM_MAP", "MATHEMATICS"),
+    ("STRUCT_ISOMORPHISM_BIJECTION", "MATHEMATICS"),
+    ("STRUCT_AUTOMORPHISM_SYMMETRY", "MATHEMATICS"),
+    ("STRUCT_PROBABILITY_MEASURE", "MATHEMATICS"),
+    ("STRUCT_SIGMA_ALGEBRA", "MATHEMATICS"),
+    ("STRUCT_RANDOM_VARIABLE", "MATHEMATICS"),
+    ("STRUCT_MARKOV_CHAIN", "MATHEMATICS"),
+    ("STRUCT_MARTINGALE_PROCESS", "MATHEMATICS"),
+    ("STRUCT_STOCHASTIC_DIFFUSION", "MATHEMATICS"),
+    ("SI_DIM_LENGTH_L", "UNIT"),
+    ("SI_DIM_MASS_M", "MASS"),
+    ("SI_DIM_TIME_T", "TIME"),
+    ("SI_DIM_ELECTRIC_CURRENT_I", "POWER"),
+    ("SI_DIM_TEMPERATURE_THETA", "HOT"),
+    ("SI_DIM_SUBSTANCE_AMOUNT_N", "AMOUNT"),
+    ("SI_DIM_LUMINOUS_INTENSITY_J", "QUALITY"),
+    ("METRIC_FREQUENCY_HERTZ", "UNIT"),
+    ("METRIC_FORCE_NEWTON", "FORCE"),
+    ("METRIC_PRESSURE_PASCAL", "UNIT"),
+    ("METRIC_ENERGY_JOULE", "POWER"),
+    ("METRIC_POWER_WATT", "POWER"),
+    ("METRIC_ELECTRIC_CHARGE_COULOMB", "POWER"),
+    ("METRIC_VOLTAGE_VOLT", "POWER"),
+    ("METRIC_CAPACITANCE_FARAD", "POWER"),
+    ("METRIC_RESISTANCE_OHM", "POWER"),
+    ("METRIC_CONDUCTANCE_SIEMENS", "POWER"),
+    ("METRIC_MAGNETIC_FLUX_WEBER", "POWER"),
+    ("METRIC_MAGNETIC_FIELD_TESLA", "POWER"),
+    ("METRIC_INDUCTANCE_HENRY", "POWER"),
+    ("METRIC_LUMINOUS_FLUX_LUMEN", "UNIT"),
+    ("METRIC_ILLUMINANCE_LUX", "UNIT"),
+    ("METRIC_RADIOACTIVITY_BECQUEREL", "UNIT"),
+    ("METRIC_RADIATION_DOSE_GRAY", "UNIT"),
+    ("METRIC_DOSE_EQUIVALENT_SIEVERT", "UNIT"),
+    ("METRIC_CATALYTIC_ACTIVITY_KATAL", "UNIT"),
+    ("METRIC_CURRENCY_VALUE_FIAT", "MONEY"),
+    ("METRIC_INFORMATION_ENTROPY_BIT", "INFORMATION"),
+    ("METRIC_INFORMATION_NAT", "INFORMATION"),
+    ("METRIC_COMPUTE_FLOP_COUNT", "COMPUTING"),
+    ("METRIC_COMPUTE_MEMORY_BYTE", "COMPUTING"),
+    ("METRIC_BANDWIDTH_BIT_PER_SEC", "COMPUTING"),
+]
+
 lines.append('# Semantic Bridge Alias Layer & Backward Compatibility')
 lines.append('LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {')
-lines.append('    # Entity Types')
-lines.append('    "TYPE_ANIMATE": "CN_Q011_ANIMAL",')
-lines.append('    "TYPE_HUMAN": "CN_Q015_PERSON",')
-lines.append('    "TYPE_INANIMATE_PHYSICAL": "CN_Q012_TANGIBLE_THING",')
-lines.append('    "TYPE_NATURAL_OBJECT": "CN_Q012_TANGIBLE_THING",')
-lines.append('    "TYPE_ARTIFACT": "CN_Q042_DEVICE",')
-lines.append('    "TYPE_SUBSTANCE_MASS": "CN_Q195_MASS",')
-lines.append('    "TYPE_COLLECTION_SET": "CN_Q102_SET",')
-lines.append('    "TYPE_ABSTRACT_CONCEPT": "CN_Q113_LOGIC",')
-lines.append('    "TYPE_PROPOSITION": "CN_Q084_INFORMATION",')
-lines.append('    "TYPE_EVENT": "CN_Q144_EVENT",')
-lines.append('    "TYPE_STATE": "CN_Q026_STATE",')
-lines.append('    "TYPE_PROCESS": "CN_Q252_ACTIVITY",')
-lines.append('    "TYPE_TEMPORAL_INTERVAL": "CN_Q021_TIME",')
-lines.append('    "TYPE_SPATIAL_REGION": "CN_Q204_AREA",')
-lines.append('    "TYPE_MEASURE_SCALAR": "CN_Q077_UNIT",')
-lines.append('    "TYPE_NUMERIC_VALUE": "CN_Q008_MATHEMATICS",')
-lines.append('    "TYPE_ORGANIZATION": "CN_Q014_GROUP",')
-lines.append('    "TYPE_COMMUNICATION_MSG": "CN_Q061_LANGUAGE",')
-lines.append('    "TYPE_ATTRIBUTE_PROPERTY": "CN_Q088_QUALITY",')
-lines.append('    "TYPE_RELATION_ROLE": "CN_Q120_LINE",')
-lines.append('    "TYPE_ALGORITHM_PROCEDURE": "CN_Q154_PROGRAMMING",')
-lines.append('    "TYPE_LEGAL_CONTRACT": "CN_Q003_LEGAL",')
-lines.append('    "TYPE_BIOLOGICAL_ORGANISM": "CN_Q121_ORGANISM",')
-lines.append('    "TYPE_SOFTWARE_SYSTEM": "CN_Q001_COMPUTING",')
-lines.append('    "TYPE_HARDWARE_DEVICE": "CN_Q042_DEVICE",')
-lines.append('    "TYPE_ASTRONOMICAL_BODY": "CN_Q024_ASTRONOMY",')
-lines.append('    "TYPE_GEOGRAPHICAL_LANDFORM": "CN_Q233_LAND",')
-lines.append('    # Capabilities & Roles')
-lines.append('    "ROLE_AGENT_CAPABLE": "CN_Q255_ABILITY",')
-lines.append('    "ROLE_SENTIENT": "CN_Q186_SENSE",')
-lines.append('    "ROLE_MOVEABLE": "CN_Q028_MOVE",')
-lines.append('    "ROLE_COMMUNICATOR": "CN_Q254_SPEAK",')
-lines.append('    "ROLE_CONSUMABLE": "CN_Q069_FOOD",')
-lines.append('    "ROLE_CONTAINER": "CN_Q229_BOX",')
-lines.append('    "ROLE_INSTRUMENT_USABLE": "CN_Q094_USE",')
-lines.append('    "ROLE_VOLITIONAL_SOURCE": "CN_Q153_DESIRE",')
-lines.append('    "ROLE_COGNITIVE_SUBJECT": "CN_Q043_MIND",')
-lines.append('    "ROLE_AFFECTIVE_TARGET": "CN_Q171_HAPPY",')
-lines.append('    "ROLE_EPISTEMIC_AUTHORITY": "CN_Q124_KNOWLEDGE",')
-lines.append('    "ROLE_PATIENT_TARGET": "CN_Q146_TAKE",')
-lines.append('    # Modalities')
-lines.append('    "MODALITY_LITERAL": "CN_Q140_TRUE",')
-lines.append('    "MODALITY_FIGURATIVE": "CN_Q190_FORMAL",')
-lines.append('    "MODALITY_HYPOTHETICAL": "CN_Q113_LOGIC",')
-lines.append('    "MODALITY_COUNTERFACTUAL": "CN_Q188_LIE",')
-lines.append('    # WordNet Roots')
-lines.append('    "WN_ACT_ACTION": "CN_Q104_ACT",')
-lines.append('    "WN_ANIMAL_FAUNA": "CN_Q011_ANIMAL",')
-lines.append('    "WN_ARTIFACT_OBJECT": "CN_Q042_DEVICE",')
-lines.append('    "WN_ATTRIBUTE_PROP": "CN_Q088_QUALITY",')
-lines.append('    "WN_BODY_PART": "CN_Q002_BODY",')
-lines.append('    "WN_COGNITION_THOUGHT": "CN_Q043_MIND",')
-lines.append('    "WN_COMMUNICATION_INFO": "CN_Q084_INFORMATION",')
-lines.append('    "WN_EVENT_OCCURRENCE": "CN_Q144_EVENT",')
-lines.append('    "WN_FEELING_EMOTION": "CN_Q171_HAPPY",')
-lines.append('    "WN_FOOD_NUTRITION": "CN_Q069_FOOD",')
-lines.append('    "WN_GROUP_SOCIAL": "CN_Q014_GROUP",')
-lines.append('    "WN_LOCATION_PLACE": "CN_Q073_PLACE",')
-lines.append('    "WN_MOTIVE_REASON": "CN_Q081_CAUSE",')
-lines.append('    "WN_OBJECT_NATURAL": "CN_Q012_TANGIBLE_THING",')
-lines.append('    "WN_PERSON_HUMAN": "CN_Q015_PERSON",')
-lines.append('    "WN_PHENOMENON_NATURE": "CN_Q052_GEOLOGY",')
-lines.append('    "WN_PLANT_FLORA": "CN_Q004_PLANT",')
-lines.append('    "WN_POSSESSION_ASSET": "CN_Q017_MONEY",')
-lines.append('    "WN_PROCESS_SERIES": "CN_Q252_ACTIVITY",')
-lines.append('    "WN_QUANTITY_NUMBER": "CN_Q203_AMOUNT",')
-lines.append('    "WN_RELATION_LINK": "CN_Q120_LINE",')
-lines.append('    # Physical & Cyber Affordances')
-lines.append('    "AFFORD_INCISED_CUTTING": "CN_Q108_CUT",')
-lines.append('    "AFFORD_PERCUSSIVE_IMPACT": "CN_Q142_FORCE",')
-lines.append('    "AFFORD_FLUID_CONTAINMENT": "CN_Q049_WATER",')
-lines.append('    "AFFORD_MECHANICAL_GRIP": "CN_Q087_HAND",')
-lines.append('    "AFFORD_PNEUMATIC_SUCTION": "CN_Q049_WATER",')
-lines.append('    "AFFORD_THERMAL_EXCHANGE": "CN_Q180_HOT",')
-lines.append('    "AFFORD_BALLISTIC_PROPULSION": "CN_Q142_FORCE",')
-lines.append('    "AFFORD_ADHESIVE_BONDING": "CN_Q245_MATERIAL",')
-lines.append('    "AFFORD_LEVERAGE_PRY": "CN_Q142_FORCE",')
-lines.append('    "AFFORD_TORQUE_ROTATION": "CN_Q028_MOVE",')
-lines.append('    "AFFORD_DRILL_PENETRATE": "CN_Q108_CUT",')
-lines.append('    "AFFORD_ABRASIVE_GRINDING": "CN_Q095_SURFACE",')
-lines.append('    "AFFORD_EXTRUSION_FORMING": "CN_Q245_MATERIAL",')
-lines.append('    "AFFORD_FASTENER_BOLT_LATCH": "CN_Q225_FIT",')
-lines.append('    "AFFORD_TENSION_CABLE_PULL": "CN_Q120_LINE",')
-lines.append('    "AFFORD_SPRING_SUSPENSION": "CN_Q028_MOVE",')
-lines.append('    "AFFORD_HYDRAULIC_ACTUATION": "CN_Q049_WATER",')
-lines.append('    "AFFORD_ROLLING_WHEEL_BEARING": "CN_Q028_MOVE",')
-lines.append('    "AFFORD_VALVE_FLOW_CONTROL": "CN_Q130_STOP",')
-lines.append('    "AFFORD_FILTER_SEPARATION": "CN_Q108_CUT",')
-lines.append('    "AFFORD_PUMP_FLUID_DISPLACEMENT": "CN_Q049_WATER",')
-lines.append('    "AFFORD_NOZZLE_ATOMIZATION": "CN_Q049_WATER",')
-lines.append('    "AFFORD_OPTICAL_MAGNIFICATION": "CN_Q148_APPEARANCE",')
-lines.append('    "AFFORD_OPTICAL_REFLECTION": "CN_Q148_APPEARANCE",')
-lines.append('    "AFFORD_ELECTRICAL_SWITCH_CONTACT": "CN_Q051_POWER",')
-lines.append('    "AFFORD_ELECTROMAGNETIC_SOLENOID": "CN_Q051_POWER",')
-lines.append('    "AFFORD_PIEZOELECTRIC_PRECISION": "CN_Q051_POWER",')
-lines.append('    "AFFORD_THERMAL_INSULATION_SHIELD": "CN_Q180_HOT",')
-lines.append('    "AFFORD_VIBRATION_DAMPING": "CN_Q028_MOVE",')
-lines.append('    "AFFORD_FLOATATION_BUOYANT_HULL": "CN_Q007_NAUTICAL",')
-lines.append('    "AFFORD_AERODYNAMIC_AIRFOIL_LIFT": "CN_Q151_BIRD",')
-lines.append('    "AFFORD_PARACHUTE_DRAG_DECEL": "CN_Q130_STOP",')
-lines.append('    "AFFORD_COMPUTE_EXECUTE": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_PERSIST_STORAGE": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_SOCKET_TRANSMIT": "CN_Q037_INTERNET",')
-lines.append('    "AFFORD_SOCKET_RECEIVE": "CN_Q037_INTERNET",')
-lines.append('    "AFFORD_ENCRYPT_CRYPTO": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_DECRYPT_CRYPTO": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_SIGN_CRYPTOGRAPHIC": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_VERIFY_SIGNATURE": "CN_Q140_TRUE",')
-lines.append('    "AFFORD_QUERY_DATABASE": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_MUTATE_DATABASE": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_AUTHENTICATE_AUTH": "CN_Q003_LEGAL",')
-lines.append('    "AFFORD_AUTHORIZE_RBAC": "CN_Q003_LEGAL",')
-lines.append('    "AFFORD_SERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_DESERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_HTTP_REST_REQUEST": "CN_Q037_INTERNET",')
-lines.append('    "AFFORD_GRPC_RPC_INVOKE": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_WEBSOCKET_DUPLEX": "CN_Q037_INTERNET",')
-lines.append('    "AFFORD_PUBLISH_EVENT_BUS": "CN_Q084_INFORMATION",')
-lines.append('    "AFFORD_SUBSCRIBE_EVENT_BUS": "CN_Q084_INFORMATION",')
-lines.append('    "AFFORD_CACHE_LOOKUP_KV": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_CACHE_INVALIDATE": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_SPAWN_CONTAINER": "CN_Q229_BOX",')
-lines.append('    "AFFORD_SCHEDULE_CRON_JOB": "CN_Q021_TIME",')
-lines.append('    "AFFORD_LOG_DIAGNOSTIC": "CN_Q084_INFORMATION",')
-lines.append('    "AFFORD_METRIC_GAUGE_EMIT": "CN_Q077_UNIT",')
-lines.append('    "AFFORD_DISTRIBUTED_LOCK": "CN_Q130_STOP",')
-lines.append('    "AFFORD_MAP_REDUCE_BATCH": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_GPU_TENSOR_FORWARD": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_VECTOR_INDEX_SEARCH": "CN_Q001_COMPUTING",')
-lines.append('    "AFFORD_FILE_COMPRESSION_ZIP": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_FILE_DECOMPRESSION": "CN_Q154_PROGRAMMING",')
-lines.append('    "AFFORD_SCHEMA_MIGRATION": "CN_Q029_CHANGE",')
-lines.append('    "AFFORD_INGEST_NUTRIENT": "CN_Q069_FOOD",')
-lines.append('    "AFFORD_CHEMICAL_CATALYSIS": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_OPTICAL_SENSE": "CN_Q186_SENSE",')
-lines.append('    "AFFORD_ACOUSTIC_SENSE": "CN_Q059_SOUND",')
-lines.append('    "AFFORD_TACTILE_SENSE": "CN_Q186_SENSE",')
-lines.append('    "AFFORD_THERMAL_SENSE": "CN_Q180_HOT",')
-lines.append('    "AFFORD_CHEMICAL_OLFACTION": "CN_Q186_SENSE",')
-lines.append('    "AFFORD_CHEMICAL_GUSTATION": "CN_Q069_FOOD",')
-lines.append('    "AFFORD_PROPRIOCEPTIVE_SENSE": "CN_Q186_SENSE",')
-lines.append('    "AFFORD_VESTIBULAR_EQUILIBRIUM": "CN_Q234_CALM",')
-lines.append('    "AFFORD_ELECTRORECEPTION_SENSE": "CN_Q051_POWER",')
-lines.append('    "AFFORD_MAGNETORECEPTION_SENSE": "CN_Q051_POWER",')
-lines.append('    "AFFORD_ECHOLOCATION_SONAR": "CN_Q059_SOUND",')
-lines.append('    "AFFORD_LIDAR_TIME_OF_FLIGHT": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_RADAR_RF_REFLECTION": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_METABOLIC_RESPIRATION": "CN_Q150_LIFE",')
-lines.append('    "AFFORD_PHOTOSYNTHESIS_LIGHT": "CN_Q004_PLANT",')
-lines.append('    "AFFORD_DNA_REPLICATION_COPY": "CN_Q208_GENETICS",')
-lines.append('    "AFFORD_RNA_TRANSCRIPTION": "CN_Q208_GENETICS",')
-lines.append('    "AFFORD_PROTEIN_TRANSLATION": "CN_Q208_GENETICS",')
-lines.append('    "AFFORD_IMMUNE_ANTIBODY_BIND": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_CELLULAR_MITOSIS_SPLIT": "CN_Q022_BIOLOGY",')
-lines.append('    "AFFORD_CELLULAR_APOPTOSIS": "CN_Q213_DEATH",')
-lines.append('    "AFFORD_MEMBRANE_ION_CHANNEL": "CN_Q022_BIOLOGY",')
-lines.append('    "AFFORD_SYNAPTIC_NEUROTRANSMIT": "CN_Q043_MIND",')
-lines.append('    "AFFORD_HORMONE_ENDOCRINE_SEC": "CN_Q002_BODY",')
-lines.append('    "AFFORD_TOXIN_NEUTRALIZATION": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_WOUND_HEALING_CLOT": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_CIRCULATORY_PUMP_HEART": "CN_Q002_BODY",')
-lines.append('    "AFFORD_NEURAL_PLASTICITY_LTP": "CN_Q043_MIND",')
-lines.append('    "AFFORD_CIRCADIAN_RHYTHM_TICK": "CN_Q021_TIME",')
-lines.append('    "AFFORD_SYMBIOTIC_MICROBIOME": "CN_Q022_BIOLOGY",')
-lines.append('    "AFFORD_SPEECH_VOCALIZATION": "CN_Q254_SPEAK",')
-lines.append('    "AFFORD_DISPLAY_PIXEL_EMIT": "CN_Q148_APPEARANCE",')
-lines.append('    "AFFORD_HAPTIC_TACTILE_FEEDBACK": "CN_Q186_SENSE",')
-lines.append('    "AFFORD_FERMENTATION_ANAEROBIC": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_PRECIPITATION_SOLID": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_COMBUSTION_OXIDATION": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_ELECTROLYSIS_SPLITTING": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_POLYMERIZATION_CHAIN": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_DISTILLATION_FRACTION": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_CHROMATOGRAPHY_SEPARATE": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_CRYSTALLIZATION_PURIFY": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_LYOPHILIZATION_FREEZE_DRY": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_CENTRIFUGATION_SPIN": "CN_Q028_MOVE",')
-lines.append('    "AFFORD_ULTRASONIC_CLEAN_CAV": "CN_Q059_SOUND",')
-lines.append('    "AFFORD_AUTOCLAVE_STERILIZATION": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_UV_GERMICIDAL_IRRAD": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_RADIATION_GAMMA_STERIL": "CN_Q006_MEDICINE",')
-lines.append('    "AFFORD_CRYOGENIC_FREEZING": "CN_Q010_CHEMISTRY",')
-lines.append('    "AFFORD_MAGNETIC_LEVITATION": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_ION_THRUST_PROPULSION": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_SOLAR_SAIL_PRESSURE": "CN_Q024_ASTRONOMY",')
-lines.append('    "AFFORD_RADIO_ANTENNA_EMISSION": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_LASER_COHERENT_BEAM": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_FIBER_OPTIC_INTERNAL_REF": "CN_Q013_PHYSICS",')
-lines.append('    "AFFORD_BATTERY_CHEMICAL_CHARGE": "CN_Q051_POWER",')
-lines.append('    "AFFORD_FUEL_CELL_CONVERSION": "CN_Q051_POWER",')
-lines.append('    "AFFORD_SUPERCAPACITOR_DISCHARGE": "CN_Q051_POWER",')
-lines.append('    "AFFORD_THERMOELECTRIC_SEEBECK": "CN_Q051_POWER",')
-lines.append('    "AFFORD_SOLAR_PHOTOVOLTAIC": "CN_Q051_POWER",')
-lines.append('    "AFFORD_WIND_TURBINE_HARVEST": "CN_Q051_POWER",')
-lines.append('    "AFFORD_HYDROELECTRIC_HARVEST": "CN_Q051_POWER",')
-lines.append('    "AFFORD_NUCLEAR_FISSION_HEAT": "CN_Q051_POWER",')
-lines.append('    # Discrete Math, SI, Metric structures')
-lines.append('    "STRUCT_SET_UNORDERED": "CN_Q102_SET",')
-lines.append('    "STRUCT_SEQUENCE_ORDERED": "CN_Q120_LINE",')
-lines.append('    "STRUCT_GRAPH_NETWORK": "CN_Q120_LINE",')
-lines.append('    "STRUCT_TREE_HIERARCHY": "CN_Q127_TREE",')
-lines.append('    "STRUCT_DIRECTED_ACYCLIC_DAG": "CN_Q120_LINE",')
-lines.append('    "STRUCT_LATTICE_ALGEBRA": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_MONOID_SEMIGROUP": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_GROUP_ALGEBRA": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_RING_FIELD": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_VECTOR_SPACE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_MATRIX_TENSOR": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_HILBERT_SPACE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_BANACH_SPACE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_TOPOLOGICAL_MANIFOLD": "CN_Q132_GEOMETRY",')
-lines.append('    "STRUCT_FIBER_BUNDLE": "CN_Q132_GEOMETRY",')
-lines.append('    "STRUCT_RIEMANNIAN_METRIC": "CN_Q132_GEOMETRY",')
-lines.append('    "STRUCT_CATEGORY_THEORY": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_FUNCTOR_MAP": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_NATURAL_TRANSFORMATION": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_ADJUNCTION_MONAD": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_QUOTIENT_STRUCTURE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_DIRECT_PRODUCT": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_COPRODUCT_DISJOINT_SUM": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_HOMOMORPHISM_MAP": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_ISOMORPHISM_BIJECTION": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_AUTOMORPHISM_SYMMETRY": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_PROBABILITY_MEASURE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_SIGMA_ALGEBRA": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_RANDOM_VARIABLE": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_MARKOV_CHAIN": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_MARTINGALE_PROCESS": "CN_Q008_MATHEMATICS",')
-lines.append('    "STRUCT_STOCHASTIC_DIFFUSION": "CN_Q008_MATHEMATICS",')
-lines.append('    "SI_DIM_LENGTH_L": "CN_Q077_UNIT",')
-lines.append('    "SI_DIM_MASS_M": "CN_Q195_MASS",')
-lines.append('    "SI_DIM_TIME_T": "CN_Q021_TIME",')
-lines.append('    "SI_DIM_ELECTRIC_CURRENT_I": "CN_Q051_POWER",')
-lines.append('    "SI_DIM_TEMPERATURE_THETA": "CN_Q180_HOT",')
-lines.append('    "SI_DIM_SUBSTANCE_AMOUNT_N": "CN_Q203_AMOUNT",')
-lines.append('    "SI_DIM_LUMINOUS_INTENSITY_J": "CN_Q088_QUALITY",')
-lines.append('    "METRIC_FREQUENCY_HERTZ": "CN_Q077_UNIT",')
-lines.append('    "METRIC_FORCE_NEWTON": "CN_Q142_FORCE",')
-lines.append('    "METRIC_PRESSURE_PASCAL": "CN_Q077_UNIT",')
-lines.append('    "METRIC_ENERGY_JOULE": "CN_Q051_POWER",')
-lines.append('    "METRIC_POWER_WATT": "CN_Q051_POWER",')
-lines.append('    "METRIC_ELECTRIC_CHARGE_COULOMB": "CN_Q051_POWER",')
-lines.append('    "METRIC_VOLTAGE_VOLT": "CN_Q051_POWER",')
-lines.append('    "METRIC_CAPACITANCE_FARAD": "CN_Q051_POWER",')
-lines.append('    "METRIC_RESISTANCE_OHM": "CN_Q051_POWER",')
-lines.append('    "METRIC_CONDUCTANCE_SIEMENS": "CN_Q051_POWER",')
-lines.append('    "METRIC_MAGNETIC_FLUX_WEBER": "CN_Q051_POWER",')
-lines.append('    "METRIC_MAGNETIC_FIELD_TESLA": "CN_Q051_POWER",')
-lines.append('    "METRIC_INDUCTANCE_HENRY": "CN_Q051_POWER",')
-lines.append('    "METRIC_LUMINOUS_FLUX_LUMEN": "CN_Q077_UNIT",')
-lines.append('    "METRIC_ILLUMINANCE_LUX": "CN_Q077_UNIT",')
-lines.append('    "METRIC_RADIOACTIVITY_BECQUEREL": "CN_Q077_UNIT",')
-lines.append('    "METRIC_RADIATION_DOSE_GRAY": "CN_Q077_UNIT",')
-lines.append('    "METRIC_DOSE_EQUIVALENT_SIEVERT": "CN_Q077_UNIT",')
-lines.append('    "METRIC_CATALYTIC_ACTIVITY_KATAL": "CN_Q077_UNIT",')
-lines.append('    "METRIC_CURRENCY_VALUE_FIAT": "CN_Q017_MONEY",')
-lines.append('    "METRIC_INFORMATION_ENTROPY_BIT": "CN_Q084_INFORMATION",')
-lines.append('    "METRIC_INFORMATION_NAT": "CN_Q084_INFORMATION",')
-lines.append('    "METRIC_COMPUTE_FLOP_COUNT": "CN_Q001_COMPUTING",')
-lines.append('    "METRIC_COMPUTE_MEMORY_BYTE": "CN_Q001_COMPUTING",')
-lines.append('    "METRIC_BANDWIDTH_BIT_PER_SEC": "CN_Q001_COMPUTING",')
+for alias_k, target_hint in RAW_LEGACY_ONTOLOGY_ALIASES:
+    resolved_name = resolve_target_alias(target_hint)
+    lines.append(f'    "{alias_k}": "{resolved_name}",')
 lines.append('}')
 lines.append('')
 lines.append('SLOT_ALIASES: Dict[str, str] = {')
@@ -429,6 +466,26 @@ lines.append('    if target_v in SLOT_NAME_TO_INDEX:')
 lines.append('        globals()[alias_k] = SLOT_NAME_TO_INDEX[target_v]')
 lines.append('')
 lines.append('')
+lines.append('def get_band_contract(band: Union[int, SlotBand]) -> BandContract:')
+lines.append('    """Returns the polymorphic contract for the specified band."""')
+lines.append('    if isinstance(band, int) and not isinstance(band, SlotBand):')
+lines.append('        band = SlotBand(band)')
+lines.append('    return BAND_CONTRACTS.get(band, BandContract.EPISTEMIC)')
+lines.append('')
+lines.append('')
+lines.append('def get_slot_contract(slot: Union[int, str, SlotDefinition]) -> BandContract:')
+lines.append('    """Returns the polymorphic contract for the specified slot."""')
+lines.append('    if isinstance(slot, SlotDefinition):')
+lines.append('        return slot.contract')
+lines.append('    elif isinstance(slot, int):')
+lines.append('        s_def = get_slot_by_index(slot)')
+lines.append('        return s_def.contract if s_def else BandContract.EPISTEMIC')
+lines.append('    elif isinstance(slot, str):')
+lines.append('        s_def = get_slot_by_name(slot)')
+lines.append('        return s_def.contract if s_def else BandContract.EPISTEMIC')
+lines.append('    return BandContract.EPISTEMIC')
+lines.append('')
+lines.append('')
 lines.append('def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canonical_slots_layout.json") -> Path:')
 lines.append('    """Exports the 1024 canonical slot definitions to a JSON file."""')
 lines.append('    p = Path(output_path)')
@@ -450,6 +507,10 @@ lines.append('    return p')
 lines.append('')
 lines.append('')
 lines.append('__all__ = [')
+lines.append('    "BandContract",')
+lines.append('    "BAND_CONTRACTS",')
+lines.append('    "get_band_contract",')
+lines.append('    "get_slot_contract",')
 lines.append('    "SlotBand",')
 lines.append('    "SlotDefinition",')
 lines.append('    "BAND_0_SLOTS",')

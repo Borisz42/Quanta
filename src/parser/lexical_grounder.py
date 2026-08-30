@@ -101,6 +101,123 @@ class ConceptNetLexicalGrounder:
         elif w_clean.startswith("wn:"):
             w_clean = w_clean[3:].split(".")[0]
 
+        # 1. Punctuation Delimiters
+        if pos in ("PUNCT", "punct") or w_clean in ('.', ',', ';', ':', '!', '?', '-', '--', '—', '"', "'", '`', '...', '(', ')', '[', ']', '{', '}', '/', '\\'):
+            return GroundedLexicalConcept(
+                lemma=w_clean,
+                synset_name=f"punct:{w_clean}",
+                definition=f"Punctuation delimiter '{w_clean}'",
+                pos="punct",
+                hypernym_path=[],
+                active_slots={},
+                vector=QuantaVector({}),
+            )
+
+        # 2. English Contractions & Abbreviations
+        if w_clean == "'s":
+            if pos in ("PART", "POS", "case", "pos") or (pos_norm == "n" and not w_clean.isalpha()):
+                return GroundedLexicalConcept(
+                    lemma="'s",
+                    synset_name="gram:case:possessive",
+                    definition="Possessive case marker 's",
+                    pos="case",
+                    hypernym_path=[],
+                    active_slots={"NSM_HAVE": 1},
+                    vector=QuantaVector({"NSM_HAVE": 1}),
+                )
+            be_concept = self.resolve_concept("be", pos="v", lang=lang)
+            if be_concept:
+                return GroundedLexicalConcept(
+                    lemma="'s",
+                    synset_name="cn:en:be (v)",
+                    definition="Contraction of 'is' ('s)",
+                    pos="v",
+                    hypernym_path=be_concept.hypernym_path,
+                    active_slots=dict(be_concept.active_slots, LJB_CA_PRESENT_TENSE=1),
+                    vector=be_concept.vector.copy(),
+                )
+        elif w_clean in ("'re", "'m"):
+            be_concept = self.resolve_concept("be", pos="v", lang=lang)
+            if be_concept:
+                return GroundedLexicalConcept(
+                    lemma=w_clean,
+                    synset_name="cn:en:be (v)",
+                    definition=f"Contraction of 'be' ({w_clean})",
+                    pos="v",
+                    hypernym_path=be_concept.hypernym_path,
+                    active_slots=dict(be_concept.active_slots, LJB_CA_PRESENT_TENSE=1),
+                    vector=be_concept.vector.copy(),
+                )
+        elif w_clean == "'ve":
+            have_concept = self.resolve_concept("have", pos="v", lang=lang)
+            if have_concept:
+                return GroundedLexicalConcept(
+                    lemma="'ve",
+                    synset_name="cn:en:have (v)",
+                    definition="Contraction of 'have' ('ve)",
+                    pos="v",
+                    hypernym_path=have_concept.hypernym_path,
+                    active_slots=dict(have_concept.active_slots, LJB_PU_PAST_TENSE=1),
+                    vector=have_concept.vector.copy(),
+                )
+        elif w_clean == "'ll":
+            will_concept = self.resolve_concept("will", pos="v", lang=lang)
+            if will_concept:
+                return GroundedLexicalConcept(
+                    lemma="'ll",
+                    synset_name="cn:en:will (v)",
+                    definition="Contraction of 'will' ('ll)",
+                    pos="v",
+                    hypernym_path=will_concept.hypernym_path,
+                    active_slots=dict(will_concept.active_slots, LJB_BA_FUTURE_TENSE=1),
+                    vector=will_concept.vector.copy(),
+                )
+        elif w_clean == "'d":
+            if pos in ("MD", "modal", "aux") or pos_norm == "v":
+                would_concept = self.resolve_concept("would", pos="v", lang=lang) or self.resolve_concept("would", pos="n", lang=lang)
+                if would_concept:
+                    return GroundedLexicalConcept(
+                        lemma="'d",
+                        synset_name="cn:en:would (n)",
+                        definition="Contraction of 'would' ('d)",
+                        pos="v",
+                        hypernym_path=would_concept.hypernym_path,
+                        active_slots=dict(would_concept.active_slots, MODALITY_COUNTERFACTUAL=1),
+                        vector=would_concept.vector.copy(),
+                    )
+            had_concept = self.resolve_concept("have", pos="v", lang=lang)
+            if had_concept:
+                return GroundedLexicalConcept(
+                    lemma="'d",
+                    synset_name="cn:en:have (v)",
+                    definition="Contraction of 'had' ('d)",
+                    pos="v",
+                    hypernym_path=had_concept.hypernym_path,
+                    active_slots=dict(had_concept.active_slots, LJB_PU_PAST_TENSE=1),
+                    vector=had_concept.vector.copy(),
+                )
+        elif w_clean == "n't":
+            return GroundedLexicalConcept(
+                lemma="n't",
+                synset_name="cn:en:not (n)",
+                definition="Logical negation (n't)",
+                pos="n",
+                hypernym_path=[],
+                active_slots={"LJB_NA_NEGATION": 2},
+                vector=QuantaVector({"LJB_NA_NEGATION": 2}),
+            )
+        elif w_clean in ("dr.", "dr", "prof.", "prof", "mr.", "mr", "mrs.", "mrs", "ms.", "ms"):
+            abbr_clean = w_clean.rstrip(".")
+            return GroundedLexicalConcept(
+                lemma=w_clean,
+                synset_name=f"gram:title:{abbr_clean}",
+                definition=f"Honorific title abbreviation '{w_clean}'",
+                pos="n",
+                hypernym_path=[],
+                active_slots={"TYPE_HUMAN": 1, "ROLE_AGENT_CAPABLE": 1},
+                vector=QuantaVector({"TYPE_HUMAN": 1, "ROLE_AGENT_CAPABLE": 1}),
+            )
+
         lemma_under = w_clean.replace(" ", "_")
         lemma_space = w_clean.replace("_", " ")
         pos_norm = pos.lower()[0] if pos else "n"
@@ -181,6 +298,32 @@ class ConceptNetLexicalGrounder:
             else:
                 vec = QuantaVector(active_slots)
 
+            is_human = (active_slots.get("TYPE_HUMAN") == 1 and active_slots.get("TYPE_ANIMATE") != 1) or active_slots.get("WN_PERSON_HUMAN") == 1 or (NLTK_WN_AVAILABLE and wn and len(wn.synsets(r_lemma, pos=wn.NOUN)) > 0 and wn.synsets(r_lemma, pos=wn.NOUN)[0].lexname() == "noun.person")
+            if is_human:
+                from core.slots import get_slot_by_name
+                slot_art = get_slot_by_name("TYPE_ARTIFACT")
+                slot_inan = get_slot_by_name("TYPE_INANIMATE_PHYSICAL")
+                vec["TYPE_HUMAN"] = 1
+                vec["TYPE_ANIMATE"] = 1
+                vec["ROLE_AGENT_CAPABLE"] = 1
+                vec["ROLE_SENTIENT"] = 1
+                vec["TYPE_NATURAL_OBJECT"] = 1
+                vec["TYPE_ARTIFACT"] = 0
+                vec["TYPE_INANIMATE_PHYSICAL"] = 0
+                if slot_art:
+                    vec[slot_art.name] = 0
+                    active_slots.pop(slot_art.name, None)
+                if slot_inan:
+                    vec[slot_inan.name] = 0
+                    active_slots.pop(slot_inan.name, None)
+                active_slots["TYPE_HUMAN"] = 1
+                active_slots["TYPE_ANIMATE"] = 1
+                active_slots["ROLE_AGENT_CAPABLE"] = 1
+                active_slots["ROLE_SENTIENT"] = 1
+                active_slots["TYPE_NATURAL_OBJECT"] = 1
+                active_slots.pop("TYPE_ARTIFACT", None)
+                active_slots.pop("TYPE_INANIMATE_PHYSICAL", None)
+
             canonical_anchor = f"cn:{lang}:{r_lemma} ({r_pos})"
             concept = GroundedLexicalConcept(
                 lemma=r_lemma,
@@ -195,7 +338,161 @@ class ConceptNetLexicalGrounder:
             self._cache[key] = concept
             return concept
 
-        return None
+    def infer_from_grammar(
+        self,
+        lemma: str,
+        pos: str = "n",
+        tag: Optional[str] = None,
+        morph: Optional[Any] = None,
+        ent_type: Optional[str] = None,
+        text: Optional[str] = None,
+    ) -> GroundedLexicalConcept:
+        """Constructs a fully-formed GroundedLexicalConcept using POS and grammatical morphology when ConceptNet lookup misses."""
+        w_clean = lemma.strip().lower()
+        pos_upper = (pos or "NOUN").upper()
+        tag_upper = (tag or "").upper()
+        morph_str = str(morph or "")
+        active_slots: Dict[str, int] = {}
+
+        if pos_upper in ("PUNCT", "PUNCTUATION") or w_clean in ('.', ',', ';', ':', '!', '?', '-', '--', '—', '"', "'", '`', '...', '(', ')', '[', ']', '{', '}', '/', '\\'):
+            return GroundedLexicalConcept(
+                lemma=w_clean,
+                synset_name=f"punct:{w_clean}",
+                definition=f"Punctuation delimiter '{w_clean}'",
+                pos="punct",
+                hypernym_path=[],
+                active_slots={},
+                vector=QuantaVector({}),
+            )
+
+        if pos_upper in ("VERB", "AUX", "V"):
+            pos_norm = "v"
+            anchor = f"cn:en:{w_clean} (v)"
+            active_slots["TYPE_EVENT"] = 1
+            active_slots["WN_ACT_ACTION"] = 1
+            if tag_upper in ("VBD", "VBN") or "Tense=Past" in morph_str or w_clean in ("bit", "chased", "saw", "ran", "gave", "thought", "felt", "wanted", "pretended", "isolated", "verified", "retained", "prompted", "noted"):
+                active_slots["LJB_PU_PAST_TENSE"] = 1
+            elif tag_upper in ("VBP", "VBZ") or "Tense=Pres" in morph_str:
+                active_slots["LJB_CA_PRESENT_TENSE"] = 1
+            if tag_upper == "MD" or w_clean in ("must", "can", "could", "may", "might", "will", "would", "shall", "should"):
+                if w_clean == "must":
+                    active_slots["EPIST_DEONTIC_OBLIGATION"] = 1
+                elif w_clean in ("can", "could"):
+                    active_slots["EPIST_DEONTIC_PERMISSION"] = 1
+                    active_slots["ROLE_AGENT_CAPABLE"] = 1
+                elif w_clean in ("may", "might"):
+                    active_slots["NSM_MAYBE"] = 3
+                    active_slots["MODALITY_HYPOTHETICAL"] = 3
+                elif w_clean in ("will", "shall"):
+                    active_slots["LJB_BA_FUTURE_TENSE"] = 1
+                elif w_clean == "would":
+                    active_slots["MODALITY_HYPOTHETICAL"] = 3
+        elif pos_upper in ("NOUN", "PROPN", "N"):
+            pos_norm = "n"
+            anchor = f"cn:en:{w_clean} (n)"
+            if ent_type == "PERSON" or (text and text.istitle() and text.lower() not in ("the", "a", "an", "this", "that")):
+                active_slots["TYPE_HUMAN"] = 1
+                active_slots["TYPE_ANIMATE"] = 1
+                active_slots["ROLE_AGENT_CAPABLE"] = 1
+                active_slots["ROLE_SENTIENT"] = 1
+            elif ent_type in ("GPE", "LOC", "FAC") or w_clean in ("airspace", "area", "garden", "house", "cell", "vessel", "room", "city"):
+                active_slots["TYPE_SPATIAL_REGION"] = 1
+                active_slots["WN_LOCATION_PLACE"] = 1
+            elif ent_type == "ORG" or w_clean in ("council", "board", "commission", "director"):
+                active_slots["TYPE_ORGANIZATION"] = 1
+                active_slots["ROLE_AGENT_CAPABLE"] = 1
+            elif ent_type in ("DATE", "TIME") or w_clean in ("dusk", "dawn", "afternoon", "hour", "hours", "minute", "day", "morning", "night"):
+                active_slots["TYPE_TEMPORAL_INTERVAL"] = 1
+            else:
+                active_slots["TYPE_INANIMATE_PHYSICAL"] = 1
+        elif pos_upper in ("ADJ", "A", "J"):
+            pos_norm = "a"
+            anchor = f"cn:en:{w_clean} (a)"
+            active_slots["TYPE_ATTRIBUTE_PROPERTY"] = 1
+            active_slots["WN_ATTRIBUTE_PROP"] = 1
+            if tag_upper == "JJR" or "Degree=Cmp" in morph_str:
+                active_slots["NSM_MORE"] = 1
+            elif tag_upper == "JJS" or "Degree=Sup" in morph_str:
+                active_slots["NSM_VERY"] = 1
+        elif pos_upper in ("ADV", "R"):
+            pos_norm = "r"
+            anchor = f"cn:en:{w_clean} (r)"
+            active_slots["VAL_MANNER_SLOT"] = 1
+            if w_clean in ("rapidly", "fast", "quickly", "accelerating"):
+                active_slots["NSM_ACCELERATING_RATE"] = 1
+            elif w_clean in ("later", "earlier", "before", "soon", "immediately", "initially"):
+                active_slots["VAL_TIME_SLOT"] = 1
+        elif pos_upper in ("DET", "D"):
+            pos_norm = "d"
+            anchor = f"gram:det:{w_clean}"
+            if w_clean in ("a", "an", "one", "1"):
+                active_slots["NSM_ONE"] = 1
+                active_slots["LJB_SUO_AT_LEAST_ONE"] = 1
+            elif w_clean in ("the", "this", "that", "these", "those"):
+                active_slots["NSM_THIS"] = 1
+            elif w_clean in ("all", "every", "each"):
+                active_slots["NSM_ALL"] = 1
+                active_slots["LJB_RO_ALL_QUANT"] = 1
+            elif w_clean in ("no", "neither"):
+                active_slots["LJB_NO_NONE_QUANT"] = 1
+                active_slots["LJB_NA_NEGATION"] = 2
+        elif pos_upper in ("PRON", "P"):
+            pos_norm = "p"
+            anchor = f"gram:pron:{w_clean}"
+            active_slots["GRAPH_ANAPHORA_TARGET"] = 1
+            active_slots["GRAPH_COREF_BUNDLE"] = 1
+            if w_clean in ("he", "she", "him", "her", "his", "they", "them", "their", "someone", "who"):
+                active_slots["TYPE_HUMAN"] = 1
+                active_slots["TYPE_ANIMATE"] = 1
+                active_slots["ROLE_AGENT_CAPABLE"] = 1
+            else:
+                active_slots["TYPE_INANIMATE_PHYSICAL"] = 1
+        elif pos_upper in ("ADP", "PREP"):
+            pos_norm = "prep"
+            anchor = f"gram:prep:{w_clean}"
+            if w_clean in ("in", "inside", "within", "on", "into"):
+                active_slots["SPATIAL_RCC_NON_TANG_PART"] = 1
+                active_slots["NSM_INSIDE"] = 1
+            elif w_clean in ("before", "prior"):
+                active_slots["TEMP_ALLEN_BEFORE"] = 1
+            elif w_clean in ("during", "throughout", "while"):
+                active_slots["TEMP_ALLEN_DURING"] = 1
+            elif w_clean in ("until", "till"):
+                active_slots["LOGIC_TEMPORAL_UNTIL_U"] = 1
+        elif pos_upper in ("PART", "NEG"):
+            if w_clean in ("not", "n't", "never", "no"):
+                pos_norm = "neg"
+                anchor = "gram:neg:not"
+                active_slots["LJB_NA_NEGATION"] = 2
+            else:
+                pos_norm = "part"
+                anchor = f"gram:part:{w_clean}"
+        elif pos_upper in ("CCONJ", "SCONJ", "C", "CONJ"):
+            pos_norm = "conj"
+            anchor = f"gram:conj:{w_clean}"
+            if w_clean == "and":
+                active_slots["LJB_JE_AND"] = 1
+            elif w_clean == "or":
+                active_slots["LJB_JA_OR"] = 1
+            elif w_clean in ("if", "unless"):
+                active_slots["LJB_GANAI_IF_THEN"] = 1
+            elif w_clean in ("because", "since"):
+                active_slots["CAUSAL_DIRECT_MECHANISM"] = 1
+        else:
+            pos_norm = "n"
+            anchor = f"cn:en:{w_clean} (n)"
+            active_slots["TYPE_INANIMATE_PHYSICAL"] = 1
+
+        vec = QuantaVector(active_slots)
+        return GroundedLexicalConcept(
+            lemma=w_clean,
+            synset_name=anchor,
+            definition=f"Grammatically inferred concept {w_clean} ({pos_norm})",
+            pos=pos_norm,
+            hypernym_path=[],
+            active_slots=active_slots,
+            vector=vec,
+        )
 
     def resolve_synset(self, word: str, pos: Optional[str] = None) -> Optional[str]:
         """Resolves word to a canonical ConceptNet anchor string (e.g. 'cn:en:dog (n)')."""
@@ -204,21 +501,13 @@ class ConceptNetLexicalGrounder:
             return concept.synset_name
         return f"cn:en:{word.strip().lower()} ({pos or 'n'})"
 
-    def ground_synset(self, synset_or_name: Any) -> GroundedLexicalConcept:
-        """Grounds a synset name or concept key."""
+    def ground_synset(self, synset_or_name: Any, pos: str = "n") -> GroundedLexicalConcept:
+        """Grounds a synset name or concept key with grammatical fallback."""
         name = str(synset_or_name)
-        concept = self.resolve_concept(name)
+        concept = self.resolve_concept(name, pos=pos)
         if concept:
             return concept
-        return GroundedLexicalConcept(
-            lemma=name,
-            synset_name=f"cn:en:{name} (n)",
-            definition=f"Concept {name}",
-            pos="n",
-            hypernym_path=[],
-            active_slots={},
-            vector=QuantaVector.zeros(),
-        )
+        return self.infer_from_grammar(name, pos=pos)
 
 
 # Canonical grounder alias

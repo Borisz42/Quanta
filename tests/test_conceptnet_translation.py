@@ -90,7 +90,7 @@ def test_conceptnet_lexical_grounder():
 
 
 def test_concept_vector_decoder_tier1():
-    """Verify Tier 1 singleton decoding (< 10 ms) on 23,383 singletons from codebook."""
+    """Verify Tier 1 singleton decoding (< 5 ms) on 25,292 singletons from codebook."""
     decoder = ConceptVectorDecoder.get_instance()
     grounder = ConceptNetLexicalGrounder.get_default()
 
@@ -163,3 +163,60 @@ def test_neurosymbolic_validation_with_conceptnet_aliases():
     res_invalid = gate.validate_graph(g_invalid)
     assert not res_invalid.is_valid
     assert a_cid2 in res_invalid.muc_nodes
+
+
+def test_epistemic_4_valued_grounding():
+    """Verify that ConceptNet grounding produces 4-valued Belnap logic vectors with 1s, 2s, and 3s."""
+    grounder = ConceptNetLexicalGrounder.get_default()
+
+    dog_concept = grounder.resolve_concept("dog", pos="n")
+    assert dog_concept is not None
+
+    # Check 256-D ConceptNet vector (Bands 3 & 4: slots 384..639)
+    cn_data = dog_concept.vector._data[384:640]
+
+    # Verify vector contains only quaternary values in {0, 1, 2, 3}
+    assert np.all((cn_data >= 0) & (cn_data <= 3))
+
+    num_ones = int((cn_data == 1).sum())
+    num_threes = int((cn_data == 3).sum())
+
+    # dog should have affirmed 1s (direct/1st-hop) and inherited 3s (2nd-hop taxonomy)
+    assert num_ones > 0, "Expected non-zero TRUE (1) values in dog concept vector"
+    assert num_threes > 0, "Expected non-zero MAYBE (3) values in dog concept vector"
+
+    # Verify active_slots dictionary retains exact 4-valued integer assignments
+    assert any(v == 1 for v in dog_concept.active_slots.values())
+    assert any(v == 3 for v in dog_concept.active_slots.values())
+
+
+def test_epistemic_cost_matrix_decoding():
+    """Verify ConceptVectorDecoder epistemic distance scoring with wildcards and contradictions."""
+    decoder = ConceptVectorDecoder.get_instance()
+    cost_matrix = decoder.EPISTEMIC_COST_MATRIX
+
+    # Exact matches have zero cost
+    assert cost_matrix[0, 0] == 0.0
+    assert cost_matrix[1, 1] == 0.0
+    assert cost_matrix[2, 2] == 0.0
+    assert cost_matrix[3, 3] == 0.0
+
+    # Contradiction between TRUE (1) and FALSE (2) is heavily penalized
+    assert cost_matrix[1, 2] >= 2.0
+    assert cost_matrix[2, 1] >= 2.0
+
+    # Epistemic MAYBE (3) acts as a soft wildcard
+    assert cost_matrix[3, 1] <= 0.2
+    assert cost_matrix[1, 3] <= 0.2
+    assert cost_matrix[3, 2] <= 0.2
+    assert cost_matrix[2, 3] <= 0.2
+
+    # Query with identical vector decodes to distance 0.0
+    grounder = ConceptNetLexicalGrounder.get_default()
+    dog_concept = grounder.resolve_concept("dog", pos="n")
+    assert dog_concept is not None
+
+    vec_256 = dog_concept.vector._data[384:640]
+    lemma, dist = decoder.decode_vector(vec_256)
+    assert lemma == "dog"
+    assert dist == 0.0

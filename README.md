@@ -187,20 +187,25 @@ Enables algebraic variable unification, lexical register scoping, and formal ded
 * **`320–383` (Sequent Calculus & Derivation Operators):** Formal proof step transitions (`SEQ_ENTAILMENT_TURNSTILE`, `SEQ_MODUS_PONENS_STEP`, `SEQ_RESOLUTION_STEP`, `SEQ_CUT_RULE_APPLIED`, `SEQ_HYPOTHESIS_INTRO`, `SEQ_AXIOM_DISCHARGE`, `SEQ_CONTRADICTION_CORE`).
 
 #### Band 3: ConceptNet Ontological Taxonomies, Scientific Domains & Structures (384–511)
-128 data-driven dimensions derived via **Usage-Weighted Ontological Density Scoring (U-ODS)** and an **Inverted-Index Partition Refinement Solver** over 34M ConceptNet 5.7.0 assertions with 2-hop matrix propagation ($M_{\text{inherited}} = M + TM + T^2M$):
+128 data-driven dimensions derived via **Usage-Weighted Ontological Density Scoring (U-ODS)** and a **Multi-Way Inverted-Index Partition Refinement Solver** over 34M ConceptNet 5.7.0 assertions operating on the full **epistemic 4-valued Belnap lattice** ($\mathcal{B}_4 = \{0, 1, 2, 3\}$) with non-monotonic transitive property inheritance ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$):
 * **`384–407` (Core Technical & Formal Domains):** `CN_Q001_COMPUTING`, `CN_Q002_BODY`, `CN_Q003_LEGAL`, `CN_Q004_PLANT`, `CN_Q005_MUSIC`, `CN_Q006_MEDICINE`, `CN_Q007_NAUTICAL`, `CN_Q008_MATHEMATICS`, `CN_Q009_MILITARY`, `CN_Q010_CHEMISTRY`, `CN_Q011_ANIMAL`, `CN_Q012_TANGIBLE_THING`, `CN_Q013_AUSTRALIA`, `CN_Q014_GROUP`, `CN_Q015_PERSON`, `CN_Q016_SPORTS`, `CN_Q017_MONEY`, `CN_Q018_CHESS`, `CN_Q019_LINGUISTICS`, `CN_Q020_COUNTY_SEAT`, `CN_Q021_TIME`, `CN_Q022_BIOLOGY`, `CN_Q023_WORK`, `CN_Q024_CARDS`.
 * **`408–455` (Scientific & Structural Categories):** `CN_Q025_TRANSPORT`, `CN_Q026_STATE`, `CN_Q027_SUGAR`, `CN_Q028_MOVE`, `CN_Q029_ZOOLOGY`, `CN_Q030_ANATOMY`, `CN_Q031_DISEASE`, `CN_Q032_GOOD`, `CN_Q033_CANADA`, `CN_Q034_WATER_CRAFT`, `CN_Q035_GRAMMAR`, `CN_Q036_HAPPINESS`, `CN_Q037_INTERNET`, `CN_Q038_BOTANY`, `CN_Q039_FINANCE`, `CN_Q040_PERSON`, `CN_Q041_SCOTLAND`, `CN_Q042_DEVICE`, `CN_Q043_MIND`, `CN_Q044_FURNITURE`, `CN_Q045_SKIN`, `CN_Q046_ACTION`, `CN_Q047_CLOTHING`, `CN_Q048_PHYSICS`, `CN_Q049_WATER`, `CN_Q050_CLASS`, `CN_Q051_NEW_ZEALAND`, `CN_Q052_GEOLOGY`, `CN_Q053_GOD`, `CN_Q054_IRELAND`, `CN_Q055_BASEBALL`, `CN_Q056_COLOR`, `CN_Q057_PHILOSOPHY`, `CN_Q058_NORTH_AMERICA`, `CN_Q059_CHURCH`, `CN_Q060_BIRD`, `CN_Q061_LANGUAGE`, `CN_Q062_CHRISTIANITY`, `CN_Q063_POINT`, `CN_Q064_PATHOLOGY`, `CN_Q065_FISH`, `CN_Q066_BIOCHEMISTRY`, `CN_Q067_BAD`, `CN_Q068_WRONG`, `CN_Q069_FOOD`, `CN_Q070_VALUE`, `CN_Q071_CRICKET`, `CN_Q072_HUMAN_ACTIVITY`.
 * **`456–511` (Contextual & Structural Taxonomies):** `CN_Q073_PLACE` $\dots$ `CN_Q128_MANNER`.
 
 #### Band 4: ConceptNet Cyber-Physical Tool Affordances & Actions (512–639)
-128 data-driven affordance and action dimensions enabling anchor-free physical/functional reasoning and **2-tier vector decoding**:
+128 data-driven affordance and action dimensions enabling anchor-free physical/functional reasoning and **vectorized 4-valued epistemic decoding**:
 * **`512–543` (Physical Dynamics & Action Affordances):** `CN_Q129_LEAVE`, `CN_Q130_STOP`, `CN_Q135_DANCE`, `CN_Q142_FORCE`, `CN_Q144_EVENT`, `CN_Q146_TAKE`, `CN_Q158_KILL`, `CN_Q166_OPEN`, `CN_Q174_ATTACK`, `CN_Q183_MAKE`, `CN_Q194_FIGHT`, `CN_Q244_HIT`, `CN_Q252_ACTIVITY`.
 * **`544–580` (Material, Spatial & Structural Affordances):** `CN_Q137_METAL`, `CN_Q139_SCHOOL`, `CN_Q148_APPEARANCE`, `CN_Q161_DESK`, `CN_Q165_RING`, `CN_Q180_HOT`, `CN_Q189_ISLAND`, `CN_Q195_MASS`, `CN_Q204_AREA`, `CN_Q207_VEHICLE`, `CN_Q229_BOX`, `CN_Q245_MATERIAL`.
 * **`581–639` (Cognitive, Sensory & Functional Capabilities):** `CN_Q140_TRUE`, `CN_Q150_LIFE`, `CN_Q153_DESIRE`, `CN_Q154_PROGRAMMING`, `CN_Q171_HAPPY`, `CN_Q186_SENSE`, `CN_Q188_LIE`, `CN_Q196_OPINION`, `CN_Q208_GENETICS`, `CN_Q213_DEATH`, `CN_Q215_DRUG`, `CN_Q234_CALM`, `CN_Q254_SPEAK`, `CN_Q255_ABILITY`, `CN_Q256_WORTHY`.
-* **2-Tier Realization Decoding:**
-  1. *Tier 1 (In-Memory SIMD)*: 23,383 singletons (mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<10\text{ ms}$.
-  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query SQLite clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
-* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) resolve directly into canonical `CN_Q*` indices via `src/core/slots.py`.
+* **Epistemic 4-Valued Grounding Scheme:**
+  - `1 (TRUE)`: Direct positive ($d_{\text{pos}} = 0$) and 1st-order positive inheritance ($d_{\text{pos}} = 1$).
+  - `2 (FALSE)`: Direct negations ($d_{\text{neg}} = 0$) and 1st-order negative inheritance ($d_{\text{neg}} = 1$) mapped to positive counterpart axes.
+  - `3 (MAYBE)`: 2nd-order positive deductions ($d_{\text{pos}} = 2$) acting as soft wildcards.
+  - `0 (IRRELEVANT)`: Unasserted dimensions and distant negative deductions ($d_{\text{neg}} \ge 2$).
+* **Vectorized Realization Decoding & Statistics:**
+  1. *Tier 1 (In-Memory SIMD)*: **25,292 unique singletons** (34.67% of core archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<5\text{ ms}$ via vectorized $4 \times 4$ cost matrix $\mathbf{C}$.
+  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query 403,503 pre-packed quaternary vectors across 54.42M active non-zero assertions in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_NATURAL_OBJECT`, `AFFORD_INCISED_CUTTING`) resolve dynamically into canonical `CN_Q*` indices via `src/core/slots.py`.
 
 #### Band 5: Theory of Mind, Multi-Agent Beliefs, Goals & Pragmatics (640–767)
 Models recursive social cognition, intentions, affective drives, and pragmatic speech acts.
@@ -335,14 +340,14 @@ $$\max_{S \subset \mathcal{F}, \vert{}S\vert{}=256} \left[ \frac{1}{\vert{}S\ver
 
 To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/conceptnetDimensions.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/conceptnetDimensions.md)):
 
-* **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix propagation ($M_{\text{inherited}} = M + TM + T^2M$) expanding 34M assertions to **54.61M non-zero connections** in **1.42s**.
+* **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix 4-valued non-monotonic propagation ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$) expanding 34M assertions to **54.42M active assertions** across $\{0, 1, 2, 3\}$ (`13.31M` TRUE, `23.1K` FALSE, `41.09M` MAYBE).
 * **Usage-Weighted Ontological Density Scoring (U-ODS)**: Ranks concept utility by combining direct degree, relation entropy, affordance ratio, DAG centrality, and real-world Zipf corpus frequency:
   $$\text{U-ODS}(c) = \left[ \log_2(1 + \text{deg}(c)) \cdot (1.0 + 1.2 H_{\text{rel}}(c)) \cdot (1.0 + 1.5 \alpha(c)) + 0.5 \min(3, \tau(c)) \right] \cdot \left(1.0 + 2.0 \frac{\text{Zipf}(c)}{8.0}\right)$$
-* **Inverted-Index Hopcroft Partition Solver**: Solves the optimal 256 dimensions across 72,930 unique semantic archetypes in **40.39s** ($157.76\text{ ms/question}$).
-* **2-Tier Vector Decoding Architecture**:
-  1. **Tier 1 (In-Memory SIMD)**: **23,383 singletons (32.1% of archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage)** decode in **$<10\text{ ms}$** via bitwise distance search over [`data/concept_codebook.csv.gz`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/concept_codebook.csv.gz).
-  2. **Tier 2 (Category Basin Search)**: Specialized technical/taxonomic terms query indexed category clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
-* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Reconciles legacy symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) with canonical `CN_Q*` slots, preserving 100% solver test compatibility.
+* **Multi-Way Inverted-Index Hopcroft Partition Solver**: Solves the optimal 256 dimensions across 72,953 unique semantic archetypes using 4-way Gini reduction ($\Delta \text{Gini} = \frac{1}{2}(W^2 - \sum W_v^2)$) and smaller-part Hopcroft subtraction.
+* **Vectorized 4-Valued Realization Decoding Architecture**:
+  1. **Tier 1 (In-Memory SIMD)**: **25,292 singletons (34.67% of archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage)** decode in **$<5\text{ ms}$** via vectorized $4 \times 4$ cost matrix $\mathbf{C}$ over [`data/concept_codebook.csv.gz`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/concept_codebook.csv.gz).
+  2. **Tier 2 (Category Basin Search)**: Specialized technical/taxonomic terms query 403,503 pre-packed quaternary vectors across indexed category clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Reconciles legacy symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_NATURAL_OBJECT`, `AFFORD_INCISED_CUTTING`) with canonical `CN_Q*` slots, preserving 100% solver test compatibility.
 
 ---
 

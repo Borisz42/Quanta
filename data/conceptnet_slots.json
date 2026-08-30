@@ -100,16 +100,7 @@
   },
   {
     "index": 395,
-    "name": "CN_Q012_TANGIBLE_THING",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it a type of tangible thing?",
-    "relation": "/r/IsA",
-    "target": "tangible thing"
-  },
-  {
-    "index": 396,
-    "name": "CN_Q013_PHYSICS",
+    "name": "CN_Q012_PHYSICS",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of physics?",
@@ -117,13 +108,22 @@
     "target": "physics"
   },
   {
-    "index": 397,
-    "name": "CN_Q014_GROUP",
+    "index": 396,
+    "name": "CN_Q013_GROUP",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to group?",
     "relation": "/r/RelatedTo",
     "target": "group"
+  },
+  {
+    "index": 397,
+    "name": "CN_Q014_TANGIBLE_THING",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a type of tangible thing?",
+    "relation": "/r/IsA",
+    "target": "tangible thing"
   },
   {
     "index": 398,
@@ -199,16 +199,7 @@
   },
   {
     "index": 406,
-    "name": "CN_Q023_WORK",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to work?",
-    "relation": "/r/RelatedTo",
-    "target": "work"
-  },
-  {
-    "index": 407,
-    "name": "CN_Q024_ASTRONOMY",
+    "name": "CN_Q023_ASTRONOMY",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of astronomy?",
@@ -216,13 +207,22 @@
     "target": "astronomy"
   },
   {
-    "index": 408,
-    "name": "CN_Q025_CANADA",
+    "index": 407,
+    "name": "CN_Q024_SUGAR",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of canada?",
-    "relation": "/r/HasContext",
-    "target": "canada"
+    "description": "Is it conceptually related to sugar?",
+    "relation": "/r/RelatedTo",
+    "target": "sugar"
+  },
+  {
+    "index": 408,
+    "name": "CN_Q025_WORK",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to work?",
+    "relation": "/r/RelatedTo",
+    "target": "work"
   },
   {
     "index": 409,
@@ -235,12 +235,12 @@
   },
   {
     "index": 410,
-    "name": "CN_Q027_SUGAR",
+    "name": "CN_Q027_CANADA",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to sugar?",
-    "relation": "/r/RelatedTo",
-    "target": "sugar"
+    "description": "Is it used in the context or domain of canada?",
+    "relation": "/r/HasContext",
+    "target": "canada"
   },
   {
     "index": 411,
@@ -280,21 +280,21 @@
   },
   {
     "index": 415,
-    "name": "CN_Q032_GOOD",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to good?",
-    "relation": "/r/RelatedTo",
-    "target": "good"
-  },
-  {
-    "index": 416,
-    "name": "CN_Q033_POLITICS",
+    "name": "CN_Q032_POLITICS",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of politics?",
     "relation": "/r/HasContext",
     "target": "politics"
+  },
+  {
+    "index": 416,
+    "name": "CN_Q033_GOOD",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to good?",
+    "relation": "/r/RelatedTo",
+    "target": "good"
   },
   {
     "index": 417,
@@ -649,12 +649,12 @@
   },
   {
     "index": 456,
-    "name": "CN_Q073_PLACE",
+    "name": "CN_Q073_BAD",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to place?",
+    "description": "Is it conceptually related to bad?",
     "relation": "/r/RelatedTo",
-    "target": "place"
+    "target": "bad"
   },
   {
     "index": 457,
@@ -667,21 +667,21 @@
   },
   {
     "index": 458,
-    "name": "CN_Q075_BAD",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to bad?",
-    "relation": "/r/RelatedTo",
-    "target": "bad"
-  },
-  {
-    "index": 459,
-    "name": "CN_Q076_ORDER",
+    "name": "CN_Q075_ORDER",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to order?",
     "relation": "/r/RelatedTo",
     "target": "order"
+  },
+  {
+    "index": 459,
+    "name": "CN_Q076_PLACE",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to place?",
+    "relation": "/r/RelatedTo",
+    "target": "place"
   },
   {
     "index": 460,
@@ -793,12 +793,12 @@
   },
   {
     "index": 472,
-    "name": "CN_Q089_LAW",
+    "name": "CN_Q089_RIGHT",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of law?",
-    "relation": "/r/HasContext",
-    "target": "law"
+    "description": "Is it conceptually related to right?",
+    "relation": "/r/RelatedTo",
+    "target": "right"
   },
   {
     "index": 473,
@@ -820,16 +820,7 @@
   },
   {
     "index": 475,
-    "name": "CN_Q092_CONTROL",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to control?",
-    "relation": "/r/RelatedTo",
-    "target": "control"
-  },
-  {
-    "index": 476,
-    "name": "CN_Q093_STATISTICS",
+    "name": "CN_Q092_STATISTICS",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of statistics?",
@@ -837,17 +828,17 @@
     "target": "statistics"
   },
   {
-    "index": 477,
-    "name": "CN_Q094_USE",
+    "index": 476,
+    "name": "CN_Q093_CONTROL",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to use?",
+    "description": "Is it conceptually related to control?",
     "relation": "/r/RelatedTo",
-    "target": "use"
+    "target": "control"
   },
   {
-    "index": 478,
-    "name": "CN_Q095_SURFACE",
+    "index": 477,
+    "name": "CN_Q094_SURFACE",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to surface?",
@@ -855,8 +846,26 @@
     "target": "surface"
   },
   {
+    "index": 478,
+    "name": "CN_Q095_LAW",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of law?",
+    "relation": "/r/HasContext",
+    "target": "law"
+  },
+  {
     "index": 479,
-    "name": "CN_Q096_YEAR",
+    "name": "CN_Q096_USE",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to use?",
+    "relation": "/r/RelatedTo",
+    "target": "use"
+  },
+  {
+    "index": 480,
+    "name": "CN_Q097_YEAR",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to year?",
@@ -864,22 +873,13 @@
     "target": "year"
   },
   {
-    "index": 480,
-    "name": "CN_Q097_COOKING",
+    "index": 481,
+    "name": "CN_Q098_COOKING",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of cooking?",
     "relation": "/r/HasContext",
     "target": "cooking"
-  },
-  {
-    "index": 481,
-    "name": "CN_Q098_RIGHT",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to right?",
-    "relation": "/r/RelatedTo",
-    "target": "right"
   },
   {
     "index": 482,
@@ -1027,7 +1027,16 @@
   },
   {
     "index": 498,
-    "name": "CN_Q115_BE",
+    "name": "CN_Q115_LINE",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to line?",
+    "relation": "/r/RelatedTo",
+    "target": "line"
+  },
+  {
+    "index": 499,
+    "name": "CN_Q116_BE",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it a manner/way of be?",
@@ -1035,8 +1044,8 @@
     "target": "be"
   },
   {
-    "index": 499,
-    "name": "CN_Q116_CHARACTER",
+    "index": 500,
+    "name": "CN_Q117_CHARACTER",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to character?",
@@ -1044,8 +1053,8 @@
     "target": "character"
   },
   {
-    "index": 500,
-    "name": "CN_Q117_GO",
+    "index": 501,
+    "name": "CN_Q118_GO",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to go?",
@@ -1053,8 +1062,8 @@
     "target": "go"
   },
   {
-    "index": 501,
-    "name": "CN_Q118_AUTOMOTIVE",
+    "index": 502,
+    "name": "CN_Q119_AUTOMOTIVE",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of automotive?",
@@ -1062,22 +1071,13 @@
     "target": "automotive"
   },
   {
-    "index": 502,
-    "name": "CN_Q119_BREAK",
+    "index": 503,
+    "name": "CN_Q120_BREAK",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to break?",
     "relation": "/r/RelatedTo",
     "target": "break"
-  },
-  {
-    "index": 503,
-    "name": "CN_Q120_LINE",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to line?",
-    "relation": "/r/RelatedTo",
-    "target": "line"
   },
   {
     "index": 504,
@@ -1126,21 +1126,21 @@
   },
   {
     "index": 509,
-    "name": "CN_Q126_NZ",
-    "band": 3,
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of nz?",
-    "relation": "/r/HasContext",
-    "target": "nz"
-  },
-  {
-    "index": 510,
-    "name": "CN_Q127_TREE",
+    "name": "CN_Q126_TREE",
     "band": 3,
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to tree?",
     "relation": "/r/RelatedTo",
     "target": "tree"
+  },
+  {
+    "index": 510,
+    "name": "CN_Q127_NZ",
+    "band": 3,
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of nz?",
+    "relation": "/r/HasContext",
+    "target": "nz"
   },
   {
     "index": 511,
@@ -1378,21 +1378,21 @@
   },
   {
     "index": 537,
-    "name": "CN_Q154_PROGRAMMING",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it used in the context or domain of programming?",
-    "relation": "/r/HasContext",
-    "target": "programming"
-  },
-  {
-    "index": 538,
-    "name": "CN_Q155_LARGE",
+    "name": "CN_Q154_LARGE",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to large?",
     "relation": "/r/RelatedTo",
     "target": "large"
+  },
+  {
+    "index": 538,
+    "name": "CN_Q155_PROGRAMMING",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of programming?",
+    "relation": "/r/HasContext",
+    "target": "programming"
   },
   {
     "index": 539,
@@ -1504,12 +1504,12 @@
   },
   {
     "index": 551,
-    "name": "CN_Q168_ZOOLOGY",
+    "name": "CN_Q168_ATTACK",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
-    "description": "Is it used in the context or domain of zoology?",
-    "relation": "/r/HasContext",
-    "target": "zoology"
+    "description": "Is it conceptually related to attack?",
+    "relation": "/r/RelatedTo",
+    "target": "attack"
   },
   {
     "index": 552,
@@ -1558,12 +1558,12 @@
   },
   {
     "index": 557,
-    "name": "CN_Q174_ATTACK",
+    "name": "CN_Q174_ZOOLOGY",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to attack?",
-    "relation": "/r/RelatedTo",
-    "target": "attack"
+    "description": "Is it used in the context or domain of zoology?",
+    "relation": "/r/HasContext",
+    "target": "zoology"
   },
   {
     "index": 558,
@@ -1666,16 +1666,7 @@
   },
   {
     "index": 569,
-    "name": "CN_Q186_SENSE",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to sense?",
-    "relation": "/r/RelatedTo",
-    "target": "sense"
-  },
-  {
-    "index": 570,
-    "name": "CN_Q187_ADVANCE",
+    "name": "CN_Q186_ADVANCE",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to advance?",
@@ -1683,13 +1674,22 @@
     "target": "advance"
   },
   {
-    "index": 571,
-    "name": "CN_Q188_LIE",
+    "index": 570,
+    "name": "CN_Q187_LIE",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to lie?",
     "relation": "/r/RelatedTo",
     "target": "lie"
+  },
+  {
+    "index": 571,
+    "name": "CN_Q188_SENSE",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to sense?",
+    "relation": "/r/RelatedTo",
+    "target": "sense"
   },
   {
     "index": 572,
@@ -1927,21 +1927,21 @@
   },
   {
     "index": 598,
-    "name": "CN_Q215_DRUG",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to drug?",
-    "relation": "/r/RelatedTo",
-    "target": "drug"
-  },
-  {
-    "index": 599,
-    "name": "CN_Q216_TRAVEL",
+    "name": "CN_Q215_TRAVEL",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it a manner/way of travel?",
     "relation": "/r/MannerOf",
     "target": "travel"
+  },
+  {
+    "index": 599,
+    "name": "CN_Q216_DRUG",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to drug?",
+    "relation": "/r/RelatedTo",
+    "target": "drug"
   },
   {
     "index": 600,
@@ -2134,21 +2134,21 @@
   },
   {
     "index": 621,
-    "name": "CN_Q238_PHYSICAL_EVENT",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it a type of physical event?",
-    "relation": "/r/IsA",
-    "target": "physical event"
-  },
-  {
-    "index": 622,
-    "name": "CN_Q239_BE",
+    "name": "CN_Q238_BE",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to be?",
     "relation": "/r/RelatedTo",
     "target": "be"
+  },
+  {
+    "index": 622,
+    "name": "CN_Q239_PHYSICAL_EVENT",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a type of physical event?",
+    "relation": "/r/IsA",
+    "target": "physical event"
   },
   {
     "index": 623,
@@ -2242,21 +2242,21 @@
   },
   {
     "index": 633,
-    "name": "CN_Q250_STAY",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to stay?",
-    "relation": "/r/RelatedTo",
-    "target": "stay"
-  },
-  {
-    "index": 634,
-    "name": "CN_Q251_MUSIC",
+    "name": "CN_Q250_MUSIC",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to music?",
     "relation": "/r/RelatedTo",
     "target": "music"
+  },
+  {
+    "index": 634,
+    "name": "CN_Q251_STAY",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to stay?",
+    "relation": "/r/RelatedTo",
+    "target": "stay"
   },
   {
     "index": 635,
@@ -2278,21 +2278,21 @@
   },
   {
     "index": 637,
-    "name": "CN_Q254_SPEAK",
-    "band": 4,
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to speak?",
-    "relation": "/r/RelatedTo",
-    "target": "speak"
-  },
-  {
-    "index": 638,
-    "name": "CN_Q255_ABILITY",
+    "name": "CN_Q254_ABILITY",
     "band": 4,
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to ability?",
     "relation": "/r/RelatedTo",
     "target": "ability"
+  },
+  {
+    "index": 638,
+    "name": "CN_Q255_SPEAK",
+    "band": 4,
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to speak?",
+    "relation": "/r/RelatedTo",
+    "target": "speak"
   },
   {
     "index": 639,

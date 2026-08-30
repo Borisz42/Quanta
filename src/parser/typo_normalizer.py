@@ -160,6 +160,13 @@ class TypoNormalizer:
         "not": 10, "no": 10, "never": 10, "maybe": 10, "perhaps": 10,
         "yesterday": 10, "today": 10, "tomorrow": 10, "before": 10, "after": 10, "during": 10,
         "who": 10, "whom": 10, "whose": 10, "what": 10, "which": 10, "where": 10, "when": 10, "how": 10, "why": 10,
+        "until": 10, "till": 10, "although": 10, "though": 10, "unless": 10, "whether": 10,
+        # Standard English Contractions
+        "i'm": 10, "you're": 10, "he's": 10, "she's": 10, "it's": 10, "we're": 10, "they're": 10, "there's": 10, "what's": 10, "who's": 10, "that's": 10,
+        "i've": 10, "you've": 10, "we've": 10, "they've": 10, "could've": 10, "would've": 10, "should've": 10,
+        "i'll": 10, "you'll": 10, "he'll": 10, "she'll": 10, "it'll": 10, "we'll": 10, "they'll": 10,
+        "i'd": 10, "you'd": 10, "he'd": 10, "she'd": 10, "it'd": 10, "we'd": 10, "they'd": 10,
+        "n't": 10, "don't": 10, "doesn't": 10, "didn't": 10, "won't": 10, "wouldn't": 10, "can't": 10, "cannot": 10, "couldn't": 10, "shouldn't": 10, "mustn't": 10, "isn't": 10, "aren't": 10, "wasn't": 10, "weren't": 10, "haven't": 10, "hasn't": 10, "hadn't": 10,
     }
 
     COMPOUND_CORRECTIONS: Dict[str, str] = {
@@ -232,10 +239,22 @@ class TypoNormalizer:
         if w_clean in lexicon:
             return w_clean
 
-        # 2. Exact match in WordNet
+        # 2. Exact match in WordNet (lemmas, inflected forms & synsets)
+        if NLTK_WN_AVAILABLE and wn:
+            try:
+                if wn.morphy(w_clean) or wn.synsets(w_clean):
+                    return word
+            except Exception:
+                pass
         wn_lemmas = self._get_all_wn_lemmas()
         if w_clean in wn_lemmas:
-            return w_clean
+            return word
+
+        # Possessive forms ('s / s')
+        if w_clean.endswith("'s") or w_clean.endswith("s'"):
+            base = w_clean[:-2] if w_clean.endswith("'s") else w_clean[:-1]
+            if base in lexicon or base in wn_lemmas or (NLTK_WN_AVAILABLE and wn and (wn.morphy(base) or wn.synsets(base))):
+                return word
 
         # 3. Candidate search with Damerau-Levenshtein against core lexicon
         best_candidate: Optional[str] = None
@@ -284,23 +303,31 @@ class TypoNormalizer:
             punct = clean[-1]
             clean = clean[:-1].strip()
 
-        clean_lower = clean.lower()
-
+        clean_text = clean
         # 1. Check known multi-word compound typos
         for typo_compound, corrected_compound in self.COMPOUND_CORRECTIONS.items():
             pattern = re.compile(re.escape(typo_compound), re.IGNORECASE)
-            clean_lower = pattern.sub(corrected_compound, clean_lower)
+            clean_text = pattern.sub(corrected_compound, clean_text)
 
         # 2. Tokenize words preserving structure
-        tokens = clean_lower.split()
+        tokens_raw = clean_text.split()
         corrected_tokens: List[str] = []
 
-        for tok in tokens:
+        stopwords_title = {"The", "A", "An", "This", "That", "These", "Those", "It", "They", "We", "He", "She", "If", "When", "While", "Had", "Did", "Do", "By", "For", "In", "On", "At", "Every", "All"}
+
+        for tok in tokens_raw:
             # Strip non-alphanumeric temporarily
             m = re.match(r"^([^\w]*)([\w\-\']+)([^\w]*)$", tok, re.UNICODE)
             if m:
                 pre, core, post = m.groups()
-                core_corr = self.correct_word(core, lang=lang)
+                # Preserve proper nouns / capitalized names
+                if core[0].isupper() and core not in stopwords_title and not core.lower().endswith("ly"):
+                    corrected_tokens.append(f"{pre}{core}{post}")
+                    continue
+
+                core_corr = self.correct_word(core.lower(), lang=lang)
+                if core[0].isupper():
+                    core_corr = core_corr.capitalize()
                 corrected_tokens.append(f"{pre}{core_corr}{post}")
             else:
                 corrected_tokens.append(tok)
@@ -308,9 +335,5 @@ class TypoNormalizer:
         result = " ".join(corrected_tokens).strip()
         if punct:
             result += punct
-
-        # Preserve original capitalization style
-        if text.strip() and text.strip()[0].isupper() and result:
-            result = result[0].upper() + result[1:]
 
         return result

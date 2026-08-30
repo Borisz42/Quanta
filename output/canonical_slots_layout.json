@@ -3161,27 +3161,27 @@
   },
   {
     "index": 395,
-    "name": "CN_Q012_TANGIBLE_THING",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it a type of tangible thing?"
-  },
-  {
-    "index": 396,
-    "name": "CN_Q013_PHYSICS",
+    "name": "CN_Q012_PHYSICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of physics?"
   },
   {
-    "index": 397,
-    "name": "CN_Q014_GROUP",
+    "index": 396,
+    "name": "CN_Q013_GROUP",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to group?"
+  },
+  {
+    "index": 397,
+    "name": "CN_Q014_TANGIBLE_THING",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a type of tangible thing?"
   },
   {
     "index": 398,
@@ -3249,27 +3249,27 @@
   },
   {
     "index": 406,
-    "name": "CN_Q023_WORK",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to work?"
-  },
-  {
-    "index": 407,
-    "name": "CN_Q024_ASTRONOMY",
+    "name": "CN_Q023_ASTRONOMY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of astronomy?"
   },
   {
-    "index": 408,
-    "name": "CN_Q025_CANADA",
+    "index": 407,
+    "name": "CN_Q024_SUGAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of canada?"
+    "description": "Is it conceptually related to sugar?"
+  },
+  {
+    "index": 408,
+    "name": "CN_Q025_WORK",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to work?"
   },
   {
     "index": 409,
@@ -3281,11 +3281,11 @@
   },
   {
     "index": 410,
-    "name": "CN_Q027_SUGAR",
+    "name": "CN_Q027_CANADA",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to sugar?"
+    "description": "Is it used in the context or domain of canada?"
   },
   {
     "index": 411,
@@ -3321,19 +3321,19 @@
   },
   {
     "index": 415,
-    "name": "CN_Q032_GOOD",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to good?"
-  },
-  {
-    "index": 416,
-    "name": "CN_Q033_POLITICS",
+    "name": "CN_Q032_POLITICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of politics?"
+  },
+  {
+    "index": 416,
+    "name": "CN_Q033_GOOD",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to good?"
   },
   {
     "index": 417,
@@ -3649,11 +3649,11 @@
   },
   {
     "index": 456,
-    "name": "CN_Q073_PLACE",
+    "name": "CN_Q073_BAD",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to place?"
+    "description": "Is it conceptually related to bad?"
   },
   {
     "index": 457,
@@ -3665,19 +3665,19 @@
   },
   {
     "index": 458,
-    "name": "CN_Q075_BAD",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to bad?"
-  },
-  {
-    "index": 459,
-    "name": "CN_Q076_ORDER",
+    "name": "CN_Q075_ORDER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to order?"
+  },
+  {
+    "index": 459,
+    "name": "CN_Q076_PLACE",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to place?"
   },
   {
     "index": 460,
@@ -3777,11 +3777,11 @@
   },
   {
     "index": 472,
-    "name": "CN_Q089_LAW",
+    "name": "CN_Q089_RIGHT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of law?"
+    "description": "Is it conceptually related to right?"
   },
   {
     "index": 473,
@@ -3801,59 +3801,59 @@
   },
   {
     "index": 475,
-    "name": "CN_Q092_CONTROL",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to control?"
-  },
-  {
-    "index": 476,
-    "name": "CN_Q093_STATISTICS",
+    "name": "CN_Q092_STATISTICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of statistics?"
   },
   {
-    "index": 477,
-    "name": "CN_Q094_USE",
+    "index": 476,
+    "name": "CN_Q093_CONTROL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to use?"
+    "description": "Is it conceptually related to control?"
   },
   {
-    "index": 478,
-    "name": "CN_Q095_SURFACE",
+    "index": 477,
+    "name": "CN_Q094_SURFACE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to surface?"
   },
   {
+    "index": 478,
+    "name": "CN_Q095_LAW",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of law?"
+  },
+  {
     "index": 479,
-    "name": "CN_Q096_YEAR",
+    "name": "CN_Q096_USE",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to use?"
+  },
+  {
+    "index": 480,
+    "name": "CN_Q097_YEAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to year?"
   },
   {
-    "index": 480,
-    "name": "CN_Q097_COOKING",
+    "index": 481,
+    "name": "CN_Q098_COOKING",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of cooking?"
-  },
-  {
-    "index": 481,
-    "name": "CN_Q098_RIGHT",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to right?"
   },
   {
     "index": 482,
@@ -3985,51 +3985,51 @@
   },
   {
     "index": 498,
-    "name": "CN_Q115_BE",
+    "name": "CN_Q115_LINE",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to line?"
+  },
+  {
+    "index": 499,
+    "name": "CN_Q116_BE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it a manner/way of be?"
   },
   {
-    "index": 499,
-    "name": "CN_Q116_CHARACTER",
+    "index": 500,
+    "name": "CN_Q117_CHARACTER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to character?"
   },
   {
-    "index": 500,
-    "name": "CN_Q117_GO",
+    "index": 501,
+    "name": "CN_Q118_GO",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to go?"
   },
   {
-    "index": 501,
-    "name": "CN_Q118_AUTOMOTIVE",
+    "index": 502,
+    "name": "CN_Q119_AUTOMOTIVE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it used in the context or domain of automotive?"
   },
   {
-    "index": 502,
-    "name": "CN_Q119_BREAK",
+    "index": 503,
+    "name": "CN_Q120_BREAK",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to break?"
-  },
-  {
-    "index": 503,
-    "name": "CN_Q120_LINE",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it conceptually related to line?"
   },
   {
     "index": 504,
@@ -4073,19 +4073,19 @@
   },
   {
     "index": 509,
-    "name": "CN_Q126_NZ",
-    "band_id": 3,
-    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "ConceptNet Taxonomy & Domain",
-    "description": "Is it used in the context or domain of nz?"
-  },
-  {
-    "index": 510,
-    "name": "CN_Q127_TREE",
+    "name": "CN_Q126_TREE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
     "category": "ConceptNet Taxonomy & Domain",
     "description": "Is it conceptually related to tree?"
+  },
+  {
+    "index": 510,
+    "name": "CN_Q127_NZ",
+    "band_id": 3,
+    "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of nz?"
   },
   {
     "index": 511,
@@ -4297,19 +4297,19 @@
   },
   {
     "index": 537,
-    "name": "CN_Q154_PROGRAMMING",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it used in the context or domain of programming?"
-  },
-  {
-    "index": 538,
-    "name": "CN_Q155_LARGE",
+    "name": "CN_Q154_LARGE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to large?"
+  },
+  {
+    "index": 538,
+    "name": "CN_Q155_PROGRAMMING",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of programming?"
   },
   {
     "index": 539,
@@ -4409,11 +4409,11 @@
   },
   {
     "index": 551,
-    "name": "CN_Q168_ZOOLOGY",
+    "name": "CN_Q168_ATTACK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
-    "description": "Is it used in the context or domain of zoology?"
+    "description": "Is it conceptually related to attack?"
   },
   {
     "index": 552,
@@ -4457,11 +4457,11 @@
   },
   {
     "index": 557,
-    "name": "CN_Q174_ATTACK",
+    "name": "CN_Q174_ZOOLOGY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to attack?"
+    "description": "Is it used in the context or domain of zoology?"
   },
   {
     "index": 558,
@@ -4553,27 +4553,27 @@
   },
   {
     "index": 569,
-    "name": "CN_Q186_SENSE",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to sense?"
-  },
-  {
-    "index": 570,
-    "name": "CN_Q187_ADVANCE",
+    "name": "CN_Q186_ADVANCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to advance?"
   },
   {
-    "index": 571,
-    "name": "CN_Q188_LIE",
+    "index": 570,
+    "name": "CN_Q187_LIE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to lie?"
+  },
+  {
+    "index": 571,
+    "name": "CN_Q188_SENSE",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to sense?"
   },
   {
     "index": 572,
@@ -4785,19 +4785,19 @@
   },
   {
     "index": 598,
-    "name": "CN_Q215_DRUG",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to drug?"
-  },
-  {
-    "index": 599,
-    "name": "CN_Q216_TRAVEL",
+    "name": "CN_Q215_TRAVEL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it a manner/way of travel?"
+  },
+  {
+    "index": 599,
+    "name": "CN_Q216_DRUG",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to drug?"
   },
   {
     "index": 600,
@@ -4969,19 +4969,19 @@
   },
   {
     "index": 621,
-    "name": "CN_Q238_PHYSICAL_EVENT",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it a type of physical event?"
-  },
-  {
-    "index": 622,
-    "name": "CN_Q239_BE",
+    "name": "CN_Q238_BE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to be?"
+  },
+  {
+    "index": 622,
+    "name": "CN_Q239_PHYSICAL_EVENT",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a type of physical event?"
   },
   {
     "index": 623,
@@ -5065,19 +5065,19 @@
   },
   {
     "index": 633,
-    "name": "CN_Q250_STAY",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to stay?"
-  },
-  {
-    "index": 634,
-    "name": "CN_Q251_MUSIC",
+    "name": "CN_Q250_MUSIC",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to music?"
+  },
+  {
+    "index": 634,
+    "name": "CN_Q251_STAY",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to stay?"
   },
   {
     "index": 635,
@@ -5097,19 +5097,19 @@
   },
   {
     "index": 637,
-    "name": "CN_Q254_SPEAK",
-    "band_id": 4,
-    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "ConceptNet Affordance & Function",
-    "description": "Is it conceptually related to speak?"
-  },
-  {
-    "index": 638,
-    "name": "CN_Q255_ABILITY",
+    "name": "CN_Q254_ABILITY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
     "category": "ConceptNet Affordance & Function",
     "description": "Is it conceptually related to ability?"
+  },
+  {
+    "index": 638,
+    "name": "CN_Q255_SPEAK",
+    "band_id": 4,
+    "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to speak?"
   },
   {
     "index": 639,

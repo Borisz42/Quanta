@@ -112,8 +112,8 @@ To guarantee zero cross-domain representational drift and deterministic indexing
 - **Band 0 (Slots 000–127):** Universal NSM Primes, Classical Kinematics & Continuous Physics (000–063: core NSM primes, 064–095: physical trajectories & continuous forces, 096–127: vector fields & material states).
 - **Band 1 (Slots 128–255):** Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency Topologies (128–143: Lojban valencies $x_1 \dots x_7$, 144–167: aspect & tense, 168–215: ASG & code AST topologies, 216–255: concurrency & OS topologies).
 - **Band 2 (Slots 256–383):** Logic Quantifiers ($\forall, \exists, \exists!$), Variable Binding & Query Registers ($X_0 \dots X_7$, query targets $?X, ?Y, ?Z$), Lambda Binders, and Sequent Calculus Derivations.
-- **Band 3 (Slots 384–511):** ConceptNet 5.7.0 Ontological Taxonomies & Scientific Domains (`CN_Q001_COMPUTING` .. `CN_Q128_MANNER`) derived via Usage-Weighted Ontological Density Scoring (U-ODS) and Hopcroft partition refinement across 34M assertions.
-- **Band 4 (Slots 512–639):** ConceptNet 5.7.0 Cyber-Physical Tool Affordances, Mechanical Actions & Functional Capabilities (`CN_Q129_LEAVE` .. `CN_Q256_WORTHY`), enabling 2-tier vector decoding (23,383 singletons in $<10\text{ ms}$ SIMD + SQLite category basin fallback).
+- **Band 3 (Slots 384–511):** ConceptNet 5.7.0 Ontological Taxonomies & Scientific Domains (`CN_Q001_COMPUTING` .. `CN_Q128_MANNER`) derived via Usage-Weighted Ontological Density Scoring (U-ODS) and Multi-Way Inverted-Index partition refinement across 34M assertions in Belnap 4-valued logic ($\mathcal{B}_4$).
+- **Band 4 (Slots 512–639):** ConceptNet 5.7.0 Cyber-Physical Tool Affordances, Mechanical Actions & Functional Capabilities (`CN_Q129_LEAVE` .. `CN_Q256_WORTHY`), enabling 2-tier vector decoding (25,292 singletons in $<5\text{ ms}$ SIMD via $4 \times 4$ cost matrix + SQLite category basin fallback).
 - **Band 5 (Slots 640–767):** Theory of Mind (1st, 2nd, 3rd-order nested multi-agent beliefs, shared common ground), Teleological Goals & Planning, Affective Drives, and Pragmatic Discourse Intent.
 - **Band 6 (Slots 768–895):** Epistemic Proof Solvers, $s(\text{CASP})$ Invariants (MUC, abducibles, coinduction loops), and Deontic Normative Logic (obligatory, permissible, prohibited, liability).
 - **Band 7 (Slots 896–1023):** Spatio-Temporal Mereotopology (13 Allen interval relations, 8 RCC-8 spatial relations), Pearl Causal Counterfactual DAGs, and Modal/LTL/CTL Temporal Logic.
@@ -222,17 +222,17 @@ $$\text{CID}(\mathcal{G}_{\text{sub}}) = \text{BLAKE3}\left( \bigoplus_{v \in \m
 
 ### Context & Architectural Rationale
 To ensure $\mathcal{O}(1)$ deterministic lexical anchoring with rich real-world common-sense, physical affordances, and cross-lingual capability without runtime network calls:
-1. **ConceptNet 5.7.0 Knowledge Base:** Ingests 34,074,917 assertions, runs depth $d=2$ BLAS sparse matrix transitive propagation ($M_{\text{inherited}} = M + TM + T^2M$ expanding to 54.61M non-zero connections), and executes the Hopcroft Inverted-Index Partition Refinement Solver across 72,930 unique semantic archetypes to produce 256 globally optimal discriminative dimensions (Bands 3 & 4).
+1. **ConceptNet 5.7.0 Knowledge Base:** Ingests 34,074,917 assertions, runs depth $d=2$ BLAS sparse matrix non-monotonic transitive propagation ($M_{\text{inherited}}$ expanding to 54.42M non-zero connections across $\{0, 1, 2, 3\}$), and executes the Multi-Way Inverted-Index Partition Refinement Solver across 72,953 unique semantic archetypes to produce 256 globally optimal discriminative dimensions (Bands 3 & 4).
 2. **ConceptNet SQLite & Codebook Artifacts:**
    - `data/conceptnet_slots.json`: 256 canonical slot definitions for Bands 3 & 4.
    - `data/conceptnet_offline.db`: 403,503 concepts (713,784 multi-POS entries) with pre-packed 256-byte quaternary vectors.
-   - `data/concept_codebook.csv.gz`: Dense $403,503 \times 256$ binary codebook matrix containing 23,383 singletons for instant SIMD decoding.
+   - `data/concept_codebook.csv.gz`: Dense $403,503 \times 256$ 4-valued codebook matrix containing 25,292 singletons for instant SIMD decoding.
 3. **ConceptNet Lexical Grounder (`ConceptNetLexicalGrounder`):** High-speed in-memory cached SQLite lookup supporting `cn:en:<lemma> (<pos>)`, space/underscore normalization, and fallback multi-POS resolution.
 4. **WordNet & FrameNet Offline Fallback:** `data/wordnet_offline.db` (synsets, hypernyms) and `data/framenet_valency.json` (valency place templates).
 5. **Typo-Tolerant Lexical Grounding:** Damerau-Levenshtein fuzzy matching (`TypoNormalizer`) and compound word healing to map misspelled surface inputs (e.g., *"glden retreiver"*) to canonical concepts (`cn:en:golden retriever (n)`) without semantic corruption.
 
 ### Implementation Guidelines
-- `scripts/concept_solver.py`: Ingestion, U-ODS scoring, Hopcroft partition refinement, and SQLite compilation.
+- `scripts/concept_solver.py`: Ingestion, U-ODS scoring, 4-valued BLAS inheritance, multi-way partition refinement, and SQLite compilation.
 - `src/parser/lexical_grounder.py`: Implement `ConceptNetLexicalGrounder` (aliased to `LexicalGrounder`) with quaternary vector unpacking and singleton cache.
 - Maintain `WordNetLexicalGrounder` and `FrameNetValencyResolver` for backward-compatible fallback.
 - Implement fuzzy matching with maximum edit distance threshold ($d \le 2$) and multi-word token healing heuristics.
@@ -246,12 +246,12 @@ To ensure $\mathcal{O}(1)$ deterministic lexical anchoring with rich real-world 
 ### Checklist
 #### 5A — ConceptNet 5.7.0 ingestion & partition solver
 - [x] **5A.1** Stream and parse 34.07M assertions from ConceptNet 5.7.0; filter for clean English concepts
-- [x] **5A.2** Implement depth $d=2$ BLAS sparse matrix transitive inheritance propagation ($M_{\text{inherited}} = M + TM + T^2M$)
+- [x] **5A.2** Implement depth $d=2$ BLAS sparse matrix 4-valued non-monotonic transitive inheritance propagation ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$)
 - [x] **5A.3** Implement Usage-Weighted Ontological Density Scoring (U-ODS) combining degree, relation entropy, affordances, and Zipf frequencies
-- [x] **5A.4** Implement Inverted-Index Hopcroft Partition Refinement Solver to select 256 optimal dimensions across 72,930 archetypes
+- [x] **5A.4** Implement Multi-Way Inverted-Index Hopcroft Partition Refinement Solver to select 256 optimal dimensions across 72,953 archetypes
 - [x] **5A.5** Export `data/conceptnet_slots.json` (256 slot definitions for Bands 3 & 4)
 - [x] **5A.6** Compile `data/conceptnet_offline.db` (403,503 concepts with pre-packed 256-byte quaternary vectors)
-- [x] **5A.7** Export `data/concept_codebook.csv.gz` ($403,503 \times 256$ matrix with 23,383 singletons)
+- [x] **5A.7** Export `data/concept_codebook.csv.gz` ($403,503 \times 256$ matrix with 25,292 singletons)
 
 #### 5B — ConceptNet Lexical Grounder
 - [x] **5B.1** Implement `ConceptNetLexicalGrounder` in `src/parser/lexical_grounder.py` with multi-POS and space/underscore lookup
@@ -385,7 +385,7 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 ### Context & Architectural Rationale
 To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta ASGs must be deterministically unrolled into diverse human and computational target languages:
 - **English Realizer (`EnglishRealizer`):** Unrolls thematic roles into natural SVO syntax with tense inflection, determiner selection, preposition routing, and **2-Tier Vector Decoding (`ConceptVectorDecoder`)**:
-  - *Tier 1 (In-Memory SIMD)*: Instant decoding across 23,383 singletons ($<10\text{ ms}$) loaded from `data/concept_codebook.csv.gz`.
+  - *Tier 1 (In-Memory SIMD)*: Instant decoding across 25,292 singletons ($<5\text{ ms}$) loaded from `data/concept_codebook.csv.gz`.
   - *Tier 2 (Category Basin Fallback)*: Category basin lookup in `data/conceptnet_offline.db`.
   - Parses canonical `cn:en:<lemma> (<pos>)`, `cn:...`, and legacy `wn:...` anchors, as well as anchor-free semantic vector decoding.
 - **FOL Emitter (`FOLEmitter`):** Emits standard First-Order Logic syntax with correct operator precedence.
@@ -408,7 +408,7 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 ### Checklist
 #### 8A — English Realizer & ConceptVectorDecoder
 - [x] **8A.1** Implement ASG traversal: root predicate → verb, X1 → subject, X2 → object
-- [x] **8A.2** Implement `ConceptVectorDecoder` in `src/realizer/english_nlg.py` with 2-tier search (23,383 singletons SIMD table + SQLite category basin fallback)
+- [x] **8A.2** Implement `ConceptVectorDecoder` in `src/realizer/english_nlg.py` with 2-tier search (25,292 singletons SIMD table + SQLite category basin fallback)
 - [x] **8A.3** Implement anchor parsing for `cn:en:<lemma> (<pos>)`, `cn:...`, and `wn:...` formats
 - [x] **8A.4** Implement tense inflection from Band 1 tense slots (past/present/future)
 - [x] **8A.5** Implement negation surface form: `LJB_NA_NEGATION=2` → "did not [verb]"
@@ -517,7 +517,7 @@ We frame the QUANTA discrete semantic space as a **Discrete Information Bottlene
 #### 10D — ConceptNet 256-D Partition Solver & Information Optimization
 - [x] **10D.1** 🧪 Formulate and execute Hopcroft Inverted-Index Partition Refinement Solver on ConceptNet 5.7.0 sparse matrix ($d=2$ transitive expansion)
 - [x] **10D.2** 🧪 Evaluate entropy and collision rates across 72,930 unique semantic archetypes; select 256 globally optimal dimensions (Bands 3 & 4)
-- [x] **10D.3** 🧪 Verify singleton resolvability: exactly 23,383 concepts (32.1% of archetypes, >95% conversational coverage) uniquely identified in Tier 1 codebook
+- [x] **10D.3** 🧪 Verify singleton resolvability: exactly 25,292 concepts (34.67% of archetypes, >95% conversational coverage) uniquely identified in Tier 1 codebook
 - [x] **10D.4** Export empirical benchmark findings and solver documentation to `docs/conceptnetDimensions.md` and `docs/DimensionEval.md`
 
 ---
@@ -656,7 +656,7 @@ This phase establishes an exhaustive validation battery for the Mentalese langua
 - [ ] **14B.1** 🧪 Test distinct concepts produce distinct vectors: "dog" ≠ "cat" ≠ "car" ≠ "tree" across 256 ConceptNet dimensions
 - [ ] **14B.2** 🧪 Test near-synonym differentiation: "happy" vs "joyful" → vectors differ in at least one canonical slot
 - [ ] **14B.3** 🧪 Test ontological class separation: all animals share `CN_Q011_ANIMAL=1` and `TYPE_ANIMATE=1` but differ in specific discriminative dimensions
-- [ ] **14B.4** 🧪 Test 23,383 singleton concepts in Tier 1 codebook have 0% collision with one another
+- [ ] **14B.4** 🧪 Test 25,292 singleton concepts in Tier 1 codebook have 0% collision with one another
 
 #### 14C — Structural coverage testing
 - [ ] **14C.1** 🧪 Test that simple declarative sentences activate Band 0 + Band 1 + Band 3/4 (ConceptNet `CN_Q*` slots) but leave non-applicable bands at `0`

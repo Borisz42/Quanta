@@ -187,3 +187,79 @@ def test_scientific_paragraph_english_round_trip(pipeline, scientific_paragraph_
     assert rt.validation_pass
     assert rt.slot_preservation_rate >= 0.90
     assert rt.realized_output == scientific_paragraph_eng
+
+
+def test_punctuation_nodes_and_delimiters(pipeline):
+    """Verify punctuation tokens are cleanly anchored as punct:* rather than ConceptNet pseudo-concepts."""
+    sentence = "Had Alice not falsely pretended to know that Bob believed her investment was secure, the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius."
+    graph, val = pipeline.translate_forward(sentence, modality="english")
+    assert val.is_valid
+
+    punct_nodes = [n for n in graph.nodes.values() if n.anchor and n.anchor.startswith("punct:")]
+    assert len(punct_nodes) >= 2, "Expected punctuation nodes for comma and period"
+    for pn in punct_nodes:
+        assert pn.anchor in ("punct:.", "punct:,", "punct:!", "punct:?")
+        assert not pn.anchor.startswith("cn:en:.")
+        assert not pn.anchor.startswith("cn:en:,")
+
+
+def test_negative_contractions_wiring(pipeline):
+    """Verify negative contractions (wouldn't, didn't) wire auxiliary verbs to negation nodes."""
+    sentence = "The auditor wouldn't have remarked that."
+    graph, val = pipeline.translate_forward(sentence, modality="english")
+    assert val.is_valid
+
+    # Find auxiliary node (would) and negation node (n't)
+    would_node = next((n for n in graph.nodes.values() if n.literal == "would"), None)
+    nt_node = next((n for n in graph.nodes.values() if n.literal == "n't"), None)
+
+    assert would_node is not None, "Expected 'would' token node"
+    assert nt_node is not None, "Expected 'n\'t' token node"
+    assert nt_node.get_slot("LJB_NA_NEGATION") == 2
+
+    # Check connection between auxiliary and negation
+    assert nt_node.cid in would_node.edges.get("GRAPH_IS_SUB_EXP", []) or nt_node.cid in would_node.edges.get("LJB_NA_NEGATION", []) or nt_node.cid in graph.root.edges.get("LJB_NA_NEGATION", [])
+
+
+def test_possessive_apostrophe_wiring(pipeline):
+    """Verify possessive apostrophe constructions (Alice's cat) wire MEREOLOGY_POSSESSIVE relations."""
+    sentence = "Alice's cat saw Bob's drone."
+    graph, val = pipeline.translate_forward(sentence, modality="english")
+    assert val.is_valid
+
+    poss_markers = [n for n in graph._node_list if n.literal == "'s"]
+    assert len(poss_markers) == 2, "Expected two 's token nodes"
+    for pm in poss_markers:
+        assert pm.anchor == "gram:case:possessive"
+        assert pm.get_slot("NSM_HAVE") == 1
+
+    # Check round trip
+    rt = pipeline.round_trip(sentence, modality="english")
+    assert rt.validation_pass
+    assert rt.realized_output == "Alice's cat saw Bob's drone."
+
+
+def test_auxiliary_contractions_and_titles(pipeline):
+    """Verify auxiliary contractions ('s, 're, 've, 'll, 'd) and titles (Dr., Prof.) are properly grounded."""
+    sentence = "Dr. Vance said that they're ready and she'll arrive."
+    graph, val = pipeline.translate_forward(sentence, modality="english")
+    assert val.is_valid
+
+    dr_node = next((n for n in graph.nodes.values() if n.literal == "Dr."), None)
+    assert dr_node is not None
+    assert dr_node.anchor == "gram:title:dr"
+
+    re_node = next((n for n in graph.nodes.values() if n.literal == "'re"), None)
+    assert re_node is not None
+    assert re_node.anchor == "cn:en:be (v)"
+
+    ll_node = next((n for n in graph.nodes.values() if n.literal == "'ll"), None)
+    assert ll_node is not None
+    assert ll_node.anchor == "cn:en:will (v)"
+
+    # Check round trip
+    rt = pipeline.round_trip(sentence, modality="english")
+    assert rt.validation_pass
+    assert "they're" in rt.realized_output
+    assert "she'll" in rt.realized_output
+

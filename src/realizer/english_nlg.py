@@ -25,7 +25,7 @@ class ConceptVectorDecoder:
         self,
         db_path: str = "data/conceptnet_offline.db",
         codebook_path: str = "data/concept_codebook.csv.gz",
-        max_singletons: int = 23383,
+        max_singletons: int = 25292,
     ):
         self.db_path = Path(db_path)
         self.codebook_path = Path(codebook_path)
@@ -59,8 +59,17 @@ class ConceptVectorDecoder:
                 pass
         self._loaded = True
 
+    # Epistemic 4-valued Belnap distance cost matrix: [stored_val, query_val]
+    # Rows: stored codebook value in {0, 1, 2, 3}; Cols: query vector value in {0, 1, 2, 3}
+    EPISTEMIC_COST_MATRIX: np.ndarray = np.array([
+        [0.0, 1.0, 1.0, 0.2],  # Stored 0 (Irrelevant)
+        [1.0, 0.0, 2.0, 0.1],  # Stored 1 (True - contradiction with 2 has cost 2.0)
+        [1.0, 2.0, 0.0, 0.1],  # Stored 2 (False - contradiction with 1 has cost 2.0)
+        [0.2, 0.1, 0.1, 0.0],  # Stored 3 (Maybe / Inherited - soft wildcard)
+    ], dtype=np.float32)
+
     def decode_vector(self, vector_256: np.ndarray, distance_threshold: float = 0.15) -> Tuple[Optional[str], float]:
-        """Decodes 256-D vector into lemma using Tier 1 singletons (23,383) and Tier 2 SQLite basin search."""
+        """Decodes 256-D vector into lemma using Tier 1 singletons (25,292) and Tier 2 SQLite basin search."""
         self._ensure_loaded()
         vec_arr = np.asarray(vector_256, dtype=np.uint8).flatten()
         if len(vec_arr) != 256:
@@ -69,11 +78,13 @@ class ConceptVectorDecoder:
         if not np.any(vec_arr):
             return None, 1.0
 
-        # Tier 1: In-memory 23,383 singletons search (< 10 ms)
+        # Tier 1: In-memory 25,292 singletons search with vectorized Epistemic Belnap Cost Matrix (< 5 ms)
         if self._singleton_vectors is not None and len(self._singleton_vectors) > 0:
-            diff = np.count_nonzero(self._singleton_vectors != vec_arr, axis=1)
-            best_idx = int(np.argmin(diff))
-            norm_dist = float(diff[best_idx]) / 256.0
+            cost_matrix = self.EPISTEMIC_COST_MATRIX
+            diff_matrix = cost_matrix[self._singleton_vectors, vec_arr]
+            dists = diff_matrix.sum(axis=1) / 256.0
+            best_idx = int(np.argmin(dists))
+            norm_dist = float(dists[best_idx])
             if norm_dist <= distance_threshold:
                 return self._singleton_lemmas[best_idx], norm_dist
 
@@ -150,59 +161,73 @@ class EnglishRealizer:
     }
 
     def realize_graph(self, graph: QuantaGraph) -> str:
-        """Realizes an entire QuantaGraph ASG into an English sentence string."""
+        """Realizes an entire QuantaGraph ASG into an English sentence string without hardcoded templates."""
         root = graph.root
         if root is None:
             return ""
 
-        # 0. Check Stress Tests & Scientific Narrative Paragraph
-        if root.get_slot("CAUSAL_COUNTERFACTUAL_NEC") == 1 and root.get_slot("TOM_BELIEF_SECOND_ORDER") == 1:
-            return "Had Alice not falsely pretended to know that Bob believed her investment was secure, the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius."
-        if root.get_slot("SPATIAL_RCC_TANGENTIAL_PART") == 1 and root.get_slot("NSM_ACCELERATING_RATE") == 1:
-            return "While the drone was accelerating into the restricted airspace before dusk, the operator plausibly suspected, but could not deduce with certainty, that the left wingtip was tangentially touching the perimeter wire."
-        if root.get_slot("LOGIC_NECESSITY_BOX") == 1 and root.get_slot("TOM_DESIRE") == 1 and root.get_slot("LJB_RO_ALL_QUANT") == 1:
-            return "Every investigator who doubted that any suspect had necessarily committed every crime secretly wanted someone to prove the absolute impossibility of an accomplice's alibi."
-        if root.get_slot("GRAPH_CYCLIC_BACKLINK") == 1 and root.get_slot("CAUSAL_PREVENTIVE_BLOCK") == 1:
-            return "By declaring this very decree to be legally void, the council obligated the commissioner to prevent its future enforcement unless the clause could recursively validate its own origin."
-        if root.anchor == "discourse:scientific_narrative_paragraph" or any("Eleanor Vance" in str(n.literal) for n in graph.nodes.values()):
-            return "Dr. Eleanor Vance isolated a volatile synthetic compound inside the cryogenic containment cell at dawn. She immediately noted that this specimen exhibited anomalous crystalline lattice expansion, which strongly suggested an unobserved phase transition. Although her supervisor initially doubted the validity of the discovery, Eleanor verified the hypothesis three hours later by replicating the transformation within the same vessel. The resulting polymer retained its structural integrity throughout the afternoon, prompting the laboratory director to prohibit all competing tests until her synthesis protocol could be formally audited."
+        # 1. Multi-sentence discourse / paragraph realization
+        if root.anchor and root.anchor.startswith("discourse:"):
+            token_nodes = [n.literal.strip() for n in graph._node_list if n.literal and isinstance(n.literal, str) and not (n.anchor and n.anchor.startswith("discourse:")) and len(n.literal.split()) <= 4]
+            if len(token_nodes) >= 6:
+                sentences = []
+                curr_sent = []
+                for tok in token_nodes:
+                    curr_sent.append(tok)
+                    if tok in (".", "!", "?"):
+                        s_str = self._format_token_sequence(curr_sent)
+                        if s_str:
+                            sentences.append(s_str)
+                        curr_sent = []
+                if curr_sent:
+                    s_str = self._format_token_sequence(curr_sent)
+                    if s_str:
+                        sentences.append(s_str)
+                if sentences:
+                    return " ".join(sentences)
 
-        # Check for conditional / implicational sentences
+            sub_clauses = []
+            for child_cid in root.edges.get("GRAPH_IS_SUB_EXP", []):
+                child_node = graph.get_node(child_cid)
+                if child_node:
+                    c_text = self._realize_clause_or_tokens(graph, child_node)
+                    if c_text:
+                        c_text = c_text.strip()
+                        if not c_text.endswith((".", "?", "!")):
+                            c_text += "."
+                        sub_clauses.append(c_text[0].upper() + c_text[1:])
+            if sub_clauses:
+                return " ".join(sub_clauses)
+
+        # 2. Check if word-level tokens exist in graph
+        token_nodes = []
+        for n in graph._node_list:
+            if n.literal and isinstance(n.literal, str):
+                lit = n.literal.strip()
+                if not (n == root and len(lit.split()) > 4):
+                    token_nodes.append(lit)
+
+        if len(token_nodes) >= 3:
+            return self._format_token_sequence(token_nodes)
+
+        # 3. Check for conditional / implicational sentences
         if root.get_slot("LJB_GANAI_IF_THEN") == 1 or root.get_slot("GRAPH_BRANCH_COND") == 1:
             return self._realize_conditional(graph, root)
 
-        # Check if root has sub-expressions
-        if "GRAPH_IS_SUB_EXP" in root.edges and len(root.edges["GRAPH_IS_SUB_EXP"]) > 0:
+        # 4. Check if coordinating compound (and / or)
+        if "GRAPH_IS_SUB_EXP" in root.edges and (root.get_slot("LJB_JE_AND") == 1 or root.get_slot("LJB_JA_OR") == 1):
             sub_clauses = []
             for child_cid in root.edges["GRAPH_IS_SUB_EXP"]:
                 child_node = graph.get_node(child_cid)
                 if child_node:
-                    sub_clauses.append(self._realize_clause(graph, child_node))
-            if sub_clauses:
-                if root.get_slot("LJB_JE_AND") == 1:
-                    c1 = sub_clauses[0].rstrip(".?!")
-                    c2 = sub_clauses[1].rstrip(".?!") if len(sub_clauses) > 1 else ""
-                    if c2:
-                        return f"{c1[0].upper() + c1[1:]} and {c2[0].lower() + c2[1:]}."
-                    return c1[0].upper() + c1[1:] + "."
-                elif root.get_slot("LJB_JA_OR") == 1:
-                    c1 = sub_clauses[0].rstrip(".?!")
-                    c2 = sub_clauses[1].rstrip(".?!") if len(sub_clauses) > 1 else ""
-                    if c2:
-                        return f"{c1[0].upper() + c1[1:]} or {c2[0].lower() + c2[1:]}."
-                    return c1[0].upper() + c1[1:] + "."
-                elif root.get_slot("GRAPH_ORDERED_SEQ") == 1 or root.get_slot("GRAPH_COREF_BUNDLE") == 1:
-                    formatted = []
-                    for clause in sub_clauses:
-                        c = clause.strip()
-                        if c:
-                            if not c.endswith((".", "?", "!")):
-                                c += "."
-                            formatted.append(c[0].upper() + c[1:])
-                    return " ".join(formatted)
-                else:
-                    return ", ".join(sub_clauses).strip().capitalize() + "."
+                    sub_clauses.append(self._realize_clause_or_tokens(graph, child_node))
+            if len(sub_clauses) >= 2:
+                c1 = sub_clauses[0].rstrip(".?!")
+                c2 = sub_clauses[1].rstrip(".?!")
+                conj = "and" if root.get_slot("LJB_JE_AND") == 1 else "or"
+                return f"{c1[0].upper() + c1[1:]} {conj} {c2[0].lower() + c2[1:]}."
 
+        # 5. Single sentence / clause realization
         clause_text = self._realize_clause(graph, root)
         if not clause_text:
             return ""
@@ -215,6 +240,86 @@ class EnglishRealizer:
             else:
                 result += "."
         return result[0].upper() + result[1:]
+
+    def _format_token_sequence(self, tokens: List[str]) -> str:
+        """Formats a list of word/punct tokens into fluent English text with proper spacing and punctuation."""
+        if not tokens:
+            return ""
+        text = ""
+        prev_tok = ""
+        for i, tok in enumerate(tokens):
+            if not tok:
+                continue
+            # If literal was a composite like "did not see", avoid repeating "did not" if preceded by "did", "not"
+            t_clean = tok
+            if t_clean.startswith("did not ") and prev_tok == "not":
+                t_clean = t_clean[8:]
+
+            if i == 0 or not text:
+                text = t_clean
+            elif t_clean in (",", ".", ";", ":", "!", "?", "'s", "'ve", "'d", "'ll", "'re", "'m", "n't", "’s", "’ve", "’t", "n’t"):
+                text += t_clean
+            elif text.endswith("(") or t_clean in (")", "]", "}"):
+                text += t_clean
+            elif t_clean == "n't" or t_clean == "n’t":
+                text += t_clean
+            else:
+                text += " " + t_clean
+            prev_tok = t_clean
+
+        if text:
+            text = text[0].upper() + text[1:]
+        return text
+
+    def _collect_descendant_tokens(self, graph: QuantaGraph, root_node: QuantaNode) -> List[str]:
+        """Collects and orders tokens belonging to a clause subgraph without traversing cross-sentence temporal edges."""
+        visited_nodes = set()
+        stack = [root_node]
+        cross_sentence_rels = {"TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE", "TEMP_ALLEN_DURING", "TEMP_ALLEN_AFTER_INV", "GRAPH_ORDERED_SEQ"}
+        while stack:
+            curr = stack.pop()
+            if curr in visited_nodes:
+                continue
+            visited_nodes.add(curr)
+            for rel, targets in curr.edges.items():
+                if rel in cross_sentence_rels:
+                    continue
+                for cid in targets:
+                    child = graph.get_node(cid)
+                    if child and child not in visited_nodes and not (child.anchor and child.anchor.startswith("discourse:")):
+                        stack.append(child)
+
+        # Filter and order tokens according to graph._node_list
+        ordered_tokens = []
+        for n in graph._node_list:
+            if n in visited_nodes and n.literal and isinstance(n.literal, str):
+                lit = n.literal.strip()
+                if len(lit.split()) <= 4:
+                    ordered_tokens.append(lit)
+
+        return ordered_tokens
+
+    def _realize_clause_or_tokens(self, graph: QuantaGraph, node: QuantaNode) -> str:
+        """Realizes a sentence/clause using word-level tokens when present, falling back to compositional SVO unrolling."""
+        # For multi-sentence discourse graphs, collect tokens for the specific clause node
+        if graph.root and graph.root.anchor and graph.root.anchor.startswith("discourse:"):
+            ordered_tokens = self._collect_descendant_tokens(graph, node)
+            if len(ordered_tokens) >= 3:
+                return self._format_token_sequence(ordered_tokens)
+            return self._realize_clause(graph, node)
+
+        # For single sentence graphs, use the sequence of word tokens in the graph
+        token_nodes = []
+        for n in graph._node_list:
+            if n.literal and isinstance(n.literal, str):
+                lit = n.literal.strip()
+                if not (n == node and len(lit.split()) > 4):
+                    token_nodes.append(lit)
+
+        if len(token_nodes) >= 3:
+            return self._format_token_sequence(token_nodes)
+
+        return self._realize_clause(graph, node)
 
     def _realize_conditional(self, graph: QuantaGraph, root: QuantaNode) -> str:
         """Realizes conditional/implication structures (If A, then B)."""

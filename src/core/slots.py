@@ -18,7 +18,11 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from core.types import BandContract
+class BandContract(str, enum.Enum):
+    """Polymorphic contract applied to dimensions depending on their Band."""
+    EPISTEMIC = "EPISTEMIC"      # Bands 0, 3, 4, 5, 6, 7: Truth & Uncertainty (Belnap FOUR)
+    STRUCTURAL = "STRUCTURAL"    # Band 1: Valencies, AST Topology, Concurrency Routing
+    REGISTER = "REGISTER"        # Band 2: Formal Logic Quantifiers & Variable Scoping
 
 
 class SlotBand(enum.IntEnum):
@@ -476,9 +480,9 @@ BAND_3_SLOTS = [
     SlotDefinition(392, "CN_Q009_MILITARY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of military?"),
     SlotDefinition(393, "CN_Q010_CHEMISTRY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of chemistry?"),
     SlotDefinition(394, "CN_Q011_ANIMAL", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to animal?"),
-    SlotDefinition(395, "CN_Q012_TANGIBLE_THING", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a type of tangible thing?"),
-    SlotDefinition(396, "CN_Q013_PHYSICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of physics?"),
-    SlotDefinition(397, "CN_Q014_GROUP", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to group?"),
+    SlotDefinition(395, "CN_Q012_PHYSICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of physics?"),
+    SlotDefinition(396, "CN_Q013_GROUP", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to group?"),
+    SlotDefinition(397, "CN_Q014_TANGIBLE_THING", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a type of tangible thing?"),
     SlotDefinition(398, "CN_Q015_PERSON", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a type of person?"),
     SlotDefinition(399, "CN_Q016_SPORTS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of sports?"),
     SlotDefinition(400, "CN_Q017_MONEY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to money?"),
@@ -487,17 +491,17 @@ BAND_3_SLOTS = [
     SlotDefinition(403, "CN_Q020_COUNTY_SEAT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to county seat?"),
     SlotDefinition(404, "CN_Q021_TIME", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to time?"),
     SlotDefinition(405, "CN_Q022_BIOLOGY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of biology?"),
-    SlotDefinition(406, "CN_Q023_WORK", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to work?"),
-    SlotDefinition(407, "CN_Q024_ASTRONOMY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of astronomy?"),
-    SlotDefinition(408, "CN_Q025_CANADA", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of canada?"),
+    SlotDefinition(406, "CN_Q023_ASTRONOMY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of astronomy?"),
+    SlotDefinition(407, "CN_Q024_SUGAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to sugar?"),
+    SlotDefinition(408, "CN_Q025_WORK", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to work?"),
     SlotDefinition(409, "CN_Q026_STATE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to state?"),
-    SlotDefinition(410, "CN_Q027_SUGAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to sugar?"),
+    SlotDefinition(410, "CN_Q027_CANADA", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of canada?"),
     SlotDefinition(411, "CN_Q028_MOVE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to move?"),
     SlotDefinition(412, "CN_Q029_CHANGE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a manner/way of change?"),
     SlotDefinition(413, "CN_Q030_ANATOMY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of anatomy?"),
     SlotDefinition(414, "CN_Q031_DISEASE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to disease?"),
-    SlotDefinition(415, "CN_Q032_GOOD", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to good?"),
-    SlotDefinition(416, "CN_Q033_POLITICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of politics?"),
+    SlotDefinition(415, "CN_Q032_POLITICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of politics?"),
+    SlotDefinition(416, "CN_Q033_GOOD", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to good?"),
     SlotDefinition(417, "CN_Q034_BASEBALL", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of baseball?"),
     SlotDefinition(418, "CN_Q035_GRAMMAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of grammar?"),
     SlotDefinition(419, "CN_Q036_HAPPINESS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Does it cause or lead to happiness?"),
@@ -537,10 +541,10 @@ BAND_3_SLOTS = [
     SlotDefinition(453, "CN_Q070_VALUE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to value?"),
     SlotDefinition(454, "CN_Q071_AVIATION", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of aviation?"),
     SlotDefinition(455, "CN_Q072_HUMAN_ACTIVITY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a type of human activity?"),
-    SlotDefinition(456, "CN_Q073_PLACE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to place?"),
+    SlotDefinition(456, "CN_Q073_BAD", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to bad?"),
     SlotDefinition(457, "CN_Q074_CITY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to city?"),
-    SlotDefinition(458, "CN_Q075_BAD", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to bad?"),
-    SlotDefinition(459, "CN_Q076_ORDER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to order?"),
+    SlotDefinition(458, "CN_Q075_ORDER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to order?"),
+    SlotDefinition(459, "CN_Q076_PLACE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to place?"),
     SlotDefinition(460, "CN_Q077_UNIT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to unit?"),
     SlotDefinition(461, "CN_Q078_REMOVE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to remove?"),
     SlotDefinition(462, "CN_Q079_SUPPORT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to support?"),
@@ -553,16 +557,16 @@ BAND_3_SLOTS = [
     SlotDefinition(469, "CN_Q086_GENUS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to genus?"),
     SlotDefinition(470, "CN_Q087_HAND", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to hand?"),
     SlotDefinition(471, "CN_Q088_QUALITY", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to quality?"),
-    SlotDefinition(472, "CN_Q089_LAW", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of law?"),
+    SlotDefinition(472, "CN_Q089_RIGHT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to right?"),
     SlotDefinition(473, "CN_Q090_BUSINESS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of business?"),
     SlotDefinition(474, "CN_Q091_COVER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to cover?"),
-    SlotDefinition(475, "CN_Q092_CONTROL", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to control?"),
-    SlotDefinition(476, "CN_Q093_STATISTICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of statistics?"),
-    SlotDefinition(477, "CN_Q094_USE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to use?"),
-    SlotDefinition(478, "CN_Q095_SURFACE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to surface?"),
-    SlotDefinition(479, "CN_Q096_YEAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to year?"),
-    SlotDefinition(480, "CN_Q097_COOKING", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of cooking?"),
-    SlotDefinition(481, "CN_Q098_RIGHT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to right?"),
+    SlotDefinition(475, "CN_Q092_STATISTICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of statistics?"),
+    SlotDefinition(476, "CN_Q093_CONTROL", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to control?"),
+    SlotDefinition(477, "CN_Q094_SURFACE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to surface?"),
+    SlotDefinition(478, "CN_Q095_LAW", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of law?"),
+    SlotDefinition(479, "CN_Q096_USE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to use?"),
+    SlotDefinition(480, "CN_Q097_YEAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to year?"),
+    SlotDefinition(481, "CN_Q098_COOKING", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of cooking?"),
     SlotDefinition(482, "CN_Q099_SOCCER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of soccer?"),
     SlotDefinition(483, "CN_Q100_HOUSE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it found in, on, or at house?"),
     SlotDefinition(484, "CN_Q101_GREAT", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to great?"),
@@ -579,19 +583,19 @@ BAND_3_SLOTS = [
     SlotDefinition(495, "CN_Q112_ATTENTION", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to attention?"),
     SlotDefinition(496, "CN_Q113_LOGIC", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of logic?"),
     SlotDefinition(497, "CN_Q114_WOMAN", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to woman?"),
-    SlotDefinition(498, "CN_Q115_BE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a manner/way of be?"),
-    SlotDefinition(499, "CN_Q116_CHARACTER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to character?"),
-    SlotDefinition(500, "CN_Q117_GO", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to go?"),
-    SlotDefinition(501, "CN_Q118_AUTOMOTIVE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of automotive?"),
-    SlotDefinition(502, "CN_Q119_BREAK", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to break?"),
-    SlotDefinition(503, "CN_Q120_LINE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to line?"),
+    SlotDefinition(498, "CN_Q115_LINE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to line?"),
+    SlotDefinition(499, "CN_Q116_BE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it a manner/way of be?"),
+    SlotDefinition(500, "CN_Q117_CHARACTER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to character?"),
+    SlotDefinition(501, "CN_Q118_GO", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to go?"),
+    SlotDefinition(502, "CN_Q119_AUTOMOTIVE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of automotive?"),
+    SlotDefinition(503, "CN_Q120_BREAK", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to break?"),
     SlotDefinition(504, "CN_Q121_ORGANISM", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to organism?"),
     SlotDefinition(505, "CN_Q122_SHARP", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to sharp?"),
     SlotDefinition(506, "CN_Q123_ECONOMICS", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of economics?"),
     SlotDefinition(507, "CN_Q124_KNOWLEDGE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to knowledge?"),
     SlotDefinition(508, "CN_Q125_FEAR", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to fear?"),
-    SlotDefinition(509, "CN_Q126_NZ", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of nz?"),
-    SlotDefinition(510, "CN_Q127_TREE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to tree?"),
+    SlotDefinition(509, "CN_Q126_TREE", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it conceptually related to tree?"),
+    SlotDefinition(510, "CN_Q127_NZ", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of nz?"),
     SlotDefinition(511, "CN_Q128_MANNER", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "ConceptNet Taxonomy & Domain", "Is it used in the context or domain of manner?"),
 ]
 
@@ -624,8 +628,8 @@ BAND_4_SLOTS = [
     SlotDefinition(534, "CN_Q151_BIRD", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to bird?"),
     SlotDefinition(535, "CN_Q152_GOVERNMENT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to government?"),
     SlotDefinition(536, "CN_Q153_DESIRE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to desire?"),
-    SlotDefinition(537, "CN_Q154_PROGRAMMING", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of programming?"),
-    SlotDefinition(538, "CN_Q155_LARGE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to large?"),
+    SlotDefinition(537, "CN_Q154_LARGE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to large?"),
+    SlotDefinition(538, "CN_Q155_PROGRAMMING", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of programming?"),
     SlotDefinition(539, "CN_Q156_MOVE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a manner/way of move?"),
     SlotDefinition(540, "CN_Q157_POKER", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of poker?"),
     SlotDefinition(541, "CN_Q158_KILL", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to kill?"),
@@ -638,13 +642,13 @@ BAND_4_SLOTS = [
     SlotDefinition(548, "CN_Q165_RING", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to ring?"),
     SlotDefinition(549, "CN_Q166_OPEN", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to open?"),
     SlotDefinition(550, "CN_Q167_AFRICA", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to africa?"),
-    SlotDefinition(551, "CN_Q168_ZOOLOGY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of zoology?"),
+    SlotDefinition(551, "CN_Q168_ATTACK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to attack?"),
     SlotDefinition(552, "CN_Q169_ATTRACTIVE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to attractive?"),
     SlotDefinition(553, "CN_Q170_SPORT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of sport?"),
     SlotDefinition(554, "CN_Q171_HAPPY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to happy?"),
     SlotDefinition(555, "CN_Q172_LOW", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to low?"),
     SlotDefinition(556, "CN_Q173_FRANCE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to france?"),
-    SlotDefinition(557, "CN_Q174_ATTACK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to attack?"),
+    SlotDefinition(557, "CN_Q174_ZOOLOGY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of zoology?"),
     SlotDefinition(558, "CN_Q175_BIBLE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to bible?"),
     SlotDefinition(559, "CN_Q176_WORKER", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to worker?"),
     SlotDefinition(560, "CN_Q177_FEMALE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to female?"),
@@ -656,9 +660,9 @@ BAND_4_SLOTS = [
     SlotDefinition(566, "CN_Q183_MAKE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to make?"),
     SlotDefinition(567, "CN_Q184_LACK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to lack?"),
     SlotDefinition(568, "CN_Q185_CHINA", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to china?"),
-    SlotDefinition(569, "CN_Q186_SENSE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to sense?"),
-    SlotDefinition(570, "CN_Q187_ADVANCE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to advance?"),
-    SlotDefinition(571, "CN_Q188_LIE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to lie?"),
+    SlotDefinition(569, "CN_Q186_ADVANCE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to advance?"),
+    SlotDefinition(570, "CN_Q187_LIE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to lie?"),
+    SlotDefinition(571, "CN_Q188_SENSE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to sense?"),
     SlotDefinition(572, "CN_Q189_ISLAND", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to island?"),
     SlotDefinition(573, "CN_Q190_FORMAL", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to formal?"),
     SlotDefinition(574, "CN_Q191_DIFFICULT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to difficult?"),
@@ -685,8 +689,8 @@ BAND_4_SLOTS = [
     SlotDefinition(595, "CN_Q212_TELEVISION", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to television?"),
     SlotDefinition(596, "CN_Q213_DEATH", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to death?"),
     SlotDefinition(597, "CN_Q214_MONEY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Does it require money beforehand?"),
-    SlotDefinition(598, "CN_Q215_DRUG", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to drug?"),
-    SlotDefinition(599, "CN_Q216_TRAVEL", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a manner/way of travel?"),
+    SlotDefinition(598, "CN_Q215_TRAVEL", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a manner/way of travel?"),
+    SlotDefinition(599, "CN_Q216_DRUG", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to drug?"),
     SlotDefinition(600, "CN_Q217_BRIGHT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it an exact synonym of bright?"),
     SlotDefinition(601, "CN_Q218_BLACK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to black?"),
     SlotDefinition(602, "CN_Q219_RELIGION", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of religion?"),
@@ -708,8 +712,8 @@ BAND_4_SLOTS = [
     SlotDefinition(618, "CN_Q235_LARGE_INTEGER", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a type of large integer?"),
     SlotDefinition(619, "CN_Q236_EUPHEMISM", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of euphemism?"),
     SlotDefinition(620, "CN_Q237_USA", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to usa?"),
-    SlotDefinition(621, "CN_Q238_PHYSICAL_EVENT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a type of physical event?"),
-    SlotDefinition(622, "CN_Q239_BE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to be?"),
+    SlotDefinition(621, "CN_Q238_BE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to be?"),
+    SlotDefinition(622, "CN_Q239_PHYSICAL_EVENT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it a type of physical event?"),
     SlotDefinition(623, "CN_Q240_SPORT", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to sport?"),
     SlotDefinition(624, "CN_Q241_OFFENSIVE", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to offensive?"),
     SlotDefinition(625, "CN_Q242_NUTS", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it typically nuts?"),
@@ -720,12 +724,12 @@ BAND_4_SLOTS = [
     SlotDefinition(630, "CN_Q247_WIND", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to wind?"),
     SlotDefinition(631, "CN_Q248_EVEN", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to even?"),
     SlotDefinition(632, "CN_Q249_CHILDISH", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it used in the context or domain of childish?"),
-    SlotDefinition(633, "CN_Q250_STAY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to stay?"),
-    SlotDefinition(634, "CN_Q251_MUSIC", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to music?"),
+    SlotDefinition(633, "CN_Q250_MUSIC", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to music?"),
+    SlotDefinition(634, "CN_Q251_STAY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to stay?"),
     SlotDefinition(635, "CN_Q252_ACTIVITY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to activity?"),
     SlotDefinition(636, "CN_Q253_SHOW", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to show?"),
-    SlotDefinition(637, "CN_Q254_SPEAK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to speak?"),
-    SlotDefinition(638, "CN_Q255_ABILITY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to ability?"),
+    SlotDefinition(637, "CN_Q254_ABILITY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to ability?"),
+    SlotDefinition(638, "CN_Q255_SPEAK", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to speak?"),
     SlotDefinition(639, "CN_Q256_WORTHY", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "ConceptNet Affordance & Function", "Is it conceptually related to worthy?"),
 ]
 
@@ -1146,11 +1150,10 @@ SLOT_INDEX_TO_NAME: Dict[int, str] = {slot.index: slot.name for slot in CANONICA
 
 # Semantic Bridge Alias Layer & Backward Compatibility
 LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
-    # Entity Types
     "TYPE_ANIMATE": "CN_Q011_ANIMAL",
     "TYPE_HUMAN": "CN_Q015_PERSON",
-    "TYPE_INANIMATE_PHYSICAL": "CN_Q012_TANGIBLE_THING",
-    "TYPE_NATURAL_OBJECT": "CN_Q052_GEOLOGY",
+    "TYPE_INANIMATE_PHYSICAL": "CN_Q014_TANGIBLE_THING",
+    "TYPE_NATURAL_OBJECT": "CN_Q121_ORGANISM",
     "TYPE_ARTIFACT": "CN_Q042_DEVICE",
     "TYPE_SUBSTANCE_MASS": "CN_Q195_MASS",
     "TYPE_COLLECTION_SET": "CN_Q102_SET",
@@ -1163,36 +1166,33 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "TYPE_SPATIAL_REGION": "CN_Q204_AREA",
     "TYPE_MEASURE_SCALAR": "CN_Q077_UNIT",
     "TYPE_NUMERIC_VALUE": "CN_Q008_MATHEMATICS",
-    "TYPE_ORGANIZATION": "CN_Q014_GROUP",
+    "TYPE_ORGANIZATION": "CN_Q013_GROUP",
     "TYPE_COMMUNICATION_MSG": "CN_Q061_LANGUAGE",
     "TYPE_ATTRIBUTE_PROPERTY": "CN_Q088_QUALITY",
-    "TYPE_RELATION_ROLE": "CN_Q120_LINE",
-    "TYPE_ALGORITHM_PROCEDURE": "CN_Q154_PROGRAMMING",
+    "TYPE_RELATION_ROLE": "CN_Q115_LINE",
+    "TYPE_ALGORITHM_PROCEDURE": "CN_Q155_PROGRAMMING",
     "TYPE_LEGAL_CONTRACT": "CN_Q003_LEGAL",
     "TYPE_BIOLOGICAL_ORGANISM": "CN_Q121_ORGANISM",
     "TYPE_SOFTWARE_SYSTEM": "CN_Q001_COMPUTING",
     "TYPE_HARDWARE_DEVICE": "CN_Q042_DEVICE",
-    "TYPE_ASTRONOMICAL_BODY": "CN_Q024_ASTRONOMY",
+    "TYPE_ASTRONOMICAL_BODY": "CN_Q023_ASTRONOMY",
     "TYPE_GEOGRAPHICAL_LANDFORM": "CN_Q233_LAND",
-    # Capabilities & Roles
-    "ROLE_AGENT_CAPABLE": "CN_Q255_ABILITY",
-    "ROLE_SENTIENT": "CN_Q186_SENSE",
+    "ROLE_AGENT_CAPABLE": "CN_Q254_ABILITY",
+    "ROLE_SENTIENT": "CN_Q188_SENSE",
     "ROLE_MOVEABLE": "CN_Q028_MOVE",
-    "ROLE_COMMUNICATOR": "CN_Q254_SPEAK",
+    "ROLE_COMMUNICATOR": "CN_Q255_SPEAK",
     "ROLE_CONSUMABLE": "CN_Q069_FOOD",
     "ROLE_CONTAINER": "CN_Q229_BOX",
-    "ROLE_INSTRUMENT_USABLE": "CN_Q094_USE",
+    "ROLE_INSTRUMENT_USABLE": "CN_Q096_USE",
     "ROLE_VOLITIONAL_SOURCE": "CN_Q153_DESIRE",
     "ROLE_COGNITIVE_SUBJECT": "CN_Q043_MIND",
     "ROLE_AFFECTIVE_TARGET": "CN_Q171_HAPPY",
     "ROLE_EPISTEMIC_AUTHORITY": "CN_Q124_KNOWLEDGE",
     "ROLE_PATIENT_TARGET": "CN_Q146_TAKE",
-    # Modalities
     "MODALITY_LITERAL": "CN_Q140_TRUE",
     "MODALITY_FIGURATIVE": "CN_Q190_FORMAL",
     "MODALITY_HYPOTHETICAL": "CN_Q113_LOGIC",
-    "MODALITY_COUNTERFACTUAL": "CN_Q188_LIE",
-    # WordNet Roots
+    "MODALITY_COUNTERFACTUAL": "CN_Q187_LIE",
     "WN_ACT_ACTION": "CN_Q104_ACT",
     "WN_ANIMAL_FAUNA": "CN_Q011_ANIMAL",
     "WN_ARTIFACT_OBJECT": "CN_Q042_DEVICE",
@@ -1203,18 +1203,17 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "WN_EVENT_OCCURRENCE": "CN_Q144_EVENT",
     "WN_FEELING_EMOTION": "CN_Q171_HAPPY",
     "WN_FOOD_NUTRITION": "CN_Q069_FOOD",
-    "WN_GROUP_SOCIAL": "CN_Q014_GROUP",
-    "WN_LOCATION_PLACE": "CN_Q073_PLACE",
+    "WN_GROUP_SOCIAL": "CN_Q013_GROUP",
+    "WN_LOCATION_PLACE": "CN_Q076_PLACE",
     "WN_MOTIVE_REASON": "CN_Q081_CAUSE",
-    "WN_OBJECT_NATURAL": "CN_Q052_GEOLOGY",
+    "WN_OBJECT_NATURAL": "CN_Q121_ORGANISM",
     "WN_PERSON_HUMAN": "CN_Q015_PERSON",
     "WN_PHENOMENON_NATURE": "CN_Q052_GEOLOGY",
     "WN_PLANT_FLORA": "CN_Q004_PLANT",
     "WN_POSSESSION_ASSET": "CN_Q017_MONEY",
     "WN_PROCESS_SERIES": "CN_Q252_ACTIVITY",
     "WN_QUANTITY_NUMBER": "CN_Q203_AMOUNT",
-    "WN_RELATION_LINK": "CN_Q120_LINE",
-    # Physical & Cyber Affordances
+    "WN_RELATION_LINK": "CN_Q115_LINE",
     "AFFORD_INCISED_CUTTING": "CN_Q108_CUT",
     "AFFORD_PERCUSSIVE_IMPACT": "CN_Q142_FORCE",
     "AFFORD_FLUID_CONTAINMENT": "CN_Q049_WATER",
@@ -1226,10 +1225,10 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_LEVERAGE_PRY": "CN_Q142_FORCE",
     "AFFORD_TORQUE_ROTATION": "CN_Q028_MOVE",
     "AFFORD_DRILL_PENETRATE": "CN_Q108_CUT",
-    "AFFORD_ABRASIVE_GRINDING": "CN_Q095_SURFACE",
+    "AFFORD_ABRASIVE_GRINDING": "CN_Q094_SURFACE",
     "AFFORD_EXTRUSION_FORMING": "CN_Q245_MATERIAL",
     "AFFORD_FASTENER_BOLT_LATCH": "CN_Q225_FIT",
-    "AFFORD_TENSION_CABLE_PULL": "CN_Q120_LINE",
+    "AFFORD_TENSION_CABLE_PULL": "CN_Q115_LINE",
     "AFFORD_SPRING_SUSPENSION": "CN_Q028_MOVE",
     "AFFORD_HYDRAULIC_ACTUATION": "CN_Q049_WATER",
     "AFFORD_ROLLING_WHEEL_BEARING": "CN_Q028_MOVE",
@@ -1248,19 +1247,19 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_AERODYNAMIC_AIRFOIL_LIFT": "CN_Q151_BIRD",
     "AFFORD_PARACHUTE_DRAG_DECEL": "CN_Q130_STOP",
     "AFFORD_COMPUTE_EXECUTE": "CN_Q001_COMPUTING",
-    "AFFORD_PERSIST_STORAGE": "CN_Q154_PROGRAMMING",
+    "AFFORD_PERSIST_STORAGE": "CN_Q155_PROGRAMMING",
     "AFFORD_SOCKET_TRANSMIT": "CN_Q037_INTERNET",
     "AFFORD_SOCKET_RECEIVE": "CN_Q037_INTERNET",
-    "AFFORD_ENCRYPT_CRYPTO": "CN_Q154_PROGRAMMING",
-    "AFFORD_DECRYPT_CRYPTO": "CN_Q154_PROGRAMMING",
-    "AFFORD_SIGN_CRYPTOGRAPHIC": "CN_Q154_PROGRAMMING",
+    "AFFORD_ENCRYPT_CRYPTO": "CN_Q155_PROGRAMMING",
+    "AFFORD_DECRYPT_CRYPTO": "CN_Q155_PROGRAMMING",
+    "AFFORD_SIGN_CRYPTOGRAPHIC": "CN_Q155_PROGRAMMING",
     "AFFORD_VERIFY_SIGNATURE": "CN_Q140_TRUE",
     "AFFORD_QUERY_DATABASE": "CN_Q001_COMPUTING",
     "AFFORD_MUTATE_DATABASE": "CN_Q001_COMPUTING",
     "AFFORD_AUTHENTICATE_AUTH": "CN_Q003_LEGAL",
     "AFFORD_AUTHORIZE_RBAC": "CN_Q003_LEGAL",
-    "AFFORD_SERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",
-    "AFFORD_DESERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",
+    "AFFORD_SERIALIZE_BUFFER": "CN_Q155_PROGRAMMING",
+    "AFFORD_DESERIALIZE_BUFFER": "CN_Q155_PROGRAMMING",
     "AFFORD_HTTP_REST_REQUEST": "CN_Q037_INTERNET",
     "AFFORD_GRPC_RPC_INVOKE": "CN_Q001_COMPUTING",
     "AFFORD_WEBSOCKET_DUPLEX": "CN_Q037_INTERNET",
@@ -1276,24 +1275,24 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_MAP_REDUCE_BATCH": "CN_Q001_COMPUTING",
     "AFFORD_GPU_TENSOR_FORWARD": "CN_Q001_COMPUTING",
     "AFFORD_VECTOR_INDEX_SEARCH": "CN_Q001_COMPUTING",
-    "AFFORD_FILE_COMPRESSION_ZIP": "CN_Q154_PROGRAMMING",
-    "AFFORD_FILE_DECOMPRESSION": "CN_Q154_PROGRAMMING",
+    "AFFORD_FILE_COMPRESSION_ZIP": "CN_Q155_PROGRAMMING",
+    "AFFORD_FILE_DECOMPRESSION": "CN_Q155_PROGRAMMING",
     "AFFORD_SCHEMA_MIGRATION": "CN_Q029_CHANGE",
     "AFFORD_INGEST_NUTRIENT": "CN_Q069_FOOD",
     "AFFORD_CHEMICAL_CATALYSIS": "CN_Q010_CHEMISTRY",
-    "AFFORD_OPTICAL_SENSE": "CN_Q186_SENSE",
+    "AFFORD_OPTICAL_SENSE": "CN_Q188_SENSE",
     "AFFORD_ACOUSTIC_SENSE": "CN_Q059_SOUND",
-    "AFFORD_TACTILE_SENSE": "CN_Q186_SENSE",
+    "AFFORD_TACTILE_SENSE": "CN_Q188_SENSE",
     "AFFORD_THERMAL_SENSE": "CN_Q180_HOT",
-    "AFFORD_CHEMICAL_OLFACTION": "CN_Q186_SENSE",
+    "AFFORD_CHEMICAL_OLFACTION": "CN_Q188_SENSE",
     "AFFORD_CHEMICAL_GUSTATION": "CN_Q069_FOOD",
-    "AFFORD_PROPRIOCEPTIVE_SENSE": "CN_Q186_SENSE",
+    "AFFORD_PROPRIOCEPTIVE_SENSE": "CN_Q188_SENSE",
     "AFFORD_VESTIBULAR_EQUILIBRIUM": "CN_Q234_CALM",
     "AFFORD_ELECTRORECEPTION_SENSE": "CN_Q051_POWER",
     "AFFORD_MAGNETORECEPTION_SENSE": "CN_Q051_POWER",
     "AFFORD_ECHOLOCATION_SONAR": "CN_Q059_SOUND",
-    "AFFORD_LIDAR_TIME_OF_FLIGHT": "CN_Q013_PHYSICS",
-    "AFFORD_RADAR_RF_REFLECTION": "CN_Q013_PHYSICS",
+    "AFFORD_LIDAR_TIME_OF_FLIGHT": "CN_Q012_PHYSICS",
+    "AFFORD_RADAR_RF_REFLECTION": "CN_Q012_PHYSICS",
     "AFFORD_METABOLIC_RESPIRATION": "CN_Q150_LIFE",
     "AFFORD_PHOTOSYNTHESIS_LIGHT": "CN_Q004_PLANT",
     "AFFORD_DNA_REPLICATION_COPY": "CN_Q208_GENETICS",
@@ -1311,9 +1310,9 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_NEURAL_PLASTICITY_LTP": "CN_Q043_MIND",
     "AFFORD_CIRCADIAN_RHYTHM_TICK": "CN_Q021_TIME",
     "AFFORD_SYMBIOTIC_MICROBIOME": "CN_Q022_BIOLOGY",
-    "AFFORD_SPEECH_VOCALIZATION": "CN_Q254_SPEAK",
+    "AFFORD_SPEECH_VOCALIZATION": "CN_Q255_SPEAK",
     "AFFORD_DISPLAY_PIXEL_EMIT": "CN_Q148_APPEARANCE",
-    "AFFORD_HAPTIC_TACTILE_FEEDBACK": "CN_Q186_SENSE",
+    "AFFORD_HAPTIC_TACTILE_FEEDBACK": "CN_Q188_SENSE",
     "AFFORD_FERMENTATION_ANAEROBIC": "CN_Q010_CHEMISTRY",
     "AFFORD_PRECIPITATION_SOLID": "CN_Q010_CHEMISTRY",
     "AFFORD_COMBUSTION_OXIDATION": "CN_Q010_CHEMISTRY",
@@ -1329,12 +1328,12 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_UV_GERMICIDAL_IRRAD": "CN_Q006_MEDICINE",
     "AFFORD_RADIATION_GAMMA_STERIL": "CN_Q006_MEDICINE",
     "AFFORD_CRYOGENIC_FREEZING": "CN_Q010_CHEMISTRY",
-    "AFFORD_MAGNETIC_LEVITATION": "CN_Q013_PHYSICS",
-    "AFFORD_ION_THRUST_PROPULSION": "CN_Q013_PHYSICS",
-    "AFFORD_SOLAR_SAIL_PRESSURE": "CN_Q024_ASTRONOMY",
-    "AFFORD_RADIO_ANTENNA_EMISSION": "CN_Q013_PHYSICS",
-    "AFFORD_LASER_COHERENT_BEAM": "CN_Q013_PHYSICS",
-    "AFFORD_FIBER_OPTIC_INTERNAL_REF": "CN_Q013_PHYSICS",
+    "AFFORD_MAGNETIC_LEVITATION": "CN_Q012_PHYSICS",
+    "AFFORD_ION_THRUST_PROPULSION": "CN_Q012_PHYSICS",
+    "AFFORD_SOLAR_SAIL_PRESSURE": "CN_Q023_ASTRONOMY",
+    "AFFORD_RADIO_ANTENNA_EMISSION": "CN_Q012_PHYSICS",
+    "AFFORD_LASER_COHERENT_BEAM": "CN_Q012_PHYSICS",
+    "AFFORD_FIBER_OPTIC_INTERNAL_REF": "CN_Q012_PHYSICS",
     "AFFORD_BATTERY_CHEMICAL_CHARGE": "CN_Q051_POWER",
     "AFFORD_FUEL_CELL_CONVERSION": "CN_Q051_POWER",
     "AFFORD_SUPERCAPACITOR_DISCHARGE": "CN_Q051_POWER",
@@ -1343,12 +1342,11 @@ LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {
     "AFFORD_WIND_TURBINE_HARVEST": "CN_Q051_POWER",
     "AFFORD_HYDROELECTRIC_HARVEST": "CN_Q051_POWER",
     "AFFORD_NUCLEAR_FISSION_HEAT": "CN_Q051_POWER",
-    # Discrete Math, SI, Metric structures
     "STRUCT_SET_UNORDERED": "CN_Q102_SET",
-    "STRUCT_SEQUENCE_ORDERED": "CN_Q120_LINE",
-    "STRUCT_GRAPH_NETWORK": "CN_Q120_LINE",
-    "STRUCT_TREE_HIERARCHY": "CN_Q127_TREE",
-    "STRUCT_DIRECTED_ACYCLIC_DAG": "CN_Q120_LINE",
+    "STRUCT_SEQUENCE_ORDERED": "CN_Q115_LINE",
+    "STRUCT_GRAPH_NETWORK": "CN_Q115_LINE",
+    "STRUCT_TREE_HIERARCHY": "CN_Q126_TREE",
+    "STRUCT_DIRECTED_ACYCLIC_DAG": "CN_Q115_LINE",
     "STRUCT_LATTICE_ALGEBRA": "CN_Q008_MATHEMATICS",
     "STRUCT_MONOID_SEMIGROUP": "CN_Q008_MATHEMATICS",
     "STRUCT_GROUP_ALGEBRA": "CN_Q008_MATHEMATICS",
@@ -1446,26 +1444,6 @@ def get_slot_names() -> List[str]:
     return [slot.name for slot in CANONICAL_SLOTS]
 
 
-def get_band_contract(band: Union[SlotBand, int]) -> BandContract:
-    """Retrieves the polymorphic contract for a band."""
-    band_enum = SlotBand(band)
-    return BAND_CONTRACTS.get(band_enum, BandContract.EPISTEMIC)
-
-
-def get_slot_contract(slot: Union[int, str]) -> BandContract:
-    """Retrieves the polymorphic contract for a slot index or name."""
-    if isinstance(slot, str):
-        s_def = get_slot_by_name(slot)
-        if s_def is None:
-            raise KeyError(f"Unknown slot name: {slot}")
-        return get_band_contract(s_def.band)
-    idx = int(slot)
-    if not (0 <= idx < 1024):
-        raise IndexError(f"Slot index {idx} out of range [0, 1023]")
-    s_def = get_slot_by_index(idx)
-    return get_band_contract(s_def.band)
-
-
 # Expose all 1024 slot definitions as module-level immutable integer constants
 for _slot in CANONICAL_SLOTS:
     globals()[_slot.name] = _slot.index
@@ -1474,6 +1452,26 @@ for _slot in CANONICAL_SLOTS:
 for alias_k, target_v in SLOT_ALIASES.items():
     if target_v in SLOT_NAME_TO_INDEX:
         globals()[alias_k] = SLOT_NAME_TO_INDEX[target_v]
+
+
+def get_band_contract(band: Union[int, SlotBand]) -> BandContract:
+    """Returns the polymorphic contract for the specified band."""
+    if isinstance(band, int) and not isinstance(band, SlotBand):
+        band = SlotBand(band)
+    return BAND_CONTRACTS.get(band, BandContract.EPISTEMIC)
+
+
+def get_slot_contract(slot: Union[int, str, SlotDefinition]) -> BandContract:
+    """Returns the polymorphic contract for the specified slot."""
+    if isinstance(slot, SlotDefinition):
+        return slot.contract
+    elif isinstance(slot, int):
+        s_def = get_slot_by_index(slot)
+        return s_def.contract if s_def else BandContract.EPISTEMIC
+    elif isinstance(slot, str):
+        s_def = get_slot_by_name(slot)
+        return s_def.contract if s_def else BandContract.EPISTEMIC
+    return BandContract.EPISTEMIC
 
 
 def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canonical_slots_layout.json") -> Path:
@@ -1488,7 +1486,6 @@ def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canoni
             "band_name": s.band.name,
             "category": s.category,
             "description": s.description,
-            "contract": s.contract.value,
         }
         for s in CANONICAL_SLOTS
     ]
@@ -1498,11 +1495,12 @@ def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canoni
 
 
 __all__ = [
-    "SlotBand",
-    "SlotDefinition",
+    "BandContract",
     "BAND_CONTRACTS",
     "get_band_contract",
     "get_slot_contract",
+    "SlotBand",
+    "SlotDefinition",
     "BAND_0_SLOTS",
     "BAND_1_SLOTS",
     "BAND_2_SLOTS",

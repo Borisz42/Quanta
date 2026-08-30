@@ -4,9 +4,15 @@
 Implements Ontological Density Scoring (ODS) to mathematically evaluate concept quality
 and split the ontology into:
 - Tier 1 (Core Anchor Universe ~200k concepts): High ODS concepts used by the Incremental
-  Sparse Partition Solver to discover the optimal 128 Band 4 discriminative questions.
+  Sparse Partition Solver to discover the optimal 128 Band 3 & 128 Band 4 discriminative questions.
 - Tier 2 (Full Lexical Grounding Universe ~520k concepts): All valid concepts with >= 2
   assertions post-inheritance, fully grounded in 256-byte packed quaternary vectors in SQLite.
+
+Epistemic 4-Valued Belnap Logic Grounding:
+- Direct positive & 1st-order positive -> 1 (TRUE / YES)
+- Direct negative & 1st-order transitive negation -> 2 (FALSE / NO / NEGATED)
+- 2nd-order transitive positive -> 3 (MAYBE / INHERITED)
+- 2nd-order transitive negation & unasserted -> 0 (IRRELEVANT / INACTIVE)
 """
 
 from collections import Counter, defaultdict
@@ -51,6 +57,17 @@ EXCLUDED_METADATA_TARGETS = {
     "euphemistic", "humorous", "poetic", "literary", "jargon", "english", "wiktionary"
 }
 
+# Negative relation to canonical positive relation mapping
+NEGATIVE_RELATION_DUAL_MAP = {
+    "/r/NotCapableOf": "/r/CapableOf",
+    "/r/NotHasProperty": "/r/HasProperty",
+    "/r/NotDesires": "/r/Desires",
+    "/r/Antonym": "/r/SimilarTo",
+    "/r/DistinctFrom": "/r/IsA",
+}
+
+NEGATIVE_RELATIONS = set(NEGATIVE_RELATION_DUAL_MAP.keys())
+
 def is_clean_concept(lemma: str) -> bool:
     """Filters out OCR noise, multi-word phrases (>2 words), and meta-dictionary lemmas."""
     if len(lemma) < 2 or len(lemma) > 32:
@@ -70,7 +87,6 @@ def is_clean_concept(lemma: str) -> bool:
 
 def is_valuable_predicate(rel: str, target: str) -> bool:
     """Filters candidate questions to focus on cognitive, physical, functional, and domain dimensions."""
-    # Exclude purely morphological/etymological relations for dimensions
     if rel in {"/r/FormOf", "/r/DerivedFrom", "/r/EtymologicallyDerivedFrom", "/r/EtymologicallyRelatedTo"}:
         return False
     if rel == "/r/HasContext" and target in EXCLUDED_METADATA_TARGETS:
@@ -111,7 +127,7 @@ ACTIONABLE_RELATIONS = {
     "/r/InstanceOf",
 }
 
-# Comprehensive relation templates for all 44+ ConceptNet relations from dataset audit
+# Comprehensive relation templates for canonical question phrasing
 RELATION_TEMPLATES = {
     # Core Taxonomic & Ontological
     "/r/IsA": "Is it a type of {}?",
@@ -121,10 +137,8 @@ RELATION_TEMPLATES = {
     # Functional & Physical Affordances
     "/r/UsedFor": "Is it used for {}?",
     "/r/CapableOf": "Is it capable of {}?",
-    "/r/NotCapableOf": "Is it incapable of {}?",
     "/r/ReceivesAction": "Can it be {}?",
     "/r/HasProperty": "Is it typically {}?",
-    "/r/NotHasProperty": "Does it typically lack property {}?",
     "/r/MadeOf": "Is it composed of {}?",
     "/r/dbpedia/product": "Is it used to produce {}?",
     # Mereological & Structural
@@ -146,7 +160,6 @@ RELATION_TEMPLATES = {
     "/r/MotivatedByGoal": "Is it done to achieve {}?",
     "/r/CausesDesire": "Does it make one want to {}?",
     "/r/Desires": "Does it desire or seek {}?",
-    "/r/NotDesires": "Does it avoid or dislike {}?",
     # Domain, Social & Cultural Context
     "/r/HasContext": "Is it used in the context or domain of {}?",
     "/r/CreatedBy": "Is it created or authored by {}?",
@@ -158,10 +171,8 @@ RELATION_TEMPLATES = {
     "/r/dbpedia/influencedBy": "Was it influenced by {}?",
     "/r/dbpedia/leader": "Is its leader or head {}?",
     "/r/SymbolOf": "Is it a cultural or symbolic representation of {}?",
-    # Lexical, Semantic & Morphological
+    # Lexical & Semantic
     "/r/SimilarTo": "Is it semantically similar to {}?",
-    "/r/Antonym": "Is it the opposite of {}?",
-    "/r/DistinctFrom": "Is it explicitly distinct from {}?",
     "/r/Attribute": "Is it a qualitative attribute of {}?",
     "/r/RelatedTo": "Is it conceptually related to {}?",
     "/r/DerivedFrom": "Is it etymologically derived from {}?",
@@ -238,15 +249,17 @@ def parse_uri(uri: str):
 
 
 def extract_knowledge_graph_fast(filepath: str):
-    """Streams ConceptNet dump with zero-overhead integer ID mapping and per-concept relation tracking."""
+    """Streams ConceptNet dump with zero-overhead integer ID mapping and separate positive/negative assertion tracking."""
     print("[*] Streaming and parsing assertions across full ConceptNet universe...", flush=True)
     concept_vocab = {}  # str -> int
     predicate_vocab = {}  # (str, str) -> int
     inv_concept_vocab = []
     inv_predicate_vocab = []
 
-    edges_c = []
-    edges_p = []
+    edges_c_pos = []
+    edges_p_pos = []
+    edges_c_neg = []
+    edges_p_neg = []
     isa_children = []
     isa_parents = []
 
@@ -289,7 +302,7 @@ def extract_knowledge_graph_fast(filepath: str):
                 continue
 
             rel = parts[1]
-            if rel not in RELATION_TEMPLATES and rel not in INVERSE_RELATION_MAP:
+            if rel not in RELATION_TEMPLATES and rel not in INVERSE_RELATION_MAP and rel not in NEGATIVE_RELATIONS:
                 continue
 
             start_lemma, start_pos = parse_uri(parts[2])
@@ -313,10 +326,17 @@ def extract_knowledge_graph_fast(filepath: str):
             c_key = f"{start_lemma} ({start_pos})"
             cid = get_concept_id(c_key)
             
-            if is_valuable_predicate(rel, end_lemma):
-                pid = get_predicate_id(rel, end_lemma)
-                edges_c.append(cid)
-                edges_p.append(pid)
+            is_neg = rel in NEGATIVE_RELATIONS
+            canon_rel = NEGATIVE_RELATION_DUAL_MAP.get(rel, rel)
+
+            if is_valuable_predicate(canon_rel, end_lemma):
+                pid = get_predicate_id(canon_rel, end_lemma)
+                if is_neg:
+                    edges_c_neg.append(cid)
+                    edges_p_neg.append(pid)
+                else:
+                    edges_c_pos.append(cid)
+                    edges_p_pos.append(pid)
                 concept_freq[cid] += 1
                 predicate_freq[pid] += 1
                 concept_rel_counts[cid][rel] += 1
@@ -335,34 +355,43 @@ def extract_knowledge_graph_fast(filepath: str):
                     target_key = f"{end_lemma} ({end_pos})"
                     t_cid = get_concept_id(target_key)
                     inv_pid = get_predicate_id(inv_rel, start_lemma)
-                    edges_c.append(t_cid)
-                    edges_p.append(inv_pid)
+                    edges_c_pos.append(t_cid)
+                    edges_p_pos.append(inv_pid)
                     concept_freq[t_cid] += 1
                     predicate_freq[inv_pid] += 1
                     concept_rel_counts[t_cid][inv_rel] += 1
 
             # Symmetric relation assertions
             elif rel in SYMMETRIC_RELATIONS:
-                if is_valuable_predicate(rel, start_lemma):
+                is_neg_sym = rel in NEGATIVE_RELATIONS
+                canon_sym_rel = NEGATIVE_RELATION_DUAL_MAP.get(rel, rel)
+                if is_valuable_predicate(canon_sym_rel, start_lemma):
                     target_key = f"{end_lemma} ({end_pos})"
                     t_cid = get_concept_id(target_key)
-                    sym_pid = get_predicate_id(rel, start_lemma)
-                    edges_c.append(t_cid)
-                    edges_p.append(sym_pid)
+                    sym_pid = get_predicate_id(canon_sym_rel, start_lemma)
+                    if is_neg_sym:
+                        edges_c_neg.append(t_cid)
+                        edges_p_neg.append(sym_pid)
+                    else:
+                        edges_c_pos.append(t_cid)
+                        edges_p_pos.append(sym_pid)
                     concept_freq[t_cid] += 1
                     predicate_freq[sym_pid] += 1
                     concept_rel_counts[t_cid][rel] += 1
 
+    total_edges = len(edges_c_pos) + len(edges_c_neg)
     print(
         f"[*] Initial streaming finished in {time.time() - t0:.1f}s ({line_count:,} lines)."
-        f" Loaded {len(edges_c):,} assertions across {len(concept_vocab):,} concepts.",
+        f" Loaded {total_edges:,} assertions ({len(edges_c_pos):,} pos, {len(edges_c_neg):,} neg) across {len(concept_vocab):,} concepts.",
         flush=True,
     )
     return (
         inv_concept_vocab,
         inv_predicate_vocab,
-        edges_c,
-        edges_p,
+        edges_c_pos,
+        edges_p_pos,
+        edges_c_neg,
+        edges_p_neg,
         isa_children,
         isa_parents,
         concept_freq,
@@ -430,13 +459,15 @@ def compute_ontological_density_scores(
 
 
 # ==============================================================================
-# 3. SPARSE MATRIX ASSEMBLY & INSTANT BLAS INHERITANCE
+# 3. SPARSE MATRIX ASSEMBLY & EPISTEMIC 4-VALUED INHERITANCE
 # ==============================================================================
 def build_and_inherit_matrices(
     inv_concept_vocab,
     inv_predicate_vocab,
-    edges_c,
-    edges_p,
+    edges_c_pos,
+    edges_p_pos,
+    edges_c_neg,
+    edges_p_neg,
     isa_children,
     isa_parents,
     concept_freq,
@@ -446,7 +477,7 @@ def build_and_inherit_matrices(
     min_assertions=2,
     inheritance_depth=2,
 ):
-    """Builds Tier-2 sparse matrix, executes BLAS inheritance, and extracts Tier-1 Core submatrix."""
+    """Builds Tier-2 sparse matrix, executes 4-valued BLAS inheritance, and extracts Tier-1 Core submatrix."""
     print(f"[*] Building full Tier-2 grounding universe (min assertions >= {min_assertions})...", flush=True)
     t0 = time.time()
 
@@ -461,20 +492,39 @@ def build_and_inherit_matrices(
     M = len(valid_pids)
     print(f"    -> Tier-2 Full Grounding Universe size: {N2:,} concepts across {M:,} candidate axes.", flush=True)
 
-    # Filter edges to Tier-2
-    new_rows, new_cols = [], []
-    for c, p in zip(edges_c, edges_p):
+    # Filter positive edges to Tier-2
+    pos_rows, pos_cols = [], []
+    for c, p in zip(edges_c_pos, edges_p_pos):
         nc = old_cid_to_t2.get(c)
         np_id = old_pid_to_new.get(p)
         if nc is not None and np_id is not None:
-            new_rows.append(nc)
-            new_cols.append(np_id)
+            pos_rows.append(nc)
+            pos_cols.append(np_id)
 
-    rows_arr = np.array(new_rows, dtype=np.int32)
-    cols_arr = np.array(new_cols, dtype=np.int32)
-    data_arr = np.ones(len(new_rows), dtype=np.float32)
+    # Filter negative edges to Tier-2
+    neg_rows, neg_cols = [], []
+    for c, p in zip(edges_c_neg, edges_p_neg):
+        nc = old_cid_to_t2.get(c)
+        np_id = old_pid_to_new.get(p)
+        if nc is not None and np_id is not None:
+            neg_rows.append(nc)
+            neg_cols.append(np_id)
 
-    mat_csr_t2 = sparse.csr_matrix((data_arr, (rows_arr, cols_arr)), shape=(N2, M), dtype=np.float32)
+    m_pos_0 = sparse.csr_matrix(
+        (np.ones(len(pos_rows), dtype=np.float32), (np.array(pos_rows, dtype=np.int32), np.array(pos_cols, dtype=np.int32))),
+        shape=(N2, M),
+        dtype=np.float32,
+    )
+    m_pos_0.data = (m_pos_0.data > 0).astype(np.float32)
+    m_pos_0.eliminate_zeros()
+
+    m_neg_0 = sparse.csr_matrix(
+        (np.ones(len(neg_rows), dtype=np.float32), (np.array(neg_rows, dtype=np.int32), np.array(neg_cols, dtype=np.int32))),
+        shape=(N2, M),
+        dtype=np.float32,
+    )
+    m_neg_0.data = (m_neg_0.data > 0).astype(np.float32)
+    m_neg_0.eliminate_zeros()
 
     # Fast BLAS taxonomic inheritance (T @ mat)
     t_isa = time.time()
@@ -494,23 +544,67 @@ def build_and_inherit_matrices(
             dtype=np.float32,
         )
 
-        print(f"[*] Propagating taxonomic property inheritance via sparse matrix product (depth = {inheritance_depth})...", flush=True)
-        cur_inherited = mat_csr_t2
-        for d in range(1, inheritance_depth + 1):
-            cur_inherited = T.dot(cur_inherited)
-            mat_csr_t2 = mat_csr_t2 + cur_inherited
-            print(f"    -> Depth {d} complete: non-zeros expanded to {mat_csr_t2.nnz:,}.", flush=True)
+        print(f"[*] Propagating 4-valued taxonomic property inheritance via sparse matrix products (depth = {inheritance_depth})...", flush=True)
+        # 1st-hop positive: M_pos_1 = T . M_pos_0
+        m_pos_1 = T.dot(m_pos_0)
+        m_pos_1.data = (m_pos_1.data > 0).astype(np.float32)
+        m_pos_1.eliminate_zeros()
 
-        mat_csr_t2.data = (mat_csr_t2.data > 0).astype(np.uint8)
-        print(f"[*] Taxonomic inheritance completed in {time.time() - t_isa:.2f}s.", flush=True)
+        # 2nd-hop positive: M_pos_2 = T . M_pos_1
+        m_pos_2 = T.dot(m_pos_1)
+        m_pos_2.data = (m_pos_2.data > 0).astype(np.float32)
+        m_pos_2.eliminate_zeros()
+
+        # 1st-hop negative: M_neg_1 = T . M_neg_0
+        m_neg_1 = T.dot(m_neg_0)
+        m_neg_1.data = (m_neg_1.data > 0).astype(np.float32)
+        m_neg_1.eliminate_zeros()
+
+        # Disjoint Indicators and Non-Monotonic Precedence
+        # 1. Explicit Negation (d_neg in {0, 1}) -> 2 (FALSE)
+        m_false = m_neg_0 + m_neg_1
+        m_false.data = (m_false.data > 0).astype(np.uint8)
+        m_false.eliminate_zeros()
+
+        # 2. Affirmed Positive (d_pos in {0, 1} \ M_false) -> 1 (TRUE)
+        m_pos_0_1 = m_pos_0 + m_pos_1
+        m_pos_0_1.data = (m_pos_0_1.data > 0).astype(np.uint8)
+        m_pos_0_1.eliminate_zeros()
+        m_true = m_pos_0_1 - m_pos_0_1.multiply(m_false)
+        m_true.eliminate_zeros()
+        m_true.data = (m_true.data > 0).astype(np.uint8)
+
+        # 3. Inherited Positive (d_pos = 2 \ (M_false | M_true)) -> 3 (MAYBE)
+        m_claimed = m_false + m_true
+        m_maybe = m_pos_2 - m_pos_2.multiply(m_claimed)
+        m_maybe.eliminate_zeros()
+        m_maybe.data = (m_maybe.data > 0).astype(np.uint8)
+
+        # Combined Quaternary CSR Matrix: 1*TRUE + 2*FALSE + 3*MAYBE
+        mat_csr_t2 = (m_true.astype(np.uint8) + (2 * m_false).astype(np.uint8) + (3 * m_maybe).astype(np.uint8)).tocsr()
+        mat_csr_t2.eliminate_zeros()
+
+        print(
+            f"[*] Epistemic 4-valued inheritance completed in {time.time() - t_isa:.2f}s:\n"
+            f"    -> TRUE  (1): {m_true.nnz:,} assertions\n"
+            f"    -> FALSE (2): {m_false.nnz:,} assertions\n"
+            f"    -> MAYBE (3): {m_maybe.nnz:,} assertions\n"
+            f"    -> Total active non-zeros: {mat_csr_t2.nnz:,}",
+            flush=True,
+        )
     else:
-        mat_csr_t2.data = (mat_csr_t2.data > 0).astype(np.uint8)
+        m_false = m_neg_0
+        m_false.data = (m_false.data > 0).astype(np.uint8)
+        m_true = m_pos_0 - m_pos_0.multiply(m_false)
+        m_true.eliminate_zeros()
+        m_true.data = (m_true.data > 0).astype(np.uint8)
+        mat_csr_t2 = (m_true.astype(np.uint8) + (2 * m_false).astype(np.uint8)).tocsr()
+        mat_csr_t2.eliminate_zeros()
 
     # Identify Tier-1 Core Anchor Universe based on ODS Pareto ranking
     print("[*] Filtering Tier-1 Core Anchor Universe by Ontological Density Score (ODS)...", flush=True)
     t2_ods_scores = np.array([ods_scores.get(cid, 0.0) for cid in tier2_cids])
     
-    # Select top rich concepts with highest ODS scores (rich multi-modal affordances)
     sorted_concept_indices = np.argsort(-t2_ods_scores)
     target_n = min(TARGET_TIER1_CONCEPTS, len(sorted_concept_indices))
     tier1_raw_indices = sorted_concept_indices[:target_n]
@@ -521,17 +615,19 @@ def build_and_inherit_matrices(
         flush=True,
     )
 
-    # OPTION 1: Profile Deduplication into Canonical Semantic Archetypes
-    print("[*] Deduplicating identical assertion rows into canonical semantic archetypes (Option 1)...", flush=True)
+    # Deduplication into Canonical Semantic Archetypes
+    print("[*] Deduplicating identical quaternary assertion rows into canonical semantic archetypes...", flush=True)
     t_dedup = time.time()
     mat_csr_t1_raw = mat_csr_t2[tier1_raw_indices, :].tocsr()
     indptr = mat_csr_t1_raw.indptr
     indices = mat_csr_t1_raw.indices
+    data = mat_csr_t1_raw.data
     
     profile_map = {}
     archetype_subindices = []
     for i in range(N_raw):
-        row_bytes = indices[indptr[i]:indptr[i+1]].tobytes()
+        start, end = indptr[i], indptr[i+1]
+        row_bytes = indices[start:end].tobytes() + b"|" + data[start:end].tobytes()
         if row_bytes not in profile_map:
             profile_map[row_bytes] = i
             archetype_subindices.append(i)
@@ -566,7 +662,7 @@ def build_and_inherit_matrices(
 
 
 # ==============================================================================
-# 4. FAST INCREMENTAL SPARSE PARTITION SOLVER (TIER-1 CORE)
+# 4. FAST INCREMENTAL SPARSE PARTITION SOLVER (TIER-1 CORE, 4-VALUED)
 # ==============================================================================
 def solve_incremental_questions(
     tier1_concepts: list,
@@ -577,10 +673,10 @@ def solve_incremental_questions(
     target_k: int = None,
     max_rounds: int = 10000,
 ):
-    """Ultra-fast inverted-index partition refinement solver with real-world Zipf corpus weights."""
+    """Ultra-fast inverted-index partition refinement solver with real-world Zipf corpus weights for 4-valued logic."""
     N, M = mat_csr_t1.shape
     target_desc = f"{target_k} questions (Band 3 & 4)" if target_k is not None else "0 collisions (100% full discrimination)"
-    print(f"\n[*] Running Vectorized Inverted-Index Partition Solver across {N:,} Tier-1 Core Concepts...", flush=True)
+    print(f"\n[*] Running Vectorized Inverted-Index Partition Solver across {N:,} Tier-1 Core Concepts (4-Valued Belnap Logic)...", flush=True)
     print(f"    (Target: {target_desc})", flush=True)
 
     print("[*] Computing real-world Zipf corpus weights across Tier-1 concepts...", flush=True)
@@ -590,7 +686,11 @@ def solve_incremental_questions(
     ], dtype=np.float64)
 
     total_weight = float(np.sum(weights))
-    mat_float = mat_csr_t1.astype(np.float32)
+
+    # Sparse indicator matrices for values 1 (TRUE), 2 (FALSE), 3 (MAYBE)
+    m1_csr = (mat_csr_t1 == 1).astype(np.float32)
+    m2_csr = (mat_csr_t1 == 2).astype(np.float32)
+    m3_csr = (mat_csr_t1 == 3).astype(np.float32)
 
     selected_q_indices = []
     selected_mask = np.zeros(M, dtype=bool)
@@ -598,15 +698,19 @@ def solve_incremental_questions(
     # Inverted map: concept_idx -> cluster_id
     concept_to_cluster = np.zeros(N, dtype=np.int32)
 
-    # Initial root cluster
-    root_concept_indices = np.arange(N, dtype=np.int32)
-    w1_init = np.asarray(mat_float.T.dot(weights)).ravel().astype(np.float64)
-    w0_init = total_weight - w1_init
-    pair_reductions = w0_init * w1_init
+    def calc_pair_gain(w_tot, w1, w2, w3):
+        w0 = w_tot - w1 - w2 - w3
+        return w0 * w1 + w0 * w2 + w0 * w3 + w1 * w2 + w1 * w3 + w2 * w3
 
+    # Initial root cluster weights for all candidate questions
+    w1_init = np.asarray(m1_csr.T.dot(weights)).ravel().astype(np.float64)
+    w2_init = np.asarray(m2_csr.T.dot(weights)).ravel().astype(np.float64)
+    w3_init = np.asarray(m3_csr.T.dot(weights)).ravel().astype(np.float64)
+    pair_reductions = calc_pair_gain(total_weight, w1_init, w2_init, w3_init)
+
+    root_concept_indices = np.arange(N, dtype=np.int32)
     active_clusters = {0: root_concept_indices}
-    cluster_weight_map = {0: total_weight}
-    cluster_w1_map = {0: w1_init}
+    cluster_w_map = {0: (total_weight, w1_init, w2_init, w3_init)}
     next_cid = 1
 
     def count_collisions():
@@ -643,75 +747,69 @@ def solve_incremental_questions(
         selected_q_indices.append(best_q)
         selected_mask[best_q] = True
 
-        # Fast direct column index fetch from CSC matrix
+        # Fast direct column slice from CSC matrix
         col_start = mat_csc_t1.indptr[best_q]
         col_end = mat_csc_t1.indptr[best_q + 1]
         col_concept_indices = mat_csc_t1.indices[col_start:col_end]
+        col_values = mat_csc_t1.data[col_start:col_end]
 
         if len(col_concept_indices) == 0:
             continue
 
-        # Inverted index: only clusters containing positive concepts for best_q can split!
+        concept_val_map = dict(zip(col_concept_indices, col_values))
         affected_cids = np.unique(concept_to_cluster[col_concept_indices])
-        col_set = set(col_concept_indices)
 
         for cid in affected_cids:
             c = active_clusters.get(cid)
             if c is None or len(c) <= 1:
                 continue
 
-            c1_list = []
-            c0_list = []
+            sub_lists = {0: [], 1: [], 2: [], 3: []}
             for idx in c:
-                if idx in col_set:
-                    c1_list.append(idx)
-                else:
-                    c0_list.append(idx)
+                v = concept_val_map.get(idx, 0)
+                sub_lists[v].append(idx)
 
-            if not c1_list or not c0_list:
+            non_empty_parts = [v for v, lst in sub_lists.items() if len(lst) > 0]
+            if len(non_empty_parts) <= 1:
                 continue
 
-            c1 = np.array(c1_list, dtype=np.int32)
-            c0 = np.array(c0_list, dtype=np.int32)
-
-            w_old = cluster_weight_map.pop(cid)
-            w1_old = cluster_w1_map.pop(cid)
+            w_old, w1_old, w2_old, w3_old = cluster_w_map.pop(cid)
             del active_clusters[cid]
 
             # Subtract old contribution
-            pair_reductions -= (w_old - w1_old) * w1_old
+            pair_reductions -= calc_pair_gain(w_old, w1_old, w2_old, w3_old)
 
-            # Hopcroft smaller-half optimization for O(1) sum update
-            if len(c1) < len(c0):
-                w_c1 = float(np.sum(weights[c1]))
-                w_c0 = w_old - w_c1
-                w1_c1 = np.asarray(mat_float[c1].T.dot(weights[c1])).ravel().astype(np.float64)
-                w1_c0 = w1_old - w1_c1
-            else:
-                w_c0 = float(np.sum(weights[c0]))
-                w_c1 = w_old - w_c0
-                w1_c0 = np.asarray(mat_float[c0].T.dot(weights[c0])).ravel().astype(np.float64)
-                w1_c1 = w1_old - w1_c0
+            sub_arrays = {v: np.array(lst, dtype=np.int32) for v, lst in sub_lists.items() if len(lst) > 0}
+            
+            # Hopcroft smaller-part optimization: find largest sub-cluster
+            largest_v = max(sub_arrays.keys(), key=lambda v: len(sub_arrays[v]))
 
-            # Sub-cluster 0
-            cid0 = next_cid
-            next_cid += 1
-            active_clusters[cid0] = c0
-            concept_to_cluster[c0] = cid0
-            if len(c0) > 1:
-                cluster_weight_map[cid0] = w_c0
-                cluster_w1_map[cid0] = w1_c0
-                pair_reductions += (w_c0 - w1_c0) * w1_c0
+            sub_w_info = {}
+            for v, c_sub in sub_arrays.items():
+                if v == largest_v:
+                    continue
+                w_v = float(np.sum(weights[c_sub]))
+                w1_v = np.asarray(m1_csr[c_sub].T.dot(weights[c_sub])).ravel().astype(np.float64)
+                w2_v = np.asarray(m2_csr[c_sub].T.dot(weights[c_sub])).ravel().astype(np.float64)
+                w3_v = np.asarray(m3_csr[c_sub].T.dot(weights[c_sub])).ravel().astype(np.float64)
+                sub_w_info[v] = (w_v, w1_v, w2_v, w3_v)
 
-            # Sub-cluster 1
-            cid1 = next_cid
-            next_cid += 1
-            active_clusters[cid1] = c1
-            concept_to_cluster[c1] = cid1
-            if len(c1) > 1:
-                cluster_weight_map[cid1] = w_c1
-                cluster_w1_map[cid1] = w1_c1
-                pair_reductions += (w_c1 - w1_c1) * w1_c1
+            # Compute largest sub-cluster by subtraction
+            w_lg = w_old - sum(info[0] for info in sub_w_info.values())
+            w1_lg = w1_old - sum(info[1] for info in sub_w_info.values())
+            w2_lg = w2_old - sum(info[2] for info in sub_w_info.values())
+            w3_lg = w3_old - sum(info[3] for info in sub_w_info.values())
+            sub_w_info[largest_v] = (w_lg, w1_lg, w2_lg, w3_lg)
+
+            for v, c_sub in sub_arrays.items():
+                w_sub, w1_sub, w2_sub, w3_sub = sub_w_info[v]
+                sub_cid = next_cid
+                next_cid += 1
+                active_clusters[sub_cid] = c_sub
+                concept_to_cluster[c_sub] = sub_cid
+                if len(c_sub) > 1:
+                    cluster_w_map[sub_cid] = (w_sub, w1_sub, w2_sub, w3_sub)
+                    pair_reductions += calc_pair_gain(w_sub, w1_sub, w2_sub, w3_sub)
 
         new_collisions = count_collisions()
         resolved_pct = (1.0 - (new_collisions / initial_collisions)) * 100.0
@@ -746,7 +844,7 @@ def solve_incremental_questions(
 
 
 # ==============================================================================
-# 5. QUANTA EXPORT FUNCTIONS (FULL TIER-2 LEXICON)
+# 5. QUANTA EXPORT FUNCTIONS (FULL TIER-2 LEXICON, 4-VALUED)
 # ==============================================================================
 def slugify(text: str) -> str:
     s = re.sub(r"[^\w\s]", "", text).strip()
@@ -780,7 +878,7 @@ def export_quanta_artifacts(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    print("\n[*] Exporting QUANTA artifacts across full Tier-2 Lexicon...", flush=True)
+    print("\n[*] Exporting QUANTA artifacts across full Tier-2 Lexicon (4-Valued Grounding)...", flush=True)
 
     # 1. Export QUANTA Slot Registry JSON
     slot_json_path = out_path / "conceptnet_slots.json"
@@ -839,6 +937,7 @@ def export_quanta_artifacts(
     sel_submat = mat_csr_t2[:, selected_indices].tocsr()
     indptr = sel_submat.indptr
     indices = sel_submat.indices
+    data = sel_submat.data
 
     t_db = time.time()
     for c_idx, c_key in enumerate(tier2_concepts):
@@ -849,16 +948,18 @@ def export_quanta_artifacts(
             lemma, pos = c_key, "n"
 
         # Fast direct slice from CSR arrays (zero object creation)
-        row_active = indices[indptr[c_idx] : indptr[c_idx + 1]]
+        start, end = indptr[c_idx], indptr[c_idx + 1]
+        row_active = indices[start:end]
+        row_values = data[start:end]
 
-        active_slots_dict = {slot_names[i]: 1 for i in row_active}
+        active_slots_dict = {slot_names[i]: int(v) for i, v in zip(row_active, row_values)}
 
         full_vector = np.zeros(1024, dtype=np.uint8)
-        for i in row_active:
+        for i, v in zip(row_active, row_values):
             if i < 128:
-                full_vector[384 + i] = 1  # Band 3
+                full_vector[384 + i] = int(v) & 0x03  # Band 3
             elif i < 256:
-                full_vector[512 + (i - 128)] = 1  # Band 4
+                full_vector[512 + (i - 128)] = int(v) & 0x03  # Band 4
 
         packed_hex = pack_quaternary_array(full_vector, 1024).hex()
         slots_json_str = json.dumps(active_slots_dict)
@@ -884,7 +985,7 @@ def export_quanta_artifacts(
 
     # 3. Export Compressed Codebook CSV
     print("[*] Exporting compressed codebook (concept_codebook.csv.gz)...", flush=True)
-    codebook_submat = sel_submat.toarray()
+    codebook_submat = sel_submat.toarray().astype(np.uint8)
     codebook_df = pd.DataFrame(
         codebook_submat,
         index=tier2_concepts,
@@ -910,8 +1011,10 @@ if __name__ == "__main__":
     (
         inv_concept_vocab,
         inv_predicate_vocab,
-        edges_c,
-        edges_p,
+        edges_c_pos,
+        edges_p_pos,
+        edges_c_neg,
+        edges_p_neg,
         isa_children,
         isa_parents,
         concept_freq,
@@ -928,7 +1031,7 @@ if __name__ == "__main__":
         isa_parents,
     )
 
-    # 4. Sparse Matrix Assembly & Instant BLAS Inheritance (Tier-1 vs Tier-2 Split)
+    # 4. Sparse Matrix Assembly & Epistemic 4-Valued BLAS Inheritance
     (
         tier1_concepts,
         tier2_concepts,
@@ -940,8 +1043,10 @@ if __name__ == "__main__":
     ) = build_and_inherit_matrices(
         inv_concept_vocab,
         inv_predicate_vocab,
-        edges_c,
-        edges_p,
+        edges_c_pos,
+        edges_p_pos,
+        edges_c_neg,
+        edges_p_neg,
         isa_children,
         isa_parents,
         concept_freq,
@@ -952,7 +1057,7 @@ if __name__ == "__main__":
         inheritance_depth=ISA_INHERITANCE_DEPTH,
     )
 
-    # 5. Solve for 0 Collisions on Tier-1 Core Universe
+    # 5. Solve for Multi-Valued Incremental Discrimination on Tier-1 Universe
     selected_indices = solve_incremental_questions(
         tier1_concepts,
         top_predicates,
@@ -973,4 +1078,4 @@ if __name__ == "__main__":
         output_dir="data",
     )
 
-    print(f"\n[+] Full ODS pipeline completed successfully in {time.time() - t_global:.1f}s.", flush=True)
+    print(f"\n[+] Full 4-valued ODS pipeline completed successfully in {time.time() - t_global:.1f}s.", flush=True)

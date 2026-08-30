@@ -104,19 +104,19 @@ Following the evaluation of information-theoretic bottlenecks and lexical ground
 
 ### Quantitative Breakdown & Performance Metrics
 * **Source Corpus**: 34,074,917 assertions from ConceptNet 5.7.0.
-* **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix propagation ($M_{\text{inherited}} = M + TM + T^2M$) expanding non-zero connections from 13.35M to **54.61M** in **1.42s**.
-* **Profile Deduplication**: 75,000 top concepts collapsed into **72,930 unique semantic archetypes** (97.2% distinctness) in **0.34s**.
-* **Partition Solver Efficiency**: 256 globally optimal dimensions selected via Inverted-Index Hopcroft Refinement from 120,000 candidate predicates in **40.39s** ($157.76\text{ ms/question}$).
+* **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix 4-valued non-monotonic propagation ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$) expanding non-zero connections across $\{0, 1, 2, 3\}$ to **54.42M active assertions** (`13.31M` TRUE, `23.1K` FALSE, `41.09M` MAYBE).
+* **Profile Deduplication**: 75,000 top concepts collapsed into **72,953 unique semantic archetypes** (97.3% distinctness).
+* **Partition Solver Efficiency**: 256 globally optimal dimensions selected via Multi-Way Inverted-Index Hopcroft Refinement ($\Delta \text{Gini} = \frac{1}{2}(W^2 - \sum W_v^2)$) from candidate predicates.
 * **Grounded Vocabulary Base**: **403,503 concepts** with pre-packed 256-byte quaternary vectors stored in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
 
 ### 2-Tier Vector Decoding & Collision Distribution
-1. **Tier 1 (Instant SIMD Lookup)**: **23,383 concepts (32.1% of archetypes, mean Zipf: 3.52)** are 100% uniquely identified by the 256 ConceptNet dimensions alone. These cover **$>95\%$ of conversational vocabulary** and decode in **$<10\text{ ms}$** in-memory.
+1. **Tier 1 (Instant SIMD Lookup)**: **25,292 concepts (34.67% of archetypes, mean Zipf: 3.52)** are 100% uniquely identified by the 256 ConceptNet dimensions alone. These cover **$>95\%$ of conversational vocabulary** and decode in **$<5\text{ ms}$** in-memory via vectorized $4 \times 4$ cost matrix $\mathbf{C}$.
 2. **Tier 2 (Category Basin Fallback)**: Specialized technical/taxonomic terms map to dense conceptual clusters in SQLite (e.g. 9,361 zoological species, 7,515 chemical compounds, 6,965 clinical labels).
 
 ### Neuro-Symbolic Solver Alignment & Verification
-* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) mapped to `CN_Q*` slots, preserving Clingo/ASP and s(CASP) solver invariants.
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_NATURAL_OBJECT`, `AFFORD_INCISED_CUTTING`) mapped dynamically to `CN_Q*` slots, preserving Clingo/ASP and s(CASP) solver invariants.
 * **Polymorphic 2-Bit Typing per Band**: Implemented distinct contracts across epistemic bands (Bands 0, 3..7), structural routing (Band 1), and register scoping (Band 2) with band-polymorphic lattice joins.
-* **Regression Test Status**: **185 / 185 tests passing (100%)** across the complete test suite.
+* **Regression Test Status**: **191 / 191 tests passing (100%)** across the complete test suite.
 
 ---
 

@@ -170,11 +170,13 @@ class ASTForwardParser:
             test_qnode = self._build_node_recursive(node.test, graph)
             graph.add_edge(q_node, "GRAPH_BRANCH_COND", test_qnode)
 
-            for stmt in getattr(node, "body", []):
+            body_stmts = node.body if isinstance(getattr(node, "body", None), list) else ([node.body] if getattr(node, "body", None) is not None else [])
+            for stmt in body_stmts:
                 then_qnode = self._build_node_recursive(stmt, graph)
                 graph.add_edge(q_node, "GRAPH_BRANCH_THEN", then_qnode)
 
-            for stmt in getattr(node, "orelse", []):
+            orelse_stmts = node.orelse if isinstance(getattr(node, "orelse", None), list) else ([node.orelse] if getattr(node, "orelse", None) is not None else [])
+            for stmt in orelse_stmts:
                 else_qnode = self._build_node_recursive(stmt, graph)
                 graph.add_edge(q_node, "GRAPH_BRANCH_ELSE", else_qnode)
 

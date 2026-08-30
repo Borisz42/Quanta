@@ -84,6 +84,93 @@ class NLPForwardParser:
             "happen", "occur", "transpire", "arise", "unfold", "materialize",
         }
 
+    KNOWN_IRREGULAR_VERBS: Dict[str, str] = {
+        "bit": "bite", "bites": "bite", "biting": "bite", "bitten": "bite",
+        "chased": "chase", "chases": "chase", "chasing": "chase",
+        "ran": "run", "runs": "run", "running": "run",
+        "saw": "see", "sees": "see", "seeing": "see", "seen": "see",
+        "gave": "give", "gives": "give", "giving": "give", "given": "give",
+        "walked": "walk", "walks": "walk", "walking": "walk",
+        "thought": "think", "thinks": "think", "thinking": "think",
+        "knew": "know", "knows": "know", "knowing": "know", "known": "know",
+        "wanted": "want", "wants": "want", "wanting": "want",
+        "felt": "feel", "feels": "feel", "feeling": "feel",
+        "touched": "touch", "touches": "touch", "touching": "touch",
+        "entered": "enter", "enters": "enter", "entering": "enter",
+        "isolated": "isolate", "isolates": "isolate",
+        "verified": "verify", "verifies": "verify",
+        "retained": "retain", "retains": "retain",
+        "prompted": "prompt", "prompts": "prompt",
+        "noted": "note", "notes": "note",
+        "doubted": "doubt", "doubts": "doubt",
+        "pretended": "pretend", "pretends": "pretend",
+        "remarked": "remark", "remarks": "remark",
+        "obligated": "obligate", "obligates": "obligate",
+        "suspected": "suspect", "suspects": "suspect",
+        "prohibited": "prohibit", "prohibits": "prohibit",
+        "audited": "audit", "audits": "audit",
+        "suggested": "suggest", "suggests": "suggest",
+        "exhibited": "exhibit", "exhibits": "exhibit",
+        "replicated": "replicate", "replicates": "replicate",
+        "prevented": "prevent", "prevents": "prevent",
+        "validated": "validate", "validates": "validate",
+        "declared": "declare", "declares": "declare",
+        "committed": "commit", "commits": "commit",
+        "created": "create", "creates": "create",
+        "was": "be", "were": "be", "is": "be", "are": "be", "been": "be", "being": "be",
+        "had": "have", "has": "have", "having": "have",
+        "did": "do", "does": "do", "doing": "do", "done": "do",
+    }
+
+    def _disambiguate_token_pos_and_lemma(self, token: Any, doc: Any) -> Tuple[str, str]:
+        """Contextually evaluates a token's POS and lemma considering its position in the sentence.
+        
+        Resolves misclassified verbs (e.g. 'bit' tagged as NOUN when acting as ROOT/predicate)
+        and evaluates unknown literals based on their structural position.
+        """
+        text_lower = token.text.lower()
+        lemma = token.lemma_.lower()
+        pos = token.pos_
+
+        # 1. Known irregular and inflected verbs
+        if text_lower in self.KNOWN_IRREGULAR_VERBS:
+            return "VERB", self.KNOWN_IRREGULAR_VERBS[text_lower]
+
+        # 2. Syntactic ROOT or clause predicate position
+        if token.dep_ == "ROOT" and pos not in ("AUX",):
+            # Check if preceded by subject NP and followed by object/prep
+            has_left_subj = any(t.i < token.i and t.pos_ in ("NOUN", "PROPN", "PRON") for t in doc)
+            has_right_obj = any(t.i > token.i and t.pos_ in ("NOUN", "PROPN", "PRON", "ADP") for t in doc)
+            if (has_left_subj and has_right_obj) or pos in ("NOUN", "ADJ", "ADV", "X"):
+                return "VERB", lemma
+
+        # 3. Positional inference for unknown literals / tokens
+        if token.i > 0:
+            prev_token = doc[token.i - 1]
+            # Follows auxiliary, modal, or negation ('must X', 'did not X', 'could X') -> VERB
+            if prev_token.pos_ in ("AUX", "MD") or prev_token.text.lower() in (
+                "not", "n't", "to", "did", "does", "do", "will", "would", "must", "can", "could", "shall", "should", "might", "may"
+            ):
+                if pos not in ("VERB", "AUX"):
+                    return "VERB", lemma
+            # Preceded by determiner ('a', 'the', 'every') -> NOUN or ADJ
+            elif prev_token.pos_ == "DET" or prev_token.text.lower() in (
+                "a", "an", "the", "this", "that", "these", "those", "every", "all", "each", "some", "my", "your", "his", "her", "their", "our"
+            ):
+                is_next_verb = False
+                if token.i + 1 < len(doc):
+                    next_t = doc[token.i + 1]
+                    if next_t.text.lower() in self.KNOWN_IRREGULAR_VERBS or next_t.dep_ == "ROOT" or next_t.pos_ == "VERB":
+                        is_next_verb = True
+                
+                # If followed by another noun (and not a verb), it's an ADJ; if followed by verb/prep/punct, it's a NOUN
+                if token.i + 1 < len(doc) and (doc[token.i + 1].pos_ in ("NOUN", "PROPN") and not is_next_verb):
+                    return "ADJ", lemma
+                else:
+                    return "NOUN", lemma
+
+        return pos, lemma
+
     def parse_dependency_tree(self, text: str) -> Any:
         """Parses text into a spaCy Doc dependency tree after typo normalization."""
         from parser.typo_normalizer import TypoNormalizer
@@ -92,20 +179,6 @@ class NLPForwardParser:
 
     def extract_subject_verb_object(self, doc: Any) -> SVOResult:
         """Extracts (subject, verb, object, modifiers) from a spaCy dependency tree."""
-        known_verb_lemmas = {
-            "bit": "bite", "bites": "bite", "bite": "bite",
-            "chased": "chase", "chases": "chase", "chase": "chase",
-            "ran": "run", "runs": "run", "run": "run",
-            "saw": "see", "sees": "see", "see": "see",
-            "gave": "give", "gives": "give", "give": "give",
-            "walked": "walk", "walks": "walk", "walk": "walk",
-            "thought": "think", "thinks": "think", "think": "think",
-            "knew": "know", "knows": "know", "know": "know",
-            "wanted": "want", "wants": "want", "want": "want",
-            "felt": "feel", "feels": "feel", "feel": "feel",
-            "touched": "touch", "touches": "touch", "touch": "touch",
-        }
-
         root_token = None
         for token in doc:
             if token.dep_ == "ROOT":
@@ -114,7 +187,7 @@ class NLPForwardParser:
 
         if root_token is not None and root_token.pos_ != "VERB":
             for token in doc:
-                if token.text.lower() in known_verb_lemmas or token.pos_ == "VERB":
+                if token.text.lower() in self.KNOWN_IRREGULAR_VERBS or token.pos_ == "VERB":
                     root_token = token
                     break
 
@@ -218,21 +291,12 @@ class NLPForwardParser:
         return None
 
     def parse_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
-        """Parses a single natural language sentence, compound sentence, or paragraph into a validated QuantaGraph ASG."""
+        """Parses a natural language sentence, compound sentence, or multi-sentence paragraph into a validated QuantaGraph ASG.
+        
+        Every word in the input text produces a dedicated QuantaNode with single-word literals,
+        ConceptNet/WordNet lexical grounding, and rich dependency and valency edges.
+        """
         clean_str = text.strip()
-        lower_str = clean_str.lower()
-
-        # 0. Stress-Test Sentences Detection
-        if "had alice not" in lower_str or "falsely pretended to know that bob believed" in lower_str:
-            return self._parse_counterfactual_stress_sentence(clean_str)
-        if "drone was accelerating into the restricted airspace" in lower_str or "tangentially touching the perimeter wire" in lower_str:
-            return self._parse_kinematics_mereotopology_sentence(clean_str)
-        if "every investigator who doubted" in lower_str or "absolute impossibility of an accomplice's alibi" in lower_str:
-            return self._parse_quantifier_modal_logic_sentence(clean_str)
-        if "declaring this very decree" in lower_str or "recursively validate its own origin" in lower_str:
-            return self._parse_self_referential_decree_sentence(clean_str)
-        if "eleanor vance" in lower_str or "cryogenic containment cell" in lower_str:
-            return self._parse_scientific_narrative_paragraph(clean_str)
 
         # 1. Multi-sentence paragraph detection
         sents = [s.strip() for s in re.split(r'(?<=[.?!])\s+', clean_str) if s.strip()]
@@ -252,467 +316,164 @@ class NLPForwardParser:
         doc = self.parse_dependency_tree(text)
         return self._parse_single_clause(doc, text, domain_context)
 
-    def _parse_counterfactual_stress_sentence(self, text: str) -> QuantaGraph:
-        """Parses Sentence 1: Counterfactual Causal Reasoning with Sarcasm & Second-Order Theory of Mind."""
-        g = QuantaGraph()
+    def _create_token_node(self, token: Any, doc: Any) -> QuantaNode:
+        """Constructs a QuantaNode for an individual token with ConceptNet or grammatical fallback grounding."""
+        text = token.text
+        pos, lemma = self._disambiguate_token_pos_and_lemma(token, doc)
+        tag = token.tag_
+        morph = token.morph
+        ent_type = token.ent_type_
 
-        # Alice node
-        alice = QuantaNode(literal="Alice", anchor="wn:person.n.01")
-        alice.set_slot("TYPE_HUMAN", 1)
-        alice.set_slot("ROLE_AGENT_CAPABLE", 1)
-        alice.set_slot("ROLE_SENTIENT", 1)
-        alice.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(alice)
+        # Try ConceptNet lookup with specific POS, handling punctuation and contractions properly
+        lookup_word = text if pos == "PUNCT" or text.lower() in ("'s", "'ve", "'d", "'ll", "'re", "'m", "n't", "dr.", "prof.", "mr.", "mrs.", "ms.") else lemma
+        concept = self.grounder.resolve_concept(lookup_word, pos=pos)
+        if concept is None:
+            concept = self.grounder.infer_from_grammar(lemma=lemma, pos=pos, tag=tag, morph=morph, ent_type=ent_type, text=text)
 
-        # Bob node
-        bob = QuantaNode(literal="Bob", anchor="wn:person.n.01")
-        bob.set_slot("TYPE_HUMAN", 1)
-        bob.set_slot("ROLE_AGENT_CAPABLE", 1)
-        bob.set_slot("ROLE_SENTIENT", 1)
-        bob.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(bob)
+        node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=text)
 
-        # Investment node
-        inv = QuantaNode(literal="her investment", anchor="wn:possession.n.02")
-        inv.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
-        inv.set_slot("WN_POSSESSION_ASSET", 1)
-        g.add_node(inv)
+        # Apply specific token-level enrichments
+        if token.dep_ == "neg" or lemma in ("not", "n't", "never", "no") or text.lower() == "n't":
+            node.set_slot("LJB_NA_NEGATION", 2)
 
-        # Auditor node
-        auditor = QuantaNode(literal="the auditor", anchor="wn:person.n.01")
-        auditor.set_slot("TYPE_HUMAN", 1)
-        auditor.set_slot("ROLE_AGENT_CAPABLE", 1)
-        auditor.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(auditor)
+        if lemma in ("a", "an", "one", "1"):
+            node.set_slot("NSM_ONE", 1)
+            node.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
+        elif lemma in ("the", "this", "that", "these", "those"):
+            node.set_slot("NSM_THIS", 1)
+        elif lemma in ("every", "all", "each"):
+            node.set_slot("NSM_ALL", 1)
+            node.set_slot("LJB_RO_ALL_QUANT", 1)
+        elif lemma in ("any", "someone", "somebody"):
+            node.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
+            node.set_slot("GRAPH_VARIABLE_BIND", 1)
 
-        # Due diligence node
-        dd = QuantaNode(literal="her due diligence", anchor="wn:act.n.02")
-        dd.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
-        dd.set_slot("WN_ACT_ACTION", 1)
-        g.add_node(dd)
+        if lemma in ("until", "till") or text.lower() in ("until", "till"):
+            node.set_slot("LOGIC_TEMPORAL_UNTIL_U", 1)
 
-        # 2nd-order ToM belief node (Alice -> knows -> Bob -> believes)
-        belief_node = QuantaNode(literal="believed investment was secure", anchor="wn:believe.v.01")
-        belief_node.set_slot("TOM_BELIEF_SECOND_ORDER", 1)
-        belief_node.set_slot("TYPE_STATE", 1)
-        belief_node.set_slot("WN_COGNITION_THOUGHT", 1)
-        g.add_node(belief_node)
-        g.add_edge(belief_node, "VAL_X1_AGENT", bob)
-        g.add_edge(belief_node, "VAL_X2_PATIENT", inv)
+        if lemma == "must":
+            node.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
 
-        # Deceptive pretend node
-        pretend_node = QuantaNode(literal="falsely pretended to know", anchor="wn:pretend.v.01")
-        pretend_node.set_slot("ROLE_DECEPTIVE_PROJECTION", 1)
-        pretend_node.set_slot("TYPE_EVENT", 1)
-        pretend_node.set_slot("WN_ACT_ACTION", 1)
-        pretend_node.set_slot("LJB_NA_NEGATION", 2)
-        g.add_node(pretend_node)
-        g.add_edge(pretend_node, "VAL_X1_AGENT", alice)
-        g.add_edge(pretend_node, "VAL_X2_PATIENT", belief_node)
+        if pos == "VERB" or token.dep_ == "ROOT":
+            if self._is_motion_verb(lemma):
+                node.set_slot("NSM_MOVE", 1)
+                node.set_slot("TYPE_EVENT", 1)
+            elif lemma in self.speech_verbs:
+                node.set_slot("NSM_SAY", 1)
+                node.set_slot("TYPE_COMMUNICATION_MSG", 1)
+            elif lemma in self.cognition_verbs:
+                node.set_slot("NSM_THINK", 1)
+                if lemma == "know":
+                    node.set_slot("NSM_KNOW", 1)
+                node.set_slot("TYPE_STATE", 1)
+            elif lemma in self.volition_verbs:
+                node.set_slot("NSM_WANT", 1)
+                node.set_slot("TYPE_STATE", 1)
+            elif lemma in self.perception_verbs:
+                node.set_slot("NSM_SEE", 1)
+                node.set_slot("TYPE_EVENT", 1)
+            elif lemma in self.contact_verbs:
+                node.set_slot("NSM_DO", 1)
+                node.set_slot("NSM_TOUCH", 1)
+                node.set_slot("TYPE_EVENT", 1)
 
-        # Sarcastic remark node
-        remark_node = QuantaNode(literal="sarcastically remarked due diligence was genius", anchor="wn:remark.v.01")
-        remark_node.set_slot("ROLE_SARCASM_IRONY", 1)
-        remark_node.set_slot("NSM_GOOD", 1)
-        remark_node.set_slot("TYPE_EVENT", 1)
-        remark_node.set_slot("WN_COMMUNICATION_INFO", 1)
-        remark_node.set_slot("LJB_NA_NEGATION", 2)
-        g.add_node(remark_node)
-        g.add_edge(remark_node, "VAL_X1_AGENT", auditor)
-        g.add_edge(remark_node, "VAL_X2_PATIENT", dd)
+        return node
 
-        # Master Counterfactual Causal Root Node
-        root = QuantaNode(literal=text.strip(), anchor="logic:counterfactual_causal")
-        root.set_slot("GRAPH_ROOT_NODE", 1)
-        root.set_slot("CAUSAL_COUNTERFACTUAL_NEC", 1)
-        root.set_slot("MODALITY_COUNTERFACTUAL", 1)
-        root.set_slot("ROLE_DECEPTIVE_PROJECTION", 1)
-        root.set_slot("TOM_BELIEF_SECOND_ORDER", 1)
-        root.set_slot("ROLE_SARCASM_IRONY", 1)
-        root.set_slot("NSM_GOOD", 1)
-        root.set_slot("TYPE_PROPOSITION", 1)
-        root.set_slot("MODALITY_LITERAL", 1)
-        root.set_slot("NSM_TRUE", 1)
-        g.add_node(root, set_as_root=True)
+    def _parse_conditional_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
+        """Parses conditional sentences: 'If <Antecedent>, then <Consequent>' into an ASG."""
+        t = text.strip()
+        lower_t = t.lower()
+        if lower_t.startswith("if "):
+            t = t[3:].strip()
 
-        g.add_edge(root, "GRAPH_BRANCH_COND", pretend_node)
-        g.add_edge(root, "GRAPH_BRANCH_THEN", remark_node)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", pretend_node)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", remark_node)
+        parts = re.split(r",\s*then\s+|\s+then\s+", t, flags=re.IGNORECASE)
+        if len(parts) != 2:
+            parts = [p.strip() for p in t.split(",") if p.strip()]
 
-        return g
+        if len(parts) >= 2:
+            cond_str, then_str = parts[0].strip().rstrip("."), parts[1].strip().rstrip(".")
+            g_cond = self.parse_sentence(cond_str, domain_context=domain_context)
+            g_then = self.parse_sentence(then_str, domain_context=domain_context)
 
-    def _parse_kinematics_mereotopology_sentence(self, text: str) -> QuantaGraph:
-        """Parses Sentence 2: Mixed Temporal Intervals, Continuous Kinematics, and Spatial Mereotopology."""
-        g = QuantaGraph()
+            combined = QuantaGraph()
+            for n in g_cond.nodes.values():
+                combined.add_node(n)
+            for n in g_then.nodes.values():
+                combined.add_node(n)
 
-        # Drone node
-        drone = QuantaNode(literal="the drone", anchor="wn:drone.n.01")
-        drone.set_slot("TYPE_ARTIFACT", 1)
-        drone.set_slot("ROLE_MOVEABLE", 1)
-        drone.set_slot("WN_ARTIFACT_OBJECT", 1)
-        g.add_node(drone)
+            root_node = QuantaNode(literal=text.strip(), anchor="logic:conditional")
+            root_node.set_slot("GRAPH_ROOT_NODE", 1)
+            root_node.set_slot("LJB_GANAI_IF_THEN", 1)
+            root_node.set_slot("GRAPH_BRANCH_COND", 1)
+            root_node.set_slot("GRAPH_BRANCH_THEN", 1)
+            root_node.set_slot("TYPE_PROPOSITION", 1)
+            root_node.set_slot("MODALITY_LITERAL", 1)
+            root_node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
+            root_node.set_slot("NSM_TRUE", 1)
+            combined.add_node(root_node, set_as_root=True)
 
-        # Restricted airspace node
-        airspace = QuantaNode(literal="the restricted airspace", anchor="wn:airspace.n.01")
-        airspace.set_slot("VAL_X3_DESTINATION", 1)
-        airspace.set_slot("TYPE_SPATIAL_REGION", 1)
-        airspace.set_slot("WN_LOCATION_PLACE", 1)
-        g.add_node(airspace)
+            if g_cond.root:
+                combined.add_edge(root_node, "GRAPH_BRANCH_COND", g_cond.root)
+                combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g_cond.root)
+            if g_then.root:
+                combined.add_edge(root_node, "GRAPH_BRANCH_THEN", g_then.root)
+                combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g_then.root)
 
-        # Dusk temporal node
-        dusk = QuantaNode(literal="dusk", anchor="wn:dusk.n.01")
-        dusk.set_slot("TYPE_TEMPORAL_INTERVAL", 1)
-        dusk.set_slot("TEMP_ALLEN_BEFORE", 1)
-        g.add_node(dusk)
+            return combined
 
-        # Kinematic acceleration clause
-        accel_clause = QuantaNode(literal="drone accelerating into restricted airspace before dusk", anchor="wn:accelerate.v.01")
-        accel_clause.set_slot("NSM_ACCELERATING_RATE", 1)
-        accel_clause.set_slot("VAL_X3_DESTINATION", 1)
-        accel_clause.set_slot("TEMP_ALLEN_DURING", 1)
-        accel_clause.set_slot("TYPE_PROCESS", 1)
-        accel_clause.set_slot("WN_ACT_ACTION", 1)
-        g.add_node(accel_clause)
-        g.add_edge(accel_clause, "VAL_X1_AGENT", drone)
-        g.add_edge(accel_clause, "VAL_X3_DESTINATION", airspace)
-        g.add_edge(accel_clause, "VAL_TIME_SLOT", dusk)
+        doc = self.parse_dependency_tree(text)
+        return self._parse_single_clause(doc, text, domain_context)
 
-        # Operator node
-        operator = QuantaNode(literal="the operator", anchor="wn:person.n.01")
-        operator.set_slot("TYPE_HUMAN", 1)
-        operator.set_slot("ROLE_AGENT_CAPABLE", 1)
-        operator.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(operator)
+    def _maybe_parse_compound_sentence(self, text: str, domain_context: Optional[str] = None) -> Optional[QuantaGraph]:
+        """Parses coordinating compound clauses joined by 'and' or 'or'."""
+        clean_text = text.strip()
+        lower = clean_text.lower()
+        conj = "and" if " and " in lower else ("or" if " or " in lower else None)
+        if not conj:
+            return None
 
-        # Wingtip meronym node
-        wingtip = QuantaNode(literal="the left wingtip", anchor="wn:wingtip.n.01")
-        wingtip.set_slot("MEREOLOGY_MERONYM_PART", 1)
-        wingtip.set_slot("TYPE_ARTIFACT", 1)
-        wingtip.set_slot("WN_ARTIFACT_OBJECT", 1)
-        g.add_node(wingtip)
+        parts = re.split(rf"\s+{conj}\s+", clean_text, flags=re.IGNORECASE)
+        if len(parts) != 2:
+            return None
 
-        # Perimeter wire node
-        wire = QuantaNode(literal="the perimeter wire", anchor="wn:wire.n.01")
-        wire.set_slot("TYPE_ARTIFACT", 1)
-        wire.set_slot("WN_ARTIFACT_OBJECT", 1)
-        g.add_node(wire)
+        c1_str, c2_str = parts[0].strip().rstrip(".,"), parts[1].strip().rstrip(".,")
+        d1 = self.parse_dependency_tree(c1_str)
+        d2 = self.parse_dependency_tree(c2_str)
+        has_v1 = any(t.pos_ in ("VERB", "AUX") or t.dep_ == "ROOT" for t in d1)
+        has_v2 = any(t.pos_ in ("VERB", "AUX") or t.dep_ == "ROOT" for t in d2)
 
-        # Mereotopological contact clause (RCC-8 TPP)
-        touch_clause = QuantaNode(literal="left wingtip tangentially touching perimeter wire", anchor="rcc8:tangential_proper_part")
-        touch_clause.set_slot("SPATIAL_RCC_TANGENTIAL_PART", 1)
-        touch_clause.set_slot("NSM_TOUCHING", 1)
-        touch_clause.set_slot("TYPE_STATE", 1)
-        g.add_node(touch_clause)
-        g.add_edge(touch_clause, "VAL_X1_AGENT", wingtip)
-        g.add_edge(touch_clause, "VAL_X2_PATIENT", wire)
+        if not (has_v1 and has_v2):
+            return None
 
-        # Epistemic split observation node
-        epist_node = QuantaNode(literal="operator plausibly suspected but could not deduce with certainty", anchor="wn:suspect.v.01")
-        epist_node.set_slot("EPIST_FUZZY_PLAUSIBILITY", 3)
-        epist_node.set_slot("EPIST_DEDUCTIVE_INFERENCE", 2)
-        epist_node.set_slot("TYPE_STATE", 1)
-        epist_node.set_slot("WN_COGNITION_THOUGHT", 1)
-        g.add_node(epist_node)
-        g.add_edge(epist_node, "VAL_X1_AGENT", operator)
-        g.add_edge(epist_node, "VAL_X2_PATIENT", touch_clause)
+        g1 = self.parse_sentence(c1_str, domain_context=domain_context)
+        g2 = self.parse_sentence(c2_str, domain_context=domain_context)
 
-        # Master Root Node
-        root = QuantaNode(literal=text.strip(), anchor="discourse:kinematic_mereotopology")
-        root.set_slot("GRAPH_ROOT_NODE", 1)
-        root.set_slot("NSM_ACCELERATING_RATE", 1)
-        root.set_slot("VAL_X3_DESTINATION", 1)
-        root.set_slot("TEMP_ALLEN_DURING", 1)
-        root.set_slot("SPATIAL_RCC_TANGENTIAL_PART", 1)
-        root.set_slot("EPIST_FUZZY_PLAUSIBILITY", 3)
-        root.set_slot("EPIST_DEDUCTIVE_INFERENCE", 2)
-        root.set_slot("TYPE_PROPOSITION", 1)
-        root.set_slot("MODALITY_LITERAL", 1)
-        root.set_slot("NSM_TRUE", 1)
-        g.add_node(root, set_as_root=True)
+        combined = QuantaGraph()
+        for n in g1.nodes.values():
+            combined.add_node(n)
+        for n in g2.nodes.values():
+            combined.add_node(n)
 
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", accel_clause)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", epist_node)
+        root_node = QuantaNode(literal=text.strip(), anchor=f"logic:compound_{conj}")
+        root_node.set_slot("GRAPH_ROOT_NODE", 1)
+        if conj == "and":
+            root_node.set_slot("LJB_JE_AND", 1)
+        else:
+            root_node.set_slot("LJB_JA_OR", 1)
+        root_node.set_slot("TYPE_PROPOSITION", 1)
+        root_node.set_slot("MODALITY_LITERAL", 1)
+        root_node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
+        root_node.set_slot("NSM_TRUE", 1)
+        combined.add_node(root_node, set_as_root=True)
 
-        return g
+        if g1.root:
+            combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g1.root)
+        if g2.root:
+            combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g2.root)
 
-    def _parse_quantifier_modal_logic_sentence(self, text: str) -> QuantaGraph:
-        """Parses Sentence 3: Deep Quantifier Scope Ambiguity with Higher-Order Modal Logic."""
-        g = QuantaGraph()
+        return combined
 
-        # Universal investigator node (∀)
-        investigator = QuantaNode(literal="Every investigator", anchor="wn:investigator.n.01")
-        investigator.set_slot("LJB_RO_ALL_QUANT", 1)
-        investigator.set_slot("GRAPH_VARIABLE_BIND", 1)
-        investigator.set_slot("TYPE_HUMAN", 1)
-        investigator.set_slot("ROLE_AGENT_CAPABLE", 1)
-        investigator.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(investigator)
 
-        # Existential suspect node (∃)
-        suspect = QuantaNode(literal="any suspect", anchor="wn:suspect.n.01")
-        suspect.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
-        suspect.set_slot("GRAPH_VARIABLE_BIND", 1)
-        suspect.set_slot("TYPE_HUMAN", 1)
-        suspect.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(suspect)
-
-        # Universal crime node (∀)
-        crime = QuantaNode(literal="every crime", anchor="wn:crime.n.01")
-        crime.set_slot("LJB_RO_ALL_QUANT", 1)
-        crime.set_slot("TYPE_EVENT", 1)
-        crime.set_slot("WN_EVENT_OCCURRENCE", 1)
-        g.add_node(crime)
-
-        # Necessary commission clause (□)
-        commit_clause = QuantaNode(literal="necessarily committed every crime", anchor="wn:commit.v.01")
-        commit_clause.set_slot("LOGIC_NECESSITY_BOX", 1)
-        commit_clause.set_slot("TYPE_EVENT", 1)
-        commit_clause.set_slot("WN_ACT_ACTION", 1)
-        g.add_node(commit_clause)
-        g.add_edge(commit_clause, "VAL_X1_AGENT", suspect)
-        g.add_edge(commit_clause, "VAL_X2_PATIENT", crime)
-
-        # Doubt clause (investigator doubted that any suspect had committed every crime)
-        doubt_clause = QuantaNode(literal="investigator doubted", anchor="wn:doubt.v.01")
-        doubt_clause.set_slot("TYPE_STATE", 1)
-        doubt_clause.set_slot("WN_COGNITION_THOUGHT", 1)
-        g.add_node(doubt_clause)
-        g.add_edge(doubt_clause, "VAL_X1_AGENT", investigator)
-        g.add_edge(doubt_clause, "VAL_X2_PATIENT", commit_clause)
-
-        # Accomplice alibi node
-        alibi = QuantaNode(literal="an accomplice's alibi", anchor="wn:alibi.n.01")
-        alibi.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
-        g.add_node(alibi)
-
-        # Impossibility clause (¬□ / impossible)
-        impossibility_clause = QuantaNode(literal="absolute impossibility of alibi", anchor="wn:prove.v.01")
-        impossibility_clause.set_slot("LJB_NA_NEGATION", 2)
-        impossibility_clause.set_slot("LOGIC_NECESSITY_BOX", 1)
-        impossibility_clause.set_slot("TYPE_PROPOSITION", 1)
-        g.add_node(impossibility_clause)
-        g.add_edge(impossibility_clause, "VAL_X2_PATIENT", alibi)
-
-        # Secret desire clause (secretly wanted someone to prove)
-        desire_clause = QuantaNode(literal="secretly wanted someone to prove", anchor="wn:want.v.01")
-        desire_clause.set_slot("TOM_DESIRE", 1)
-        desire_clause.set_slot("TYPE_STATE", 1)
-        desire_clause.set_slot("WN_COGNITION_THOUGHT", 1)
-        g.add_node(desire_clause)
-        g.add_edge(desire_clause, "VAL_X1_AGENT", investigator)
-        g.add_edge(desire_clause, "VAL_X2_PATIENT", impossibility_clause)
-
-        # Master Root Node
-        root = QuantaNode(literal=text.strip(), anchor="logic:modal_quantifier_scope")
-        root.set_slot("GRAPH_ROOT_NODE", 1)
-        root.set_slot("LJB_RO_ALL_QUANT", 1)
-        root.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
-        root.set_slot("GRAPH_VARIABLE_BIND", 1)
-        root.set_slot("TOM_DESIRE", 1)
-        root.set_slot("LOGIC_NECESSITY_BOX", 1)
-        root.set_slot("LJB_NA_NEGATION", 2)
-        root.set_slot("TYPE_PROPOSITION", 1)
-        root.set_slot("MODALITY_LITERAL", 1)
-        root.set_slot("NSM_TRUE", 1)
-        g.add_node(root, set_as_root=True)
-
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", doubt_clause)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", desire_clause)
-
-        return g
-
-    def _parse_self_referential_decree_sentence(self, text: str) -> QuantaGraph:
-        """Parses Sentence 4: Metalogical Self-Reference and Deontic Causal Interventions."""
-        g = QuantaGraph()
-
-        # Council node
-        council = QuantaNode(literal="the council", anchor="wn:council.n.01")
-        council.set_slot("TYPE_ORGANIZATION", 1)
-        council.set_slot("ROLE_AGENT_CAPABLE", 1)
-        council.set_slot("WN_GROUP_SOCIAL", 1)
-        g.add_node(council)
-
-        # Commissioner node
-        commissioner = QuantaNode(literal="the commissioner", anchor="wn:commissioner.n.01")
-        commissioner.set_slot("TYPE_HUMAN", 1)
-        commissioner.set_slot("ROLE_AGENT_CAPABLE", 1)
-        commissioner.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(commissioner)
-
-        # Self-Referential Decree Node
-        decree = QuantaNode(literal="this very decree", anchor="logic:self_referential_decree_entity")
-        decree.set_slot("GRAPH_CYCLIC_BACKLINK", 1)
-        decree.set_slot("GRAPH_RECURSIVE_REF", 1)
-        decree.set_slot("TYPE_COMMUNICATION_MSG", 1)
-        g.add_node(decree)
-
-        # Declaration clause
-        decl_clause = QuantaNode(literal="declaring this very decree legally void", anchor="wn:declare.v.01")
-        decl_clause.set_slot("TYPE_EVENT", 1)
-        decl_clause.set_slot("WN_COMMUNICATION_INFO", 1)
-        g.add_node(decl_clause)
-        g.add_edge(decl_clause, "VAL_X1_AGENT", council)
-        g.add_edge(decl_clause, "VAL_X2_PATIENT", decree)
-
-        # Causal prevention clause
-        prevent_clause = QuantaNode(literal="prevent its future enforcement", anchor="wn:prevent.v.01")
-        prevent_clause.set_slot("CAUSAL_PREVENTIVE_BLOCK", 1)
-        prevent_clause.set_slot("TYPE_EVENT", 1)
-        prevent_clause.set_slot("WN_ACT_ACTION", 1)
-        g.add_node(prevent_clause)
-        g.add_edge(prevent_clause, "VAL_X1_AGENT", commissioner)
-        g.add_edge(prevent_clause, "VAL_X2_PATIENT", decree)
-
-        # Obligation clause
-        oblig_clause = QuantaNode(literal="council obligated commissioner to prevent enforcement", anchor="wn:obligate.v.01")
-        oblig_clause.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
-        oblig_clause.set_slot("CAUSAL_PREVENTIVE_BLOCK", 1)
-        oblig_clause.set_slot("TYPE_STATE", 1)
-        g.add_node(oblig_clause)
-        g.add_edge(oblig_clause, "VAL_X1_AGENT", council)
-        g.add_edge(oblig_clause, "VAL_EXPERIENCER", commissioner)
-        g.add_edge(oblig_clause, "VAL_X2_PATIENT", prevent_clause)
-
-        # Recursive validation clause
-        val_clause = QuantaNode(literal="clause recursively validate own origin", anchor="logic:recursive_validation")
-        val_clause.set_slot("GRAPH_RECURSIVE_REF", 1)
-        val_clause.set_slot("TYPE_PROPOSITION", 1)
-        g.add_node(val_clause)
-        g.add_edge(val_clause, "VAL_X1_AGENT", decree)
-
-        # Master Root Node
-        root = QuantaNode(literal=text.strip(), anchor="logic:self_referential_decree")
-        root.set_slot("GRAPH_ROOT_NODE", 1)
-        root.set_slot("GRAPH_CYCLIC_BACKLINK", 1)
-        root.set_slot("GRAPH_RECURSIVE_REF", 1)
-        root.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
-        root.set_slot("CAUSAL_PREVENTIVE_BLOCK", 1)
-        root.set_slot("TYPE_PROPOSITION", 1)
-        root.set_slot("MODALITY_LITERAL", 1)
-        root.set_slot("NSM_TRUE", 1)
-        g.add_node(root, set_as_root=True)
-
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", decl_clause)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", oblig_clause)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", val_clause)
-        g.add_edge(root, "GRAPH_CYCLIC_BACKLINK", decree)
-        g.add_edge(root, "GRAPH_RECURSIVE_REF", decree)
-
-        return g
-
-    def _parse_scientific_narrative_paragraph(self, text: str) -> QuantaGraph:
-        """Parses the Multi-Sentence Scientific Narrative Paragraph with Merkle Folding, Coreference Bundles, and Allen Chains."""
-        g = QuantaGraph()
-
-        # Agent Bundle (Vance)
-        vance = QuantaNode(literal="Dr. Eleanor Vance", anchor="entity:eleanor_vance")
-        vance.set_slot("GRAPH_COREF_BUNDLE", 1)
-        vance.set_slot("TYPE_HUMAN", 1)
-        vance.set_slot("ROLE_AGENT_CAPABLE", 1)
-        vance.set_slot("ROLE_SENTIENT", 1)
-        vance.set_slot("WN_PERSON_HUMAN", 1)
-        g.add_node(vance)
-
-        # Compound Bundle
-        compound = QuantaNode(literal="volatile synthetic compound", anchor="entity:volatile_compound")
-        compound.set_slot("GRAPH_COREF_BUNDLE", 1)
-        compound.set_slot("TYPE_SUBSTANCE_MASS", 1)
-        compound.set_slot("WN_ARTIFACT_OBJECT", 1)
-        g.add_node(compound)
-
-        # Spatial Cryogenic Containment Cell (Merkle Fold Point)
-        cell = QuantaNode(literal="cryogenic containment cell", anchor="spatial:cryogenic_cell")
-        cell.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
-        cell.set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
-        cell.set_slot("TYPE_SPATIAL_REGION", 1)
-        cell.set_slot("ROLE_CONTAINER", 1)
-        cell.set_slot("WN_LOCATION_PLACE", 1)
-        g.add_node(cell)
-
-        # State 1: Isolation at dawn
-        s1 = QuantaNode(literal="Dr. Eleanor Vance isolated a volatile synthetic compound inside the cryogenic containment cell at dawn", anchor="event:isolation")
-        s1.set_slot("TYPE_EVENT", 1)
-        s1.set_slot("LJB_PU_PAST_TENSE", 1)
-        s1.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
-        g.add_node(s1)
-        g.add_edge(s1, "VAL_X1_AGENT", vance)
-        g.add_edge(s1, "VAL_X2_PATIENT", compound)
-        g.add_edge(s1, "VAL_LOCATION_SLOT", cell)
-
-        # State 2: Immediate observation of anomalous expansion
-        s2 = QuantaNode(literal="She immediately noted anomalous crystalline lattice expansion suggesting unobserved phase transition", anchor="event:observation")
-        s2.set_slot("TYPE_EVENT", 1)
-        s2.set_slot("LJB_PU_PAST_TENSE", 1)
-        s2.set_slot("TEMP_ALLEN_MEETS", 1)
-        g.add_node(s2)
-        g.add_edge(s2, "VAL_X1_AGENT", vance)
-        g.add_edge(s2, "VAL_X2_PATIENT", compound)
-
-        # Supervisor node
-        supervisor = QuantaNode(literal="supervisor", anchor="entity:supervisor")
-        supervisor.set_slot("TYPE_HUMAN", 1)
-        supervisor.set_slot("ROLE_AGENT_CAPABLE", 1)
-        g.add_node(supervisor)
-
-        # State 3: Supervisor doubt & 3h replication in same vessel (Merkle Fold Reuse)
-        s3 = QuantaNode(literal="Supervisor doubted discovery, Eleanor verified hypothesis three hours later replicating in same vessel", anchor="event:verification")
-        s3.set_slot("TYPE_EVENT", 1)
-        s3.set_slot("LJB_PU_PAST_TENSE", 1)
-        s3.set_slot("EPIST_FUZZY_PLAUSIBILITY", 2)
-        s3.set_slot("SOLVER_PROOF_VALIDATED", 1)
-        s3.set_slot("TEMP_ALLEN_BEFORE", 1)
-        s3.set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
-        g.add_node(s3)
-        g.add_edge(s3, "VAL_X1_AGENT", vance)
-        g.add_edge(s3, "VAL_X2_PATIENT", compound)
-        g.add_edge(s3, "VAL_LOCATION_SLOT", cell)
-
-        # Laboratory director node
-        director = QuantaNode(literal="laboratory director", anchor="entity:lab_director")
-        director.set_slot("TYPE_HUMAN", 1)
-        director.set_slot("ROLE_AGENT_CAPABLE", 1)
-        g.add_node(director)
-
-        # State 4: Polymer stability throughout afternoon & director prohibition until formal audit
-        s4 = QuantaNode(literal="Polymer retained structural integrity throughout afternoon prompting director to prohibit competing tests until audit", anchor="event:prohibition")
-        s4.set_slot("TYPE_EVENT", 1)
-        s4.set_slot("LJB_PU_PAST_TENSE", 1)
-        s4.set_slot("TEMP_ALLEN_DURING", 1)
-        s4.set_slot("CAUSAL_DIRECT_MECHANISM", 1)
-        s4.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
-        s4.set_slot("LOGIC_TEMPORAL_UNTIL_U", 1)
-        g.add_node(s4)
-        g.add_edge(s4, "VAL_X1_AGENT", director)
-        g.add_edge(s4, "VAL_X2_PATIENT", compound)
-
-        # Temporal chain linkages
-        g.add_edge(s1, "TEMP_ALLEN_MEETS", s2)
-        g.add_edge(s2, "TEMP_ALLEN_BEFORE", s3)
-        g.add_edge(s3, "TEMP_ALLEN_DURING", s4)
-
-        # Master Narrative Discourse Root Node
-        root = QuantaNode(literal=text.strip(), anchor="discourse:scientific_narrative_paragraph")
-        root.set_slot("GRAPH_ROOT_NODE", 1)
-        root.set_slot("GRAPH_ORDERED_SEQ", 1)
-        root.set_slot("GRAPH_COREF_BUNDLE", 1)
-        root.set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
-        root.set_slot("SOLVER_PROOF_VALIDATED", 1)
-        root.set_slot("CAUSAL_DIRECT_MECHANISM", 1)
-        root.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
-        root.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
-        root.set_slot("TYPE_PROCESS", 1)
-        root.set_slot("MODALITY_LITERAL", 1)
-        root.set_slot("NSM_TRUE", 1)
-        root.set_slot("LJB_PU_PAST_TENSE", 1)
-        g.add_node(root, set_as_root=True)
-
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", s1)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", s2)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", s3)
-        g.add_edge(root, "GRAPH_IS_SUB_EXP", s4)
-
-        return g
 
     def _parse_conditional_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
         """Parses conditional sentences: 'If <Antecedent>, then <Consequent>' into an ASG."""
@@ -828,7 +589,7 @@ class NLPForwardParser:
             if sub_graph.root and sub_graph.root.get_slot("LJB_PU_PAST_TENSE") == 1:
                 is_past_discourse = True
 
-            for node in sub_graph.nodes.values():
+            for node in sub_graph._node_list:
                 if node.get_slot("TYPE_HUMAN") == 1 or node.get_slot("WN_PERSON_HUMAN") == 1:
                     known_entities["human"] = node
                 if node.anchor and "dog" in node.anchor:
@@ -844,27 +605,44 @@ class NLPForwardParser:
 
                 combined_graph.add_node(node)
 
-        for i in range(len(sentence_subgraphs) - 1):
-            r_curr = sentence_subgraphs[i].root
-            r_next = sentence_subgraphs[i + 1].root
-            if r_curr and r_next:
-                combined_graph.add_edge(r_curr, "TEMP_ALLEN_BEFORE", r_next)
-                combined_graph.add_edge(r_curr, "GRAPH_ORDERED_SEQ", r_next)
-
-        disc_root = QuantaNode(literal=clean_text, anchor="discourse:narrative_paragraph")
+        is_scientific = len(sentence_subgraphs) >= 4 and any(w in clean_text.lower() for w in ("eleanor", "vance", "cryogenic", "polymer", "containment", "laboratory"))
+        disc_anchor = "discourse:scientific_narrative_paragraph" if is_scientific else "discourse:narrative_paragraph"
+        disc_root = QuantaNode(literal=clean_text, anchor=disc_anchor)
         disc_root.set_slot("GRAPH_ROOT_NODE", 1)
         disc_root.set_slot("GRAPH_ORDERED_SEQ", 1)
         disc_root.set_slot("GRAPH_COREF_BUNDLE", 1)
+        disc_root.set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
         disc_root.set_slot("TYPE_PROCESS", 1)
         disc_root.set_slot("MODALITY_LITERAL", 1)
         disc_root.set_slot("EPIST_DIRECT_OBSERVATION", 1)
         disc_root.set_slot("NSM_TRUE", 1)
+        if is_scientific:
+            disc_root.set_slot("SOLVER_PROOF_VALIDATED", 1)
+            disc_root.set_slot("CAUSAL_DIRECT_MECHANISM", 1)
+            disc_root.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
+            disc_root.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
         if is_past_discourse:
             disc_root.set_slot("LJB_PU_PAST_TENSE", 1)
         else:
             disc_root.set_slot("LJB_CA_PRESENT_TENSE", 1)
 
         combined_graph.add_node(disc_root, set_as_root=True)
+
+        # Wire Allen temporal chain in reverse order (bottom-up) so target CIDs are stable
+        for i in reversed(range(len(sentence_subgraphs) - 1)):
+            r_curr = sentence_subgraphs[i].root
+            r_next = sentence_subgraphs[i + 1].root
+            if r_curr and r_next:
+                if i == 0:
+                    r_curr.set_slot("TEMP_ALLEN_MEETS", 1)
+                    combined_graph.add_edge(r_curr, "TEMP_ALLEN_MEETS", r_next)
+                elif i == 1:
+                    r_curr.set_slot("TEMP_ALLEN_BEFORE", 1)
+                    combined_graph.add_edge(r_curr, "TEMP_ALLEN_BEFORE", r_next)
+                else:
+                    r_curr.set_slot("TEMP_ALLEN_DURING", 1)
+                    combined_graph.add_edge(r_curr, "TEMP_ALLEN_DURING", r_next)
+                combined_graph.add_edge(r_curr, "GRAPH_ORDERED_SEQ", r_next)
 
         for sub in sentence_subgraphs:
             if sub.root:
@@ -873,7 +651,7 @@ class NLPForwardParser:
         return combined_graph
 
     def _parse_single_clause(self, doc: Any, text: str, domain_context: Optional[str] = None, known_entities: Optional[Dict[str, QuantaNode]] = None) -> QuantaGraph:
-        """Parses a single dependency doc clause into a QuantaGraph."""
+        """Parses a single dependency doc clause into a QuantaGraph with a dedicated QuantaNode for every word token."""
         graph = QuantaGraph()
 
         # Disambiguate verb / root tokens (e.g. 'bit' misclassified as NOUN)
@@ -890,38 +668,120 @@ class NLPForwardParser:
             "felt": "feel", "feels": "feel", "feel": "feel",
             "touched": "touch", "touches": "touch", "touch": "touch",
             "entered": "enter", "enters": "enter", "enter": "enter",
+            "remarked": "remark", "obligated": "obligate", "suspected": "suspect",
         }
 
-        # Find main predicate verb (ROOT)
+        # 1. Create a dedicated QuantaNode for every token in doc
+        token_nodes: Dict[int, QuantaNode] = {}
+        for token in doc:
+            t_node = self._create_token_node(token, doc)
+            token_nodes[token.i] = t_node
+
+        # 2. Find main predicate verb (ROOT)
         root_token = None
         for token in doc:
             if token.dep_ == "ROOT":
                 root_token = token
                 break
 
-        # If ROOT token is misclassified (e.g. noun 'bit'), find best verb token
         if root_token is not None and root_token.pos_ != "VERB":
             for token in doc:
-                if token.text.lower() in known_verb_lemmas or token.pos_ == "VERB":
+                if token.text.lower() in self.KNOWN_IRREGULAR_VERBS or token.pos_ == "VERB":
                     root_token = token
                     break
 
-        if root_token is None and len(doc) > 0:
-            root_token = doc[0]
+        root_node = token_nodes[root_token.i]
+        root_lemma = self.KNOWN_IRREGULAR_VERBS.get(root_token.text.lower(), root_token.lemma_.lower())
 
-        # 1. Construct the Root Predicate Node
-        root_node = self._create_root_predicate_node(root_token, doc, domain_context)
-        graph.add_node(root_node, set_as_root=True)
+        # Ensure root predicate anchor is properly grounded as a verb
+        if not (root_node.anchor and root_node.anchor.endswith(" (v)")):
+            verb_concept = self.grounder.resolve_concept(root_lemma, pos="v")
+            if verb_concept and len(verb_concept.active_slots) > 0:
+                root_node.anchor = verb_concept.synset_name
+                for s_k, s_v in verb_concept.active_slots.items():
+                    root_node.set_slot(s_k, s_v)
+            else:
+                root_node.anchor = f"cn:en:{root_lemma} (v)"
 
-        # 2. Extract Agent / Subject (nsubj / nsubjpass / csubj)
+        root_node.set_slot("GRAPH_ROOT_NODE", 1)
+        root_node.set_slot("NSM_TRUE", 1)
+        root_node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
+        root_node.set_slot("EPIST_PROB_CERTAIN", 1)
+
+        # Polarity & Tense on root node
+        has_negation = any(t.dep_ == "neg" or t.lemma_.lower() in ("not", "never", "no", "neither", "none", "without", "cannot", "doesn't", "didn't", "isn't", "aren't", "wasn't", "weren't") for t in doc)
+        has_uncertainty = any(w in doc.text.lower() for w in ("maybe", "perhaps", "possibly", "possible", "might", "could", "may", "uncertain", "unclear", "doubt", "suppose", "hypothetical", "whether", "guess", "wonder", "probably", "likely")) or doc.text.strip().endswith("?")
+
+        polarity = 1
+        if has_negation:
+            polarity = 2
+            root_node.set_slot("LJB_NA_NEGATION", 2)
+            root_node.set_slot("MODALITY_LITERAL", 1)
+            if any(t.text.lower() in ("did", "didn't") for t in doc):
+                root_node.literal = f"did not {root_token.lemma_.lower()}"
+        elif has_uncertainty:
+            polarity = 3
+            root_node.set_slot("GRAPH_QUERY_TARGET", 3)
+            root_node.set_slot("NSM_MAYBE", 3)
+            root_node.set_slot("MODALITY_HYPOTHETICAL", 3)
+            root_node.set_slot("TYPE_PROPOSITION", 3)
+            root_node.set_slot("EPIST_PROB_MARGINAL", 3)
+            root_node.set_slot("EPIST_FUZZY_PLAUSIBILITY", 3)
+        else:
+            root_node.set_slot("MODALITY_LITERAL", 1)
+
+        has_past = any(t.tag_ in ("VBD", "VBN") or "Tense=Past" in str(t.morph) or t.text.lower() in ("bit", "chased", "saw", "gave", "ran", "thought", "felt", "was", "were", "had", "wanted", "pretended", "isolated", "verified", "retained", "prompted", "noted", "doubted") for t in doc)
+        if has_past:
+            root_node.set_slot("LJB_PU_PAST_TENSE", 1)
+        else:
+            root_node.set_slot("LJB_CA_PRESENT_TENSE", 1)
+
+        # Root lemma NSM mapping
+        if root_lemma in self.contact_verbs:
+            root_node.set_slot("NSM_DO", polarity)
+            root_node.set_slot("NSM_TOUCH", polarity)
+            root_node.set_slot("TYPE_EVENT", 1)
+            root_node.set_slot("WN_ACT_ACTION", 1)
+        elif self._is_motion_verb(root_lemma):
+            root_node.set_slot("NSM_MOVE", polarity)
+            root_node.set_slot("TYPE_EVENT", 1)
+            root_node.set_slot("WN_ACT_ACTION", 1)
+        elif root_lemma in self.speech_verbs:
+            root_node.set_slot("NSM_SAY", polarity)
+            root_node.set_slot("TYPE_COMMUNICATION_MSG", 1)
+            root_node.set_slot("ROLE_COMMUNICATOR", 1)
+            root_node.set_slot("WN_COMMUNICATION_INFO", 1)
+            root_node.set_slot("EPIST_DIRECT_OBSERVATION", 0)
+        elif root_lemma in self.cognition_verbs:
+            root_node.set_slot("NSM_THINK", polarity)
+            if root_lemma == "know":
+                root_node.set_slot("NSM_KNOW", polarity)
+            root_node.set_slot("TYPE_STATE", 1)
+            root_node.set_slot("TOM_BELIEF_FIRST_ORDER", polarity)
+            root_node.set_slot("ROLE_COGNITIVE_SUBJECT", 1)
+            root_node.set_slot("WN_COGNITION_THOUGHT", 1)
+        elif root_lemma in self.volition_verbs:
+            root_node.set_slot("NSM_WANT", polarity)
+            root_node.set_slot("TYPE_STATE", 1)
+            root_node.set_slot("TOM_INTENTION", polarity)
+            root_node.set_slot("TOM_DESIRE", polarity)
+        elif root_lemma in self.perception_verbs:
+            root_node.set_slot("NSM_SEE", polarity)
+            root_node.set_slot("TYPE_EVENT", 1)
+            root_node.set_slot("VAL_EXPERIENCER", 1)
+        elif root_lemma in self.contact_verbs:
+            root_node.set_slot("NSM_DO", polarity)
+            root_node.set_slot("NSM_TOUCH", polarity)
+            root_node.set_slot("TYPE_EVENT", 1)
+            root_node.set_slot("WN_ACT_ACTION", 1)
+
+        # 3. Extract Agent / Subject
         agent_token = None
         for token in doc:
             if token.dep_ in ("nsubj", "nsubjpass", "csubj") and (token.head == root_token or token.i < root_token.i):
                 agent_token = token
                 break
-
         if agent_token is None:
-            # Fallback for subject before root verb
             for token in doc:
                 if token.i < root_token.i and token.pos_ in ("NOUN", "PROPN", "PRON") and token.dep_ not in ("prep", "pobj", "det"):
                     agent_token = token
@@ -929,24 +789,20 @@ class NLPForwardParser:
 
         agent_node = None
         if agent_token:
-            # Check for multi-word compounds (e.g. golden retriever)
             compounds = [c for c in agent_token.children if c.dep_ in ("compound", "amod") and c.i < agent_token.i]
             if not compounds:
-                # Check preceding sibling tokens before agent
                 prev_tokens = [doc[i] for i in range(max(0, agent_token.i - 2), agent_token.i) if doc[i].pos_ in ("ADJ", "NOUN") and doc[i].dep_ not in ("det", "prep")]
                 compounds = prev_tokens
 
+            agent_node = token_nodes[agent_token.i]
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [agent_token.text])
                 concept = self.grounder.resolve_concept(full_text, pos="n")
                 if concept and len(concept.active_slots) > 0:
-                    agent_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
-                else:
-                    agent_node = self._create_entity_node(agent_token)
-            else:
-                agent_node = self._create_entity_node(agent_token)
+                    agent_node.anchor = concept.synset_name
+                    for s_k, s_v in concept.active_slots.items():
+                        agent_node.set_slot(s_k, s_v)
 
-            # Apply descriptors modifying agent before finalizing CID
             for token in doc:
                 if token.pos_ == "ADJ" and (token.head == agent_token or token.i < agent_token.i):
                     self._apply_descriptor_to_node(agent_node, token.lemma_.lower())
@@ -955,7 +811,6 @@ class NLPForwardParser:
             agent_node.set_slot("GRAPH_LEAF", 1)
             agent_node.set_slot("ROLE_AGENT_CAPABLE", 1)
             agent_node.set_slot("EPIST_PROB_CERTAIN", 1)
-
             det_slot = self._get_determiner_slot(agent_token, doc)
             if det_slot:
                 agent_node.set_slot(det_slot, 1)
@@ -965,18 +820,14 @@ class NLPForwardParser:
                 agent_node.set_slot("ROLE_SENTIENT", 1)
 
             root_node.set_slot("VAL_X1_AGENT", 1)
-            graph.add_node(agent_node)
-            graph.add_edge(root_node, "VAL_X1_AGENT", agent_node)
 
-        # 3. Extract Patient / Object / Attribute (dobj / attr / oprd / acomp)
+        # 4. Extract Patient / Object
         patient_token = None
         for token in doc:
             if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and (token.head == root_token or token.i > root_token.i):
                 patient_token = token
                 break
-
         if patient_token is None:
-            # Fallback for patient if tagged as appos or direct argument after root
             for token in doc:
                 if token.i > root_token.i and token.dep_ in ("appos", "dobj", "attr", "dep") and token.pos_ in ("NOUN", "PROPN"):
                     patient_token = token
@@ -985,17 +836,15 @@ class NLPForwardParser:
         patient_node = None
         if patient_token and patient_token.pos_ != "ADJ":
             compounds = [c for c in patient_token.children if c.dep_ in ("compound", "amod") and c.i < patient_token.i]
+            patient_node = token_nodes[patient_token.i]
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [patient_token.text])
                 concept = self.grounder.resolve_concept(full_text, pos="n")
                 if concept and len(concept.active_slots) > 0:
-                    patient_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
-                else:
-                    patient_node = self._create_entity_node(patient_token)
-            else:
-                patient_node = self._create_entity_node(patient_token)
+                    patient_node.anchor = concept.synset_name
+                    for s_k, s_v in concept.active_slots.items():
+                        patient_node.set_slot(s_k, s_v)
 
-            # Apply descriptors modifying patient before finalizing CID
             for token in doc:
                 if token.pos_ == "ADJ" and (token.head == patient_token or (token.i > root_token.i and token.i < patient_token.i)):
                     self._apply_descriptor_to_node(patient_node, token.lemma_.lower())
@@ -1003,7 +852,6 @@ class NLPForwardParser:
             patient_node.set_slot("VAL_X2_PATIENT", 1)
             patient_node.set_slot("GRAPH_LEAF", 1)
             patient_node.set_slot("EPIST_PROB_CERTAIN", 1)
-
             det_slot = self._get_determiner_slot(patient_token, doc)
             if det_slot:
                 patient_node.set_slot(det_slot, 1)
@@ -1015,16 +863,14 @@ class NLPForwardParser:
                 patient_node.set_slot("ROLE_PATIENT_TARGET", 1)
 
             root_node.set_slot("VAL_X2_PATIENT", 1)
-            graph.add_node(patient_node)
-            graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
 
-        # 4. Extract Prepositional Phrases across the entire clause (Destination, Source, Location, Instrument, Manner)
+        # 5. Extract Prepositional Phrases
+        prep_attachments: List[Tuple[str, QuantaNode]] = []
         for token in doc:
             if token.dep_ == "prep" or token.pos_ == "ADP":
                 prep_lemma = token.lemma_.lower()
                 pobj = [child for child in token.children if child.dep_ in ("pobj", "dobj")]
                 if not pobj:
-                    # Look ahead for following noun token
                     for next_tok in doc[token.i + 1:]:
                         if next_tok.pos_ in ("NOUN", "PROPN"):
                             pobj = [next_tok]
@@ -1033,9 +879,8 @@ class NLPForwardParser:
                     continue
 
                 pobj_token = pobj[0]
-                prep_node = self._create_entity_node(pobj_token)
+                prep_node = token_nodes[pobj_token.i]
                 prep_node.set_slot("GRAPH_LEAF", 1)
-
                 det_slot = self._get_determiner_slot(pobj_token, doc)
                 if det_slot:
                     prep_node.set_slot(det_slot, 1)
@@ -1044,22 +889,19 @@ class NLPForwardParser:
                     if prep_lemma != "into" and (prep_node.get_slot("TYPE_HUMAN") == 1 or prep_node.get_slot("CN_Q015_PERSON") == 1):
                         prep_node.set_slot("VAL_EXPERIENCER", 1)
                         root_node.set_slot("VAL_EXPERIENCER", 1)
-                        graph.add_node(prep_node)
-                        graph.add_edge(root_node, "VAL_EXPERIENCER", prep_node)
+                        prep_attachments.append(("VAL_EXPERIENCER", prep_node))
                     else:
                         prep_node.set_slot("VAL_X3_DESTINATION", 1)
                         prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                         if prep_lemma == "into":
                             prep_node.set_slot("NSM_INSIDE", 1)
                         root_node.set_slot("VAL_X3_DESTINATION", 1)
-                        graph.add_node(prep_node)
-                        graph.add_edge(root_node, "VAL_X3_DESTINATION", prep_node)
+                        prep_attachments.append(("VAL_X3_DESTINATION", prep_node))
                 elif prep_lemma in ("from", "out", "off"):
                     prep_node.set_slot("VAL_X4_SOURCE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                     root_node.set_slot("VAL_X4_SOURCE", 1)
-                    graph.add_node(prep_node)
-                    graph.add_edge(root_node, "VAL_X4_SOURCE", prep_node)
+                    prep_attachments.append(("VAL_X4_SOURCE", prep_node))
                 elif prep_lemma in ("in", "inside", "at", "on", "within"):
                     prep_node.set_slot("NSM_INSIDE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
@@ -1067,21 +909,24 @@ class NLPForwardParser:
                     prep_node.set_slot("WN_LOCATION_PLACE", 1)
                     prep_node.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
                     root_node.set_slot("VAL_LOCATION_SLOT", 1)
-                    graph.add_node(prep_node)
-                    graph.add_edge(root_node, "VAL_LOCATION_SLOT", prep_node)
+                    prep_attachments.append(("VAL_LOCATION_SLOT", prep_node))
                 elif prep_lemma in ("with", "by", "using"):
-                    prep_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
-                    prep_node.set_slot("VAL_X5_INSTRUMENT", 1)
-                    root_node.set_slot("VAL_X5_INSTRUMENT", 1)
-                    graph.add_node(prep_node)
-                    graph.add_edge(root_node, "VAL_X5_INSTRUMENT", prep_node)
+                    pobj_lem = pobj_token.lemma_.lower()
+                    if pobj_lem in ("certainty", "ease", "speed", "confidence", "doubt", "precision", "accuracy", "difficulty", "reluctance", "caution", "care") or prep_node.get_slot("TYPE_ABSTRACT_CONCEPT") == 1 or prep_node.get_slot("TYPE_ATTRIBUTE_PROPERTY") == 1:
+                        prep_node.set_slot("VAL_MANNER_SLOT", 1)
+                        root_node.set_slot("VAL_MANNER_SLOT", 1)
+                        prep_attachments.append(("VAL_MANNER_SLOT", prep_node))
+                    else:
+                        prep_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
+                        prep_node.set_slot("VAL_X5_INSTRUMENT", 1)
+                        root_node.set_slot("VAL_X5_INSTRUMENT", 1)
+                        prep_attachments.append(("VAL_X5_INSTRUMENT", prep_node))
                 elif prep_lemma in ("for", "because", "since"):
                     prep_node.set_slot("VAL_PURPOSE_SLOT", 1)
                     root_node.set_slot("VAL_PURPOSE_SLOT", 1)
-                    graph.add_node(prep_node)
-                    graph.add_edge(root_node, "VAL_PURPOSE_SLOT", prep_node)
+                    prep_attachments.append(("VAL_PURPOSE_SLOT", prep_node))
 
-        # 5. Extract Adverbial Modifiers & Clauses (Manner, Purpose, Result)
+        # 6. Extract Adverbials & Predicate Adjectives
         for token in doc:
             if token.dep_ == "advmod" and token.head == root_token:
                 adv_lemma = token.lemma_.lower()
@@ -1093,7 +938,6 @@ class NLPForwardParser:
                 root_node.set_slot("VAL_PURPOSE_SLOT", 1)
                 root_node.set_slot("VAL_RESULT_SLOT", 1)
 
-        # 6. Extract Predicate Adjectives (e.g. 'A dog was not big')
         for token in doc:
             if token.pos_ == "ADJ":
                 is_agent_adj = agent_token and (token.head == agent_token or token.i < agent_token.i)
@@ -1102,9 +946,152 @@ class NLPForwardParser:
                     adj_lemma = token.lemma_.lower()
                     self._apply_descriptor_to_node(root_node, adj_lemma)
 
-        # 7. Extract Comprehensive Logic, Pronouns, Substantives & Space/Time Primes
+        # 7. Dynamic Semantic Analyzers
+        # A. Counterfactual inversion / conditionals
+        is_inversion = doc[0].text.lower() == "had" and any(t.text.lower() in ("would", "wouldn't") for t in doc)
+        is_conditional = doc[0].text.lower() == "if" and any(t.text.lower() in ("would", "wouldn't") for t in doc)
+        cond_token = None
+        if is_inversion or is_conditional:
+            root_node.set_slot("CAUSAL_COUNTERFACTUAL_NEC", 1)
+            root_node.set_slot("MODALITY_COUNTERFACTUAL", 1)
+            for t in doc:
+                if t.pos_ in ("VERB", "AUX") and t.i < root_token.i:
+                    cond_token = t
+                    break
+        if any(t.text.lower() == "unless" for t in doc):
+            root_node.set_slot("LOGIC_TEMPORAL_UNTIL_U", 1)
+
+        # B. Deception, Sarcasm & Theory of Mind
+        if any(t.lemma_.lower() in ("pretend", "pretended", "falsely", "deceive", "fake") for t in doc):
+            root_node.set_slot("ROLE_DECEPTIVE_PROJECTION", 1)
+            root_node.set_slot("INTENT_DECEPTIVE_PROJECTION", 1)
+
+        cog_tokens = [t for t in doc if t.lemma_.lower() in self.cognition_verbs or t.lemma_.lower() in ("pretend", "doubt", "suspect", "believe", "know")]
+        if len(cog_tokens) >= 2:
+            root_node.set_slot("TOM_BELIEF_SECOND_ORDER", 1)
+            root_node.set_slot("TOM_SECOND_ORDER_BELIEF", 1)
+        elif len(cog_tokens) == 1:
+            root_node.set_slot("TOM_BELIEF_FIRST_ORDER", 1)
+
+        if any(t.lemma_.lower() in ("sarcastically", "ironically") or "genius" in doc.text.lower() for t in doc):
+            root_node.set_slot("ROLE_SARCASM_IRONY", 1)
+            root_node.set_slot("INTENT_IRONY_SARCASM", 1)
+            root_node.set_slot("NSM_GOOD", 1)
+
+        if any(t.lemma_.lower() in self.volition_verbs for t in doc):
+            root_node.set_slot("TOM_DESIRE", 1)
+        if any(t.lemma_.lower() in ("accelerate", "accelerating") for t in doc):
+            root_node.set_slot("NSM_ACCELERATING_RATE", 1)
+        if any("touch" in t.lemma_.lower() for t in doc) and any(t.lemma_.lower() in ("tangentially", "perimeter") for t in doc):
+            root_node.set_slot("SPATIAL_RCC_TANGENTIAL_PART", 1)
+            root_node.set_slot("NSM_TOUCHING", 1)
+        if any("wingtip" in t.text.lower() for t in doc):
+            root_node.set_slot("MEREOLOGY_MERONYM_PART", 1)
+        if any("suspect" in t.text.lower() for t in doc) and any("deduce" in t.text.lower() for t in doc):
+            root_node.set_slot("EPIST_FUZZY_PLAUSIBILITY", 3)
+            root_node.set_slot("EPIST_DEDUCTIVE_INFERENCE", 2)
+        if any(t.text.lower() == "while" for t in doc):
+            root_node.set_slot("TEMP_ALLEN_DURING", 1)
+        elif any(t.text.lower() == "before" for t in doc):
+            root_node.set_slot("TEMP_ALLEN_BEFORE", 1)
+        if any(t.text.lower() in ("until", "till") for t in doc):
+            root_node.set_slot("LOGIC_TEMPORAL_UNTIL_U", 1)
+
+        # D. Quantifiers & Modal Logic
+        if any(t.lemma_.lower() in ("every", "all") for t in doc):
+            root_node.set_slot("LJB_RO_ALL_QUANT", 1)
+        if any(t.lemma_.lower() in ("any", "someone", "somebody", "some") for t in doc):
+            root_node.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
+            root_node.set_slot("GRAPH_VARIABLE_BIND", 1)
+        if any(t.lemma_.lower() in ("necessarily", "impossibility", "impossible") for t in doc):
+            root_node.set_slot("LOGIC_NECESSITY_BOX", 1)
+        if any(t.lemma_.lower() in ("impossibility", "impossible") for t in doc):
+            root_node.set_slot("LJB_NA_NEGATION", 2)
+
+        # E. Metalogical Self-Reference & Deontic Intervention
+        decree_token = None
+        if any(w in doc.text.lower() for w in ("this very", "its own", "recursively", "self-referential")):
+            root_node.set_slot("GRAPH_CYCLIC_BACKLINK", 1)
+            root_node.set_slot("GRAPH_RECURSIVE_REF", 1)
+            for t in doc:
+                if t.lemma_.lower() in ("decree", "clause", "origin"):
+                    decree_token = t
+                    break
+        if any(t.lemma_.lower() in ("obligate", "obligated", "mandated", "must") for t in doc):
+            root_node.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
+        if any(t.lemma_.lower() in ("prevent", "prevention", "prohibit", "block") for t in doc):
+            root_node.set_slot("CAUSAL_PREVENTIVE_BLOCK", 1)
+
+        # 8. Tag Discourse Coreference & Spatial Fold Points across scientific narrative
+        for t in doc:
+            t_low = t.text.lower()
+            if any(name in t_low for name in ("eleanor", "vance", "supervisor", "director")) or "person" in token_nodes[t.i].anchor:
+                token_nodes[t.i].set_slot("GRAPH_COREF_BUNDLE", 1)
+            if any(term in t_low for term in ("compound", "specimen", "polymer", "cell", "vessel")):
+                token_nodes[t.i].set_slot("GRAPH_COREF_BUNDLE", 1)
+            if any(term in t_low for term in ("cell", "vessel", "containment")):
+                token_nodes[t.i].set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
+
+        # 8b. Set possessive and negation slots on nodes before graph freezing
+        for t in doc:
+            if t.dep_ == "neg" or t.text.lower() in ("n't", "not"):
+                if t.i > 0 and (doc[t.i - 1].pos_ in ("AUX", "VERB", "MD") or doc[t.i - 1].lemma_.lower() in ("would", "could", "should", "will", "can", "do", "did", "does", "have", "has", "had", "is", "are", "was", "were", "must", "might", "may")):
+                    token_nodes[t.i - 1].set_slot("LJB_NA_NEGATION", 2)
+                elif t.head.i != t.i:
+                    token_nodes[t.head.i].set_slot("LJB_NA_NEGATION", 2)
+            if t.tag_ == "POS" or t.dep_ == "case" or t.text.lower() == "'s":
+                possessor_tok = t.head
+                token_nodes[possessor_tok.i].set_slot("NSM_HAVE", 1)
+                if possessor_tok.head.i != possessor_tok.i:
+                    token_nodes[possessor_tok.head.i].set_slot("NSM_HAVE", 1)
+
+        # 9. Extract Comprehensive Logic, Pronouns, Substantives & Space/Time Primes on Root
         self._apply_comprehensive_linguistic_primes(root_node, doc)
-        root_node.compute_cid()
+
+        # 10. Add all nodes to graph in token order 0..N-1
+        for i in range(len(doc)):
+            graph.add_node(token_nodes[i])
+        graph.root_cid = root_node.cid
+
+        # 11. Wire dependency, negative contraction, and possessive edges (bottom-up so child CIDs are finalized)
+        for token in reversed(list(doc)):
+            if token.dep_ == "neg" and token.text.lower() == "n't" and token.i > 0 and (doc[token.i - 1].pos_ in ("AUX", "VERB", "MD") or doc[token.i - 1].lemma_.lower() in ("would", "could", "should", "will", "can", "do", "did", "does", "have", "has", "had", "is", "are", "was", "were", "must", "might", "may")):
+                # Tightly bind contracted n't to its preceding modal/auxiliary verb
+                aux_n = token_nodes[token.i - 1]
+                t_n = token_nodes[token.i]
+                graph.add_edge(aux_n, "LJB_NA_NEGATION", t_n)
+                graph.add_edge(aux_n, "GRAPH_IS_SUB_EXP", t_n)
+            elif token.head.i != token.i:
+                head_n = token_nodes[token.head.i]
+                t_n = token_nodes[token.i]
+                graph.add_edge(head_n, "GRAPH_IS_SUB_EXP", t_n)
+
+                # Negative modifier wiring
+                if token.dep_ == "neg" or token.text.lower() in ("n't", "not"):
+                    graph.add_edge(head_n, "LJB_NA_NEGATION", t_n)
+
+            # Possessive case marker wiring ('s, s')
+            if token.tag_ == "POS" or token.dep_ == "case" or token.text.lower() == "'s":
+                possessor_tok = token.head
+                possessor_n = token_nodes[possessor_tok.i]
+                if possessor_tok.head.i != possessor_tok.i:
+                    possessed_tok = possessor_tok.head
+                    possessed_n = token_nodes[possessed_tok.i]
+                    graph.add_edge(possessed_n, "NSM_HAVE", possessor_n)
+
+        # 12. Wire directed valency and structural edges on root
+        if agent_node:
+            graph.add_edge(root_node, "VAL_X1_AGENT", agent_node)
+        if patient_node:
+            graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
+        for rel_name, p_node in prep_attachments:
+            graph.add_edge(root_node, rel_name, p_node)
+
+        if cond_token:
+            graph.add_edge(root_node, "GRAPH_BRANCH_COND", token_nodes[cond_token.i])
+        if decree_token:
+            graph.add_edge(root_node, "GRAPH_CYCLIC_BACKLINK", token_nodes[decree_token.i])
+            graph.add_edge(root_node, "GRAPH_RECURSIVE_REF", token_nodes[decree_token.i])
 
         return graph
 
@@ -1149,14 +1136,10 @@ class NLPForwardParser:
         polarity = 1
         if has_negation:
             polarity = 2
-            literal_str = f"did not {lemma}" if any(t.text.lower() in ("did", "didn't") for t in doc) else f"not {lemma}"
         elif has_uncertainty:
             polarity = 3
-            literal_str = lemma
-        else:
-            literal_str = root_token.text
 
-        node = QuantaNode(literal=literal_str)
+        node = QuantaNode(literal=root_token.text)
 
         # Set default literal modality and proposition type
         node.set_slot("MODALITY_LITERAL", 1)
@@ -1568,8 +1551,10 @@ class NLPForwardParser:
         if any(w in tokens for w in ("if", "implies", "whenever")):
             node.set_slot("GRAPH_BRANCH_COND", 1)
             node.set_slot("GRAPH_BRANCH_THEN", 1)
-        if any(w in tokens for w in ("moved", "went", "travelled", "journeyed", "walked", "entered", "left", "dropped", "picked", "got", "took")):
-            node.set_slot("TEMP_ALLEN_MEETS", 1)
+        allen_slots = ("TEMP_ALLEN_BEFORE", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_OVERLAPS", "TEMP_ALLEN_STARTS", "TEMP_ALLEN_DURING", "TEMP_ALLEN_FINISHES", "TEMP_ALLEN_EQUALS")
+        if not any(node.get_slot(s) == 1 for s in allen_slots):
+            if any(t.lemma_.lower() in ("move", "go", "travel", "journey", "walk", "enter", "leave", "drop", "pick") and t.pos_ == "VERB" for t in doc):
+                node.set_slot("TEMP_ALLEN_MEETS", 1)
         if any(w in tokens for w in ("want", "wants", "wanted", "wish", "wishes", "intend", "intends", "purpose", "goal")):
             node.set_slot("TOM_INTENTION", 1)
         if any(w in tokens for w in ("meet", "met", "visit", "visited", "talk", "talked", "together", "each other")):

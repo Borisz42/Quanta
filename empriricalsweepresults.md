@@ -15,15 +15,15 @@ The vector space is partitioned into 8 isolated 128-slot bands:
 ├────────────────────────────┬────────────────────────────┬────────────────────────────┬─────────────────────────────────┤
 │ Band 0 (Slots 000-127)     │ Band 1 (Slots 128-255)     │ Band 2 (Slots 256-383)     │ Band 3 (Slots 384-511)          │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
-│ Universal NSM Primes,      │ Structural Valencies,      │ Formal Logic Quantifiers,  │ Ontological Types & Taxonomies, │
-│ Classical Kinematics &     │ Grammatical Tense/Aspect,  │ Variable Binding Registers │ Abstract Math Structures,       │
-│ Continuous Physics Fields  │ AST & Concurrency Markers  │ (X0..X7) & Sequent Proofs  │ SI Metrology Metric Scales      │
+│ Universal NSM Primes,      │ Structural Valencies,      │ Formal Logic Quantifiers,  │ ConceptNet 5.7.0 Taxonomies,    │
+│ Classical Kinematics &     │ Grammatical Tense/Aspect,  │ Variable Binding Registers │ Scientific Domains & Structures │
+│ Continuous Physics Fields  │ AST & Concurrency Markers  │ (X0..X7) & Sequent Proofs  │ (CN_Q001_COMPUTING..CN_Q128)    │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
 │ Band 4 (Slots 512-639)     │ Band 5 (Slots 640-767)     │ Band 6 (Slots 768-895)     │ Band 7 (Slots 896-1023)         │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
-│ Cyber-Physical Tool        │ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
-│ Affordances & Executable   │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
-│ Digital Software APIs      │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
+│ ConceptNet Tool Affordances│ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
+│ Cyber-Physical Actions     │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
+│ (CN_Q129_LEAVE..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
 └────────────────────────────┴────────────────────────────┴────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -31,8 +31,8 @@ The vector space is partitioned into 8 isolated 128-slot bands:
 - **Band 0 (000–127)**: Universal NSM Primes (0–63), Continuous Classical Kinematics (64–95), Vector Fields & Material States (96–127).
 - **Band 1 (128–255)**: Lojban Argument Valencies (128–143), Aspect/Tense (144–167), AST Graph Topologies (168–215), OS & Concurrency Primitives (216–255).
 - **Band 2 (256–383)**: Formal Quantifiers $\forall, \exists, \exists!$ (256–279), Bound Variables $X_0 \dots X_7$ & Query Heads (280–319), Sequent Calculus & Proof Verification Rules (320–383).
-- **Band 3 (384–511)**: Entity Taxonomies, Roles & WordNet Roots (384–447), Abstract Mathematical Structures (448–479), SI Metric Dimensions & Measurement Units (480–511).
-- **Band 4 (512–639)**: Mechanical/Physical Affordances (512–543), Digital Software API Affordances (544–575), Chemical, Biological & Sensory Affordances (576–639).
+- **Band 3 (384–511)**: ConceptNet 5.7.0 Ontological Taxonomies & Scientific Domains (128 data-driven dimensions with 4-valued Belnap grounding $\mathcal{B}_4$).
+- **Band 4 (512–639)**: ConceptNet Cyber-Physical Tool Affordances, Mechanical Dynamics & Digital Actions (128 data-driven affordances enabling anchor-free 2-tier decoding).
 - **Band 5 (640–767)**: Theory of Mind (1st, 2nd, 3rd-order beliefs) (640–671), Teleological Hierarchical Goals & Planning (672–703), Affective States & Drives (704–735), Pragmatic Speech Act Intent (736–767).
 - **Band 6 (768–895)**: Epistemic Knowledge Sources (768–799), Deontic Normative Logic (800–831), $s(\text{CASP})$ Stable Model Invariants (832–863), Formal Modal Logics (864–895).
 - **Band 7 (896–1023)**: Allen Interval Temporal Relations & Inverses (896–927), RCC-8 Spatial Mereotopology (928–959), Pearl Causal Hierarchy $L_1, L_2, L_3$ & Counterfactuals (960–991), LTL & Branching CTL Temporal Logics (992–1023).
