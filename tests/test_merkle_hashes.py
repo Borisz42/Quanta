@@ -726,4 +726,201 @@ def test_module_level_fold_unfold_api():
     assert g.get_node(b_cid) is not None
 
 
+def test_single_node_graph_merkle_root():
+    """3A.5: A single-node graph's Merkle root must be deterministic and valid (64-char hex).
+
+    Note: the Merkle root is computed by hashing count+sorted(cids+vectors), so for a
+    single node it will NOT equal the node's CID, but it MUST be deterministic.
+    """
+    node = QuantaNode(
+        vector={"NSM_I": 1, "TYPE_HUMAN": 1},
+        anchor="wn:person.n.01",
+    )
+    graph = QuantaGraph()
+    cid = graph.add_node(node, set_as_root=True)
+
+    merkle_root = graph.compute_merkle_root()
+    assert len(merkle_root) == 64, f"Merkle root must be 64-char hex (256-bit BLAKE3), got: {merkle_root!r}"
+    assert all(c in "0123456789abcdef" for c in merkle_root), "Merkle root must be lowercase hex"
+
+    # Integrity check must pass on a single-node graph
+    valid, errors = graph.validate_integrity()
+    assert valid, f"Single-node graph failed integrity: {errors}"
+    assert errors == []
+
+    # Merkle root is stable across multiple calls (idempotent)
+    assert graph.compute_merkle_root() == merkle_root
+
+    # Single-node Merkle root differs from the node CID (it hashes additional metadata)
+    # This is the expected behavior: Merkle root ≠ leaf CID for a graph
+    assert isinstance(cid, str) and len(cid) == 64
+    assert merkle_root != cid, (
+        "Merkle root should differ from the raw node CID (it hashes count + CID + vector)"
+    )
+
+    # A different node must produce a different Merkle root
+    graph2 = QuantaGraph()
+    graph2.add_node(QuantaNode(vector={"NSM_DO": 1}, anchor="wn:act.v.01"), set_as_root=True)
+    assert graph2.compute_merkle_root() != merkle_root
+
+
+def test_single_node_fold_unfold_roundtrip():
+    """3B.6: Folding a single-node subgraph (leaf with no outgoing edges) must round-trip cleanly.
+
+    Note: folding replaces the leaf node with a pointer node, so the total node count
+    stays the same (1 removed, 1 added). The leaf CID must be absent and the pointer
+    CID present after folding.
+    """
+    graph = QuantaGraph()
+    leaf = QuantaNode(vector={"NSM_I": 1}, anchor="wn:entity.n.01")
+    root = QuantaNode(vector={"NSM_DO": 1}, anchor="wn:act.v.01")
+    leaf_cid = graph.add_node(leaf)
+    root_cid = graph.add_node(root, set_as_root=True)
+    graph.add_edge(root_cid, "VAL_X2_PATIENT", leaf_cid)
+
+    original_merkle = graph.compute_merkle_root()
+    original_node_count = len(graph)
+
+    # Fold the leaf (single node, no outgoing edges)
+    storage = {}
+    ptr_cid, sub_merkle = graph.fold_subgraph(leaf_cid, storage=storage)
+
+    # After folding a single leaf: leaf is removed, pointer is added → count unchanged
+    assert len(graph) == original_node_count, (
+        f"Folding a single leaf replaces it with a pointer node (count stays same). "
+        f"Expected {original_node_count}, got {len(graph)}"
+    )
+    # The original leaf CID must no longer be directly present
+    assert graph.get_node(leaf_cid) is None, "Leaf node should not be directly accessible after folding"
+    # The pointer node must be present in its place
+    assert ptr_cid in graph.nodes, "Pointer node must be in the graph after folding"
+    assert sub_merkle in storage, "Folded sub-graph must be saved in storage"
+
+    # Unfold must restore the leaf into the graph
+    # Note: instance unfold_subgraph operates on self graph, takes (pointer_cid, storage)
+    restored_cid = graph.unfold_subgraph(ptr_cid, storage)
+    assert restored_cid == leaf_cid, f"Restored CID should be {leaf_cid}, got {restored_cid}"
+    assert graph.get_node(leaf_cid) is not None, "Leaf node must be present after unfolding"
+
+    # Merkle root must be unchanged after fold+unfold roundtrip
+    final_merkle = graph.compute_merkle_root()
+    assert final_merkle == original_merkle, (
+        f"Merkle root must be invariant under fold+unfold roundtrip. "
+        f"Before: {original_merkle}, After: {final_merkle}"
+    )
+
+
+
+
+def test_two_distinct_graphs_produce_different_merkle_roots():
+    """3B.7: Any structural difference between two graphs must produce different Merkle roots."""
+    def make_graph(anchor_a: str, anchor_b: str) -> QuantaGraph:
+        g = QuantaGraph()
+        n1 = QuantaNode(vector={"NSM_DO": 1}, anchor=anchor_a)
+        n2 = QuantaNode(vector={"TYPE_HUMAN": 1}, anchor=anchor_b)
+        c1 = g.add_node(n1, set_as_root=True)
+        c2 = g.add_node(n2)
+        g.add_edge(c1, "VAL_X1_AGENT", c2)
+        return g
+
+    g1 = make_graph("wn:bite.v.01", "wn:dog.n.01")
+    g2 = make_graph("wn:bite.v.01", "wn:cat.n.01")   # Different leaf anchor
+    g3 = make_graph("wn:eat.v.01", "wn:dog.n.01")    # Different root anchor
+
+    r1 = g1.compute_merkle_root()
+    r2 = g2.compute_merkle_root()
+    r3 = g3.compute_merkle_root()
+
+    assert r1 != r2, "Graphs differing in leaf anchor must have different Merkle roots"
+    assert r1 != r3, "Graphs differing in root anchor must have different Merkle roots"
+    assert r2 != r3, "Graphs differing in both anchors must have different Merkle roots"
+
+    # Self-consistency: same construction twice gives same root
+    g1_copy = make_graph("wn:bite.v.01", "wn:dog.n.01")
+    assert g1.compute_merkle_root() == g1_copy.compute_merkle_root()
+
+
+def test_edge_label_change_affects_merkle_root():
+    """3B.8: Changing only an edge label must produce a different Merkle root."""
+    def make_graph_with_edge_label(label: str) -> QuantaGraph:
+        g = QuantaGraph()
+        root = QuantaNode(vector={"NSM_DO": 1}, anchor="wn:carry.v.01")
+        child = QuantaNode(vector={"TYPE_ANIMATE": 1}, anchor="wn:person.n.01")
+        r_cid = g.add_node(root, set_as_root=True)
+        c_cid = g.add_node(child)
+        g.add_edge(r_cid, label, c_cid)
+        return g
+
+    g_agent = make_graph_with_edge_label("VAL_X1_AGENT")
+    g_patient = make_graph_with_edge_label("VAL_X2_PATIENT")
+
+    root_agent = g_agent.compute_merkle_root()
+    root_patient = g_patient.compute_merkle_root()
+
+    assert root_agent != root_patient, (
+        "Graphs with identical nodes but different edge labels must have different Merkle roots"
+    )
+
+
+def test_proposition_vector_round_trip_stability():
+    """4.4: to_proposition_vector must return stable 1024-dim QuantaVector across repeated calls."""
+    graph = QuantaGraph()
+    node_a = QuantaNode(vector={"NSM_DO": 1, "TYPE_EVENT": 1}, anchor="wn:run.v.01")
+    node_b = QuantaNode(vector={"TYPE_ANIMATE": 1, "ROLE_AGENT_CAPABLE": 1}, anchor="wn:dog.n.01")
+    a_cid = graph.add_node(node_a, set_as_root=True)
+    b_cid = graph.add_node(node_b)
+    graph.add_edge(a_cid, "VAL_X1_AGENT", b_cid)
+
+    pv1 = graph.to_proposition_vector()
+    pv2 = graph.to_proposition_vector()
+
+    assert isinstance(pv1, QuantaVector)
+    assert isinstance(pv2, QuantaVector)
+    assert len(pv1) == 1024
+    assert pv1 == pv2, "to_proposition_vector must return identical result on repeated calls"
+
+    # Mutating the graph should change the proposition vector
+    node_c = QuantaNode(vector={"TYPE_HUMAN": 1}, anchor="wn:person.n.01")
+    c_cid = graph.add_node(node_c)
+    graph.add_edge(a_cid, "VAL_X2_PATIENT", c_cid)
+
+    pv3 = graph.to_proposition_vector()
+    assert isinstance(pv3, QuantaVector)
+    # The proposition vector of a larger graph should differ (has more active slots)
+    assert pv3 != pv1, "Proposition vector must change when new nodes are added to the graph"
+
+
+def test_graph_json_preserves_merkle_root_and_integrity():
+    """4.5: Serializing and deserializing a graph must preserve Merkle root and pass integrity check."""
+    graph = QuantaGraph()
+    root_node = QuantaNode(vector={"NSM_DO": 1, "TYPE_EVENT": 1}, anchor="wn:fly.v.01")
+    child_a = QuantaNode(vector={"TYPE_ANIMATE": 1}, anchor="wn:eagle.n.01")
+    child_b = QuantaNode(vector={"TYPE_SPATIAL_REGION": 1}, anchor="wn:sky.n.01")
+
+    r_cid = graph.add_node(root_node, set_as_root=True)
+    a_cid = graph.add_node(child_a)
+    b_cid = graph.add_node(child_b)
+    graph.add_edge(r_cid, "VAL_X1_AGENT", a_cid)
+    graph.add_edge(r_cid, "VAL_LOCATIVE", b_cid)
+
+    original_merkle = graph.compute_merkle_root()
+    valid, errors = graph.validate_integrity()
+    assert valid, f"Original graph failed integrity: {errors}"
+
+    # Serialize and deserialize
+    json_str = graph.to_json()
+    recovered = QuantaGraph.from_json(json_str)
+
+    assert recovered.root_cid == graph.root_cid
+    assert recovered.compute_merkle_root() == original_merkle, (
+        "Merkle root must be identical after JSON serialization round-trip"
+    )
+
+    valid_r, errors_r = recovered.validate_integrity()
+    assert valid_r, f"Recovered graph failed integrity: {errors_r}"
+    assert errors_r == []
+    assert len(recovered) == len(graph)
+
+
+
 
