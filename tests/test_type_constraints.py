@@ -342,4 +342,125 @@ def test_validator_gate_alias_and_unpacking():
     assert muc is None
 
 
+def test_natural_object_vs_artifact_contradiction(validator):
+    """Test Rule 3: Natural objects cannot be manufactured artifacts unless figurative."""
+    conflict_node = QuantaNode(
+        vector={
+            "TYPE_NATURAL_OBJECT": 1,
+            "TYPE_ARTIFACT": 1,
+        },
+    )
+    res = validator.validate_node(conflict_node)
+    assert not res.is_valid
+    slots = [s for _, s, _ in res.muc_slots]
+    assert "TYPE_NATURAL_OBJECT" in slots
+    assert "TYPE_ARTIFACT" in slots
+
+    # Figurative bypass
+    fig_node = QuantaNode(
+        vector={
+            "TYPE_NATURAL_OBJECT": 1,
+            "TYPE_ARTIFACT": 1,
+            "MODALITY_FIGURATIVE": 1,
+        },
+    )
+    assert validator.validate_node(fig_node).is_valid
+
+
+def test_consumable_vs_abstract_contradiction(validator):
+    """Test Rule 5: Consumable entities must be physical substances/objects, not abstract concepts."""
+    bad_node = QuantaNode(
+        vector={
+            "ROLE_CONSUMABLE": 1,
+            "TYPE_ABSTRACT_CONCEPT": 1,
+        },
+    )
+    res = validator.validate_node(bad_node)
+    assert not res.is_valid
+    slots = [s for _, s, _ in res.muc_slots]
+    assert "ROLE_CONSUMABLE" in slots
+    assert "TYPE_ABSTRACT_CONCEPT" in slots
+
+
+def test_epistemic_observation_vs_hearsay_contradiction(validator):
+    """Test Rule 20: Direct observation cannot be marked as hearsay."""
+    conflict_node = QuantaNode(
+        vector={
+            "EPIST_DIRECT_OBSERVATION": 1,
+            "EPIST_HEARSAY_TESTIMONY": 1,
+            "TYPE_PROPOSITION": 1,
+        },
+    )
+    res = validator.validate_node(conflict_node)
+    assert not res.is_valid
+    slots = [s for _, s, _ in res.muc_slots]
+    assert "EPIST_DIRECT_OBSERVATION" in slots
+    assert "EPIST_HEARSAY_TESTIMONY" in slots
+
+
+def test_direct_affirmation_vs_negation_contradiction(validator):
+    """Test Rule 21: Unhedged direct affirmation cannot be simultaneously negated."""
+    conflict_node = QuantaNode(
+        vector={
+            "NSM_TRUE": 1,
+            "LJB_NA_NEGATION": 1,
+            "TYPE_PROPOSITION": 1,
+        },
+    )
+    res = validator.validate_node(conflict_node)
+    assert not res.is_valid
+    slots = [s for _, s, _ in res.muc_slots]
+    assert "NSM_TRUE" in slots
+    assert "LJB_NA_NEGATION" in slots
+
+    # Uncertain / modal hedge bypass
+    hedged_node = QuantaNode(
+        vector={
+            "NSM_TRUE": 1,
+            "LJB_NA_NEGATION": 1,
+            "NSM_MAYBE": 1,
+            "TYPE_PROPOSITION": 1,
+        },
+    )
+    assert validator.validate_node(hedged_node).is_valid
+
+
+def test_experiencer_and_instrument_thematic_role_rules(validator):
+    """Test Rules 7 and 8: Experiencer requires sentience; Instrument cannot be abstract concept."""
+    # 1. Non-sentient experiencer
+    event_node = QuantaNode(
+        vector={"TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:see.v.01",
+    )
+    inanimate_exp = QuantaNode(
+        vector={"TYPE_INANIMATE_PHYSICAL": 1},
+        anchor="wn:rock.n.01",
+    )
+    g1 = QuantaGraph()
+    e_cid = g1.add_node(event_node, set_as_root=True)
+    exp_cid = g1.add_node(inanimate_exp)
+    g1.add_edge(e_cid, "VAL_EXPERIENCER", exp_cid)
+
+    res1 = validator.validate_graph(g1)
+    assert not res1.is_valid
+
+    # 2. Abstract concept as literal instrument
+    event_node2 = QuantaNode(
+        vector={"TYPE_EVENT": 1, "MODALITY_LITERAL": 1},
+        anchor="wn:cut.v.01",
+    )
+    abstract_inst = QuantaNode(
+        vector={"TYPE_ABSTRACT_CONCEPT": 1},
+        anchor="wn:democracy.n.01",
+    )
+    g2 = QuantaGraph()
+    e_cid2 = g2.add_node(event_node2, set_as_root=True)
+    inst_cid = g2.add_node(abstract_inst)
+    g2.add_edge(e_cid2, "VAL_X5_INSTRUMENT", inst_cid)
+
+    res2 = validator.validate_graph(g2)
+    assert not res2.is_valid
+
+
+
 
