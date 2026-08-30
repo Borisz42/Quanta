@@ -1,6 +1,8 @@
 import pytest
 from parser.lexical_grounder import (
     WordNetLexicalGrounder,
+    ConceptNetLexicalGrounder,
+    LexicalGrounder,
     NLTK_WN_AVAILABLE,
     FrameNetValencyResolver,
     resolve_frame_roles,
@@ -190,5 +192,61 @@ def test_ground_extended_domain_concepts():
     # Places
     kitchen_concept = grounder.ground_synset("kitchen.n.01")
     assert kitchen_concept.active_slots.get("WN_ARTIFACT_OBJECT") == 1 or kitchen_concept.active_slots.get("WN_LOCATION_PLACE") == 1
+
+
+def test_conceptnet_grounder_aliasing_and_singleton():
+    """Verify LexicalGrounder aliases ConceptNetLexicalGrounder and singleton access."""
+    assert LexicalGrounder is ConceptNetLexicalGrounder
+    g1 = ConceptNetLexicalGrounder.get_default()
+    g2 = LexicalGrounder.get_default()
+    assert g1 is g2
+
+
+def test_conceptnet_grounder_multi_pos_and_normalization():
+    """5B.1 & 5B.2: Verify multi-POS resolution, underscore/space normalization, and binary hex unpacking."""
+    grounder = ConceptNetLexicalGrounder.get_default()
+
+    # Noun resolution
+    dog_n = grounder.resolve_concept("dog", pos="n")
+    assert dog_n is not None
+    assert dog_n.lemma == "dog"
+    assert dog_n.pos == "n"
+    assert dog_n.synset_name == "cn:en:dog (n)"
+    assert dog_n.vector["CN_Q011_ANIMAL"] == 1
+
+    # Verb resolution
+    bite_v = grounder.resolve_concept("bite", pos="v")
+    assert bite_v is not None
+    assert bite_v.lemma == "bite"
+    assert bite_v.pos == "v"
+
+    # Multiword expression with space and underscore
+    gr_space = grounder.resolve_concept("golden retriever", pos="n")
+    gr_under = grounder.resolve_concept("golden_retriever", pos="n")
+    assert gr_space is not None
+    assert gr_under is not None
+    assert gr_space.lemma == gr_under.lemma
+
+    # In-memory LRU cache hit test (5B.3)
+    cached_dog = grounder.resolve_concept("dog", pos="n")
+    assert cached_dog is dog_n
+
+    # Typo tolerance fallback (5D.1, 5D.3)
+    typo_concept = grounder.resolve_concept("glden retreiver", pos="n")
+    assert typo_concept is not None
+    assert "retriever" in typo_concept.lemma
+
+
+def test_conceptnet_resolve_and_ground_synset_helpers():
+    """Verify resolve_synset and ground_synset helper methods."""
+    grounder = ConceptNetLexicalGrounder.get_default()
+
+    anchor = grounder.resolve_synset("mailman", pos="n")
+    assert anchor == "cn:en:mailman (n)"
+
+    grounded = grounder.ground_synset("cn:en:mailman (n)")
+    assert grounded.lemma == "mailman"
+    assert grounded.pos == "n"
+
 
 

@@ -113,23 +113,17 @@ class ConceptNetLexicalGrounder:
             return None
 
         cur = self._conn.cursor()
-        candidate_keys = [
+        pos_keys = [
             f"cn:{lang}:{lemma_under} ({pos_norm})",
             f"cn:{lang}:{lemma_space} ({pos_norm})",
             f"cn:{lemma_under} ({pos_norm})",
             f"cn:{lemma_space} ({pos_norm})",
-            f"cn:{lang}:{lemma_under}",
-            f"cn:{lang}:{lemma_space}",
-            f"cn:{lemma_under}",
-            f"cn:{lemma_space}",
-            lemma_under,
-            lemma_space,
         ]
         
-        placeholders = ",".join("?" * len(candidate_keys))
+        placeholders_pos = ",".join("?" * len(pos_keys))
         cur.execute(
-            f"SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE key IN ({placeholders}) LIMIT 1",
-            candidate_keys
+            f"SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE key IN ({placeholders_pos}) LIMIT 1",
+            pos_keys
         )
         row = cur.fetchone()
         
@@ -137,6 +131,22 @@ class ConceptNetLexicalGrounder:
             cur.execute(
                 "SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE lemma IN (?, ?) AND pos=? LIMIT 1",
                 (lemma_space, lemma_under, pos_norm)
+            )
+            row = cur.fetchone()
+
+        if not row:
+            unqualified_keys = [
+                f"cn:{lang}:{lemma_under}",
+                f"cn:{lang}:{lemma_space}",
+                f"cn:{lemma_under}",
+                f"cn:{lemma_space}",
+                lemma_under,
+                lemma_space,
+            ]
+            placeholders_unq = ",".join("?" * len(unqualified_keys))
+            cur.execute(
+                f"SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE key IN ({placeholders_unq}) LIMIT 1",
+                unqualified_keys
             )
             row = cur.fetchone()
 

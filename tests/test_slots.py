@@ -235,3 +235,24 @@ def test_no_duplicate_slot_indices_across_all_bands():
     assert len(set(all_names)) == 1024, "Duplicate slot names detected across bands"
     # Indices are a complete range [0, 1023]
     assert set(all_indices) == set(range(1024)), "Slot indices must span exactly {0, 1, ..., 1023}"
+
+
+def test_conceptnet_slots_json_sync():
+    """5A.5: Verify data/conceptnet_slots.json exactly matches canonical Band 3 and Band 4 slots."""
+    cn_slots_file = Path("data/conceptnet_slots.json")
+    assert cn_slots_file.exists(), "data/conceptnet_slots.json must exist"
+
+    with open(cn_slots_file, "r", encoding="utf-8") as f:
+        cn_slots = json.load(f)
+
+    assert len(cn_slots) == 256, f"Expected 256 ConceptNet slots, got {len(cn_slots)}"
+
+    for i, item in enumerate(cn_slots):
+        expected_idx = 384 + i
+        assert item["index"] == expected_idx, f"Slot index mismatch at position {i}: expected {expected_idx}, got {item['index']}"
+        canon_slot = CANONICAL_SLOTS[expected_idx]
+        assert item["name"] == canon_slot.name, f"Slot name mismatch at {expected_idx}: {item['name']} != {canon_slot.name}"
+        assert item["description"] == canon_slot.description, f"Description mismatch at {expected_idx}"
+        expected_band = 3 if expected_idx < 512 else 4
+        assert item["band"] == expected_band
+
