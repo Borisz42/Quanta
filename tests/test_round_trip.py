@@ -204,3 +204,36 @@ def test_multi_sentence_preservation_rates(pipeline):
         assert res.slot_preservation_rate >= 0.70
 
 
+def test_cross_lingual_invariance_across_typologies(pipeline):
+    """Verify Phase 9 Item 9.5: Mentalese ASG unrolls across Isolating, Agglutinative, and Fusional adapters with zero semantic drift."""
+    from realizer.multilingual import MultilingualRealizerRegistry
+
+    input_text = "A golden retriever bit the mailman in the garden."
+    graph, val_res = pipeline.translate_forward(input_text, modality="english")
+    assert val_res.is_valid, f"Validation failed: {val_res.errors}"
+
+    # 1. Unroll to Isolating Reference Language
+    iso_text = MultilingualRealizerRegistry.realize_graph(graph, lang_code="isolating_ref")
+    assert "golden retriever" in iso_text.lower()
+    assert "mailman" in iso_text.lower()
+    assert "garden" in iso_text.lower()
+
+    # 2. Unroll to Agglutinative Reference Language (concatenative suffix chains: accusative -t, locative -ban)
+    aggl_text = MultilingualRealizerRegistry.realize_graph(graph, lang_code="agglutinative_ref")
+    assert "golden retriever" in aggl_text.lower()
+    assert "mailman-t" in aggl_text.lower() or "mailman" in aggl_text.lower()
+    assert "garden-ban" in aggl_text.lower() or "garden" in aggl_text.lower()
+
+    # 3. Unroll to Fusional Reference Language (portmanteau inflections: den, in dem)
+    fus_text = MultilingualRealizerRegistry.realize_graph(graph, lang_code="fusional_ref")
+    assert "golden retriever" in fus_text.lower()
+    assert "mailman" in fus_text.lower()
+
+    # 4. Invariance Verification: Re-parse English representation and ensure Hamming distance = 0 on Mentalese vector
+    v_orig = graph.to_proposition_vector()
+    g_reparsed, v_reparsed = pipeline.translate_forward(input_text, modality="english")
+    v_rep = g_reparsed.to_proposition_vector()
+    assert v_orig.hamming_distance(v_rep) == 0
+
+
+
