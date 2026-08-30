@@ -48,9 +48,13 @@ def build_candidate_pool() -> List[CandidateDimension]:
 
     # 1. Canonical Slots (1024 Slots across Bands 0-7)
     for slot in CANONICAL_SLOTS:
+        if slot.name.startswith("CN_Q"):
+            source = "ConceptNet 5.7.0"
+        else:
+            source = f"Band{int(slot.band)}_{slot.band.name}"
         add(
             name=slot.name,
-            source=f"Band{int(slot.band)}_{slot.band.name}",
+            source=source,
             category=slot.category,
             description=slot.description,
         )

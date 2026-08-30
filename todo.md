@@ -450,7 +450,7 @@ If Mentalese captures true invariant semantics, transforming surface text into a
 - [x] **9.2** 🧪 FOL round-trip: FOL string → forward parse → ASG → FOL emitter → exact string match
 - [x] **9.3** 🧪 Code round-trip: Python source → AST parser → ASG → Code emitter → exec both, compare output
 - [x] **9.4** 🧪 Quaternary Hamming distance test: round-tripped ASG vectors must have Hamming distance = 0 on canonical slots
-- [ ] **9.5** 🧪 Cross-lingual test: Reserved for future generalized multilingual framework
+- [x] **9.5** 🧪 Cross-lingual test: Verify Mentalese ASG unrolls across Isolating, Agglutinative, and Fusional adapters with zero semantic drift
 - [x] **9.6** 🧪 Negation round-trip: "X did not Y" → ASG → English → verify negation preserved
 - [x] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
 - [x] **9.8** 🧪 ConceptNet translation suite: dedicated round-trip & vector decoding verification (`tests/test_conceptnet_translation.py`)
@@ -500,7 +500,7 @@ We frame the QUANTA discrete semantic space as a **Discrete Information Bottlene
 #### 10C — mRMR dimension selector & dimension sweep
 - [x] **10C.1** Implement greedy forward mRMR selection: iteratively pick dimension maximizing multi-objective utility
 - [x] **10C.2** Run mRMR on candidate pool against validation corpus
-- [x] **10C.3** Export selected optimal dimensions to `output/optimal_256_dimensions.json` and `output/optimal_dimensions.json`
+- [x] **10C.3** Export selected optimal dimensions to `output/optimal_dimensions.json` and `output/optimal_dimensions.csv`
 - [x] **10C.4** 🧪 Implement and run dimension sweep across `d ∈ {64, 128, 256, 512, 1024, 2048}`; verify $d^* = 1024$ achieves $R_{\text{collision}} = 0$, entropy saturation, $<5\text{ ms}$ ASP latency, and 4-cache-line SIMD throughput
 - [x] **10C.5** Export dimension sweep results to `output/dimension_sweep_results.json` and `output/dimension_sweep_report.md`
 
@@ -572,7 +572,7 @@ It guarantees end-to-end type safety, structured logging, performance telemetry,
 - [x] **12.1** Implement `TranslatorPipeline` class orchestrating: Input → Forward Parser → ASP Validation Gate → Merkle Addressing → Reverse Realizer
 - [x] **12.2** Add pipeline mode selection: `target_format ∈ {english, fol, python}`
 - [x] **12.3** Implement error handling: parser failure, validation rejection (return MUC diagnostic)
-- [ ] **12.4** Add pipeline logging: every stage emits structured log entry with timing
+- [x] **12.4** Add pipeline logging: every stage emits structured log entry with timing
 - [x] **12.5** 🧪 End-to-end pipeline test: "A golden retriever bit the mailman" → English round-trip
 - [x] **12.6** 🧪 End-to-end pipeline test: `∀x(Dog(x) → Animal(x))` → FOL round-trip
 - [x] **12.7** 🧪 End-to-end pipeline test: `def factorial(n)` → Python code round-trip

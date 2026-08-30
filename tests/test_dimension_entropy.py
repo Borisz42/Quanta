@@ -25,7 +25,7 @@ def test_candidate_pool_structure_and_export(tmp_path):
     # Verify first 1024 are canonical slots across all 8 bands
     for i in range(1024):
         assert candidates[i].id == i
-        assert candidates[i].source.startswith("Band")
+        assert candidates[i].source.startswith("Band") or "ConceptNet" in candidates[i].source
 
     # Verify no duplicate candidate names or IDs
     names = [c.name for c in candidates]
