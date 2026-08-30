@@ -168,3 +168,73 @@ def factorial(n):
     assert fact_fn(0) == 1
     assert fact_fn(1) == 1
     assert fact_fn(5) == 120
+
+
+def test_ast_loop_topologies(ast_parser):
+    """Verify Phase 6 Item 6D.7: Loop mapping (For / While -> GRAPH_CONTROL_LOOP=1)."""
+    # For loop
+    for_code = """
+for i in range(10):
+    total = total + i
+""".strip()
+    g_for = ast_parser.parse_ast_node(for_code)
+    assert g_for.root is not None
+    root_for = g_for.root
+    assert root_for.get_slot("GRAPH_CONTROL_LOOP") == 1
+    assert root_for.get_slot("GRAPH_CYCLIC_BACKLINK") == 1
+    assert root_for.get_slot("TYPE_PROCESS") == 1
+    assert root_for.get_slot("GRAPH_SCOPED_CONTEXT") == 1
+
+    # While loop
+    while_code = """
+while n > 0:
+    n = n - 1
+""".strip()
+    g_while = ast_parser.parse_ast_node(while_code)
+    assert g_while.root is not None
+    root_while = g_while.root
+    assert root_while.get_slot("GRAPH_CONTROL_LOOP") == 1
+    assert root_while.get_slot("GRAPH_BRANCH_COND") == 3
+
+
+def test_ast_multi_argument_function(ast_parser):
+    """Verify Phase 6 Item 6D.5: Multi-argument function signatures."""
+    code = """
+def add(a, b, c):
+    return a + b + c
+""".strip()
+    graph = ast_parser.parse_ast_node(code)
+    assert graph.root is not None
+    root = graph.root
+
+    assert root.get_slot("GRAPH_FUNCTION_DEF") == 1
+    assert root.literal == "def add(a, b, c)"
+
+    arg_children = graph.get_children(root.cid, relation="GRAPH_ARGUMENT_LIST")
+    assert len(arg_children) == 3
+    arg_literals = [c.literal for c in arg_children]
+    assert arg_literals == ["a", "b", "c"]
+    for arg_node in arg_children:
+        assert arg_node.get_slot("GRAPH_VARIABLE_BIND") == 1
+        assert arg_node.get_slot("GRAPH_ARGUMENT_LIST") == 1
+        assert arg_node.get_slot("GRAPH_LEAF") == 1
+
+
+def test_ast_class_definition_inheritance(ast_parser):
+    """Verify class definition and base inheritance mapping."""
+    code = """
+class GoldenRetriever(Dog):
+    pass
+""".strip()
+    graph = ast_parser.parse_ast_node(code)
+    assert graph.root is not None
+    root = graph.root
+
+    assert root.get_slot("TYPE_ABSTRACT_CONCEPT") == 1
+    assert root.get_slot("GRAPH_ROOT_NODE") == 1
+    assert root.anchor == "class:GoldenRetriever"
+
+    base_children = graph.get_children(root.cid, relation="VAL_X4_SOURCE")
+    assert len(base_children) == 1
+    assert base_children[0].literal == "base:Dog"
+
