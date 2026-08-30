@@ -191,6 +191,12 @@ output/*
 /data/raw/*
 !/data/raw/.gitkeep
 !/data/raw/python_ast_samples.jsonl
+!/data/validation_corpus/
+/data/validation_corpus/*
+!/data/validation_corpus/.gitkeep
+!/data/virtual_page_table/
+/data/virtual_page_table/*
+!/data/virtual_page_table/.gitkeep
 
 # Large datasets, raw dumps, archives and offline databases
 *.gz

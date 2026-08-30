@@ -47,3 +47,12 @@ pythonpath = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [".git", "__pycache__", "build", "dist", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
