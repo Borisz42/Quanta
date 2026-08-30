@@ -7,7 +7,7 @@
 >
 > **Core Architectural Pillars:**
 > 1. **Discrete Quaternary Vector Space ($\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$):** Epistemic 4-valued logic ($\mathcal{B}_4$) preventing continuous floating-point noise drift and representation collapse across 8 isolated 128-slot bands.
-> 2. **Universal Semantic & Syntactic Grounding:** Natural Semantic Metalanguage (NSM) primes, WordNet root categories, FrameNet valencies, and Lojban construct grammar.
+> 2. **Universal Semantic & Syntactic Grounding:** Natural Semantic Metalanguage (NSM) primes, ConceptNet 5.7.0 256-D data-driven ontological & affordance grounding, WordNet root categories, FrameNet valencies, and Lojban construct grammar.
 > 3. **Cryptographic Merkle ASG Topology:** BLAKE3 sub-graph Content Identifiers (CIDs) enabling recursive graph folding and $\mathcal{O}(1)$ VRAM context scaling.
 > 4. **Strict Neuro-Symbolic Verification:** Logic Tensor Networks (LTNs) and top-down coinductive $s(\text{CASP})$ / Answer Set Programming (ASP) with Minimal Unsatisfiable Core (MUC) extraction for closed-loop repair (zero structural hallucination).
 > 5. **Non-Autoregressive Discrete Diffusion Proposer (Fast-dLLM v2):** Parallel block denoising bypassing the autoregressive $\mathcal{O}(N)$ generation bottleneck.
@@ -102,17 +102,18 @@ To guarantee zero cross-domain representational drift and deterministic indexing
 - **Band 0 (Slots 000–127):** Universal NSM Primes, Classical Kinematics & Continuous Physics (000–063: core NSM primes, 064–095: physical trajectories & continuous forces, 096–127: vector fields & material states).
 - **Band 1 (Slots 128–255):** Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency Topologies (128–143: Lojban valencies $x_1 \dots x_7$, 144–167: aspect & tense, 168–215: ASG & code AST topologies, 216–255: concurrency & OS topologies).
 - **Band 2 (Slots 256–383):** Logic Quantifiers ($\forall, \exists, \exists!$), Variable Binding & Query Registers ($X_0 \dots X_7$, query targets $?X, ?Y, ?Z$), Lambda Binders, and Sequent Calculus Derivations.
-- **Band 3 (Slots 384–511):** Ontological Taxonomies (WordNet top-level hypernym roots, entity types), Abstract Mathematical Structures (sets, sequences, lattices, trees, tensors), and SI Fundamental Metric Scales.
-- **Band 4 (Slots 512–639):** Cyber-Physical Tool Affordances (cutting, percussive impact, fluid containment, gripping, thermal exchange, propulsion), Mechanical Dynamics & Digital Software Operations (APIs, databases, crypto).
+- **Band 3 (Slots 384–511):** ConceptNet 5.7.0 Ontological Taxonomies & Scientific Domains (`CN_Q001_COMPUTING` .. `CN_Q128_MANNER`) derived via Usage-Weighted Ontological Density Scoring (U-ODS) and Hopcroft partition refinement across 34M assertions.
+- **Band 4 (Slots 512–639):** ConceptNet 5.7.0 Cyber-Physical Tool Affordances, Mechanical Actions & Functional Capabilities (`CN_Q129_LEAVE` .. `CN_Q256_WORTHY`), enabling 2-tier vector decoding (23,383 singletons in $<10\text{ ms}$ SIMD + SQLite category basin fallback).
 - **Band 5 (Slots 640–767):** Theory of Mind (1st, 2nd, 3rd-order nested multi-agent beliefs, shared common ground), Teleological Goals & Planning, Affective Drives, and Pragmatic Discourse Intent.
 - **Band 6 (Slots 768–895):** Epistemic Proof Solvers, $s(\text{CASP})$ Invariants (MUC, abducibles, coinduction loops), and Deontic Normative Logic (obligatory, permissible, prohibited, liability).
 - **Band 7 (Slots 896–1023):** Spatio-Temporal Mereotopology (13 Allen interval relations, 8 RCC-8 spatial relations), Pearl Causal Counterfactual DAGs, and Modal/LTL/CTL Temporal Logic.
 
-Strongly-typed valency signatures enforce compile-time semantic typing on every predicate argument slot, rendering category errors (e.g., *"The rock thinks"*) syntactically illegal before neural processing.
+Strongly-typed valency signatures and the `LEGACY_ONTOLOGY_ALIASES` semantic bridge layer reconcile legacy symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) with canonical `CN_Q*` slots, ensuring compile-time semantic typing and 100% solver rule compatibility.
 
 ### Implementation Guidelines
 - Define immutable integer constants for all 1024 slots organized by 8 bands in `src/core/slots.py`.
-- Export the complete slot taxonomy and metadata to `output/canonical_slots_layout.json`.
+- Export the complete slot taxonomy and metadata to `output/canonical_slots_layout.json` via `src/scripts/generate_slots_registry.py`.
+- Maintain `LEGACY_ONTOLOGY_ALIASES` mapping legacy symbolic constants to canonical `CN_Q*` slot indices.
 - Implement a type constraint registry mapping predicate argument valencies to required ontological capabilities (e.g., `VAL_X1_AGENT` requires `ROLE_AGENT_CAPABLE=1` and `TYPE_ANIMATE=1`).
 
 ### Verification & Acceptance Criteria
@@ -124,13 +125,14 @@ Strongly-typed valency signatures enforce compile-time semantic typing on every 
 - [x] **2A.1** Define Band 0 slot constants (0–127): Universal NSM Primes, Kinematics, Continuous Physics
 - [x] **2A.2** Define Band 1 slot constants (128–255): Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency
 - [x] **2A.3** Define Band 2 slot constants (256–383): Logic Quantifiers, Variable Binding Registers ($X_0 \dots X_7$), Query Heads
-- [x] **2A.4** Define Band 3 slot constants (384–511): Ontological Taxonomies, Math Structures, Metric Scales
-- [x] **2A.5** Define Band 4 slot constants (512–639): Cyber-Physical Tool Affordances, Mechanical Dynamics, Software Operations
+- [x] **2A.4** Define Band 3 slot constants (384–511): ConceptNet Ontological Taxonomies & Domains (`CN_Q001` .. `CN_Q128`)
+- [x] **2A.5** Define Band 4 slot constants (512–639): ConceptNet Cyber-Physical Tool Affordances & Actions (`CN_Q129` .. `CN_Q256`)
 - [x] **2A.6** Define Band 5 slot constants (640–767): Theory of Mind (3-Tier Beliefs), Teleological Goals, Discourse Intent
 - [x] **2A.7** Define Band 6 slot constants (768–895): Epistemic Solvers, $s(\text{CASP})$ Invariants, Deontic Logic
 - [x] **2A.8** Define Band 7 slot constants (896–1023): Spatio-Temporal Calculi (Allen, RCC-8), Pearl Causal DAGs, LTL/CTL
-- [x] **2A.9** Export all 1024 slot definitions to `output/canonical_slots_layout.json`
-- [x] **2A.10** 🧪 Write test verifying no duplicate slot indices, all 1024 indices covered, and 8-band boundaries are correct
+- [x] **2A.9** Implement `LEGACY_ONTOLOGY_ALIASES` semantic bridge layer in `src/core/slots.py`
+- [x] **2A.10** Export all 1024 slot definitions to `output/canonical_slots_layout.json`
+- [x] **2A.11** 🧪 Write test verifying no duplicate slot indices, all 1024 indices covered, alias integrity, and 8-band boundaries are correct
 
 #### 2B — Strongly-typed valency signatures
 - [x] **2B.1** Define type constraint registry mapping predicate argument slots to required ontological types (e.g., `VAL_X1_AGENT` → `+ANIMATE_AGENT`)
@@ -206,41 +208,57 @@ $$\text{CID}(\mathcal{G}_{\text{sub}}) = \text{BLAKE3}\left( \bigoplus_{v \in \m
 
 ---
 
-## Phase 5: Offline Data & Lexical Resources
+## Phase 5: Offline Data, ConceptNet 5.7.0 & Lexical Resources
 
 ### Context & Architectural Rationale
-To ensure $\mathcal{O}(1)$ deterministic lexical anchoring without runtime network overhead or embedding lookups, QUANTA compiles offline lexical caches:
-1. **WordNet SQLite Index:** Maps words/lemmas to synsets, hypernym paths, and Band 3 ontological root categories (`WN_ANIMAL_FAUNA`, `WN_PERSON_HUMAN`, etc.).
-2. **FrameNet Valency Templates:** Maps verb lemmas to semantic frames and thematic roles (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, etc.).
-3. **Typo-Tolerant Lexical Grounding:** Damerau-Levenshtein fuzzy matching and compound word healing to map misspelled surface inputs (e.g., *"glden retreiver"*) to canonical synsets (`wn:golden_retriever.n.01`) without semantic corruption.
+To ensure $\mathcal{O}(1)$ deterministic lexical anchoring with rich real-world common-sense, physical affordances, and cross-lingual capability without runtime network calls:
+1. **ConceptNet 5.7.0 Knowledge Base:** Ingests 34,074,917 assertions, runs depth $d=2$ BLAS sparse matrix transitive propagation ($M_{\text{inherited}} = M + TM + T^2M$ expanding to 54.61M non-zero connections), and executes the Hopcroft Inverted-Index Partition Refinement Solver across 72,930 unique semantic archetypes to produce 256 globally optimal discriminative dimensions (Bands 3 & 4).
+2. **ConceptNet SQLite & Codebook Artifacts:**
+   - `data/conceptnet_slots.json`: 256 canonical slot definitions for Bands 3 & 4.
+   - `data/conceptnet_offline.db`: 403,503 concepts (713,784 multi-POS entries) with pre-packed 256-byte quaternary vectors.
+   - `data/concept_codebook.csv.gz`: Dense $403,503 \times 256$ binary codebook matrix containing 23,383 singletons for instant SIMD decoding.
+3. **ConceptNet Lexical Grounder (`ConceptNetLexicalGrounder`):** High-speed in-memory cached SQLite lookup supporting `cn:en:<lemma> (<pos>)`, space/underscore normalization, and fallback multi-POS resolution.
+4. **WordNet & FrameNet Offline Fallback:** `data/wordnet_offline.db` (synsets, hypernyms) and `data/framenet_valency.json` (valency place templates).
+5. **Typo-Tolerant Lexical Grounding:** Damerau-Levenshtein fuzzy matching (`TypoNormalizer`) and compound word healing to map misspelled surface inputs (e.g., *"glden retreiver"*) to canonical concepts (`cn:en:golden retriever (n)`) without semantic corruption.
 
 ### Implementation Guidelines
-- Build `data/wordnet_offline.db` with indexed tables for fast synset lookups and hypernym path traversals.
-- Export `data/framenet_valency.json` containing validated frame structures.
+- `scripts/concept_solver.py`: Ingestion, U-ODS scoring, Hopcroft partition refinement, and SQLite compilation.
+- `src/parser/lexical_grounder.py`: Implement `ConceptNetLexicalGrounder` (aliased to `LexicalGrounder`) with quaternary vector unpacking and singleton cache.
+- Maintain `WordNetLexicalGrounder` and `FrameNetValencyResolver` for backward-compatible fallback.
 - Implement fuzzy matching with maximum edit distance threshold ($d \le 2$) and multi-word token healing heuristics.
 
 ### Verification & Acceptance Criteria
-- "dog" resolves to `wn:dog.n.01`, traces through hypernym `animal.n.01`, and sets `WN_ANIMAL_FAUNA=1`.
-- "bite" resolves to FrameNet frame with Agent and Patient mappings.
-- Typo test suite (README Example D): `"glden retreiver"` $\to$ `golden retriever`, `"maileman"` $\to$ `mailman`, `"graden"` $\to$ `garden`, generating the exact same Merkle CID as clean input.
+- "dog" resolves via ConceptNet to `cn:en:dog (n)` with active `CN_Q011_ANIMAL=1` and `TYPE_ANIMATE=1`.
+- "bite" resolves to verb concept `cn:en:bite (v)` and FrameNet frame with Agent and Patient mappings.
+- "golden retriever" resolves to multiword concept `cn:en:golden retriever (n)`.
+- Typo test suite: `"glden retreiver"` $\to$ `golden retriever`, `"maileman"` $\to$ `mailman`, `"graden"` $\to$ `garden`, generating the exact same Merkle CID as clean input.
 
 ### Checklist
-#### 5A — WordNet offline cache
-- [x] **5A.1** Write script to build SQLite cache of WordNet synsets, hypernym paths, and top-level root categories
-- [x] **5A.2** Implement `resolve_synset(word, pos) → synset_id` lookup function
-- [x] **5A.3** Implement `get_hypernym_path(synset_id) → list[synset_id]` for ontological classification
-- [x] **5A.4** Implement `get_wordnet_root_category(synset_id) → Band3 slot index` mapping synsets to Band 3 WordNet root slots
-- [x] **5A.5** 🧪 Test: "dog" → `wn:dog.n.01`, hypernym path includes `animal.n.01` → `WN_ANIMAL_FAUNA` slot
+#### 5A — ConceptNet 5.7.0 ingestion & partition solver
+- [x] **5A.1** Stream and parse 34.07M assertions from ConceptNet 5.7.0; filter for clean English concepts
+- [x] **5A.2** Implement depth $d=2$ BLAS sparse matrix transitive inheritance propagation ($M_{\text{inherited}} = M + TM + T^2M$)
+- [x] **5A.3** Implement Usage-Weighted Ontological Density Scoring (U-ODS) combining degree, relation entropy, affordances, and Zipf frequencies
+- [x] **5A.4** Implement Inverted-Index Hopcroft Partition Refinement Solver to select 256 optimal dimensions across 72,930 archetypes
+- [x] **5A.5** Export `data/conceptnet_slots.json` (256 slot definitions for Bands 3 & 4)
+- [x] **5A.6** Compile `data/conceptnet_offline.db` (403,503 concepts with pre-packed 256-byte quaternary vectors)
+- [x] **5A.7** Export `data/concept_codebook.csv.gz` ($403,503 \times 256$ matrix with 23,383 singletons)
 
-#### 5B — FrameNet valency templates
-- [x] **5B.1** Write script to export FrameNet frames and roles to `data/framenet_valency.json`
-- [x] **5B.2** Implement `resolve_frame_roles(verb_lemma) → dict[role_name, Band1_slot]` mapping
-- [x] **5B.3** 🧪 Test: "bite" maps to frame with Agent, Patient roles → `VAL_X1_AGENT`, `VAL_X2_PATIENT`
+#### 5B — ConceptNet Lexical Grounder
+- [x] **5B.1** Implement `ConceptNetLexicalGrounder` in `src/parser/lexical_grounder.py` with multi-POS and space/underscore lookup
+- [x] **5B.2** Implement binary quaternary hex unpacking from SQLite `packed_bytes_hex` into `QuantaVector`
+- [x] **5B.3** Implement in-memory concept LRU cache for sub-millisecond lexical grounding
+- [x] **5B.4** 🧪 Write unit tests for `ConceptNetLexicalGrounder` resolving nouns, verbs, and multiword compounds
 
-#### 5C — Typo-tolerant lexical grounding
-- [x] **5C.1** Implement fuzzy Damerau-Levenshtein matcher for surface tokens against WordNet lemma index
-- [x] **5C.2** Implement compound word healing (split/merge heuristics for multi-word expressions)
-- [x] **5C.3** 🧪 Test: "glden retreiver" → `wn:golden_retriever.n.01`, "maileman" → `wn:mailman.n.01`, "graden" → `wn:garden.n.01` (README Example D)
+#### 5C — WordNet & FrameNet fallback caches
+- [x] **5C.1** Build SQLite cache of WordNet synsets, hypernym paths, and top-level root categories (`data/wordnet_offline.db`)
+- [x] **5C.2** Export FrameNet frames and roles to `data/framenet_valency.json`
+- [x] **5C.3** Implement `resolve_frame_roles(verb_lemma) → dict[role_name, Band1_slot]` mapping
+- [x] **5C.4** 🧪 Test: "bite" maps to frame with Agent, Patient roles → `VAL_X1_AGENT`, `VAL_X2_PATIENT`
+
+#### 5D — Typo-tolerant lexical grounding
+- [x] **5D.1** Implement fuzzy Damerau-Levenshtein matcher for surface tokens against concept lemma index
+- [x] **5D.2** Implement compound word healing (split/merge heuristics for multi-word expressions)
+- [x] **5D.3** 🧪 Test: "glden retreiver" → `cn:en:golden retriever (n)`, "maileman" → `cn:en:mailman (n)`, "graden" → `cn:en:garden (n)`
 
 ---
 
@@ -248,17 +266,17 @@ To ensure $\mathcal{O}(1)$ deterministic lexical anchoring without runtime netwo
 
 ### Context & Architectural Rationale
 The forward parser transforms heterogeneous surface expressions (natural language sentences, First-Order Logic formulas, and Python source code) into canonical Quanta Abstract Syntax Graphs ($\Sigma^{1024}$).
-- **Natural Language Parsing:** Uses spaCy dependency trees + WordNet/FrameNet resolvers to extract thematic valency structures, tenses, determiners, negations (setting polarity `2`), and questions/modals (setting polarity `3`).
+- **Natural Language Parsing:** Uses spaCy dependency trees + `ConceptNetLexicalGrounder` (with WordNet/FrameNet fallback) to ground nominal and verbal nodes with `cn:en:<lemma> (<pos>)` anchors, extract thematic valency structures, tenses, determiners, negations (setting polarity `2`), and questions/modals (setting polarity `3`). Multiword compound expressions (e.g. *"golden retriever"*) are grounded as unified concepts before defaulting to head noun + descriptor unrolling.
 - **FOL Formula Parsing:** Converts quantified logic expressions ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$) into propositional AST graphs.
 - **Python AST Parsing:** Converts Python AST nodes (`FunctionDef`, `If`, `Return`, `For`/`While`, recursive calls) into graph topologies with cyclic self-CID links for recursive routines.
 
 ### Implementation Guidelines
-- `nlp_forward.py`: Convert spaCy dependency trees into Quanta ASG topologies. Handle determiners ("a" $\to$ `NSM_ONE=1`, "the" $\to$ `NSM_THIS=1`, "every" $\to$ `NSM_ALL=1`). Negations set `LJB_NA_NEGATION=2` and flip action primes (`NSM_DO=2`). Interrogatives set `GRAPH_QUERY_TARGET=3` and modal primes (`NSM_MAYBE=3`).
+- `nlp_forward.py`: Convert spaCy dependency trees into Quanta ASG topologies using `ConceptNetLexicalGrounder`. Handle determiners ("a" $\to$ `NSM_ONE=1`, "the" $\to$ `NSM_THIS=1`, "every" $\to$ `NSM_ALL=1`). Negations set `LJB_NA_NEGATION=2` and flip action primes (`NSM_DO=2`). Interrogatives set `GRAPH_QUERY_TARGET=3` and modal primes (`NSM_MAYBE=3`).
 - `fol_parser.py`: Tokenize and recursively parse FOL strings into structured ASGs.
 - `ast_parser.py`: Walk Python `ast` nodes, mapping control flow, variable bindings, and self-referential recursive calls (`GRAPH_RECURSIVE_REF=1` pointing to root function CID).
 
 ### Verification & Acceptance Criteria
-- Parse Example A, B, C sentences and verify node and aggregate vectors match README definitions.
+- Parse Example A, B, C sentences and verify node and aggregate vectors match README definitions with `cn:en:...` anchors.
 - FOL test: $\forall x (\text{Dog}(x) \rightarrow \text{Animal}(x))$ generates the canonical implication ASG (Example E).
 - Code test: `def factorial(n): ...` generates the canonical recursive AST topology (Example F).
 - Run test item **6B.11** for epistemic uncertainty query parsing.
@@ -272,15 +290,15 @@ The forward parser transforms heterogeneous surface expressions (natural languag
 - [x] **6A.4** 🧪 Test: "A golden retriever bit the mailman in the garden" extracts correct SVO + location
 
 #### 6B — spaCy → QuantaGraph forward mapping
-- [x] **6B.1** Implement root predicate node creation from main verb + WordNet synset resolution
-- [x] **6B.2** Implement agent child node creation from subject + ontological type resolution
-- [x] **6B.3** Implement patient child node creation from object + ontological type resolution
-- [x] **6B.4** Implement modifier/location/temporal child node creation from prepositional phrases
+- [x] **6B.1** Implement root predicate node creation from main verb via `ConceptNetLexicalGrounder` (`cn:en:<verb> (v)`) with WordNet fallback
+- [x] **6B.2** Implement agent child node creation from subject + multiword compound ConceptNet grounding (`cn:en:<noun> (n)`)
+- [x] **6B.3** Implement patient child node creation from object + multiword compound ConceptNet grounding
+- [x] **6B.4** Implement modifier/location/temporal/destination child node creation from prepositional phrases
 - [x] **6B.5** Implement tense detection and mapping to Band 1 tense slots (`LJB_PU_PAST_TENSE`, etc.)
 - [x] **6B.6** Implement negation detection (`not`, `n't`) → set `LJB_NA_NEGATION=2` and flip relevant Band 0 primes to `2`
 - [x] **6B.7** Implement question/uncertainty detection → set `GRAPH_QUERY_TARGET=3`, relevant primes to `3`
 - [x] **6B.8** Implement determiner resolution: "a" → `NSM_ONE=1`, "the" → `NSM_THIS=1`, "every" → `NSM_ALL=1`
-- [x] **6B.9** 🧪 Full forward-parse test for Example A ("golden retriever bit the mailman in the garden") — verify all node vectors match README
+- [x] **6B.9** 🧪 Full forward-parse test for Example A ("golden retriever bit the mailman in the garden") — verify all node vectors and anchors match
 - [x] **6B.10** 🧪 Full forward-parse test for Example B ("The dog did not bite the mailman") — verify negation slots
 - [x] **6B.11** 🧪 Full forward-parse test for Example C ("Did the dog perhaps bite a mailman?") — verify query/uncertainty slots
 
@@ -307,27 +325,27 @@ The forward parser transforms heterogeneous surface expressions (natural languag
 
 ### Context & Architectural Rationale
 The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compiler. Proposed graphs are audited by symbolic constraint solvers to guarantee formal correctness.
-1. **PyClingo / ASP Invariants:** Encodes ontological domain/range constraints, RCC-8 spatial mereotopology (e.g., `DISCONNECTED` and `NON_TANG_PART` are mutually exclusive), Allen interval temporal logic, and Pearl causal hierarchy rules.
-2. **Minimal Unsatisfiable Core (MUC) Extraction:** When a constraint is violated, the solver isolates the smallest set of conflicting graph nodes. This diagnostic vector enables closed-loop targeted repair rather than discarding the entire generation.
+1. **PyClingo / ASP Invariants with Semantic Alias Bridging:** Encodes ontological domain/range constraints, RCC-8 spatial mereotopology (e.g., `DISCONNECTED` and `NON_TANG_PART` are mutually exclusive), Allen interval temporal logic, and Pearl causal hierarchy rules. Integrates `LEGACY_ONTOLOGY_ALIASES` so that distributed ConceptNet semantic fingerprints (`CN_Q001` .. `CN_Q256`) project cleanly onto symbolic domain rules (`TYPE_ANIMATE`, `ROLE_AGENT_CAPABLE`, etc.) without requiring combinatorial 1-hot mutual exclusion.
+2. **Minimal Unsatisfiable Core (MUC) Extraction:** When a constraint is violated, the solver isolates the smallest set of conflicting graph nodes and slot assertions. This diagnostic vector enables closed-loop targeted repair rather than discarding the entire generation.
 3. **$s(\text{CASP})$ Coinductive ASP:** Evaluates logic programs top-down without exhaustive grounding, retaining logical variables and resolving cyclic dependencies (such as recursive function ASTs) that cause grounding explosion in standard ASP solvers.
 
 ### Implementation Guidelines
-- `scasp_rules.lp`: Write Clingo integrity constraints (`:- ...`) enforcing ontological typing (e.g., inanimate entities cannot be volitional agents).
+- `scasp_rules.lp`: Write Clingo integrity constraints (`:- ...`) enforcing ontological typing (e.g., inanimate entities cannot be volitional agents unless figurative).
 - Implement spatial consistency rules (RCC-8) and temporal ordering rules (Allen intervals).
-- `validator_gate.py`: Execute solver over converted graph facts. If unsatisfiable, compute MUC using assumption literals.
-- `scasp_rules.pl`: Formulate equivalent top-down coinductive $s(\text{CASP})$ rules for SWI-Prolog bridge.
+- `validator_gate.py`: Execute solver over converted graph facts and mapped `LEGACY_ONTOLOGY_ALIASES`. If unsatisfiable, compute MUC using assumption literals.
+- `scasp_rules.pl`: Formulate equivalent top-down coinductive $s(\text{CASP})$ rules for SWI-Prolog bridge with alias expansion.
 
 ### Verification & Acceptance Criteria
 - "The rock thinks" triggers an immediate constraint violation; MUC identifies the rock entity node as the conflict source.
-- "The human thinks" passes validation with zero violations.
+- "The human thinks" and "The dog bites the mailman" pass validation with zero violations across ConceptNet-grounded nodes.
 - Spatial/temporal contradiction tests: A graph asserting both $A \text{ before } B$ and $B \text{ before } A$ is flagged as invalid.
 - Coinduction test: Recursive ASG graph is validated without infinite loop or grounding timeout.
 
 ### Checklist
 #### 7A — Clingo / PyClingo ASP rules
 - [x] **7A.1** Install `clingo` Python bindings
-- [x] **7A.2** Write basic ontological integrity rules in `scasp_rules.lp`: animate-only agents, type exclusivity constraints
-- [x] **7A.3** Write domain/range validation rules: e.g., `ABSTRACT_CONCEPT` cannot have `AGENT_CAPABLE=1`
+- [x] **7A.2** Write ontological integrity rules in `scasp_rules.lp`: animate-only agents, entity-level typing constraints with figurative modality bypass
+- [x] **7A.3** Write domain/range validation rules: e.g., `ABSTRACT_CONCEPT` cannot have `AGENT_CAPABLE=1` unless figurative
 - [x] **7A.4** 🧪 Test: "The rock thinks" graph triggers constraint violation; "The human thinks" passes
 
 #### 7B — Extended invariant rules
@@ -338,15 +356,16 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 - [x] **7B.5** 🧪 Test each rule category with valid and invalid graph inputs
 
 #### 7C — Validator gate & MUC extraction
-- [x] **7C.1** Implement `ValidatorGate` class that accepts a `QuantaGraph` and runs Clingo solving
+- [x] **7C.1** Implement `ValidatorGate` class that accepts a `QuantaGraph`, emits canonical and aliased facts, and runs Clingo solving
 - [x] **7C.2** Implement MUC (Minimal Unsatisfiable Core) extraction: identify the smallest set of conflicting nodes/axioms
-- [x] **7C.3** Implement `validate(graph) → (is_valid: bool, muc: list[node_cid] | None)` API
+- [x] **7C.3** Implement `validate(graph) → ValidationResult` returning validity, errors, MUC slots, and MUC node CIDs
 - [x] **7C.4** 🧪 Test MUC extraction: create a graph with one invalid node among valid ones; verify MUC pinpoints exactly the invalid node
+- [x] **7C.5** 🧪 Test validation with ConceptNet-grounded graphs and verify alias bridge functionality
 
 #### 7D — s(CASP) / SWI-Prolog integration (optional advanced path)
 - [x] **7D.1** Install SWI-Prolog with s(CASP) pack
-- [x] **7D.2** Write s(CASP) Prolog equivalents of the Clingo rules in `scasp_rules.pl`
-- [x] **7D.3** Implement Python↔Prolog subprocess bridge for s(CASP) invocation
+- [x] **7D.2** Write s(CASP) Prolog equivalents of the Clingo rules in `scasp_rules.pl` with alias expansion
+- [x] **7D.3** Implement Python↔Prolog subprocess bridge for s(CASP) invocation (`scasp_bridge.py`)
 - [x] **7D.4** 🧪 Test coinductive reasoning: validate a cyclic graph (recursive function ASG) that standard grounding would reject
 
 ---
@@ -355,13 +374,16 @@ The Neuro-Symbolic Verification Gate acts as QUANTA's "System 2" cognitive compi
 
 ### Context & Architectural Rationale
 To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta ASGs must be deterministically unrolled into diverse human and computational target languages:
-- **English Realizer (`EnglishRealizer`):** Unrolls thematic roles into natural SVO syntax with tense inflection and determiner selection.
+- **English Realizer (`EnglishRealizer`):** Unrolls thematic roles into natural SVO syntax with tense inflection, determiner selection, preposition routing, and **2-Tier Vector Decoding (`ConceptVectorDecoder`)**:
+  - *Tier 1 (In-Memory SIMD)*: Instant decoding across 23,383 singletons ($<10\text{ ms}$) loaded from `data/concept_codebook.csv.gz`.
+  - *Tier 2 (Category Basin Fallback)*: Category basin lookup in `data/conceptnet_offline.db`.
+  - Parses canonical `cn:en:<lemma> (<pos>)`, `cn:...`, and legacy `wn:...` anchors, as well as anchor-free semantic vector decoding.
 - **FOL Emitter (`FOLEmitter`):** Emits standard First-Order Logic syntax with correct operator precedence.
 - **Code Emitter (`CodeEmitter`):** Emits executable Python source code from AST topologies.
 - *(Note: Specific language realizers like Hungarian have been removed in favor of a future generalized multilingual architecture).*
 
 ### Implementation Guidelines
-- `english_nlg.py`: Construct grammatical English prose from ASG traversal.
+- `english_nlg.py`: Construct grammatical English prose from ASG traversal and instantiate `ConceptVectorDecoder`.
 - `fol_emitter.py`: Traverse quantified sub-expressions and format formulas ($\forall x (\text{Dog}(x) \rightarrow \text{Animal}(x))$).
 - `code_emitter.py`: Format Python functions, loops, and recursive calls with proper indentation.
 
@@ -371,17 +393,21 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - Example C graph $\to$ English: *"Did the dog perhaps bite a mailman?"*
 - Example E graph $\to$ FOL string: `∀x(Dog(x) → Animal(x))`.
 - Example F graph $\to$ Executable Python code; running `factorial(5)` returns `120`.
+- 2-Tier vector decoding test: Pure 256-D vector with zero anchors resolves correctly to "dog" via Tier 1 codebook table.
 
 ### Checklist
-#### 8A — English Realizer
+#### 8A — English Realizer & ConceptVectorDecoder
 - [x] **8A.1** Implement ASG traversal: root predicate → verb, X1 → subject, X2 → object
-- [x] **8A.2** Implement tense inflection from Band 1 tense slots (past/present/future)
-- [x] **8A.3** Implement negation surface form: `LJB_NA_NEGATION=2` → "did not [verb]"
-- [x] **8A.4** Implement determiner generation: `NSM_ONE=1` → "a", `NSM_THIS=1` → "the", `NSM_ALL=1` → "every"
-- [x] **8A.5** Implement prepositional phrase generation from location/temporal child nodes
-- [x] **8A.6** 🧪 Test: Example A graph → "A golden retriever bit the mailman in the garden."
-- [x] **8A.7** 🧪 Test: Example B graph → "The dog did not bite the mailman."
-- [x] **8A.8** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
+- [x] **8A.2** Implement `ConceptVectorDecoder` in `src/realizer/english_nlg.py` with 2-tier search (23,383 singletons SIMD table + SQLite category basin fallback)
+- [x] **8A.3** Implement anchor parsing for `cn:en:<lemma> (<pos>)`, `cn:...`, and `wn:...` formats
+- [x] **8A.4** Implement tense inflection from Band 1 tense slots (past/present/future)
+- [x] **8A.5** Implement negation surface form: `LJB_NA_NEGATION=2` → "did not [verb]"
+- [x] **8A.6** Implement determiner generation: `NSM_ONE=1` → "a", `NSM_THIS=1` → "the", `NSM_ALL=1` → "every"
+- [x] **8A.7** Implement prepositional phrase generation from location/temporal/destination child nodes
+- [x] **8A.8** 🧪 Test: Example A graph → "A golden retriever bit the mailman in the garden."
+- [x] **8A.9** 🧪 Test: Example B graph → "The dog did not bite the mailman."
+- [x] **8A.10** 🧪 Test: Example C graph → "Did the dog perhaps bite a mailman?"
+- [x] **8A.11** 🧪 Test: Anchor-free 2-tier vector decoding (< 10 ms SIMD lookup) on 256-D ConceptNet vector
 
 #### 8B — Generalized Multilingual Realizer Architecture (Future Extension)
 - [ ] **8B.1** Plan generalized cross-lingual morphology & syntax mapping framework
@@ -427,6 +453,7 @@ If Mentalese captures true invariant semantics, transforming surface text into a
 - [ ] **9.5** 🧪 Cross-lingual test: Reserved for future generalized multilingual framework
 - [x] **9.6** 🧪 Negation round-trip: "X did not Y" → ASG → English → verify negation preserved
 - [x] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
+- [x] **9.8** 🧪 ConceptNet translation suite: dedicated round-trip & vector decoding verification (`tests/test_conceptnet_translation.py`)
 
 ---
 
@@ -477,6 +504,12 @@ We frame the QUANTA discrete semantic space as a **Discrete Information Bottlene
 - [x] **10C.4** 🧪 Implement and run dimension sweep across `d ∈ {64, 128, 256, 512, 1024, 2048}`; verify $d^* = 1024$ achieves $R_{\text{collision}} = 0$, entropy saturation, $<5\text{ ms}$ ASP latency, and 4-cache-line SIMD throughput
 - [x] **10C.5** Export dimension sweep results to `output/dimension_sweep_results.json` and `output/dimension_sweep_report.md`
 
+#### 10D — ConceptNet 256-D Partition Solver & Information Optimization
+- [x] **10D.1** 🧪 Formulate and execute Hopcroft Inverted-Index Partition Refinement Solver on ConceptNet 5.7.0 sparse matrix ($d=2$ transitive expansion)
+- [x] **10D.2** 🧪 Evaluate entropy and collision rates across 72,930 unique semantic archetypes; select 256 globally optimal dimensions (Bands 3 & 4)
+- [x] **10D.3** 🧪 Verify singleton resolvability: exactly 23,383 concepts (32.1% of archetypes, >95% conversational coverage) uniquely identified in Tier 1 codebook
+- [x] **10D.4** Export empirical benchmark findings and solver documentation to `docs/conceptnetDimensions.md` and `docs/DimensionEval.md`
+
 ---
 
 ## Phase 11: Validation Corpus & Benchmark Data
@@ -522,11 +555,11 @@ To rigorously profile dimension entropy and train/evaluate neuro-symbolic reason
 
 ### Context & Architectural Rationale
 The `TranslatorPipeline` orchestrates the complete two-way cognitive cycle:
-$$\text{Input (NL / FOL / Code)} \longrightarrow \text{Forward Parser} \longrightarrow \text{Validation Gate (ASP)} \longrightarrow \text{Merkle Address} \longrightarrow \text{Reverse Realizer (Target)}$$
+$$\text{Input (NL / FOL / Code)} \longrightarrow \text{ConceptNet Forward Parser} \longrightarrow \text{Validation Gate (ASP + Aliases)} \longrightarrow \text{Merkle Address} \longrightarrow \text{Reverse Realizer (2-Tier Decoder)}$$
 It guarantees end-to-end type safety, structured logging, performance telemetry, and graceful error reporting with Minimal Unsatisfiable Core (MUC) diagnostics when invalid inputs are rejected.
 
 ### Implementation Guidelines
-- `translator_pipeline.py`: Build orchestration engine supporting `target_format ∈ {english, fol, python}`.
+- `translator_pipeline.py`: Build orchestration engine supporting `target_format ∈ {english, fol, python}` and ConceptNet lexical grounding.
 - Emit structured JSON log entries tracking stage latencies and memory usage.
 - Return explicit MUC diagnostic payloads upon validation rejection.
 
@@ -544,6 +577,7 @@ It guarantees end-to-end type safety, structured logging, performance telemetry,
 - [x] **12.6** 🧪 End-to-end pipeline test: `∀x(Dog(x) → Animal(x))` → FOL round-trip
 - [x] **12.7** 🧪 End-to-end pipeline test: `def factorial(n)` → Python code round-trip
 - [x] **12.8** 🧪 End-to-end pipeline test: invalid input ("The rock thinks") → validation rejection with MUC
+- [x] **12.9** 🧪 End-to-end pipeline test: ConceptNet-grounded sentences with 2-tier vector decoding
 
 ---
 
@@ -609,12 +643,13 @@ This phase establishes an exhaustive validation battery for the Mentalese langua
 - [ ] **14A.3** 🧪 Test composition: join of an affirmed and negated proposition produces `UNKNOWN=3` in the correct slots
 
 #### 14B — Semantic collision testing
-- [ ] **14B.1** 🧪 Test distinct concepts produce distinct vectors: "dog" ≠ "cat" ≠ "car" ≠ "tree"
+- [ ] **14B.1** 🧪 Test distinct concepts produce distinct vectors: "dog" ≠ "cat" ≠ "car" ≠ "tree" across 256 ConceptNet dimensions
 - [ ] **14B.2** 🧪 Test near-synonym differentiation: "happy" vs "joyful" → vectors differ in at least one canonical slot
-- [ ] **14B.3** 🧪 Test ontological class separation: all animals share `TYPE_ANIMATE=1` but differ in other dimensions
+- [ ] **14B.3** 🧪 Test ontological class separation: all animals share `CN_Q011_ANIMAL=1` and `TYPE_ANIMATE=1` but differ in specific discriminative dimensions
+- [ ] **14B.4** 🧪 Test 23,383 singleton concepts in Tier 1 codebook have 0% collision with one another
 
 #### 14C — Structural coverage testing
-- [ ] **14C.1** 🧪 Test that simple declarative sentences activate Band 0 + Band 1 + Band 3 but leave most of other bands at `0`
+- [ ] **14C.1** 🧪 Test that simple declarative sentences activate Band 0 + Band 1 + Band 3/4 (ConceptNet `CN_Q*` slots) but leave non-applicable bands at `0`
 - [ ] **14C.2** 🧪 Test that FOL formulas activate Band 2 quantifier/connective/variable slots
 - [ ] **14C.3** 🧪 Test that code ASTs activate Band 1 AST topology slots (`GRAPH_FUNCTION_DEF`, `GRAPH_CONTROL_LOOP`, etc.)
 - [ ] **14C.4** 🧪 Test that spatial propositions ("X is inside Y") activate Band 7 RCC-8 slots
@@ -919,7 +954,7 @@ Vision-Language Models (VLMs) suffer from severe visual hallucinations, spatial 
 ### Context & Architectural Rationale
 Strategic dissemination across two high-impact conference targets:
 1. **Primary Submission (NeSy / ACL):** *The Mentalese Paradigm: Epistemic 4-Valued Metalanguage for Verifiable Neuro-Symbolic Reasoning*
-   - Focus: Theoretical grounding, 1024-dimension layout (8 bands of 128 slots), Belnap logic, top-down coinductive $s(\text{CASP})$ verification, MUC repair, polyglot surface realization, and 100% accuracy on FOLIO/ProofWriter.
+   - Focus: Theoretical grounding, 1024-dimension layout (8 bands of 128 slots), ConceptNet 5.7.0 256-D data-driven grounding, Belnap logic, top-down coinductive $s(\text{CASP})$ verification with alias bridging, MUC repair, 2-tier polyglot surface realization, and 100% accuracy on FOLIO/ProofWriter.
 2. **Secondary Submission (NeurIPS / EMNLP):** *Non-Autoregressive Discrete Graph Diffusion over Strongly-Typed Quaternary Abstract Syntax Graphs*
    - Focus: Fast-dLLM v2 discrete diffusion engine, Finite Scalar Quantization (FSQ) link, parallel block decoding throughput, and Virtual Page-Table Attention ($\mathcal{O}(1)$ VRAM context scaling).
 
@@ -932,10 +967,10 @@ Strategic dissemination across two high-impact conference targets:
 
 ### Checklist
 - [ ] **23.1** Draft primary paper abstract and introduction (NeSy / ACL target)
-- [ ] **23.2** Write representational grounding section (1024-dim layout, 8-band taxonomy, Belnap 4-valued logic, FSQ connection, empirical Pareto dimension sweep proof)
-- [ ] **23.3** Write neuro-symbolic gate section (LTN + s(CASP) + MUC repair)
-- [ ] **23.4** Write bidirectional surface realization section (English, FOL, Code)
+- [ ] **23.2** Write representational grounding section (1024-dim layout, 8-band taxonomy, ConceptNet 5.7.0 256-D U-ODS derivation, Belnap 4-valued logic, FSQ connection, empirical Pareto dimension sweep proof)
+- [ ] **23.3** Write neuro-symbolic gate section (LTN + s(CASP) + alias bridging + MUC repair)
+- [ ] **23.4** Write bidirectional surface realization section (English NLG with 2-tier SIMD decoding, FOL, Code)
 - [ ] **23.5** Compile benchmark results tables (FOLIO, ProofWriter, bAbI, CLUTRR, AR-LSAT)
 - [ ] **23.6** Write conclusion and AGI alignment discussion
 - [ ] **23.7** Draft secondary paper (NeurIPS / EMNLP target): Fast-dLLM engine + FSQ + Page-Table Attention
-- [ ] **23.8** Prepare supplementary materials: slot layout tables, proof trace examples, code listings
+- [ ] **23.8** Prepare supplementary materials: slot layout tables, ConceptNet 256-D solver derivations, proof trace examples, code listings
