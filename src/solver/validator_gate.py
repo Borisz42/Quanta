@@ -94,6 +94,11 @@ class ValidationGate:
         assumptions: List[Tuple[clingo.Symbol, bool]] = []
         slot_map: Dict[str, Tuple[str, str, int]] = {}
 
+        from core.slots import LEGACY_ONTOLOGY_ALIASES
+        inv_aliases: Dict[str, List[str]] = {}
+        for alias_k, canon_v in LEGACY_ONTOLOGY_ALIASES.items():
+            inv_aliases.setdefault(canon_v, []).append(alias_k)
+
         current_nodes = graph.nodes
         for cid, node in current_nodes.items():
             active = node.vector.active_slots()
@@ -104,13 +109,15 @@ class ValidationGate:
                     slot_name = f"DIM_{idx}"
                 val_int = int(qval)
 
-                candidates.append(f'candidate_slot("{cid}", "{slot_name}", {val_int}).')
-                sym = clingo.Function(
-                    "slot",
-                    [clingo.String(cid), clingo.String(slot_name), clingo.Number(val_int)],
-                )
-                assumptions.append((sym, True))
-                slot_map[str(sym)] = (cid, slot_name, val_int)
+                names_to_emit = [slot_name] + inv_aliases.get(slot_name, [])
+                for s_name in names_to_emit:
+                    candidates.append(f'candidate_slot("{cid}", "{s_name}", {val_int}).')
+                    sym = clingo.Function(
+                        "slot",
+                        [clingo.String(cid), clingo.String(s_name), clingo.Number(val_int)],
+                    )
+                    assumptions.append((sym, True))
+                    slot_map[str(sym)] = (cid, s_name, val_int)
 
             for rel, targets in node.edges.items():
                 for t_cid in targets:

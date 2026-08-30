@@ -5,16 +5,101 @@ into grammatical, fluent English sentences.
 """
 
 from __future__ import annotations
+from pathlib import Path
 import re
+import sqlite3
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import numpy as np
 
 from core.asg import QuantaGraph, QuantaNode
 from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
 
 
+class ConceptVectorDecoder:
+    """Decodes 256-D ConceptNet vectors (Bands 3 & 4) back into natural language lemmas using 2-tier search."""
+
+    _instance: Optional[ConceptVectorDecoder] = None
+
+    def __init__(
+        self,
+        db_path: str = "data/conceptnet_offline.db",
+        codebook_path: str = "data/concept_codebook.csv.gz",
+        max_singletons: int = 23383,
+    ):
+        self.db_path = Path(db_path)
+        self.codebook_path = Path(codebook_path)
+        self.max_singletons = max_singletons
+        self._conn: Optional[sqlite3.Connection] = None
+        self._singleton_lemmas: List[str] = []
+        self._singleton_vectors: Optional[np.ndarray] = None
+        self._loaded: bool = False
+
+    @classmethod
+    def get_instance(cls) -> ConceptVectorDecoder:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def _ensure_loaded(self):
+        if self._loaded:
+            return
+        if self.codebook_path.exists():
+            try:
+                import pandas as pd
+                df = pd.read_csv(self.codebook_path, nrows=self.max_singletons)
+                self._singleton_lemmas = [str(k).split(" (")[0].replace("_", " ") for k in df.iloc[:, 0].values]
+                self._singleton_vectors = df.iloc[:, 1:257].values.astype(np.uint8)
+            except Exception:
+                pass
+        if self.db_path.exists() and self._conn is None:
+            try:
+                self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            except Exception:
+                pass
+        self._loaded = True
+
+    def decode_vector(self, vector_256: np.ndarray, distance_threshold: float = 0.15) -> Tuple[Optional[str], float]:
+        """Decodes 256-D vector into lemma using Tier 1 singletons (23,383) and Tier 2 SQLite basin search."""
+        self._ensure_loaded()
+        vec_arr = np.asarray(vector_256, dtype=np.uint8).flatten()
+        if len(vec_arr) != 256:
+            return None, 1.0
+
+        if not np.any(vec_arr):
+            return None, 1.0
+
+        # Tier 1: In-memory 23,383 singletons search (< 10 ms)
+        if self._singleton_vectors is not None and len(self._singleton_vectors) > 0:
+            diff = np.count_nonzero(self._singleton_vectors != vec_arr, axis=1)
+            best_idx = int(np.argmin(diff))
+            norm_dist = float(diff[best_idx]) / 256.0
+            if norm_dist <= distance_threshold:
+                return self._singleton_lemmas[best_idx], norm_dist
+
+        # Tier 2: Category Basin query in SQLite
+        if self._conn:
+            active_indices = np.where(vec_arr > 0)[0]
+            if len(active_indices) > 0:
+                cur = self._conn.cursor()
+                top_q = f"CN_Q{active_indices[0] + 1:03d}"
+                cur.execute(
+                    "SELECT lemma, active_slots, packed_bytes_hex FROM concepts WHERE active_slots LIKE ? LIMIT 50",
+                    (f"%{top_q}%",)
+                )
+                rows = cur.fetchall()
+                if rows:
+                    best_lemma = rows[0][0]
+                    return best_lemma, 0.20
+
+        return None, 1.0
+
+
 class EnglishRealizer:
     """Deterministic English NLG realizer unrolling QuantaGraph ASGs to natural text."""
+
+    def __init__(self):
+        self.vector_decoder = ConceptVectorDecoder.get_instance()
 
     IRREGULAR_PAST = {
         "be": "was",
@@ -321,17 +406,33 @@ class EnglishRealizer:
 
     def _extract_verb_base(self, node: QuantaNode) -> str:
         """Extracts the base verb lemma from node anchor, literal, or active NSM prime."""
-        if node.anchor and node.anchor.startswith("wn:"):
-            # e.g., 'wn:bite.v.01' -> 'bite'
-            parts = node.anchor[3:].split(".")
-            if len(parts) > 0 and parts[0]:
-                return parts[0].replace("_", " ")
+        if node.anchor:
+            if node.anchor.startswith("cn:"):
+                anc = node.anchor[3:]
+                if ":" in anc:
+                    anc = anc.split(":", 1)[1]
+                if " (" in anc:
+                    anc = anc.split(" (")[0]
+                return anc.replace("_", " ").strip()
+            elif node.anchor.startswith("wn:"):
+                # e.g., 'wn:bite.v.01' -> 'bite'
+                parts = node.anchor[3:].split(".")
+                if len(parts) > 0 and parts[0]:
+                    return parts[0].replace("_", " ")
 
         if node.literal and isinstance(node.literal, str):
             lit = node.literal.strip()
             # If literal is a simple verb or short text
             if len(lit.split()) == 1 and lit.isalpha():
                 return lit.lower()
+
+        # Vector decoding fallback if Band 3/4 non-zero
+        if hasattr(node, "vector") and node.vector is not None:
+            vec_data = node.vector._data if hasattr(node.vector, "_data") else None
+            if vec_data is not None and np.any(vec_data[384:640]):
+                lemma, dist = self.vector_decoder.decode_vector(vec_data[384:640])
+                if lemma and dist <= 0.15:
+                    return lemma
 
         # Fallback: Infer from Band 0 NSM primes
         if node.get_slot("NSM_MOVE") != 0:
@@ -460,16 +561,32 @@ class EnglishRealizer:
         """Realizes an entity node with determiners, quantifiers, descriptors, and head noun."""
         head_noun = ""
 
-        if node.anchor and node.anchor.startswith("wn:"):
-            # e.g., 'wn:golden_retriever.n.01' -> 'golden retriever'
-            parts = node.anchor[3:].split(".")
-            if len(parts) > 0:
-                head_noun = parts[0].replace("_", " ")
+        if node.anchor:
+            if node.anchor.startswith("cn:"):
+                anc = node.anchor[3:]
+                if ":" in anc:
+                    anc = anc.split(":", 1)[1]
+                if " (" in anc:
+                    anc = anc.split(" (")[0]
+                head_noun = anc.replace("_", " ").strip()
+            elif node.anchor.startswith("wn:"):
+                # e.g., 'wn:golden_retriever.n.01' -> 'golden retriever'
+                parts = node.anchor[3:].split(".")
+                if len(parts) > 0:
+                    head_noun = parts[0].replace("_", " ")
 
         if not head_noun and node.literal:
             lit = str(node.literal).strip()
             # If literal is a clean entity name
             head_noun = lit
+
+        # Vector decoding fallback for anchor-free nodes
+        if not head_noun and hasattr(node, "vector") and node.vector is not None:
+            vec_data = node.vector._data if hasattr(node.vector, "_data") else None
+            if vec_data is not None and np.any(vec_data[384:640]):
+                lemma, dist = self.vector_decoder.decode_vector(vec_data[384:640])
+                if lemma and dist <= 0.15:
+                    head_noun = lemma
 
         if head_noun in ("homo", "homo sapiens", "human being"):
             if node.literal and str(node.literal).lower() in ("human", "person", "man", "woman"):
@@ -482,15 +599,15 @@ class EnglishRealizer:
                 head_noun = lit
 
         if not head_noun:
-            if node.get_slot("TYPE_HUMAN") == 1:
+            if node.get_slot("TYPE_HUMAN") == 1 or node.get_slot("CN_Q015_PERSON") == 1:
                 head_noun = "person"
-            elif node.get_slot("TYPE_ANIMATE") == 1:
+            elif node.get_slot("TYPE_ANIMATE") == 1 or node.get_slot("CN_Q011_ANIMAL") == 1:
                 head_noun = "animal"
-            elif node.get_slot("TYPE_ARTIFACT") == 1:
+            elif node.get_slot("TYPE_ARTIFACT") == 1 or node.get_slot("CN_Q042_DEVICE") == 1:
                 head_noun = "object"
-            elif node.get_slot("TYPE_SPATIAL_REGION") == 1:
+            elif node.get_slot("TYPE_SPATIAL_REGION") == 1 or node.get_slot("CN_Q073_PLACE") == 1:
                 head_noun = "place"
-            elif node.get_slot("TYPE_ABSTRACT_CONCEPT") == 1:
+            elif node.get_slot("TYPE_ABSTRACT_CONCEPT") == 1 or node.get_slot("CN_Q113_LOGIC") == 1:
                 head_noun = "concept"
             else:
                 head_noun = "entity"

@@ -56,6 +56,11 @@ class SCaspBridge:
 
     def graph_to_prolog_facts(self, graph: QuantaGraph) -> str:
         """Converts QuantaGraph nodes, slots, and edges into Prolog fact statements."""
+        from core.slots import LEGACY_ONTOLOGY_ALIASES
+        inv_aliases: Dict[str, List[str]] = {}
+        for alias_k, canon_v in LEGACY_ONTOLOGY_ALIASES.items():
+            inv_aliases.setdefault(canon_v, []).append(alias_k)
+
         lines: List[str] = []
         lines.append("% QUANTA ASG Prolog Facts")
 
@@ -70,6 +75,8 @@ class SCaspBridge:
                 slot_name = get_slot_by_index(idx).name
                 val_int = int(qval)
                 lines.append(f"slot('{cid}', '{slot_name}', {val_int}).")
+                for alias in inv_aliases.get(slot_name, []):
+                    lines.append(f"slot('{cid}', '{alias}', {val_int}).")
 
             for rel, targets in node.edges.items():
                 for t_cid in targets:

@@ -19,7 +19,7 @@ except ImportError:
 from core.asg import QuantaGraph, QuantaNode
 from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
-from parser.lexical_grounder import WordNetLexicalGrounder
+from parser.lexical_grounder import ConceptNetLexicalGrounder, WordNetLexicalGrounder
 
 
 class SVOResult(NamedTuple):
@@ -36,10 +36,10 @@ class NLPForwardParser:
     def __init__(self, spacy_model: str = "en_core_web_sm", offline_cache_path: Optional[str] = None):
         self.nlp = spacy.load(spacy_model)
         if offline_cache_path is None:
-            default_db = Path("data/wordnet_offline.db")
+            default_db = Path("data/conceptnet_offline.db")
             if default_db.exists():
                 offline_cache_path = str(default_db)
-        self.grounder = WordNetLexicalGrounder(offline_cache_path=offline_cache_path)
+        self.grounder = ConceptNetLexicalGrounder(offline_cache_path=offline_cache_path)
 
         # Lexical classification maps for Band 0 NSM primes
         self.motion_verbs = {
@@ -938,10 +938,10 @@ class NLPForwardParser:
 
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [agent_token.text])
-                try:
-                    concept = self.grounder.ground_synset(full_text.lower().replace(" ", "_"))
+                concept = self.grounder.resolve_concept(full_text, pos="n")
+                if concept and len(concept.active_slots) > 0:
                     agent_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
-                except Exception:
+                else:
                     agent_node = self._create_entity_node(agent_token)
             else:
                 agent_node = self._create_entity_node(agent_token)
@@ -987,10 +987,10 @@ class NLPForwardParser:
             compounds = [c for c in patient_token.children if c.dep_ in ("compound", "amod") and c.i < patient_token.i]
             if compounds:
                 full_text = " ".join([c.text for c in compounds] + [patient_token.text])
-                try:
-                    concept = self.grounder.ground_synset(full_text.lower().replace(" ", "_"))
+                concept = self.grounder.resolve_concept(full_text, pos="n")
+                if concept and len(concept.active_slots) > 0:
                     patient_node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=full_text)
-                except Exception:
+                else:
                     patient_node = self._create_entity_node(patient_token)
             else:
                 patient_node = self._create_entity_node(patient_token)
@@ -1041,7 +1041,7 @@ class NLPForwardParser:
                     prep_node.set_slot(det_slot, 1)
 
                 if prep_lemma in ("to", "into", "towards"):
-                    if prep_node.get_slot("TYPE_ANIMATE") == 1 or prep_node.get_slot("TYPE_HUMAN") == 1:
+                    if prep_lemma != "into" and (prep_node.get_slot("TYPE_HUMAN") == 1 or prep_node.get_slot("CN_Q015_PERSON") == 1):
                         prep_node.set_slot("VAL_EXPERIENCER", 1)
                         root_node.set_slot("VAL_EXPERIENCER", 1)
                         graph.add_node(prep_node)
@@ -1228,7 +1228,13 @@ class NLPForwardParser:
             else:
                 node.set_slot("TYPE_STATE", 1)
 
-        node.anchor = f"wn:{lemma}.v.01"
+        concept = self.grounder.resolve_concept(lemma, pos="v")
+        if concept:
+            node.anchor = concept.synset_name
+            for s_name, s_val in concept.active_slots.items():
+                node.set_slot(s_name, s_val)
+        else:
+            node.anchor = f"cn:en:{lemma} (v)"
 
         # Band 1: Tense Detection
         morph = str(root_token.morph)
@@ -1257,7 +1263,7 @@ class NLPForwardParser:
         return node
 
     def _create_entity_node(self, token: Any) -> QuantaNode:
-        """Constructs an entity QuantaNode grounded through WordNet."""
+        """Constructs an entity QuantaNode grounded through ConceptNet."""
         lemma = token.lemma_.lower()
         text_lower = token.text.lower()
 
@@ -1268,17 +1274,16 @@ class NLPForwardParser:
             node.set_slot("TYPE_ANIMATE", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
             node.set_slot("ROLE_SENTIENT", 1)
-            node.set_slot("WN_PERSON_HUMAN", 1)
             node.set_slot("GRAPH_ANAPHORA_TARGET", 1)
             node.set_slot("GRAPH_COREF_BUNDLE", 1)
-            node.anchor = "wn:person.n.01"
+            node.anchor = "cn:en:person (n)"
             return node
         elif text_lower in ("it", "its"):
             node = QuantaNode(literal=token.text)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
             node.set_slot("GRAPH_ANAPHORA_TARGET", 1)
             node.set_slot("GRAPH_COREF_BUNDLE", 1)
-            node.anchor = "wn:entity.n.01"
+            node.anchor = "cn:en:entity (n)"
             return node
         elif text_lower in ("they", "them", "their"):
             node = QuantaNode(literal=token.text)
@@ -1287,25 +1292,24 @@ class NLPForwardParser:
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
             node.set_slot("GRAPH_ANAPHORA_TARGET", 1)
             node.set_slot("GRAPH_COREF_BUNDLE", 1)
-            node.anchor = "wn:person.n.01"
+            node.anchor = "cn:en:person (n)"
             return node
 
         try:
             concept = self.grounder.ground_synset(lemma)
             node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=token.text)
         except Exception:
-            # Fallback when not found in WordNet
+            # Fallback when not found in offline DB
             node = QuantaNode(literal=token.text)
             if token.ent_type_ == "PERSON" or token.text.istitle():
                 node.set_slot("TYPE_HUMAN", 1)
                 node.set_slot("TYPE_ANIMATE", 1)
                 node.set_slot("ROLE_AGENT_CAPABLE", 1)
                 node.set_slot("ROLE_SENTIENT", 1)
-                node.set_slot("WN_PERSON_HUMAN", 1)
-                node.anchor = f"wn:person.n.01"
+                node.anchor = "cn:en:person (n)"
             else:
                 node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
-                node.anchor = f"wn:{lemma}.n.01"
+                node.anchor = f"cn:en:{lemma} (n)"
 
         return node
 

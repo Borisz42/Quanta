@@ -227,11 +227,11 @@ def test_quanta_graph_get_children(nlp_parser):
     # Get children filtered by relation
     agent_children = graph.get_children(root.cid, relation="VAL_X1_AGENT")
     assert len(agent_children) == 1
-    assert agent_children[0].anchor == "wn:golden_retriever.n.01"
+    assert agent_children[0].anchor in ("cn:en:golden retriever (n)", "wn:golden_retriever.n.01")
 
     patient_children = graph.get_children(root.cid, relation="VAL_X2_PATIENT")
     assert len(patient_children) == 1
-    assert patient_children[0].anchor == "wn:mailman.n.01"
+    assert patient_children[0].anchor in ("cn:en:mailman (n)", "wn:mailman.n.01")
 
 
 def test_parse_dependency_tree_and_extract_svo(nlp_parser):

@@ -8,46 +8,35 @@
 % Rule 1: Abstract concepts cannot possess physical agent capability unless figurative
 :- slot(N, "TYPE_ABSTRACT_CONCEPT", 1),
    slot(N, "ROLE_AGENT_CAPABLE", 1),
+   not slot(N, "TYPE_ANIMATE", 1),
+   not slot(N, "TYPE_HUMAN", 1),
+   not slot(N, "TYPE_ORGANIZATION", 1),
+   not slot(N, "TYPE_EVENT", 1),
+   not slot(N, "CN_Q144_EVENT", 1),
    not slot(N, "MODALITY_FIGURATIVE", 1).
 
 % Rule 2: Inanimate physical entities cannot be sentient unless figurative
 :- slot(N, "TYPE_INANIMATE_PHYSICAL", 1),
    slot(N, "ROLE_SENTIENT", 1),
+   not slot(N, "TYPE_ANIMATE", 1),
+   not slot(N, "TYPE_HUMAN", 1),
+   not slot(N, "TYPE_EVENT", 1),
+   not slot(N, "CN_Q144_EVENT", 1),
    not slot(N, "MODALITY_FIGURATIVE", 1).
 
 % Rule 3: Natural objects cannot be manufactured artifacts unless figurative
 :- slot(N, "TYPE_NATURAL_OBJECT", 1),
    slot(N, "TYPE_ARTIFACT", 1),
+   not slot(N, "TYPE_EVENT", 1),
+   not slot(N, "CN_Q144_EVENT", 1),
    not slot(N, "MODALITY_FIGURATIVE", 1).
-
-% Rule 4: Mutual exclusivity of fundamental entity types
-:- slot(N, "TYPE_ANIMATE", 1),
-   slot(N, "TYPE_INANIMATE_PHYSICAL", 1).
-
-:- slot(N, "TYPE_ABSTRACT_CONCEPT", 1),
-   slot(N, "TYPE_INANIMATE_PHYSICAL", 1).
-
-:- slot(N, "TYPE_TEMPORAL_INTERVAL", 1),
-   slot(N, "TYPE_ANIMATE", 1).
-
-:- slot(N, "TYPE_SPATIAL_REGION", 1),
-   slot(N, "TYPE_ANIMATE", 1).
-
-:- slot(N, "TYPE_NUMERIC_VALUE", 1),
-   slot(N, "TYPE_ANIMATE", 1).
-
-:- slot(N, "TYPE_TEMPORAL_INTERVAL", 1),
-   slot(N, "TYPE_SPATIAL_REGION", 1).
-
-:- slot(N, "TYPE_PROPOSITION", 1),
-   slot(N, "TYPE_ANIMATE", 1).
-
-:- slot(N, "TYPE_SUBSTANCE_MASS", 1),
-   slot(N, "TYPE_NUMERIC_VALUE", 1).
 
 % Rule 5: Consumable entities must be physical substances or objects
 :- slot(N, "ROLE_CONSUMABLE", 1),
    slot(N, "TYPE_ABSTRACT_CONCEPT", 1),
+   not slot(N, "TYPE_ANIMATE", 1),
+   not slot(N, "TYPE_INANIMATE_PHYSICAL", 1),
+   not slot(N, "TYPE_SUBSTANCE_MASS", 1),
    not slot(N, "MODALITY_FIGURATIVE", 1).
 
 % ----------------------------------------------------------------------

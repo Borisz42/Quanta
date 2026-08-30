@@ -3073,2051 +3073,2051 @@
   },
   {
     "index": 384,
-    "name": "TYPE_ANIMATE",
+    "name": "CN_Q001_COMPUTING",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Biological living being"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of computing?"
   },
   {
     "index": 385,
-    "name": "TYPE_HUMAN",
+    "name": "CN_Q002_BODY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Human person"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to body?"
   },
   {
     "index": 386,
-    "name": "TYPE_INANIMATE_PHYSICAL",
+    "name": "CN_Q003_LEGAL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Non-living physical entity"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of legal?"
   },
   {
     "index": 387,
-    "name": "TYPE_NATURAL_OBJECT",
+    "name": "CN_Q004_PLANT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Non-manufactured physical object (rock, star)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to plant?"
   },
   {
     "index": 388,
-    "name": "TYPE_ARTIFACT",
+    "name": "CN_Q005_MUSIC",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Manufactured tool or object"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of music?"
   },
   {
     "index": 389,
-    "name": "TYPE_SUBSTANCE_MASS",
+    "name": "CN_Q006_MEDICINE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Continuous uncounted material / matter"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of medicine?"
   },
   {
     "index": 390,
-    "name": "TYPE_COLLECTION_SET",
+    "name": "CN_Q007_NAUTICAL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Plural set or aggregated group"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of nautical?"
   },
   {
     "index": 391,
-    "name": "TYPE_ABSTRACT_CONCEPT",
+    "name": "CN_Q008_MATHEMATICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Intangible / mathematical / theoretical concept"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of mathematics?"
   },
   {
     "index": 392,
-    "name": "TYPE_PROPOSITION",
+    "name": "CN_Q009_MILITARY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Declarative statement with truth value"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of military?"
   },
   {
     "index": 393,
-    "name": "TYPE_EVENT",
+    "name": "CN_Q010_CHEMISTRY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Bounded temporal transition / occurrence"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of chemistry?"
   },
   {
     "index": 394,
-    "name": "TYPE_STATE",
+    "name": "CN_Q011_ANIMAL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Static condition or enduring property"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to animal?"
   },
   {
     "index": 395,
-    "name": "TYPE_PROCESS",
+    "name": "CN_Q012_TANGIBLE_THING",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Continuous ongoing activity"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a type of tangible thing?"
   },
   {
     "index": 396,
-    "name": "TYPE_TEMPORAL_INTERVAL",
+    "name": "CN_Q013_PHYSICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Time span / duration / era"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of physics?"
   },
   {
     "index": 397,
-    "name": "TYPE_SPATIAL_REGION",
+    "name": "CN_Q014_GROUP",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Geometric location or zone"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to group?"
   },
   {
     "index": 398,
-    "name": "TYPE_MEASURE_SCALAR",
+    "name": "CN_Q015_PERSON",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Quantitative magnitude with unit"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a type of person?"
   },
   {
     "index": 399,
-    "name": "TYPE_NUMERIC_VALUE",
+    "name": "CN_Q016_SPORTS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Pure mathematical number or constant"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of sports?"
   },
   {
     "index": 400,
-    "name": "TYPE_ORGANIZATION",
+    "name": "CN_Q017_MONEY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Institutional or corporate body"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to money?"
   },
   {
     "index": 401,
-    "name": "TYPE_COMMUNICATION_MSG",
+    "name": "CN_Q018_AUSTRALIA",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Message, utterance, or document"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of australia?"
   },
   {
     "index": 402,
-    "name": "TYPE_ATTRIBUTE_PROPERTY",
+    "name": "CN_Q019_LINGUISTICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Inherent trait, quality, or descriptor"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of linguistics?"
   },
   {
     "index": 403,
-    "name": "TYPE_RELATION_ROLE",
+    "name": "CN_Q020_COUNTY_SEAT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Relational association or bridge"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to county seat?"
   },
   {
     "index": 404,
-    "name": "ROLE_AGENT_CAPABLE",
+    "name": "CN_Q021_TIME",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Capable of intentional volition / action"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to time?"
   },
   {
     "index": 405,
-    "name": "ROLE_SENTIENT",
+    "name": "CN_Q022_BIOLOGY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Capable of subjective perception and feeling"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of biology?"
   },
   {
     "index": 406,
-    "name": "ROLE_MOVEABLE",
+    "name": "CN_Q023_WORK",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Capable of physical translation in space"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to work?"
   },
   {
     "index": 407,
-    "name": "ROLE_COMMUNICATOR",
+    "name": "CN_Q024_ASTRONOMY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Capable of transmitting linguistic symbols"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of astronomy?"
   },
   {
     "index": 408,
-    "name": "ROLE_CONSUMABLE",
+    "name": "CN_Q025_CANADA",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Can be ingested, depleted, or absorbed"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of canada?"
   },
   {
     "index": 409,
-    "name": "ROLE_CONTAINER",
+    "name": "CN_Q026_STATE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Can enclose other physical/abstract entities"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to state?"
   },
   {
     "index": 410,
-    "name": "ROLE_INSTRUMENT_USABLE",
+    "name": "CN_Q027_SUGAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Can be utilized by an agent as an instrument"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to sugar?"
   },
   {
     "index": 411,
-    "name": "ROLE_VOLITIONAL_SOURCE",
+    "name": "CN_Q028_MOVE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Capabilities",
-    "description": "Origin of willful command or purpose"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to move?"
   },
   {
     "index": 412,
-    "name": "ROLE_COGNITIVE_SUBJECT",
+    "name": "CN_Q029_CHANGE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Thematic Roles",
-    "description": "Subject of internal cognition or belief"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a manner/way of change?"
   },
   {
     "index": 413,
-    "name": "ROLE_AFFECTIVE_TARGET",
+    "name": "CN_Q030_ANATOMY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Thematic Roles",
-    "description": "Object of emotional valence"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of anatomy?"
   },
   {
     "index": 414,
-    "name": "ROLE_EPISTEMIC_AUTHORITY",
+    "name": "CN_Q031_DISEASE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Thematic Roles",
-    "description": "Source of truth / authoritative claim"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to disease?"
   },
   {
     "index": 415,
-    "name": "ROLE_PATIENT_TARGET",
+    "name": "CN_Q032_GOOD",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Thematic Roles",
-    "description": "Entity targeted for state transition"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to good?"
   },
   {
     "index": 416,
-    "name": "MODALITY_LITERAL",
+    "name": "CN_Q033_POLITICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Modality",
-    "description": "Strict literal compositional interpretation"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of politics?"
   },
   {
     "index": 417,
-    "name": "MODALITY_FIGURATIVE",
+    "name": "CN_Q034_BASEBALL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Modality",
-    "description": "Metaphorical or allegorical interpretation"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of baseball?"
   },
   {
     "index": 418,
-    "name": "MODALITY_HYPOTHETICAL",
+    "name": "CN_Q035_GRAMMAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Modality",
-    "description": "Conditional / hypothetical scenario premise"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of grammar?"
   },
   {
     "index": 419,
-    "name": "MODALITY_COUNTERFACTUAL",
+    "name": "CN_Q036_HAPPINESS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Modality",
-    "description": "Counterfactual world branch (contrary to fact)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Does it cause or lead to happiness?"
   },
   {
     "index": 420,
-    "name": "WN_ACT_ACTION",
+    "name": "CN_Q037_INTERNET",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:act - actions, deeds"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of internet?"
   },
   {
     "index": 421,
-    "name": "WN_ANIMAL_FAUNA",
+    "name": "CN_Q038_BOTANY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:animal - zoological fauna"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of botany?"
   },
   {
     "index": 422,
-    "name": "WN_ARTIFACT_OBJECT",
+    "name": "CN_Q039_FINANCE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:artifact - manufactured artifacts"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of finance?"
   },
   {
     "index": 423,
-    "name": "WN_ATTRIBUTE_PROP",
+    "name": "CN_Q040_PERSON",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:attribute - traits and characteristics"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to person?"
   },
   {
     "index": 424,
-    "name": "WN_BODY_PART",
+    "name": "CN_Q041_SCOTLAND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:body - anatomical parts and organs"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of scotland?"
   },
   {
     "index": 425,
-    "name": "WN_COGNITION_THOUGHT",
+    "name": "CN_Q042_DEVICE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:cognition - cognitive concepts and ideas"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to device?"
   },
   {
     "index": 426,
-    "name": "WN_COMMUNICATION_INFO",
+    "name": "CN_Q043_MIND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:communication - linguistic exchanges"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to mind?"
   },
   {
     "index": 427,
-    "name": "WN_EVENT_OCCURRENCE",
+    "name": "CN_Q044_CRICKET",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:event - phenomena and incidents"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of cricket?"
   },
   {
     "index": 428,
-    "name": "WN_FEELING_EMOTION",
+    "name": "CN_Q045_SKIN",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:feeling - affective feelings and states"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to skin?"
   },
   {
     "index": 429,
-    "name": "WN_FOOD_NUTRITION",
+    "name": "CN_Q046_ACTION",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:food - edible items and nutrient substance"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to action?"
   },
   {
     "index": 430,
-    "name": "WN_GROUP_SOCIAL",
+    "name": "CN_Q047_ENGLAND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:group - social collectives and groupings"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to england?"
   },
   {
     "index": 431,
-    "name": "WN_LOCATION_PLACE",
+    "name": "CN_Q048_LIGHT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:location - geographical sites"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to light?"
   },
   {
     "index": 432,
-    "name": "WN_MOTIVE_REASON",
+    "name": "CN_Q049_WATER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:motive - reasons and motivational causes"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to water?"
   },
   {
     "index": 433,
-    "name": "WN_OBJECT_NATURAL",
+    "name": "CN_Q050_CLASS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:object - natural inanimate physical objects"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to class?"
   },
   {
     "index": 434,
-    "name": "WN_PERSON_HUMAN",
+    "name": "CN_Q051_POWER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:person - individual humans"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to power?"
   },
   {
     "index": 435,
-    "name": "WN_PHENOMENON_NATURE",
+    "name": "CN_Q052_GEOLOGY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:phenomenon - natural atmospheric/physical events"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of geology?"
   },
   {
     "index": 436,
-    "name": "WN_PLANT_FLORA",
+    "name": "CN_Q053_GOD",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:plant - botanical flora and vegetation"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to god?"
   },
   {
     "index": 437,
-    "name": "WN_POSSESSION_ASSET",
+    "name": "CN_Q054_IRELAND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:possession - financial assets and holdings"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of ireland?"
   },
   {
     "index": 438,
-    "name": "WN_PROCESS_SERIES",
+    "name": "CN_Q055_CABINET",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:process - dynamic multi-step procedures"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it found in, on, or at cabinet?"
   },
   {
     "index": 439,
-    "name": "WN_QUANTITY_NUMBER",
+    "name": "CN_Q056_GAME",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:quantity - amounts and quantitative measures"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to game?"
   },
   {
     "index": 440,
-    "name": "WN_RELATION_LINK",
+    "name": "CN_Q057_PHILOSOPHY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "WordNet Roots",
-    "description": "wn:relation - ontological and conceptual relations"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of philosophy?"
   },
   {
     "index": 441,
-    "name": "TYPE_ALGORITHM_PROCEDURE",
+    "name": "CN_Q058_NORTH_AMERICA",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Formal computational recipe or algorithm"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of north america?"
   },
   {
     "index": 442,
-    "name": "TYPE_LEGAL_CONTRACT",
+    "name": "CN_Q059_SOUND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Normative binding agreement / contract"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to sound?"
   },
   {
     "index": 443,
-    "name": "TYPE_BIOLOGICAL_ORGANISM",
+    "name": "CN_Q060_VIDEO_GAMES",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Cellular living organism"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of video games?"
   },
   {
     "index": 444,
-    "name": "TYPE_SOFTWARE_SYSTEM",
+    "name": "CN_Q061_LANGUAGE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Executable digital software program"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to language?"
   },
   {
     "index": 445,
-    "name": "TYPE_HARDWARE_DEVICE",
+    "name": "CN_Q062_CHRISTIANITY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Physical electronic or mechanical machine"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of christianity?"
   },
   {
     "index": 446,
-    "name": "TYPE_ASTRONOMICAL_BODY",
+    "name": "CN_Q063_POINT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Celestial star, planet, or cosmic object"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to point?"
   },
   {
     "index": 447,
-    "name": "TYPE_GEOGRAPHICAL_LANDFORM",
+    "name": "CN_Q064_PATHOLOGY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Entity Types",
-    "description": "Topographic mountain, river, or biome"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of pathology?"
   },
   {
     "index": 448,
-    "name": "STRUCT_SET_UNORDERED",
+    "name": "CN_Q065_FISH",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Discrete Math",
-    "description": "Unordered distinct element set {x, y, z}"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to fish?"
   },
   {
     "index": 449,
-    "name": "STRUCT_SEQUENCE_ORDERED",
+    "name": "CN_Q066_SEXUAL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Discrete Math",
-    "description": "Ordered tuple / list sequence (x0, x1, ...)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to sexual?"
   },
   {
     "index": 450,
-    "name": "STRUCT_GRAPH_NETWORK",
+    "name": "CN_Q067_COUNTRY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Discrete Math",
-    "description": "General graph G = (V, E)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to country?"
   },
   {
     "index": 451,
-    "name": "STRUCT_TREE_HIERARCHY",
+    "name": "CN_Q068_WRONG",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Discrete Math",
-    "description": "Rooted acyclic tree hierarchy"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to wrong?"
   },
   {
     "index": 452,
-    "name": "STRUCT_DIRECTED_ACYCLIC_DAG",
+    "name": "CN_Q069_FOOD",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Discrete Math",
-    "description": "Directed Acyclic Graph DAG topology"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to food?"
   },
   {
     "index": 453,
-    "name": "STRUCT_LATTICE_ALGEBRA",
+    "name": "CN_Q070_VALUE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Partially ordered set with join/meet lattice"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to value?"
   },
   {
     "index": 454,
-    "name": "STRUCT_MONOID_SEMIGROUP",
+    "name": "CN_Q071_AVIATION",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Associative binary operator with identity element"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of aviation?"
   },
   {
     "index": 455,
-    "name": "STRUCT_GROUP_ALGEBRA",
+    "name": "CN_Q072_HUMAN_ACTIVITY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Group (G, *): Monoid with element inverses"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a type of human activity?"
   },
   {
     "index": 456,
-    "name": "STRUCT_RING_FIELD",
+    "name": "CN_Q073_PLACE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Ring / Field (addition and multiplication arithmetic)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to place?"
   },
   {
     "index": 457,
-    "name": "STRUCT_VECTOR_SPACE",
+    "name": "CN_Q074_CITY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Linear Algebra",
-    "description": "Vector space over field F with scalar multiplication"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to city?"
   },
   {
     "index": 458,
-    "name": "STRUCT_MATRIX_TENSOR",
+    "name": "CN_Q075_BAD",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Linear Algebra",
-    "description": "Multi-dimensional tensor array / matrix"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to bad?"
   },
   {
     "index": 459,
-    "name": "STRUCT_HILBERT_SPACE",
+    "name": "CN_Q076_ORDER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Functional Analysis",
-    "description": "Complete inner product vector space"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to order?"
   },
   {
     "index": 460,
-    "name": "STRUCT_BANACH_SPACE",
+    "name": "CN_Q077_UNIT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Functional Analysis",
-    "description": "Complete normed vector space"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to unit?"
   },
   {
     "index": 461,
-    "name": "STRUCT_TOPOLOGICAL_MANIFOLD",
+    "name": "CN_Q078_REMOVE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Topology",
-    "description": "Locally Euclidean topological manifold"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to remove?"
   },
   {
     "index": 462,
-    "name": "STRUCT_FIBER_BUNDLE",
+    "name": "CN_Q079_SUPPORT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Differential Geometry",
-    "description": "Fiber bundle total space / base space"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to support?"
   },
   {
     "index": 463,
-    "name": "STRUCT_RIEMANNIAN_METRIC",
+    "name": "CN_Q080_FUN",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Differential Geometry",
-    "description": "Riemannian metric tensor g_ij for geodesics"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used for fun?"
   },
   {
     "index": 464,
-    "name": "STRUCT_CATEGORY_THEORY",
+    "name": "CN_Q081_CAUSE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Category Theory",
-    "description": "Category C = (Objects, Morphisms)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to cause?"
   },
   {
     "index": 465,
-    "name": "STRUCT_FUNCTOR_MAP",
+    "name": "CN_Q082_BUSINESS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Category Theory",
-    "description": "Structure-preserving functor between categories"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to business?"
   },
   {
     "index": 466,
-    "name": "STRUCT_NATURAL_TRANSFORMATION",
+    "name": "CN_Q083_ARCHITECTURE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Category Theory",
-    "description": "Morphism between functors (Natural transformation)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of architecture?"
   },
   {
     "index": 467,
-    "name": "STRUCT_ADJUNCTION_MONAD",
+    "name": "CN_Q084_INFORMATION",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Category Theory",
-    "description": "Adjoint functor pair / algebraic Monad"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to information?"
   },
   {
     "index": 468,
-    "name": "STRUCT_QUOTIENT_STRUCTURE",
+    "name": "CN_Q085_DIALECT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Equivalence class partition quotient structure"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of dialect?"
   },
   {
     "index": 469,
-    "name": "STRUCT_DIRECT_PRODUCT",
+    "name": "CN_Q086_GENUS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Cartesian direct product A x B"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to genus?"
   },
   {
     "index": 470,
-    "name": "STRUCT_COPRODUCT_DISJOINT_SUM",
+    "name": "CN_Q087_HAND",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Categorical coproduct / disjoint sum A + B"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to hand?"
   },
   {
     "index": 471,
-    "name": "STRUCT_HOMOMORPHISM_MAP",
+    "name": "CN_Q088_QUALITY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Structure-preserving algebraic homomorphism"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to quality?"
   },
   {
     "index": 472,
-    "name": "STRUCT_ISOMORPHISM_BIJECTION",
+    "name": "CN_Q089_LAW",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Invertible bijective isomorphism"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of law?"
   },
   {
     "index": 473,
-    "name": "STRUCT_AUTOMORPHISM_SYMMETRY",
+    "name": "CN_Q090_BUSINESS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Abstract Algebra",
-    "description": "Self-isomorphism symmetry group action"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of business?"
   },
   {
     "index": 474,
-    "name": "STRUCT_PROBABILITY_MEASURE",
+    "name": "CN_Q091_COVER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Measure Theory",
-    "description": "Probability space (\u03a9, \u03a3, P) measure triple"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to cover?"
   },
   {
     "index": 475,
-    "name": "STRUCT_SIGMA_ALGEBRA",
+    "name": "CN_Q092_CONTROL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Measure Theory",
-    "description": "Closed sigma-algebra of measurable events"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to control?"
   },
   {
     "index": 476,
-    "name": "STRUCT_RANDOM_VARIABLE",
+    "name": "CN_Q093_STATISTICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Probability",
-    "description": "Measurable function X: \u03a9 -> R"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of statistics?"
   },
   {
     "index": 477,
-    "name": "STRUCT_MARKOV_CHAIN",
+    "name": "CN_Q094_USE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Stochastic",
-    "description": "Memoryless Markov stochastic transition kernel"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to use?"
   },
   {
     "index": 478,
-    "name": "STRUCT_MARTINGALE_PROCESS",
+    "name": "CN_Q095_SURFACE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Stochastic",
-    "description": "Conditional expectation invariant martingale"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to surface?"
   },
   {
     "index": 479,
-    "name": "STRUCT_STOCHASTIC_DIFFUSION",
+    "name": "CN_Q096_YEAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Stochastic",
-    "description": "Ito / Stratonovich continuous diffusion process"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to year?"
   },
   {
     "index": 480,
-    "name": "SI_DIM_LENGTH_L",
+    "name": "CN_Q097_COOKING",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Length [L] (meter)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of cooking?"
   },
   {
     "index": 481,
-    "name": "SI_DIM_MASS_M",
+    "name": "CN_Q098_RIGHT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Mass [M] (kilogram)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to right?"
   },
   {
     "index": 482,
-    "name": "SI_DIM_TIME_T",
+    "name": "CN_Q099_SOCCER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Time [T] (second)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of soccer?"
   },
   {
     "index": 483,
-    "name": "SI_DIM_ELECTRIC_CURRENT_I",
+    "name": "CN_Q100_HOUSE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Electric Current [I] (ampere)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it found in, on, or at house?"
   },
   {
     "index": 484,
-    "name": "SI_DIM_TEMPERATURE_THETA",
+    "name": "CN_Q101_GREAT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Thermodynamic Temperature [\u0398] (kelvin)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to great?"
   },
   {
     "index": 485,
-    "name": "SI_DIM_SUBSTANCE_AMOUNT_N",
+    "name": "CN_Q102_SET",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Amount of Substance [N] (mole)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to set?"
   },
   {
     "index": 486,
-    "name": "SI_DIM_LUMINOUS_INTENSITY_J",
+    "name": "CN_Q103_PHYSICAL",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "SI Dimensions",
-    "description": "SI Base: Luminous Intensity [J] (candela)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to physical?"
   },
   {
     "index": 487,
-    "name": "METRIC_FREQUENCY_HERTZ",
+    "name": "CN_Q104_ACT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Frequency [T^-1] (Hz)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to act?"
   },
   {
     "index": 488,
-    "name": "METRIC_FORCE_NEWTON",
+    "name": "CN_Q105_FAMILY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Force [M L T^-2] (N)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to family?"
   },
   {
     "index": 489,
-    "name": "METRIC_PRESSURE_PASCAL",
+    "name": "CN_Q106_LIQUID",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Pressure / Stress [M L^-1 T^-2] (Pa)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to liquid?"
   },
   {
     "index": 490,
-    "name": "METRIC_ENERGY_JOULE",
+    "name": "CN_Q107_WEAK",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Energy / Work / Heat [M L^2 T^-2] (J)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it an exact synonym of weak?"
   },
   {
     "index": 491,
-    "name": "METRIC_POWER_WATT",
+    "name": "CN_Q108_CUT",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Power / Radiant Flux [M L^2 T^-3] (W)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to cut?"
   },
   {
     "index": 492,
-    "name": "METRIC_ELECTRIC_CHARGE_COULOMB",
+    "name": "CN_Q109_CITY",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Electric Charge [I T] (C)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it found in, on, or at city?"
   },
   {
     "index": 493,
-    "name": "METRIC_VOLTAGE_VOLT",
+    "name": "CN_Q110_MEAN",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Electrical Potential Difference [M L^2 T^-3 I^-1] (V)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to mean?"
   },
   {
     "index": 494,
-    "name": "METRIC_CAPACITANCE_FARAD",
+    "name": "CN_Q111_COMPLETE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Electric Capacitance [M^-1 L^-2 T^4 I^2] (F)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to complete?"
   },
   {
     "index": 495,
-    "name": "METRIC_RESISTANCE_OHM",
+    "name": "CN_Q112_ATTENTION",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Electrical Resistance [M L^2 T^-3 I^-2] (\u03a9)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to attention?"
   },
   {
     "index": 496,
-    "name": "METRIC_CONDUCTANCE_SIEMENS",
+    "name": "CN_Q113_LOGIC",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Electrical Conductance [M^-1 L^-2 T^3 I^2] (S)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of logic?"
   },
   {
     "index": 497,
-    "name": "METRIC_MAGNETIC_FLUX_WEBER",
+    "name": "CN_Q114_WOMAN",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Magnetic Flux [M L^2 T^-2 I^-1] (Wb)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to woman?"
   },
   {
     "index": 498,
-    "name": "METRIC_MAGNETIC_FIELD_TESLA",
+    "name": "CN_Q115_BE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Magnetic Flux Density [M T^-2 I^-1] (T)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it a manner/way of be?"
   },
   {
     "index": 499,
-    "name": "METRIC_INDUCTANCE_HENRY",
+    "name": "CN_Q116_CHARACTER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Inductance [M L^2 T^-2 I^-2] (H)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to character?"
   },
   {
     "index": 500,
-    "name": "METRIC_LUMINOUS_FLUX_LUMEN",
+    "name": "CN_Q117_GO",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Luminous Flux [J] (lm)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to go?"
   },
   {
     "index": 501,
-    "name": "METRIC_ILLUMINANCE_LUX",
+    "name": "CN_Q118_AUTOMOTIVE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Illuminance [J L^-2] (lx)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of automotive?"
   },
   {
     "index": 502,
-    "name": "METRIC_RADIOACTIVITY_BECQUEREL",
+    "name": "CN_Q119_BREAK",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Radioactivity Decay Rate [T^-1] (Bq)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to break?"
   },
   {
     "index": 503,
-    "name": "METRIC_RADIATION_DOSE_GRAY",
+    "name": "CN_Q120_LINE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Absorbed Radiation Dose [L^2 T^-2] (Gy)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to line?"
   },
   {
     "index": 504,
-    "name": "METRIC_DOSE_EQUIVALENT_SIEVERT",
+    "name": "CN_Q121_ORGANISM",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Equivalent Radiation Dose [L^2 T^-2] (Sv)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to organism?"
   },
   {
     "index": 505,
-    "name": "METRIC_CATALYTIC_ACTIVITY_KATAL",
+    "name": "CN_Q122_SHARP",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Derived Units",
-    "description": "Catalytic Activity [N T^-1] (kat)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to sharp?"
   },
   {
     "index": 506,
-    "name": "METRIC_CURRENCY_VALUE_FIAT",
+    "name": "CN_Q123_ECONOMICS",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Economic Units",
-    "description": "Financial currency value / economic purchasing power"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of economics?"
   },
   {
     "index": 507,
-    "name": "METRIC_INFORMATION_ENTROPY_BIT",
+    "name": "CN_Q124_KNOWLEDGE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Information Units",
-    "description": "Information entropy [bits / shannons]"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to knowledge?"
   },
   {
     "index": 508,
-    "name": "METRIC_INFORMATION_NAT",
+    "name": "CN_Q125_FEAR",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Information Units",
-    "description": "Information entropy in natural log base [nats]"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to fear?"
   },
   {
     "index": 509,
-    "name": "METRIC_COMPUTE_FLOP_COUNT",
+    "name": "CN_Q126_NZ",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Computational",
-    "description": "Floating-point operations count (FLOP)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of nz?"
   },
   {
     "index": 510,
-    "name": "METRIC_COMPUTE_MEMORY_BYTE",
+    "name": "CN_Q127_TREE",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Computational",
-    "description": "Digital storage byte capacity (B)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it conceptually related to tree?"
   },
   {
     "index": 511,
-    "name": "METRIC_BANDWIDTH_BIT_PER_SEC",
+    "name": "CN_Q128_MANNER",
     "band_id": 3,
     "band_name": "BAND_3_ONTOLOGY_STRUCTURES",
-    "category": "Computational",
-    "description": "Network throughput bandwidth (bps)"
+    "category": "ConceptNet Taxonomy & Domain",
+    "description": "Is it used in the context or domain of manner?"
   },
   {
     "index": 512,
-    "name": "AFFORD_INCISED_CUTTING",
+    "name": "CN_Q129_LEAVE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Cutting, slicing, or shearing matter with blade/edge"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to leave?"
   },
   {
     "index": 513,
-    "name": "AFFORD_PERCUSSIVE_IMPACT",
+    "name": "CN_Q130_STOP",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Delivering high-energy kinetic impact / striking"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to stop?"
   },
   {
     "index": 514,
-    "name": "AFFORD_FLUID_CONTAINMENT",
+    "name": "CN_Q131_UNITED_STATES",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Enclosing and retaining liquid or gas volume"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to united states?"
   },
   {
     "index": 515,
-    "name": "AFFORD_MECHANICAL_GRIP",
+    "name": "CN_Q132_GEOMETRY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Clamping, gripping, or friction grasping"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of geometry?"
   },
   {
     "index": 516,
-    "name": "AFFORD_PNEUMATIC_SUCTION",
+    "name": "CN_Q133_PROSCRIBED",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Vacuum pressure differential suction"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of proscribed?"
   },
   {
     "index": 517,
-    "name": "AFFORD_THERMAL_EXCHANGE",
+    "name": "CN_Q134_PUBLIC",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Heating, cooling, or dissipating thermal energy"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to public?"
   },
   {
     "index": 518,
-    "name": "AFFORD_BALLISTIC_PROPULSION",
+    "name": "CN_Q135_DANCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Launching, ejecting, or firing projectile"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to dance?"
   },
   {
     "index": 519,
-    "name": "AFFORD_ADHESIVE_BONDING",
+    "name": "CN_Q136_CANADA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Joining surfaces via chemical adhesion or glue"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to canada?"
   },
   {
     "index": 520,
-    "name": "AFFORD_LEVERAGE_PRY",
+    "name": "CN_Q137_METAL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Applying mechanical advantage torque / prying"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to metal?"
   },
   {
     "index": 521,
-    "name": "AFFORD_TORQUE_ROTATION",
+    "name": "CN_Q138_PAIN",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Rotating, twisting, or threading fastener"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to pain?"
   },
   {
     "index": 522,
-    "name": "AFFORD_DRILL_PENETRATE",
+    "name": "CN_Q139_SCHOOL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Rotary penetration / boring cylindrical hole"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to school?"
   },
   {
     "index": 523,
-    "name": "AFFORD_ABRASIVE_GRINDING",
+    "name": "CN_Q140_TRUE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Frictional surface smoothing, sanding, polishing"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to true?"
   },
   {
     "index": 524,
-    "name": "AFFORD_EXTRUSION_FORMING",
+    "name": "CN_Q141_AMERICAN_FOOTBALL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Plastic extrusion / forming through die"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of american football?"
   },
   {
     "index": 525,
-    "name": "AFFORD_FASTENER_BOLT_LATCH",
+    "name": "CN_Q142_FORCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Reversible mechanical locking / fastening"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to force?"
   },
   {
     "index": 526,
-    "name": "AFFORD_TENSION_CABLE_PULL",
+    "name": "CN_Q143_UNITED_KINGDOM",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Tensile pulling via cable, winch, or tether"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of united kingdom?"
   },
   {
     "index": 527,
-    "name": "AFFORD_SPRING_SUSPENSION",
+    "name": "CN_Q144_EVENT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Elastic kinetic shock absorption / suspension"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to event?"
   },
   {
     "index": 528,
-    "name": "AFFORD_HYDRAULIC_ACTUATION",
+    "name": "CN_Q145_INDIA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "High-force fluid cylinder displacement"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to india?"
   },
   {
     "index": 529,
-    "name": "AFFORD_ROLLING_WHEEL_BEARING",
+    "name": "CN_Q146_TAKE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Rotary low-friction rolling displacement"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to take?"
   },
   {
     "index": 530,
-    "name": "AFFORD_VALVE_FLOW_CONTROL",
+    "name": "CN_Q147_LEARN",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Regulating / throttling fluid or gas conduit"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Does this process/action involve learn?"
   },
   {
     "index": 531,
-    "name": "AFFORD_FILTER_SEPARATION",
+    "name": "CN_Q148_APPEARANCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Porous size-exclusion filtration of particulates"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to appearance?"
   },
   {
     "index": 532,
-    "name": "AFFORD_PUMP_FLUID_DISPLACEMENT",
+    "name": "CN_Q149_AIRPORT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Active mechanical fluid pumping / circulation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it found in, on, or at airport?"
   },
   {
     "index": 533,
-    "name": "AFFORD_NOZZLE_ATOMIZATION",
+    "name": "CN_Q150_LIFE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Aerosol spray / jet dispersion through nozzle"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to life?"
   },
   {
     "index": 534,
-    "name": "AFFORD_OPTICAL_MAGNIFICATION",
+    "name": "CN_Q151_BIRD",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Optical refraction / lens magnification"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to bird?"
   },
   {
     "index": 535,
-    "name": "AFFORD_OPTICAL_REFLECTION",
+    "name": "CN_Q152_GOVERNMENT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Specular / diffuse mirror beam reflection"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to government?"
   },
   {
     "index": 536,
-    "name": "AFFORD_ELECTRICAL_SWITCH_CONTACT",
+    "name": "CN_Q153_DESIRE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Circuit contact switching / relay opening"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to desire?"
   },
   {
     "index": 537,
-    "name": "AFFORD_ELECTROMAGNETIC_SOLENOID",
+    "name": "CN_Q154_PROGRAMMING",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Solenoid magnetic core linear actuation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of programming?"
   },
   {
     "index": 538,
-    "name": "AFFORD_PIEZOELECTRIC_PRECISION",
+    "name": "CN_Q155_LARGE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Nanometer-precision piezoelectric displacement"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to large?"
   },
   {
     "index": 539,
-    "name": "AFFORD_THERMAL_INSULATION_SHIELD",
+    "name": "CN_Q156_MOVE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Thermal barrier insulation / radiative shield"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a manner/way of move?"
   },
   {
     "index": 540,
-    "name": "AFFORD_VIBRATION_DAMPING",
+    "name": "CN_Q157_POKER",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Viscoelastic mechanical vibration absorption"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of poker?"
   },
   {
     "index": 541,
-    "name": "AFFORD_FLOATATION_BUOYANT_HULL",
+    "name": "CN_Q158_KILL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Hydrostatic displacement hull buoyancy"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to kill?"
   },
   {
     "index": 542,
-    "name": "AFFORD_AERODYNAMIC_AIRFOIL_LIFT",
+    "name": "CN_Q159_BIOCHEMISTRY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Bernoulli aerodynamic wing lift generation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of biochemistry?"
   },
   {
     "index": 543,
-    "name": "AFFORD_PARACHUTE_DRAG_DECEL",
+    "name": "CN_Q160_BEAR",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Atmospheric aerodynamic drag deceleration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to bear?"
   },
   {
     "index": 544,
-    "name": "AFFORD_COMPUTE_EXECUTE",
+    "name": "CN_Q161_DESK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Executing machine bytecode / CPU instructions"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it found in, on, or at desk?"
   },
   {
     "index": 545,
-    "name": "AFFORD_PERSIST_STORAGE",
+    "name": "CN_Q162_BOOK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Persisting durable data to disk / flash / NVMe"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to book?"
   },
   {
     "index": 546,
-    "name": "AFFORD_SOCKET_TRANSMIT",
+    "name": "CN_Q163_PSYCHOLOGY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Sending network packet stream across socket"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of psychology?"
   },
   {
     "index": 547,
-    "name": "AFFORD_SOCKET_RECEIVE",
+    "name": "CN_Q164_VERY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Ingesting incoming network socket packet stream"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to very?"
   },
   {
     "index": 548,
-    "name": "AFFORD_ENCRYPT_CRYPTO",
+    "name": "CN_Q165_RING",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Symmetric/asymmetric cryptographic encryption"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to ring?"
   },
   {
     "index": 549,
-    "name": "AFFORD_DECRYPT_CRYPTO",
+    "name": "CN_Q166_OPEN",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Cryptographic key decryption"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to open?"
   },
   {
     "index": 550,
-    "name": "AFFORD_SIGN_CRYPTOGRAPHIC",
+    "name": "CN_Q167_AFRICA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Generating digital signature ECDSA/Ed25519"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to africa?"
   },
   {
     "index": 551,
-    "name": "AFFORD_VERIFY_SIGNATURE",
+    "name": "CN_Q168_ZOOLOGY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Validating cryptographic signature authenticity"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of zoology?"
   },
   {
     "index": 552,
-    "name": "AFFORD_QUERY_DATABASE",
+    "name": "CN_Q169_ATTRACTIVE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Executing SQL/NoSQL structured database query"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to attractive?"
   },
   {
     "index": 553,
-    "name": "AFFORD_MUTATE_DATABASE",
+    "name": "CN_Q170_SPORT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Executing ACID transactional insert/update/delete"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of sport?"
   },
   {
     "index": 554,
-    "name": "AFFORD_AUTHENTICATE_AUTH",
+    "name": "CN_Q171_HAPPY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Validating identity credentials / OAuth tokens"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to happy?"
   },
   {
     "index": 555,
-    "name": "AFFORD_AUTHORIZE_RBAC",
+    "name": "CN_Q172_LOW",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Enforcing Role-Based Access Control permission"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to low?"
   },
   {
     "index": 556,
-    "name": "AFFORD_SERIALIZE_BUFFER",
+    "name": "CN_Q173_FRANCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Serializing data structure to Protobuf/JSON/bytes"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to france?"
   },
   {
     "index": 557,
-    "name": "AFFORD_DESERIALIZE_BUFFER",
+    "name": "CN_Q174_ATTACK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Parsing binary buffer into native memory object"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to attack?"
   },
   {
     "index": 558,
-    "name": "AFFORD_HTTP_REST_REQUEST",
+    "name": "CN_Q175_BIBLE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Dispatching RESTful HTTP/1.1 or HTTP/2 request"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to bible?"
   },
   {
     "index": 559,
-    "name": "AFFORD_GRPC_RPC_INVOKE",
+    "name": "CN_Q176_WORKER",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Remote Procedure Call invocation across gRPC"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to worker?"
   },
   {
     "index": 560,
-    "name": "AFFORD_WEBSOCKET_DUPLEX",
+    "name": "CN_Q177_FEMALE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Full-duplex WebSocket continuous streaming"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to female?"
   },
   {
     "index": 561,
-    "name": "AFFORD_PUBLISH_EVENT_BUS",
+    "name": "CN_Q178_COMMON",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Publishing message to Kafka/RabbitMQ broker"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to common?"
   },
   {
     "index": 562,
-    "name": "AFFORD_SUBSCRIBE_EVENT_BUS",
+    "name": "CN_Q179_STALE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Subscribing to asynchronous event topic"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to stale?"
   },
   {
     "index": 563,
-    "name": "AFFORD_CACHE_LOOKUP_KV",
+    "name": "CN_Q180_HOT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Fast Redis / Memcached in-memory key lookup"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to hot?"
   },
   {
     "index": 564,
-    "name": "AFFORD_CACHE_INVALIDATE",
+    "name": "CN_Q181_EARTH",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Evicting / invalidating stale cache keys"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to earth?"
   },
   {
     "index": 565,
-    "name": "AFFORD_SPAWN_CONTAINER",
+    "name": "CN_Q182_STORE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Provisioning Docker / OCI isolated container"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it found in, on, or at store?"
   },
   {
     "index": 566,
-    "name": "AFFORD_SCHEDULE_CRON_JOB",
+    "name": "CN_Q183_MAKE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Scheduling timer cron job execution"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to make?"
   },
   {
     "index": 567,
-    "name": "AFFORD_LOG_DIAGNOSTIC",
+    "name": "CN_Q184_LACK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Emitting structured telemetry / audit log entry"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to lack?"
   },
   {
     "index": 568,
-    "name": "AFFORD_METRIC_GAUGE_EMIT",
+    "name": "CN_Q185_CHINA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Recording Prometheus counter/histogram metric"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to china?"
   },
   {
     "index": 569,
-    "name": "AFFORD_DISTRIBUTED_LOCK",
+    "name": "CN_Q186_SENSE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Acquiring distributed lease via Raft/etcd"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to sense?"
   },
   {
     "index": 570,
-    "name": "AFFORD_MAP_REDUCE_BATCH",
+    "name": "CN_Q187_ADVANCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Parallel distributed MapReduce computation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to advance?"
   },
   {
     "index": 571,
-    "name": "AFFORD_GPU_TENSOR_FORWARD",
+    "name": "CN_Q188_LIE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Executing PyTorch / TensorRT GPU forward pass"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to lie?"
   },
   {
     "index": 572,
-    "name": "AFFORD_VECTOR_INDEX_SEARCH",
+    "name": "CN_Q189_ISLAND",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Top-K approximate nearest neighbor HNSW search"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to island?"
   },
   {
     "index": 573,
-    "name": "AFFORD_FILE_COMPRESSION_ZIP",
+    "name": "CN_Q190_FORMAL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Zstandard / Gzip lossless compression"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to formal?"
   },
   {
     "index": 574,
-    "name": "AFFORD_FILE_DECOMPRESSION",
+    "name": "CN_Q191_DIFFICULT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Decompressing compressed archive payload"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to difficult?"
   },
   {
     "index": 575,
-    "name": "AFFORD_SCHEMA_MIGRATION",
+    "name": "CN_Q192_DOUBT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Digital Affordance",
-    "description": "Executing database DDL schema migration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to doubt?"
   },
   {
     "index": 576,
-    "name": "AFFORD_INGEST_NUTRIENT",
+    "name": "CN_Q193_CLEAR",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Oral ingestion / absorption of metabolic fuel"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to clear?"
   },
   {
     "index": 577,
-    "name": "AFFORD_CHEMICAL_CATALYSIS",
+    "name": "CN_Q194_FIGHT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Enzymatic or inorganic chemical reaction acceleration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to fight?"
   },
   {
     "index": 578,
-    "name": "AFFORD_OPTICAL_SENSE",
+    "name": "CN_Q195_MASS",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Focal photodiode / retinal photon detection"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to mass?"
   },
   {
     "index": 579,
-    "name": "AFFORD_ACOUSTIC_SENSE",
+    "name": "CN_Q196_OPINION",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Microphone / cochlear acoustic wave detection"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to opinion?"
   },
   {
     "index": 580,
-    "name": "AFFORD_TACTILE_SENSE",
+    "name": "CN_Q197_CARD",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Piezo / mechanoreceptor tactile surface contact"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to card?"
   },
   {
     "index": 581,
-    "name": "AFFORD_THERMAL_SENSE",
+    "name": "CN_Q198_SOCIAL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Thermocouple / thermoreceptor temperature sensing"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to social?"
   },
   {
     "index": 582,
-    "name": "AFFORD_CHEMICAL_OLFACTION",
+    "name": "CN_Q199_INTERNET_SLANG",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Volatile molecule receptor binding (Smell)"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of internet slang?"
   },
   {
     "index": 583,
-    "name": "AFFORD_CHEMICAL_GUSTATION",
+    "name": "CN_Q200_ELECTRONICS",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Liquid solute chemical receptor binding (Taste)"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of electronics?"
   },
   {
     "index": 584,
-    "name": "AFFORD_PROPRIOCEPTIVE_SENSE",
+    "name": "CN_Q201_KITCHEN",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Internal joint angle / muscle tension state sensing"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it found in, on, or at kitchen?"
   },
   {
     "index": 585,
-    "name": "AFFORD_VESTIBULAR_EQUILIBRIUM",
+    "name": "CN_Q202_ROUGH",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Inertial gyroscopic balance / gravity orientation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to rough?"
   },
   {
     "index": 586,
-    "name": "AFFORD_ELECTRORECEPTION_SENSE",
+    "name": "CN_Q203_AMOUNT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Bioelectric field detection in surrounding medium"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to amount?"
   },
   {
     "index": 587,
-    "name": "AFFORD_MAGNETORECEPTION_SENSE",
+    "name": "CN_Q204_AREA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Geomagnetic orientation sensing"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to area?"
   },
   {
     "index": 588,
-    "name": "AFFORD_ECHOLOCATION_SONAR",
+    "name": "CN_Q205_FORMAL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Acoustic ping time-of-flight distance ranging"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of formal?"
   },
   {
     "index": 589,
-    "name": "AFFORD_LIDAR_TIME_OF_FLIGHT",
+    "name": "CN_Q206_ACT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Laser pulse photon time-of-flight spatial scanning"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a manner/way of act?"
   },
   {
     "index": 590,
-    "name": "AFFORD_RADAR_RF_REFLECTION",
+    "name": "CN_Q207_VEHICLE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Affordance",
-    "description": "Microwave radio reflection target tracking"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to vehicle?"
   },
   {
     "index": 591,
-    "name": "AFFORD_METABOLIC_RESPIRATION",
+    "name": "CN_Q208_GENETICS",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Cellular ATP generation via oxidative respiration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of genetics?"
   },
   {
     "index": 592,
-    "name": "AFFORD_PHOTOSYNTHESIS_LIGHT",
+    "name": "CN_Q209_RAIL_TRANSPORT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Converting solar photons into carbohydrate bonds"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of rail transport?"
   },
   {
     "index": 593,
-    "name": "AFFORD_DNA_REPLICATION_COPY",
+    "name": "CN_Q210_GREEK_MYTHOLOGY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Polymerase nucleic acid template replication"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of greek mythology?"
   },
   {
     "index": 594,
-    "name": "AFFORD_RNA_TRANSCRIPTION",
+    "name": "CN_Q211_ERROR",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Gene sequence transcription to messenger RNA"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to error?"
   },
   {
     "index": 595,
-    "name": "AFFORD_PROTEIN_TRANSLATION",
+    "name": "CN_Q212_TELEVISION",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Ribosomal mRNA peptide chain translation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to television?"
   },
   {
     "index": 596,
-    "name": "AFFORD_IMMUNE_ANTIBODY_BIND",
+    "name": "CN_Q213_DEATH",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Adaptive immune antigen-antibody recognition"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to death?"
   },
   {
     "index": 597,
-    "name": "AFFORD_CELLULAR_MITOSIS_SPLIT",
+    "name": "CN_Q214_MONEY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Eukaryotic cell division and duplication"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Does it require money beforehand?"
   },
   {
     "index": 598,
-    "name": "AFFORD_CELLULAR_APOPTOSIS",
+    "name": "CN_Q215_DRUG",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Programmed cell death / self-destruction"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to drug?"
   },
   {
     "index": 599,
-    "name": "AFFORD_MEMBRANE_ION_CHANNEL",
+    "name": "CN_Q216_TRAVEL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Voltage-gated sodium/potassium ion flux"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a manner/way of travel?"
   },
   {
     "index": 600,
-    "name": "AFFORD_SYNAPTIC_NEUROTRANSMIT",
+    "name": "CN_Q217_BRIGHT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Neurotransmitter vesicle exocytosis across synapse"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it an exact synonym of bright?"
   },
   {
     "index": 601,
-    "name": "AFFORD_HORMONE_ENDOCRINE_SEC",
+    "name": "CN_Q218_BLACK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Systemic endocrine chemical messenger release"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to black?"
   },
   {
     "index": 602,
-    "name": "AFFORD_TOXIN_NEUTRALIZATION",
+    "name": "CN_Q219_RELIGION",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Hepatic enzymatic xenobiotic detoxification"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of religion?"
   },
   {
     "index": 603,
-    "name": "AFFORD_WOUND_HEALING_CLOT",
+    "name": "CN_Q220_CAREFUL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Fibrin platelet clotting and tissue repair"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to careful?"
   },
   {
     "index": 604,
-    "name": "AFFORD_CIRCULATORY_PUMP_HEART",
+    "name": "CN_Q221_GERMANY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Pulsatile circulatory hemodynamic transport"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to germany?"
   },
   {
     "index": 605,
-    "name": "AFFORD_NEURAL_PLASTICITY_LTP",
+    "name": "CN_Q222_THINK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Hebbian long-term potentiation synaptic tuning"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Does it require think beforehand?"
   },
   {
     "index": 606,
-    "name": "AFFORD_CIRCADIAN_RHYTHM_TICK",
+    "name": "CN_Q223_EXTREME",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Suprachiasmatic circadian clock oscillation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to extreme?"
   },
   {
     "index": 607,
-    "name": "AFFORD_SYMBIOTIC_MICROBIOME",
+    "name": "CN_Q224_TRAVEL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Biological Affordance",
-    "description": "Mutualistic microbial metabolic collaboration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to travel?"
   },
   {
     "index": 608,
-    "name": "AFFORD_SPEECH_VOCALIZATION",
+    "name": "CN_Q225_FIT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Output",
-    "description": "Phonetic vocal tract acoustic sound generation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to fit?"
   },
   {
     "index": 609,
-    "name": "AFFORD_DISPLAY_PIXEL_EMIT",
+    "name": "CN_Q226_FALSE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Output",
-    "description": "RGB matrix photon emission on visual display"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to false?"
   },
   {
     "index": 610,
-    "name": "AFFORD_HAPTIC_TACTILE_FEEDBACK",
+    "name": "CN_Q227_DAMAGE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Sensory Output",
-    "description": "Eccentric rotating mass / LRA haptic vibration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to damage?"
   },
   {
     "index": 611,
-    "name": "AFFORD_FERMENTATION_ANAEROBIC",
+    "name": "CN_Q228_INDIA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Anaerobic carbohydrate glycolysis to ethanol/acid"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of india?"
   },
   {
     "index": 612,
-    "name": "AFFORD_PRECIPITATION_SOLID",
+    "name": "CN_Q229_BOX",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Insoluble solid salt precipitation from solution"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to box?"
   },
   {
     "index": 613,
-    "name": "AFFORD_COMBUSTION_OXIDATION",
+    "name": "CN_Q230_SITUATION",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Exothermic rapid hydrocarbon oxidation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to situation?"
   },
   {
     "index": 614,
-    "name": "AFFORD_ELECTROLYSIS_SPLITTING",
+    "name": "CN_Q231_ROMANTIC",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Electrochemical voltage water/compound splitting"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to romantic?"
   },
   {
     "index": 615,
-    "name": "AFFORD_POLYMERIZATION_CHAIN",
+    "name": "CN_Q232_COMPUTER_SCIENCE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Monomer radical / condensation chain polymerization"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of computer science?"
   },
   {
     "index": 616,
-    "name": "AFFORD_DISTILLATION_FRACTION",
+    "name": "CN_Q233_LAND",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Thermal boiling point vapor phase fractionation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to land?"
   },
   {
     "index": 617,
-    "name": "AFFORD_CHROMATOGRAPHY_SEPARATE",
+    "name": "CN_Q234_CALM",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Stationary/mobile phase chemical separation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to calm?"
   },
   {
     "index": 618,
-    "name": "AFFORD_CRYSTALLIZATION_PURIFY",
+    "name": "CN_Q235_LARGE_INTEGER",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Nucleation and crystal growth purification"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a type of large integer?"
   },
   {
     "index": 619,
-    "name": "AFFORD_LYOPHILIZATION_FREEZE_DRY",
+    "name": "CN_Q236_EUPHEMISM",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "Sublimation vacuum freeze drying"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of euphemism?"
   },
   {
     "index": 620,
-    "name": "AFFORD_CENTRIFUGATION_SPIN",
+    "name": "CN_Q237_USA",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Chemical Affordance",
-    "description": "High-G centrifugal density gradient separation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to usa?"
   },
   {
     "index": 621,
-    "name": "AFFORD_ULTRASONIC_CLEAN_CAV",
+    "name": "CN_Q238_PHYSICAL_EVENT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Acoustic cavitation bubble surface scrubbing"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it a type of physical event?"
   },
   {
     "index": 622,
-    "name": "AFFORD_AUTOCLAVE_STERILIZATION",
+    "name": "CN_Q239_BE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "High-pressure saturated steam pathogen kill"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to be?"
   },
   {
     "index": 623,
-    "name": "AFFORD_UV_GERMICIDAL_IRRAD",
+    "name": "CN_Q240_SPORT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Ultraviolet-C nucleic acid dimer destruction"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to sport?"
   },
   {
     "index": 624,
-    "name": "AFFORD_RADIATION_GAMMA_STERIL",
+    "name": "CN_Q241_OFFENSIVE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "High-energy cobalt-60 ionizing sterilization"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to offensive?"
   },
   {
     "index": 625,
-    "name": "AFFORD_CRYOGENIC_FREEZING",
+    "name": "CN_Q242_NUTS",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Liquid nitrogen vitrification / cryopreservation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it typically nuts?"
   },
   {
     "index": 626,
-    "name": "AFFORD_MAGNETIC_LEVITATION",
+    "name": "CN_Q243_DEGREE",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Meissner superconductor / active MagLev suspension"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to degree?"
   },
   {
     "index": 627,
-    "name": "AFFORD_ION_THRUST_PROPULSION",
+    "name": "CN_Q244_HIT",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Electrostatic xenon ion beam acceleration"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to hit?"
   },
   {
     "index": 628,
-    "name": "AFFORD_SOLAR_SAIL_PRESSURE",
+    "name": "CN_Q245_MATERIAL",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Radiation pressure photon momentum transfer"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to material?"
   },
   {
     "index": 629,
-    "name": "AFFORD_RADIO_ANTENNA_EMISSION",
+    "name": "CN_Q246_DRESS",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Dipole / phased array electromagnetic RF radiation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to dress?"
   },
   {
     "index": 630,
-    "name": "AFFORD_LASER_COHERENT_BEAM",
+    "name": "CN_Q247_WIND",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Stimulated photon emission coherent collimated beam"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to wind?"
   },
   {
     "index": 631,
-    "name": "AFFORD_FIBER_OPTIC_INTERNAL_REF",
+    "name": "CN_Q248_EVEN",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Total internal reflection optical transmission"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to even?"
   },
   {
     "index": 632,
-    "name": "AFFORD_BATTERY_CHEMICAL_CHARGE",
+    "name": "CN_Q249_CHILDISH",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Reversible lithium ion intercalation storage"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it used in the context or domain of childish?"
   },
   {
     "index": 633,
-    "name": "AFFORD_FUEL_CELL_CONVERSION",
+    "name": "CN_Q250_STAY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Direct electrochemical hydrogen-oxygen conversion"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to stay?"
   },
   {
     "index": 634,
-    "name": "AFFORD_SUPERCAPACITOR_DISCHARGE",
+    "name": "CN_Q251_MUSIC",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Electrostatic double-layer rapid power burst"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to music?"
   },
   {
     "index": 635,
-    "name": "AFFORD_THERMOELECTRIC_SEEBECK",
+    "name": "CN_Q252_ACTIVITY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Direct temperature gradient to voltage generation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to activity?"
   },
   {
     "index": 636,
-    "name": "AFFORD_SOLAR_PHOTOVOLTAIC",
+    "name": "CN_Q253_SHOW",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Semiconductor bandgap electron-hole pair generation"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to show?"
   },
   {
     "index": 637,
-    "name": "AFFORD_WIND_TURBINE_HARVEST",
+    "name": "CN_Q254_SPEAK",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Aerodynamic kinetic energy to rotary shaft work"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to speak?"
   },
   {
     "index": 638,
-    "name": "AFFORD_HYDROELECTRIC_HARVEST",
+    "name": "CN_Q255_ABILITY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Gravitational potential water head to turbine work"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to ability?"
   },
   {
     "index": 639,
-    "name": "AFFORD_NUCLEAR_FISSION_HEAT",
+    "name": "CN_Q256_WORTHY",
     "band_id": 4,
     "band_name": "BAND_4_AFFORDANCES_OPERATIONS",
-    "category": "Physical Affordance",
-    "description": "Uranium neutron-induced fission chain reaction"
+    "category": "ConceptNet Affordance & Function",
+    "description": "Is it conceptually related to worthy?"
   },
   {
     "index": 640,

@@ -83,13 +83,19 @@ def test_module_level_slot_constants():
     assert slots.GRAPH_IMMUTABLE_HASH_LOCK == 197
     assert slots.QUANT_UNIVERSAL_FORALL == 256
     assert slots.VAR_SLOT_X0 == 280
-    assert slots.TYPE_ANIMATE == 384
-    assert slots.AFFORD_INCISED_CUTTING == 512
+    assert slots.CN_Q001_COMPUTING == 384
+    assert slots.CN_Q129_LEAVE == 512
     assert slots.TOM_FIRST_ORDER_BELIEF == 640
     assert slots.EPIST_DIRECT_OBSERVATION == 768
     assert slots.SOLVER_CWA_CLOSED_WORLD == 832
     assert slots.TEMP_ALLEN_BEFORE == 896
     assert slots.MODEL_CHECK_PROBABILISTIC_PRISM == 1023
+
+    # Test legacy aliases
+    assert slots.TYPE_ANIMATE == slots.CN_Q011_ANIMAL
+    assert slots.TYPE_HUMAN == slots.CN_Q015_PERSON
+    assert slots.AFFORD_INCISED_CUTTING == slots.CN_Q108_CUT
+    assert slots.WN_ANIMAL_FAUNA == slots.CN_Q011_ANIMAL
 
 
 def test_get_slot_helpers():

@@ -186,9 +186,20 @@ output/*
 !output/.gitkeep
 /data/*
 !/data/.gitkeep
+!/data/conceptnet_slots.json
 !/data/raw/
 /data/raw/*
 !/data/raw/.gitkeep
 !/data/raw/python_ast_samples.jsonl
+
+# Large datasets, raw dumps, archives and offline databases
+*.gz
+*.tar.gz
+*.csv.gz
+*.db
+*.sqlite
+*.sqlite3
+conceptnet-assertions-5.7.0.csv.gz
+concept_codebook.csv.gz
 
 

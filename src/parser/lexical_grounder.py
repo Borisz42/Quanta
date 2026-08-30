@@ -56,6 +56,165 @@ class GroundedLexicalConcept:
     vector: QuantaVector
 
 
+class ConceptNetLexicalGrounder:
+    """Resolves lexical entities and verbs into canonical QUANTA quaternary vectors using ConceptNet 256-D dimensions."""
+
+    _default_instance: Optional[ConceptNetLexicalGrounder] = None
+
+    def __init__(self, offline_cache_path: Optional[Union[str, Path]] = None):
+        self._cache: Dict[str, GroundedLexicalConcept] = {}
+        if offline_cache_path is None:
+            default_db = Path("data/conceptnet_offline.db")
+            if default_db.exists():
+                offline_cache_path = default_db
+        self.offline_cache_path = Path(offline_cache_path) if offline_cache_path else None
+        self._conn: Optional[sqlite3.Connection] = None
+        if self.offline_cache_path and self.offline_cache_path.exists():
+            self._conn = sqlite3.connect(str(self.offline_cache_path), check_same_thread=False)
+
+    @classmethod
+    def get_default(cls) -> ConceptNetLexicalGrounder:
+        if cls._default_instance is None:
+            cls._default_instance = cls()
+        return cls._default_instance
+
+    def resolve_concept(
+        self,
+        word: str,
+        pos: Optional[str] = "n",
+        lang: str = "en",
+    ) -> Optional[GroundedLexicalConcept]:
+        """Resolves a lemma/word into a GroundedLexicalConcept with 256-D ConceptNet quaternary vector."""
+        w_clean = word.strip().lower()
+        if not w_clean:
+            return None
+
+        # Clean anchor prefix if present
+        if w_clean.startswith("cn:"):
+            w_clean = w_clean[3:]
+            if f":{lang}:" in f":{w_clean}":
+                parts = w_clean.split(":")
+                if len(parts) >= 2:
+                    w_clean = parts[1]
+            if " (" in w_clean and w_clean.endswith(")"):
+                w_clean = w_clean.split(" (")[0]
+        elif w_clean.startswith("wn:"):
+            w_clean = w_clean[3:].split(".")[0]
+
+        lemma_under = w_clean.replace(" ", "_")
+        lemma_space = w_clean.replace("_", " ")
+        pos_norm = pos.lower()[0] if pos else "n"
+
+        cache_key = f"cn:{lang}:{lemma_under} ({pos_norm})"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        if not self._conn:
+            return None
+
+        cur = self._conn.cursor()
+        candidate_keys = [
+            f"cn:{lang}:{lemma_under} ({pos_norm})",
+            f"cn:{lang}:{lemma_space} ({pos_norm})",
+            f"cn:{lemma_under} ({pos_norm})",
+            f"cn:{lemma_space} ({pos_norm})",
+            f"cn:{lang}:{lemma_under}",
+            f"cn:{lang}:{lemma_space}",
+            f"cn:{lemma_under}",
+            f"cn:{lemma_space}",
+            lemma_under,
+            lemma_space,
+        ]
+        
+        placeholders = ",".join("?" * len(candidate_keys))
+        cur.execute(
+            f"SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE key IN ({placeholders}) LIMIT 1",
+            candidate_keys
+        )
+        row = cur.fetchone()
+        
+        if not row:
+            cur.execute(
+                "SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE lemma IN (?, ?) AND pos=? LIMIT 1",
+                (lemma_space, lemma_under, pos_norm)
+            )
+            row = cur.fetchone()
+
+        if not row:
+            cur.execute(
+                "SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE lemma IN (?, ?) LIMIT 1",
+                (lemma_space, lemma_under)
+            )
+            row = cur.fetchone()
+
+        if not row:
+            try:
+                from parser.typo_normalizer import TypoNormalizer
+                norm = TypoNormalizer.get_instance()
+                corr = norm.normalize_text(w_clean, lang=lang).lower()
+                corr_space = corr.replace("_", " ")
+                corr_under = corr.replace(" ", "_")
+                if corr_space != lemma_space:
+                    cur.execute(
+                        "SELECT key, lemma, pos, active_slots, packed_bytes_hex FROM concepts WHERE lemma IN (?, ?) LIMIT 1",
+                        (corr_space, corr_under)
+                    )
+                    row = cur.fetchone()
+            except Exception:
+                pass
+
+        if row:
+            key, r_lemma, r_pos, active_slots_raw, packed_hex = row
+            active_slots = json.loads(active_slots_raw) if isinstance(active_slots_raw, str) else active_slots_raw
+            if packed_hex:
+                vec = QuantaVector(bytes.fromhex(packed_hex))
+            else:
+                vec = QuantaVector(active_slots)
+
+            canonical_anchor = f"cn:{lang}:{r_lemma} ({r_pos})"
+            concept = GroundedLexicalConcept(
+                lemma=r_lemma,
+                synset_name=canonical_anchor,
+                definition=f"ConceptNet grounded entity {r_lemma} ({r_pos})",
+                pos=r_pos,
+                hypernym_path=[],
+                active_slots=active_slots,
+                vector=vec,
+            )
+            self._cache[cache_key] = concept
+            self._cache[key] = concept
+            return concept
+
+        return None
+
+    def resolve_synset(self, word: str, pos: Optional[str] = None) -> Optional[str]:
+        """Resolves word to a canonical ConceptNet anchor string (e.g. 'cn:en:dog (n)')."""
+        concept = self.resolve_concept(word, pos=pos)
+        if concept:
+            return concept.synset_name
+        return f"cn:en:{word.strip().lower()} ({pos or 'n'})"
+
+    def ground_synset(self, synset_or_name: Any) -> GroundedLexicalConcept:
+        """Grounds a synset name or concept key."""
+        name = str(synset_or_name)
+        concept = self.resolve_concept(name)
+        if concept:
+            return concept
+        return GroundedLexicalConcept(
+            lemma=name,
+            synset_name=f"cn:en:{name} (n)",
+            definition=f"Concept {name}",
+            pos="n",
+            hypernym_path=[],
+            active_slots={},
+            vector=QuantaVector.zeros(),
+        )
+
+
+# Canonical grounder alias
+LexicalGrounder = ConceptNetLexicalGrounder
+
+
 class WordNetLexicalGrounder:
     """Resolves lexical entities into canonical QUANTA ontological vectors using WordNet hypernym paths."""
 
@@ -872,5 +1031,17 @@ def resolve_frame_roles(verb_lemma: str, resolver: Optional[FrameNetValencyResol
     """Module-level helper to resolve a verb lemma to its FrameNet role-to-Band1-slot mapping."""
     r = resolver or FrameNetValencyResolver.get_instance()
     return r.resolve_frame_roles(verb_lemma)
+
+
+__all__ = [
+    "GroundedLexicalConcept",
+    "ConceptNetLexicalGrounder",
+    "LexicalGrounder",
+    "WordNetLexicalGrounder",
+    "FrameNetTemplate",
+    "FrameNetValencyResolver",
+    "resolve_frame_roles",
+    "NLTK_WN_AVAILABLE",
+]
 
 

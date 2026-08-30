@@ -1,1317 +1,479 @@
-"""Generator script for canonical 1024-dimension slots in QUANTA."""
-
 import json
 from pathlib import Path
+import sys
 
-def generate_slots_code() -> str:
-    lines = [
-        '"""Canonical 1024-dimension slot registry for QUANTA.',
-        '',
-        'Partitions the 1024 dimensions into eight isolated 128-slot bands:',
-        '- Band 0 (000–127): Universal NSM Primes, Classical Kinematics & Continuous Physics',
-        '- Band 1 (128–255): Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency Topologies',
-        '- Band 2 (256–383): Logic Quantifiers (∀, ∃, ∃!), Variable Binding Registers & Query Unification Heads',
-        '- Band 3 (384–511): Ontological Taxonomies, Abstract Mathematical Structures & Scalar Metric Scales',
-        '- Band 4 (512–639): Cyber-Physical Tool Affordances, Mechanical Dynamics & Digital Software Operations',
-        '- Band 5 (640–767): Theory of Mind, 3-Tier Nested Beliefs, Teleological Goals & Pragmatic Intent',
-        '- Band 6 (768–895): Epistemic Proof Solvers, s(CASP) Invariants & Deontic Normative Logic',
-        '- Band 7 (896–1023): Spatio-Temporal Mereotopology (Allen, RCC-8) & Pearl Causal Counterfactual DAGs',
-        '"""',
-        '',
-        'from __future__ import annotations',
-        'from dataclasses import dataclass',
-        'import enum',
-        'import json',
-        'from pathlib import Path',
-        'from typing import Dict, List, Optional, Union',
-        '',
-        '',
-        'class SlotBand(enum.IntEnum):',
-        '    BAND_0_NSM_KINEMATICS = 0',
-        '    BAND_1_VALENCIES_TOPOLOGY = 1',
-        '    BAND_2_LOGIC_VARIABLES = 2',
-        '    BAND_3_ONTOLOGY_STRUCTURES = 3',
-        '    BAND_4_AFFORDANCES_OPERATIONS = 4',
-        '    BAND_5_TOM_PRAGMATICS = 5',
-        '    BAND_6_PROOF_DEONTICS = 6',
-        '    BAND_7_SPATIOTEMPORAL_CAUSAL = 7',
-        '    # Backward compatibility aliases',
-        '    BAND_2_ONTOLOGY_MODALITY = 3',
-        '    BAND_3_EPISTEMIC_METARULES = 6',
-        '',
-        '',
-        '@dataclass(frozen=True)',
-        'class SlotDefinition:',
-        '    index: int',
-        '    name: str',
-        '    band: SlotBand',
-        '    category: str',
-        '    description: str',
-        '',
-    ]
+# Ensure src is in python path
+src_dir = Path("src")
+sys.path.insert(0, str(src_dir.resolve()))
 
-    bands_data = []
+from core.slots import BAND_0_SLOTS, BAND_1_SLOTS, BAND_2_SLOTS, BAND_5_SLOTS, BAND_6_SLOTS, BAND_7_SLOTS
 
-    # BAND 0: 000-127
-    b0 = []
-    nsm_primes = [
-        ("NSM_I", "Substantives", "First-person speaker prime"),
-        ("NSM_YOU", "Substantives", "Second-person addressee prime"),
-        ("NSM_SOMEONE", "Substantives", "Indefinite person/agent prime"),
-        ("NSM_SOMETHING", "Substantives", "Inanimate entity or thing prime"),
-        ("NSM_PEOPLE", "Substantives", "Plural humans prime"),
-        ("NSM_BODY", "Substantives", "Physical organism body prime"),
-        ("NSM_THIS", "Determiners", "Proximal deictic determiner"),
-        ("NSM_SAME", "Determiners", "Identity relation prime"),
-        ("NSM_OTHER", "Determiners", "Alterior / difference prime"),
-        ("NSM_ONE", "Quantifiers", "Singular count prime"),
-        ("NSM_TWO", "Quantifiers", "Dual count prime"),
-        ("NSM_MUCH", "Quantifiers", "Large quantity / mass prime"),
-        ("NSM_LITTLE", "Quantifiers", "Small quantity / mass prime"),
-        ("NSM_SOME", "Quantifiers", "Existential partition prime"),
-        ("NSM_ALL", "Quantifiers", "Universal quantifier prime"),
-        ("NSM_MORE", "Quantifiers", "Additive / comparative excess prime"),
-        ("NSM_FEW", "Quantifiers", "Paucal quantifier prime"),
-        ("NSM_PART", "Quantifiers", "Mereological part prime"),
-        ("NSM_GOOD", "Evaluators", "Positive evaluation prime"),
-        ("NSM_BAD", "Evaluators", "Negative evaluation prime"),
-        ("NSM_BIG", "Descriptors", "Large magnitude prime"),
-        ("NSM_SMALL", "Descriptors", "Small magnitude prime"),
-        ("NSM_VERY", "Augmentatives", "Intensifier prime"),
-        ("NSM_TRUE", "Evaluators", "Truthfulness / verity prime"),
-        ("NSM_THINK", "Mental Predicates", "Cognition prime"),
-        ("NSM_KNOW", "Mental Predicates", "Knowledge prime"),
-        ("NSM_WANT", "Mental Predicates", "Volition / desire prime"),
-        ("NSM_FEEL", "Mental Predicates", "Sensation / affect prime"),
-        ("NSM_SEE", "Perception", "Visual perception prime"),
-        ("NSM_HEAR", "Perception", "Auditory perception prime"),
-        ("NSM_SAY", "Communication", "Speech act prime"),
-        ("NSM_WORDS", "Communication", "Lexical / linguistic payload prime"),
-        ("NSM_DO", "Action", "Active agentive action prime"),
-        ("NSM_HAPPEN", "Events", "Spontaneous occurrence prime"),
-        ("NSM_MOVE", "Action", "Kinematic motion prime"),
-        ("NSM_TOUCH", "Action", "Physical contact prime"),
-        ("NSM_BE_SOMEWHERE", "Location", "Locative presence prime"),
-        ("NSM_THERE_IS", "Existence", "Existential ontic presence prime"),
-        ("NSM_HAVE", "Possession", "Possessive association prime"),
-        ("NSM_LIVE", "Life", "Biological animation prime"),
-        ("NSM_DIE", "Life", "Cessation of life prime"),
-        ("NSM_BORN", "Life", "Inception of life prime"),
-        ("NSM_GROW", "Life", "Developmental expansion prime"),
-        ("NSM_NOW", "Time", "Temporal present prime"),
-        ("NSM_BEFORE", "Time", "Temporal precedence prime"),
-        ("NSM_AFTER", "Time", "Temporal succession prime"),
-        ("NSM_A_LONG_TIME", "Time", "Extended temporal duration"),
-        ("NSM_A_SHORT_TIME", "Time", "Brief temporal duration"),
-        ("NSM_FOR_SOME_TIME", "Time", "Bounded temporal interval"),
-        ("NSM_MOMENT", "Time", "Instantaneous point in time"),
-        ("NSM_HERE", "Space", "Proximal spatial location"),
-        ("NSM_ABOVE", "Space", "Superior vertical spatial relation"),
-        ("NSM_BELOW", "Space", "Inferior vertical spatial relation"),
-        ("NSM_FAR", "Space", "Distal spatial relation"),
-        ("NSM_NEAR", "Space", "Proximal spatial relation"),
-        ("NSM_SIDE", "Space", "Lateral spatial relation"),
-        ("NSM_INSIDE", "Space", "Interior topological containment"),
-        ("NSM_OUTSIDE", "Space", "Exterior spatial exclusion"),
-        ("NSM_TOUCHING", "Space", "Contiguous boundary contact"),
-        ("NSM_BETWEEN", "Space", "Intermediate spatial placement"),
-        ("NSM_CONTINUOUS_RATE", "Kinematics", "Constant velocity / rate of change"),
-        ("NSM_ACCELERATING_RATE", "Kinematics", "Second-order accelerating rate"),
-        ("NSM_CAN", "Logical Modality", "Possibility / dynamic ability prime"),
-        ("NSM_MAYBE", "Logical Modality", "Epistemic possibility prime"),
-    ]
-    b0.extend(nsm_primes)
-    kinematics_phys = [
-        ("PHYS_VELOCITY_LINEAR", "Kinematics", "Linear velocity vector magnitude"),
-        ("PHYS_ACCELERATION_LINEAR", "Kinematics", "Linear acceleration trajectory"),
-        ("PHYS_ANGULAR_VELOCITY", "Kinematics", "Rotational angular velocity"),
-        ("PHYS_ANGULAR_ACCELERATION", "Kinematics", "Rotational angular acceleration"),
-        ("PHYS_MOMENTUM_LINEAR", "Dynamics", "Linear momentum p = mv"),
-        ("PHYS_ANGULAR_MOMENTUM", "Dynamics", "Angular momentum L = r x p"),
-        ("PHYS_FORCE_IMPULSE", "Dynamics", "Instantaneous force impulse or impact"),
-        ("PHYS_CONTINUOUS_FORCE", "Dynamics", "Sustained applied mechanical force"),
-        ("PHYS_TORQUE_MOMENT", "Dynamics", "Rotational torque or twisting moment"),
-        ("PHYS_MASS_INERTIA", "Dynamics", "Inertial mass resistance to acceleration"),
-        ("PHYS_GRAVITATIONAL_FORCE", "Dynamics", "Gravitational force field attraction"),
-        ("PHYS_FRICTION_DYNAMIC", "Dynamics", "Kinetic friction opposing surface motion"),
-        ("PHYS_FRICTION_STATIC", "Dynamics", "Static friction threshold resistance"),
-        ("PHYS_FLUID_VISCOSITY", "Fluid Dynamics", "Fluid shear resistance and viscosity"),
-        ("PHYS_PRESSURE_HYDROSTATIC", "Fluid Dynamics", "Hydrostatic / pneumatic pressure"),
-        ("PHYS_FLUID_BUOYANCY", "Fluid Dynamics", "Archimedean buoyant upward force"),
-        ("PHYS_SURFACE_TENSION", "Fluid Dynamics", "Interfacial surface tension energy"),
-        ("PHYS_TURBULENCE_FLOW", "Fluid Dynamics", "Non-laminar chaotic turbulent flow"),
-        ("PHYS_LAMINAR_FLOW", "Fluid Dynamics", "Smooth laminar streamline fluid motion"),
-        ("PHYS_THERMAL_EXPANSION", "Thermodynamics", "Thermal expansion / contraction rate"),
-        ("PHYS_TEMPERATURE_HEAT", "Thermodynamics", "Thermal energy / heat flow"),
-        ("PHYS_ENTROPY_THERMAL", "Thermodynamics", "Thermodynamic disorder / entropy generation"),
-        ("PHYS_HEAT_CONDUCTION", "Thermodynamics", "Conductive heat transfer rate"),
-        ("PHYS_HEAT_CONVECTION", "Thermodynamics", "Convective fluid heat transport"),
-        ("PHYS_HEAT_RADIATION", "Thermodynamics", "Electromagnetic radiative heat emission"),
-        ("PHYS_ELASTIC_DEFORMATION", "Continuum", "Reversible elastic strain / deformation"),
-        ("PHYS_PLASTIC_DEFORMATION", "Continuum", "Irreversible plastic deformation / yield"),
-        ("PHYS_STRESS_TENSILE", "Continuum", "Tensile pull stress along axis"),
-        ("PHYS_STRESS_COMPRESSIVE", "Continuum", "Compressive squeezing stress"),
-        ("PHYS_STRESS_SHEAR", "Continuum", "Planar shear stress"),
-        ("PHYS_FRACTURE_RUPTURE", "Continuum", "Material rupture / fracture limit"),
-        ("PHYS_VIBRATION_OSCILLATION", "Kinematics", "Harmonic periodic oscillation / vibration"),
-    ]
-    b0.extend(kinematics_phys)
-    fields_materials = [
-        ("STATE_SOLID_CRYSTALLINE", "Material State", "Ordered crystalline solid state"),
-        ("STATE_SOLID_AMORPHOUS", "Material State", "Non-crystalline amorphous solid"),
-        ("STATE_LIQUID", "Material State", "Incompressible fluid liquid state"),
-        ("STATE_GAS", "Material State", "Compressible gaseous vapor state"),
-        ("STATE_PLASMA", "Material State", "Ionized gas plasma state"),
-        ("STATE_BOSE_CONDENSATE", "Material State", "Quantum degenerate matter state"),
-        ("FIELD_GRAVITATIONAL", "Fields", "Gravitational field potential tensor"),
-        ("FIELD_ELECTROSTATIC", "Fields", "Electrostatic Coulomb field"),
-        ("FIELD_MAGNETIC", "Fields", "Magnetic flux density field B"),
-        ("FIELD_ELECTROMAGNETIC", "Fields", "Coupled electromagnetic wave field"),
-        ("FIELD_QUANTUM_PROBABILITY", "Fields", "Quantum probability amplitude field"),
-        ("PROP_DENSITY_MASS", "Properties", "Volumetric mass density (kg/m^3)"),
-        ("PROP_CONDUCTIVITY_ELECTRICAL", "Properties", "Electrical conductivity / resistivity"),
-        ("PROP_CONDUCTIVITY_THERMAL", "Properties", "Thermal transport conductivity"),
-        ("PROP_MAGNETIC_PERMEABILITY", "Properties", "Magnetic susceptibility / permeability"),
-        ("PROP_DIELECTRIC_PERMITTIVITY", "Properties", "Electric dielectric permittivity"),
-        ("PROP_HARDNESS_INDENTATION", "Properties", "Mohs / Vickers surface hardness"),
-        ("PROP_TOUGHNESS_IMPACT", "Properties", "Energy absorption before fracture"),
-        ("PROP_DUCTILITY_MALLEABILITY", "Properties", "Plastic drawing and rolling capacity"),
-        ("PROP_OPTICAL_TRANSPARENCY", "Properties", "Optical transmission / transparency"),
-        ("PROP_REFRACTIVE_INDEX", "Properties", "Electromagnetic refractive index"),
-        ("PROP_ACOUSTIC_IMPEDANCE", "Properties", "Speed of sound / acoustic impedance"),
-        ("PROP_CHEMICAL_REACTIVITY", "Properties", "Chemical oxidation / reaction affinity"),
-        ("PROP_PH_ACID_BASE", "Properties", "Acidic / basic hydrogen ion concentration"),
-        ("PROP_SOLUBILITY_SOLVENT", "Properties", "Dissolution capability in solvent"),
-        ("PROP_CORROSION_RESISTANCE", "Properties", "Resistance to chemical degradation"),
-        ("PROP_RADIOACTIVE_DECAY", "Properties", "Nuclear decay rate / half-life"),
-        ("PROP_POROSITY_PERMEABILITY", "Properties", "Porous volume fraction"),
-        ("PROP_ADHESIVE_AFFINITY", "Properties", "Interfacial sticking affinity"),
-        ("PROP_COHESIVE_STRENGTH", "Properties", "Internal molecular cohesive strength"),
-        ("PROP_SPECIFIC_HEAT_CAPACITY", "Properties", "Specific thermal heat capacity"),
-        ("PROP_PHASE_TRANSITION_TEMP", "Properties", "Melting / boiling phase transition point"),
-    ]
-    b0.extend(fields_materials)
-    bands_data.append((0, "BAND_0_NSM_KINEMATICS", b0))
+cn_slots = json.load(open('data/conceptnet_slots.json', 'r', encoding='utf-8'))
+b3_cn = [s for s in cn_slots if s['band'] == 3]
+b4_cn = [s for s in cn_slots if s['band'] == 4]
 
-    # BAND 1: 128-255
-    b1 = []
-    valencies = [
-        ("VAL_X1_AGENT", "Valency", "Actor / initiator place x1"),
-        ("VAL_X2_PATIENT", "Valency", "Patient / theme / undergoer place x2"),
-        ("VAL_X3_DESTINATION", "Valency", "Goal / recipient / destination place x3"),
-        ("VAL_X4_SOURCE", "Valency", "Origin / source place x4"),
-        ("VAL_X5_INSTRUMENT", "Valency", "Instrument / medium place x5"),
-        ("VAL_X6_BENEFICIARY", "Valency", "Beneficiary / intended recipient place x6"),
-        ("VAL_X7_PURPOSE_GOAL", "Valency", "Teleological ultimate purpose place x7"),
-        ("VAL_EXPERIENCER", "Valency", "Experiencer / sentient recipient"),
-        ("VAL_LOCATION_SLOT", "Valency", "Spatial frame argument"),
-        ("VAL_TIME_SLOT", "Valency", "Temporal anchor argument"),
-        ("VAL_MANNER_SLOT", "Valency", "Manner / qualitative modification argument"),
-        ("VAL_PURPOSE_SLOT", "Valency", "Teleological goal argument"),
-        ("VAL_RESULT_SLOT", "Valency", "Result / output state argument"),
-        ("VAL_MEDIUM_SLOT", "Valency", "Transmission medium / channel argument"),
-        ("VAL_CONDITION_SLOT", "Valency", "Precondition / situational constraint argument"),
-        ("VAL_DEGREE_SLOT", "Valency", "Scalar magnitude / extent modifier argument"),
-    ]
-    b1.extend(valencies)
-    aspect_tense = [
-        ("LJB_PU_PAST_TENSE", "Tense", "Past tense grammatical marker"),
-        ("LJB_CA_PRESENT_TENSE", "Tense", "Present tense grammatical marker"),
-        ("LJB_BA_FUTURE_TENSE", "Tense", "Future tense grammatical marker"),
-        ("LJB_ZI_SHORT_PAST", "Temporal Interval", "Recent past marker"),
-        ("LJB_ZA_MEDIUM_PAST", "Temporal Interval", "Intermediate past marker"),
-        ("LJB_ZU_LONG_PAST", "Temporal Interval", "Ancient/distant past marker"),
-        ("LJB_ZEI_SHORT_FUTURE", "Temporal Interval", "Immediate near future marker"),
-        ("LJB_ZAI_MEDIUM_FUTURE", "Temporal Interval", "Intermediate future marker"),
-        ("LJB_ZAU_LONG_FUTURE", "Temporal Interval", "Distant future marker"),
-        ("ASPECT_PERFECTIVE", "Aspect", "Completed event bounded in totality"),
-        ("ASPECT_IMPERFECTIVE", "Aspect", "Ongoing unbounded event internal perspective"),
-        ("ASPECT_PROGRESSIVE", "Aspect", "Active continuous in-progress action"),
-        ("ASPECT_ITERATIVE", "Aspect", "Repeated recurring cyclic occurrence"),
-        ("ASPECT_INCHOATIVE", "Aspect", "Inception / beginning of state change"),
-        ("ASPECT_CESSATIVE", "Aspect", "Termination / ending of state or process"),
-        ("ASPECT_HABITUAL", "Aspect", "Customary characteristic ongoing habit"),
-        ("ASPECT_GNOMIC_UNIVERSAL", "Aspect", "Timeless universal truth aspect"),
-        ("ASPECT_SEMPELFACTIVE", "Aspect", "Single punctual instantaneous event"),
-        ("ASPECT_TELIC_BOUNDED", "Aspect", "Event possessing inherent endpoint"),
-        ("ASPECT_ATELIC_UNBOUNDED", "Aspect", "Homogeneous unbounded activity"),
-        ("LJB_VI_SHORT_DISTANCE", "Spatial Tense", "Near distance spatial marker"),
-        ("LJB_VA_MEDIUM_DISTANCE", "Spatial Tense", "Medium distance spatial marker"),
-        ("LJB_VU_LONG_DISTANCE", "Spatial Tense", "Far distance spatial marker"),
-        ("LJB_FAH_SPATIAL_DIRECTION", "Spatial Tense", "Spatial orientation / heading marker"),
-    ]
-    b1.extend(aspect_tense)
-    ast_topologies = [
-        ("GRAPH_ROOT_NODE", "Graph Topology", "Root proposition node of ASG"),
-        ("GRAPH_LEAF", "Graph Topology", "Terminal leaf entity in ASG"),
-        ("GRAPH_RECURSIVE_REF", "Graph Topology", "Self-referential recursive backlink"),
-        ("GRAPH_IS_SUB_EXP", "Graph Topology", "Nested sub-expression / sub-graph"),
-        ("GRAPH_CYCLIC_BACKLINK", "Graph Topology", "Cyclic co-inductive edge pointer"),
-        ("GRAPH_ORDERED_SEQ", "Graph Topology", "Ordered sequence child relation"),
-        ("GRAPH_BRANCH_COND", "Graph Topology", "Branch condition evaluation head"),
-        ("GRAPH_BRANCH_THEN", "Graph Topology", "Branch true evaluation branch"),
-        ("GRAPH_BRANCH_ELSE", "Graph Topology", "Branch false evaluation branch"),
-        ("GRAPH_CONTROL_LOOP", "Graph Topology", "AST: Iteration loop construct (while/for)"),
-        ("GRAPH_FUNCTION_DEF", "Graph Topology", "AST: Function or method definition"),
-        ("GRAPH_INVOCATION_CALL", "Graph Topology", "AST: Function or operator invocation"),
-        ("GRAPH_VARIABLE_BIND", "Graph Topology", "AST: Variable assignment / lexical binding"),
-        ("GRAPH_ARGUMENT_LIST", "Graph Topology", "AST: Variadic argument sequence head"),
-        ("GRAPH_RETURN_VALUE", "Graph Topology", "AST: Evaluation outcome / return sink"),
-        ("GRAPH_SCOPED_CONTEXT", "Graph Topology", "AST: Lexical scope block container"),
-        ("GRAPH_CLOSURE_CAPTURE", "Graph Topology", "AST: Captured environment closure"),
-        ("GRAPH_TYPE_SIGNATURE", "Graph Topology", "AST: Static type assertion / signature"),
-        ("GRAPH_EXCEPTION_HANDLE", "Graph Topology", "AST: Error / exception catch handler"),
-        ("GRAPH_EXCEPTION_THROW", "Graph Topology", "AST: Exception raise / throw site"),
-        ("GRAPH_ANAPHORA_TARGET", "Graph Topology", "Pronoun / anaphora referent link"),
-        ("GRAPH_COREF_BUNDLE", "Graph Topology", "Co-reference equivalence cluster"),
-        ("GRAPH_ASSERTION_CLAIM", "Graph Topology", "Logical assertion proposition head"),
-        ("GRAPH_QUERY_TARGET", "Graph Topology", "Goal / query variable target"),
-        ("GRAPH_ENTAILMENT_EDGE", "Graph Topology", "Deductive derivation edge"),
-        ("GRAPH_CONTRADICTION_EDGE", "Graph Topology", "Mutual exclusivity constraint edge"),
-        ("GRAPH_MERKLE_FOLD_POINT", "Graph Topology", "Merkle tree folding boundary"),
-        ("GRAPH_EXT_REFERENCE", "Graph Topology", "External CID reference pointer"),
-        ("GRAPH_VIRTUAL_PAGE_LINK", "Graph Topology", "Host RAM virtual page-table pointer"),
-        ("GRAPH_IMMUTABLE_HASH_LOCK", "Graph Topology", "Cryptographically locked sub-graph CID"),
-        ("GRAPH_PATTERN_MATCH_HEAD", "Graph Topology", "AST: Pattern match dispatch root"),
-        ("GRAPH_PATTERN_CASE", "Graph Topology", "AST: Pattern match branch case"),
-        ("GRAPH_DYNAMIC_DISPATCH", "Graph Topology", "AST: Virtual / polymorphic dynamic dispatch"),
-        ("GRAPH_STRUCT_FIELD_ACCESS", "Graph Topology", "AST: Record / struct field projection"),
-        ("GRAPH_ARRAY_INDEX_LOOKUP", "Graph Topology", "AST: Array / tensor element indexing"),
-        ("GRAPH_YIELD_GENERATOR", "Graph Topology", "AST: Generator coroutine yield point"),
-        ("GRAPH_ASYNC_AWAIT", "Graph Topology", "AST: Coroutine suspension await point"),
-        ("GRAPH_MODULE_IMPORT", "Graph Topology", "AST: Module package import declaration"),
-        ("GRAPH_MODULE_EXPORT", "Graph Topology", "AST: Public interface symbol export"),
-        ("GRAPH_CLASS_STRUCT_DEF", "Graph Topology", "AST: Class / struct schema definition"),
-        ("GRAPH_INTERFACE_TRAIT_DEF", "Graph Topology", "AST: Abstract interface / trait contract"),
-        ("GRAPH_GENERIC_TYPE_PARAM", "Graph Topology", "AST: Parametric polymorphism type variable"),
-        ("GRAPH_MACRO_EXPANSION", "Graph Topology", "AST: Metaprogramming macro syntax transform"),
-        ("GRAPH_COMPILER_INTRINSIC", "Graph Topology", "AST: Hardware-level compiler intrinsic"),
-        ("GRAPH_MEMORY_ALLOCATION", "Graph Topology", "AST: Heap memory allocation site"),
-        ("GRAPH_MEMORY_DEALLOCATION", "Graph Topology", "AST: Memory reclamation / free site"),
-        ("GRAPH_POINTER_DEREFERENCE", "Graph Topology", "AST: Pointer indirection / dereference"),
-        ("GRAPH_STATIC_ASSERTION", "Graph Topology", "AST: Compile-time static assert invariant"),
-    ]
-    b1.extend(ast_topologies)
-    concurrency_os = [
-        ("LJB_ASYNC_CONCURRENT", "Concurrency", "Concurrent non-blocking execution"),
-        ("LJB_MUTEX_DEPENDENCY", "Concurrency", "Mutual exclusion synchronization dependency"),
-        ("LJB_RACE_CONDITION", "Concurrency", "Non-deterministic race order flag"),
-        ("CONCUR_THREAD_SPAWN", "Concurrency", "OS thread spawn / fork point"),
-        ("CONCUR_THREAD_JOIN", "Concurrency", "Thread synchronization barrier join"),
-        ("CONCUR_PROCESS_FORK", "Concurrency", "Isolated process fork boundary"),
-        ("CONCUR_PROCESS_EXEC", "Concurrency", "Process image binary execution"),
-        ("CONCUR_CHANNEL_SEND", "Concurrency", "Message queue / channel producer transmit"),
-        ("CONCUR_CHANNEL_RECV", "Concurrency", "Message queue / channel consumer receive"),
-        ("CONCUR_CHANNEL_SELECT", "Concurrency", "Multiplexed non-blocking channel select"),
-        ("CONCUR_SEMAPHORE_ACQUIRE", "Concurrency", "Counting semaphore resource acquire"),
-        ("CONCUR_SEMAPHORE_RELEASE", "Concurrency", "Counting semaphore resource release"),
-        ("CONCUR_READ_WRITE_LOCK", "Concurrency", "Shared-read / exclusive-write lock"),
-        ("CONCUR_ATOMIC_COMPARE_SWAP", "Concurrency", "Hardware lock-free compare-and-swap CAS"),
-        ("CONCUR_MEMORY_BARRIER_FENCE", "Concurrency", "CPU hardware memory ordering fence"),
-        ("CONCUR_DEADLOCK_CYCLE_FLAG", "Concurrency", "Deadlock cyclic resource wait condition"),
-        ("CONCUR_LIVELOCK_STARVATION", "Concurrency", "Resource starvation / livelock state"),
-        ("CONCUR_ACTOR_MAILBOX", "Concurrency", "Actor model asynchronous mailbox head"),
-        ("CONCUR_EVENT_LOOP_DISPATCH", "Concurrency", "Event loop reactor / proactor dispatch"),
-        ("CONCUR_SIGNAL_INTERRUPT", "Concurrency", "Asynchronous OS signal / hardware interrupt"),
-        ("OS_SOCKET_TCP_STREAM", "OS Networking", "Bidirectional byte stream connection"),
-        ("OS_SOCKET_UDP_DATAGRAM", "OS Networking", "Unreliable connectionless packet datagram"),
-        ("OS_IPC_SHARED_MEMORY", "OS Systems", "Inter-process shared memory segment"),
-        ("OS_IPC_PIPE_FIFO", "OS Systems", "Anonymous / named pipe IPC buffer"),
-        ("OS_FILE_DESCRIPTOR_OPEN", "OS Storage", "Active file descriptor handle"),
-        ("OS_FILE_DESCRIPTOR_MMAP", "OS Storage", "Memory-mapped file page table mapping"),
-        ("OS_VIRTUAL_PAGE_FAULT", "OS Virtual Memory", "Page table translation fault interrupt"),
-        ("OS_KERNEL_SYSCALL_ENTRY", "OS Kernel", "User-space to kernel-space transition"),
-        ("OS_CONTEXT_SWITCH", "OS Kernel", "Hardware register state context switch"),
-        ("OS_SCHEDULER_PRIORITY", "OS Kernel", "Preemptive scheduling priority rank"),
-        ("OS_TIME_EPOCH_TICK", "OS Clocks", "Hardware monotonic clock timestamp"),
-        ("OS_SECURITY_CAPABILITY", "OS Security", "POSIX / capability security token"),
-        ("OS_SANDBOX_ISOLATION", "OS Security", "Namespace / cgroup containment sandbox"),
-        ("OS_CONTAINER_RUNTIME", "OS Systems", "Containerized runtime virtualization"),
-        ("OS_HYPERVISOR_VM_GUEST", "OS Systems", "Hardware hypervisor guest instance"),
-        ("OS_DMA_DIRECT_TRANSFER", "Hardware", "Direct Memory Access controller transfer"),
-        ("OS_GPU_KERNEL_LAUNCH", "Hardware", "Heterogeneous GPU compute stream dispatch"),
-        ("OS_NUMA_NODE_AFFINITY", "Hardware", "Non-Uniform Memory Access locality node"),
-        ("OS_CACHE_LINE_FLUSH", "Hardware", "Hardware CPU cache line invalidate/flush"),
-        ("OS_IO_URING_RING_BUFFER", "OS Async I/O", "High-performance lockless ring buffer"),
-    ]
-    b1.extend(concurrency_os)
-    bands_data.append((1, "BAND_1_VALENCIES_TOPOLOGY", b1))
+lines = []
+lines.append('"""Canonical 1024-dimension slot registry for QUANTA.')
+lines.append('')
+lines.append('Partitions the 1024 dimensions into eight isolated 128-slot bands:')
+lines.append('- Band 0 (000–127): Universal NSM Primes, Classical Kinematics & Continuous Physics')
+lines.append('- Band 1 (128–255): Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency Topologies')
+lines.append('- Band 2 (256–383): Logic Quantifiers (∀, ∃, ∃!), Variable Binding Registers & Query Unification Heads')
+lines.append('- Band 3 (384–511): 128 Data-Driven ConceptNet Taxonomies, Scientific Domains & Entity Types')
+lines.append('- Band 4 (512–639): 128 Data-Driven ConceptNet Actions, Functional Affordances & Cyber-Physical Properties')
+lines.append('- Band 5 (640–767): Theory of Mind, 3-Tier Nested Beliefs, Teleological Goals & Pragmatic Intent')
+lines.append('- Band 6 (768–895): Epistemic Proof Solvers, s(CASP) Invariants & Deontic Normative Logic')
+lines.append('- Band 7 (896–1023): Spatio-Temporal Mereotopology (Allen, RCC-8) & Pearl Causal Counterfactual DAGs')
+lines.append('"""')
+lines.append('')
+lines.append('from __future__ import annotations')
+lines.append('from dataclasses import dataclass')
+lines.append('import enum')
+lines.append('import json')
+lines.append('from pathlib import Path')
+lines.append('from typing import Dict, List, Optional, Union')
+lines.append('')
+lines.append('')
+lines.append('class SlotBand(enum.IntEnum):')
+lines.append('    BAND_0_NSM_KINEMATICS = 0')
+lines.append('    BAND_1_VALENCIES_TOPOLOGY = 1')
+lines.append('    BAND_2_LOGIC_VARIABLES = 2')
+lines.append('    BAND_3_ONTOLOGY_STRUCTURES = 3')
+lines.append('    BAND_4_AFFORDANCES_OPERATIONS = 4')
+lines.append('    BAND_5_TOM_PRAGMATICS = 5')
+lines.append('    BAND_6_PROOF_DEONTICS = 6')
+lines.append('    BAND_7_SPATIOTEMPORAL_CAUSAL = 7')
+lines.append('    # Backward compatibility aliases')
+lines.append('    BAND_2_ONTOLOGY_MODALITY = 3')
+lines.append('    BAND_3_EPISTEMIC_METARULES = 6')
+lines.append('')
+lines.append('')
+lines.append('@dataclass(frozen=True)')
+lines.append('class SlotDefinition:')
+lines.append('    index: int')
+lines.append('    name: str')
+lines.append('    band: SlotBand')
+lines.append('    category: str')
+lines.append('    description: str')
+lines.append('')
 
-    # BAND 2: 256-383
-    b2 = []
-    quantifiers_connectives = [
-        ("QUANT_UNIVERSAL_FORALL", "Quantifiers", "Universal quantifier ∀ (For all x)"),
-        ("QUANT_EXISTENTIAL_EXISTS", "Quantifiers", "Existential quantifier ∃ (There exists x)"),
-        ("QUANT_UNIQUENESS_EXISTS_ONE", "Quantifiers", "Uniqueness quantifier ∃! (There exists exactly one x)"),
-        ("QUANT_MAJORITY_MOST", "Quantifiers", "Generalized quantifier: Most / majority (>50%)"),
-        ("QUANT_PAUCAL_FEW", "Quantifiers", "Generalized quantifier: Few / small fraction"),
-        ("QUANT_EXACT_COUNT_K", "Quantifiers", "Exact numerical cardinality quantifier (|X| = k)"),
-        ("QUANT_AT_LEAST_K", "Quantifiers", "Lower-bounded cardinality quantifier (|X| >= k)"),
-        ("QUANT_AT_MOST_K", "Quantifiers", "Upper-bounded cardinality quantifier (|X| <= k)"),
-        ("QUANT_GENERIC_TYPICAL", "Quantifiers", "Generic / default normative quantifier"),
-        ("LJB_NA_NEGATION", "Connectives", "Brute truth-functional negation (NOT)"),
-        ("LJB_JE_AND", "Connectives", "Conjunction / logical AND"),
-        ("LJB_JA_OR", "Connectives", "Inclusive disjunction / logical OR"),
-        ("LJB_JON_XOR", "Connectives", "Exclusive disjunction / logical XOR"),
-        ("LJB_GANAI_IF_THEN", "Connectives", "Material implication / conditional (P -> Q)"),
-        ("LJB_DU_IDENTITY", "Connectives", "Strict logical identity (=)"),
-        ("LJB_SOI_RECIPROCAL", "Connectives", "Reciprocal / mutual relation marker"),
-        ("LJB_RO_ALL_QUANT", "Quantifiers", "All / every formal universal quantifier"),
-        ("LJB_SUO_AT_LEAST_ONE", "Quantifiers", "At least one existential quantifier"),
-        ("LJB_NO_NONE_QUANT", "Quantifiers", "Zero / none formal quantifier"),
-        ("LJB_MOI_ORDINAL", "Quantifiers", "Ordinal ranking converter"),
-        ("LJB_MEI_CARDINAL", "Quantifiers", "Cardinal group converter"),
-        ("CONNECTIVE_NAND", "Connectives", "Sheffer stroke / negated conjunction NAND"),
-        ("CONNECTIVE_NOR", "Connectives", "Peirce arrow / negated disjunction NOR"),
-        ("CONNECTIVE_MATERIAL_NON_IMPL", "Connectives", "Material non-implication (P and not Q)"),
-    ]
-    b2.extend(quantifiers_connectives)
-    var_registers = [
-        ("VAR_SLOT_X0", "Variable Registers", "Bound formal variable register X0"),
-        ("VAR_SLOT_X1", "Variable Registers", "Bound formal variable register X1"),
-        ("VAR_SLOT_X2", "Variable Registers", "Bound formal variable register X2"),
-        ("VAR_SLOT_X3", "Variable Registers", "Bound formal variable register X3"),
-        ("VAR_SLOT_X4", "Variable Registers", "Bound formal variable register X4"),
-        ("VAR_SLOT_X5", "Variable Registers", "Bound formal variable register X5"),
-        ("VAR_SLOT_X6", "Variable Registers", "Bound formal variable register X6"),
-        ("VAR_SLOT_X7", "Variable Registers", "Bound formal variable register X7"),
-        ("VAR_SKOLEM_CONST_0", "Skolem Registers", "Skolemized existential constant c0"),
-        ("VAR_SKOLEM_CONST_1", "Skolem Registers", "Skolemized existential constant c1"),
-        ("VAR_SKOLEM_CONST_2", "Skolem Registers", "Skolemized existential constant c2"),
-        ("VAR_SKOLEM_CONST_3", "Skolem Registers", "Skolemized existential constant c3"),
-        ("VAR_SKOLEM_FUNC_F0", "Skolem Registers", "Skolem function f0(x) for dependent existentials"),
-        ("VAR_SKOLEM_FUNC_F1", "Skolem Registers", "Skolem function f1(x) for dependent existentials"),
-        ("QUERY_TARGET_VAR_X", "Unification Query", "First-order query target ?X"),
-        ("QUERY_TARGET_VAR_Y", "Unification Query", "First-order query target ?Y"),
-        ("QUERY_TARGET_VAR_Z", "Unification Query", "First-order query target ?Z"),
-        ("QUERY_TARGET_VAR_W", "Unification Query", "First-order query target ?W"),
-        ("QUERY_AGGREGATE_COUNT", "Unification Query", "Aggregation target: COUNT(?X)"),
-        ("QUERY_AGGREGATE_SUM", "Unification Query", "Aggregation target: SUM(?X)"),
-        ("QUERY_AGGREGATE_AVG", "Unification Query", "Aggregation target: AVG(?X)"),
-        ("QUERY_AGGREGATE_MIN", "Unification Query", "Aggregation target: MIN(?X)"),
-        ("QUERY_AGGREGATE_MAX", "Unification Query", "Aggregation target: MAX(?X)"),
-        ("LAMBDA_PARAM_0", "Lambda Calculus", "Lambda abstraction parameter 0 (λx0)"),
-        ("LAMBDA_PARAM_1", "Lambda Calculus", "Lambda abstraction parameter 1 (λx1)"),
-        ("LAMBDA_PARAM_2", "Lambda Calculus", "Lambda abstraction parameter 2 (λx2)"),
-        ("LAMBDA_PARAM_3", "Lambda Calculus", "Lambda abstraction parameter 3 (λx3)"),
-        ("LAMBDA_BODY_HEAD", "Lambda Calculus", "Lambda expression body application head"),
-        ("LAMBDA_APPLICATION_OP", "Lambda Calculus", "Beta-reduction function application operator"),
-        ("LAMBDA_Y_COMBINATOR", "Lambda Calculus", "Fixed-point Y combinator for recursion"),
-        ("DE_BRUIJN_INDEX_0", "Variable Binding", "De Bruijn index 0 (innermost binder)"),
-        ("DE_BRUIJN_INDEX_1", "Variable Binding", "De Bruijn index 1 (enclosing binder)"),
-        ("DE_BRUIJN_INDEX_2", "Variable Binding", "De Bruijn index 2"),
-        ("DE_BRUIJN_INDEX_3", "Variable Binding", "De Bruijn index 3+"),
-        ("UNIFY_OCCURS_CHECK_FLAG", "Unification", "Occurs-check circularity protection flag"),
-        ("UNIFY_MOST_GENERAL_MGU", "Unification", "Most General Unifier substitution head"),
-        ("UNIFY_SUBSTITUTION_BIND", "Unification", "Active variable-to-term substitution mapping"),
-        ("UNIFY_FAILURE_CLASH", "Unification", "Unification failure: functor clash"),
-        ("UNIFY_FAILURE_CYCLE", "Unification", "Unification failure: infinite rational loop"),
-        ("UNIFY_FREE_VARIABLE_FLAG", "Variable Binding", "Unbound free variable in open formula"),
-    ]
-    b2.extend(var_registers)
-    proof_sequent = [
-        ("PROOF_TURNSTILE_ENTAIL", "Sequent Calculus", "Turnstile entailment relation (Γ ⊢ Δ)"),
-        ("PROOF_SEMANTIC_ENTAIL_MOD", "Sequent Calculus", "Semantic model entailment (Γ ⊨ Δ)"),
-        ("PROOF_MODUS_PONENS_STEP", "Deduction", "Modus ponens rule: P, P->Q ⊢ Q"),
-        ("PROOF_MODUS_TOLLENS_STEP", "Deduction", "Modus tollens rule: not Q, P->Q ⊢ not P"),
-        ("PROOF_HYPOTHETICAL_SYLLOGISM", "Deduction", "Hypothetical syllogism: P->Q, Q->R ⊢ P->R"),
-        ("PROOF_DISJUNCTIVE_SYLLOGISM", "Deduction", "Disjunctive syllogism: P or Q, not P ⊢ Q"),
-        ("PROOF_RESOLUTION_STEP", "Deduction", "Clausal resolution step (A or B, not B or C ⊢ A or C)"),
-        ("PROOF_CUT_ELIMINATION", "Sequent Calculus", "Gentzen cut elimination rule application"),
-        ("PROOF_IDENTITY_AXIOM", "Sequent Calculus", "Identity initial sequent (A ⊢ A)"),
-        ("PROOF_WEAKENING_LEFT", "Structural Rules", "Left structural weakening (Γ ⊢ Δ ⇒ Γ, A ⊢ Δ)"),
-        ("PROOF_WEAKENING_RIGHT", "Structural Rules", "Right structural weakening (Γ ⊢ Δ ⇒ Γ ⊢ Δ, A)"),
-        ("PROOF_CONTRACTION_LEFT", "Structural Rules", "Left structural contraction (Γ, A, A ⊢ Δ ⇒ Γ, A ⊢ Δ)"),
-        ("PROOF_CONTRACTION_RIGHT", "Structural Rules", "Right structural contraction (Γ ⊢ Δ, A, A ⇒ Γ ⊢ Δ, A)"),
-        ("PROOF_EXCHANGE_PERMUTE", "Structural Rules", "Structural permutation / exchange of antecedents"),
-        ("PROOF_CONJUNCTION_INTRO_L", "Logical Rules", "Left conjunction introduction (A, Γ ⊢ Δ)"),
-        ("PROOF_CONJUNCTION_INTRO_R", "Logical Rules", "Right conjunction introduction (Γ ⊢ A, Δ and Γ ⊢ B, Δ)"),
-        ("PROOF_DISJUNCTION_INTRO_L", "Logical Rules", "Left disjunction introduction (A, Γ ⊢ Δ and B, Γ ⊢ Δ)"),
-        ("PROOF_DISJUNCTION_INTRO_R", "Logical Rules", "Right disjunction introduction (Γ ⊢ A, B, Δ)"),
-        ("PROOF_IMPLICATION_INTRO_L", "Logical Rules", "Left implication introduction"),
-        ("PROOF_IMPLICATION_INTRO_R", "Logical Rules", "Right implication introduction (Γ, A ⊢ B, Δ)"),
-        ("PROOF_NEGATION_INTRO_L", "Logical Rules", "Left negation introduction (Γ ⊢ A, Δ ⇒ not A, Γ ⊢ Δ)"),
-        ("PROOF_NEGATION_INTRO_R", "Logical Rules", "Right negation introduction (A, Γ ⊢ Δ ⇒ Γ ⊢ not A, Δ)"),
-        ("PROOF_FORALL_INTRO_L", "Quantifier Rules", "Left universal introduction (P[t/x], Γ ⊢ Δ)"),
-        ("PROOF_FORALL_INTRO_R", "Quantifier Rules", "Right universal introduction (eigenvariable condition)"),
-        ("PROOF_EXISTS_INTRO_L", "Quantifier Rules", "Left existential introduction (eigenvariable condition)"),
-        ("PROOF_EXISTS_INTRO_R", "Quantifier Rules", "Right existential introduction (Γ ⊢ P[t/x], Δ)"),
-        ("PROOF_MATHEMATICAL_INDUCTION", "Induction", "Peano mathematical induction base + step"),
-        ("PROOF_STRUCTURAL_INDUCTION", "Induction", "Structural induction over algebraic data types"),
-        ("PROOF_COINDUCTIVE_FIXED_POINT", "Coinduction", "Greatest fixed-point coinductive loop proof"),
-        ("PROOF_CONTRADICTION_REDUCTIO", "Proof Methods", "Reductio ad absurdum (Proof by contradiction)"),
-        ("PROOF_CONTRACTION_CONTRAPOS", "Proof Methods", "Proof by contrapositive (not Q -> not P)"),
-        ("PROOF_EXHAUSTION_CASES", "Proof Methods", "Proof by exhaustive case enumeration"),
-        ("PROOF_CONSTRUCTIVE_WITNESS", "Intuitionistic", "Constructive existential witness generation"),
-        ("PROOF_EXCLUDED_MIDDLE_LEM", "Classical Logic", "Law of Excluded Middle instance (P or not P)"),
-        ("PROOF_DOUBLE_NEGATION_ELIM", "Classical Logic", "Double negation elimination (not not P ⊢ P)"),
-        ("PROOF_CURRYING_ISOMORPHISM", "Type Theory", "Curry-Howard isomorphism (A and B -> C ≅ A -> B -> C)"),
-        ("PROOF_SUM_EITHER_TYPE", "Type Theory", "Disjoint union / sum type constructor (Either A B)"),
-        ("PROOF_PRODUCT_PAIR_TYPE", "Type Theory", "Cartesian product / pair type constructor (Pair A B)"),
-        ("PROOF_DEPENDENT_PI_TYPE", "Type Theory", "Dependent function type Π(x:A).B(x)"),
-        ("PROOF_DEPENDENT_SIGMA_TYPE", "Type Theory", "Dependent pair type Σ(x:A).B(x)"),
-        ("PROOF_HOMOTOPY_PATH_EQ", "HoTT", "Homotopy Type Theory propositional equality path"),
-        ("PROOF_UNIVALENCE_AXIOM", "HoTT", "Voevodsky Univalence Axiom (Equivalence is Equality)"),
-        ("PROOF_HIGHER_INDUCTIVE_TYPE", "HoTT", "Higher Inductive Type constructor (Circle, Torus)"),
-        ("PROOF_ASSUMPTION_HYPOTHESIS", "Proof Tree", "Assumed local hypothesis in natural deduction"),
-        ("PROOF_DISCHARGE_HYPOTHESIS", "Proof Tree", "Discharged hypothesis bracket"),
-        ("PROOF_LEAF_AXIOM_NODE", "Proof Tree", "Leaf axiom node in derivation tree"),
-        ("PROOF_INTERMEDIATE_LEMMA", "Proof Tree", "Proven intermediate lemma citation"),
-        ("PROOF_QED_THEOREM_COMPLETE", "Proof Tree", "Complete verified proof certificate QED"),
-        ("PROOF_TABLEAUX_BRANCH_OPEN", "Semantic Tableaux", "Open satisfiable model branch in semantic tableau"),
-        ("PROOF_TABLEAUX_BRANCH_CLOSED", "Semantic Tableaux", "Closed contradiction branch (X and not X)"),
-        ("PROOF_TABLEAUX_ALPHA_EXPAND", "Semantic Tableaux", "Conjunctive tableau expansion step"),
-        ("PROOF_TABLEAUX_BETA_SPLIT", "Semantic Tableaux", "Disjunctive tableau branching step"),
-        ("PROOF_DPLL_UNIT_PROPAGATION", "SAT Solving", "DPLL / CDCL unit clause propagation"),
-        ("PROOF_DPLL_PURE_LITERAL", "SAT Solving", "DPLL pure literal elimination rule"),
-        ("PROOF_CDCL_CONFLICT_CLAUSE", "SAT Solving", "CDCL conflict-driven learned clause (1-UIP)"),
-        ("PROOF_CDCL_NON_CHRONO_BACK", "SAT Solving", "CDCL non-chronological backjumping"),
-        ("PROOF_SMT_THEORY_EQUALITY_UF", "SMT Solving", "EUF: Uninterpreted functions congruence closure"),
-        ("PROOF_SMT_THEORY_LINEAR_ARITH", "SMT Solving", "LRA/LIA: Simplex / Fourier-Motzkin arithmetic solver"),
-        ("PROOF_SMT_THEORY_BITVECTORS", "SMT Solving", "BV: Bit-vector theory bit-blasting"),
-        ("PROOF_SMT_THEORY_ARRAYS_EX", "SMT Solving", "Arrays theory: Read-over-write axioms"),
-        ("PROOF_CERTIFICATE_LFSC", "Proof Formats", "LFSC logical framework proof certificate"),
-        ("PROOF_CERTIFICATE_ALETHE", "Proof Formats", "Alethe SMT proof format certificate"),
-        ("PROOF_CERTIFICATE_DRAT_SAT", "Proof Formats", "DRAT proof reconstruction trace for SAT"),
-        ("PROOF_SOUNDNESS_AUDIT_PASS", "Verifier", "Independent trusted kernel soundness audit pass"),
-    ]
-    b2.extend(proof_sequent)
-    bands_data.append((2, "BAND_2_LOGIC_VARIABLES", b2))
+def format_band(band_name, band_enum, slots_list):
+    res = [f'# ==============================================================================']
+    res.append(f'# {band_name}')
+    res.append(f'# ==============================================================================')
+    res.append(f'{band_name} = [')
+    for s in slots_list:
+        desc_escaped = s.description.replace('"', '\\"')
+        res.append(f'    SlotDefinition({s.index}, "{s.name}", {band_enum}, "{s.category}", "{desc_escaped}"),')
+    res.append(']')
+    res.append('')
+    return res
 
-    # BAND 3: 384-511
-    b3 = []
-    # 384-447 (64 slots: 20 entity types + 12 capabilities + 4 modalities + 21 WordNet + 7 extended)
-    entities = [
-        ("TYPE_ANIMATE", "Entity Types", "Biological living being"),
-        ("TYPE_HUMAN", "Entity Types", "Human person"),
-        ("TYPE_INANIMATE_PHYSICAL", "Entity Types", "Non-living physical entity"),
-        ("TYPE_NATURAL_OBJECT", "Entity Types", "Non-manufactured physical object (rock, star)"),
-        ("TYPE_ARTIFACT", "Entity Types", "Manufactured tool or object"),
-        ("TYPE_SUBSTANCE_MASS", "Entity Types", "Continuous uncounted material / matter"),
-        ("TYPE_COLLECTION_SET", "Entity Types", "Plural set or aggregated group"),
-        ("TYPE_ABSTRACT_CONCEPT", "Entity Types", "Intangible / mathematical / theoretical concept"),
-        ("TYPE_PROPOSITION", "Entity Types", "Declarative statement with truth value"),
-        ("TYPE_EVENT", "Entity Types", "Bounded temporal transition / occurrence"),
-        ("TYPE_STATE", "Entity Types", "Static condition or enduring property"),
-        ("TYPE_PROCESS", "Entity Types", "Continuous ongoing activity"),
-        ("TYPE_TEMPORAL_INTERVAL", "Entity Types", "Time span / duration / era"),
-        ("TYPE_SPATIAL_REGION", "Entity Types", "Geometric location or zone"),
-        ("TYPE_MEASURE_SCALAR", "Entity Types", "Quantitative magnitude with unit"),
-        ("TYPE_NUMERIC_VALUE", "Entity Types", "Pure mathematical number or constant"),
-        ("TYPE_ORGANIZATION", "Entity Types", "Institutional or corporate body"),
-        ("TYPE_COMMUNICATION_MSG", "Entity Types", "Message, utterance, or document"),
-        ("TYPE_ATTRIBUTE_PROPERTY", "Entity Types", "Inherent trait, quality, or descriptor"),
-        ("TYPE_RELATION_ROLE", "Entity Types", "Relational association or bridge"),
-        ("ROLE_AGENT_CAPABLE", "Capabilities", "Capable of intentional volition / action"),
-        ("ROLE_SENTIENT", "Capabilities", "Capable of subjective perception and feeling"),
-        ("ROLE_MOVEABLE", "Capabilities", "Capable of physical translation in space"),
-        ("ROLE_COMMUNICATOR", "Capabilities", "Capable of transmitting linguistic symbols"),
-        ("ROLE_CONSUMABLE", "Capabilities", "Can be ingested, depleted, or absorbed"),
-        ("ROLE_CONTAINER", "Capabilities", "Can enclose other physical/abstract entities"),
-        ("ROLE_INSTRUMENT_USABLE", "Capabilities", "Can be utilized by an agent as an instrument"),
-        ("ROLE_VOLITIONAL_SOURCE", "Capabilities", "Origin of willful command or purpose"),
-        ("ROLE_COGNITIVE_SUBJECT", "Thematic Roles", "Subject of internal cognition or belief"),
-        ("ROLE_AFFECTIVE_TARGET", "Thematic Roles", "Object of emotional valence"),
-        ("ROLE_EPISTEMIC_AUTHORITY", "Thematic Roles", "Source of truth / authoritative claim"),
-        ("ROLE_PATIENT_TARGET", "Thematic Roles", "Entity targeted for state transition"),
-        ("MODALITY_LITERAL", "Modality", "Strict literal compositional interpretation"),
-        ("MODALITY_FIGURATIVE", "Modality", "Metaphorical or allegorical interpretation"),
-        ("MODALITY_HYPOTHETICAL", "Modality", "Conditional / hypothetical scenario premise"),
-        ("MODALITY_COUNTERFACTUAL", "Modality", "Counterfactual world branch (contrary to fact)"),
-        ("WN_ACT_ACTION", "WordNet Roots", "wn:act - actions, deeds"),
-        ("WN_ANIMAL_FAUNA", "WordNet Roots", "wn:animal - zoological fauna"),
-        ("WN_ARTIFACT_OBJECT", "WordNet Roots", "wn:artifact - manufactured artifacts"),
-        ("WN_ATTRIBUTE_PROP", "WordNet Roots", "wn:attribute - traits and characteristics"),
-        ("WN_BODY_PART", "WordNet Roots", "wn:body - anatomical parts and organs"),
-        ("WN_COGNITION_THOUGHT", "WordNet Roots", "wn:cognition - cognitive concepts and ideas"),
-        ("WN_COMMUNICATION_INFO", "WordNet Roots", "wn:communication - linguistic exchanges"),
-        ("WN_EVENT_OCCURRENCE", "WordNet Roots", "wn:event - phenomena and incidents"),
-        ("WN_FEELING_EMOTION", "WordNet Roots", "wn:feeling - affective feelings and states"),
-        ("WN_FOOD_NUTRITION", "WordNet Roots", "wn:food - edible items and nutrient substance"),
-        ("WN_GROUP_SOCIAL", "WordNet Roots", "wn:group - social collectives and groupings"),
-        ("WN_LOCATION_PLACE", "WordNet Roots", "wn:location - geographical sites"),
-        ("WN_MOTIVE_REASON", "WordNet Roots", "wn:motive - reasons and motivational causes"),
-        ("WN_OBJECT_NATURAL", "WordNet Roots", "wn:object - natural inanimate physical objects"),
-        ("WN_PERSON_HUMAN", "WordNet Roots", "wn:person - individual humans"),
-        ("WN_PHENOMENON_NATURE", "WordNet Roots", "wn:phenomenon - natural atmospheric/physical events"),
-        ("WN_PLANT_FLORA", "WordNet Roots", "wn:plant - botanical flora and vegetation"),
-        ("WN_POSSESSION_ASSET", "WordNet Roots", "wn:possession - financial assets and holdings"),
-        ("WN_PROCESS_SERIES", "WordNet Roots", "wn:process - dynamic multi-step procedures"),
-        ("WN_QUANTITY_NUMBER", "WordNet Roots", "wn:quantity - amounts and quantitative measures"),
-        ("WN_RELATION_LINK", "WordNet Roots", "wn:relation - ontological and conceptual relations"),
-        ("TYPE_ALGORITHM_PROCEDURE", "Entity Types", "Formal computational recipe or algorithm"),
-        ("TYPE_LEGAL_CONTRACT", "Entity Types", "Normative binding agreement / contract"),
-        ("TYPE_BIOLOGICAL_ORGANISM", "Entity Types", "Cellular living organism"),
-        ("TYPE_SOFTWARE_SYSTEM", "Entity Types", "Executable digital software program"),
-        ("TYPE_HARDWARE_DEVICE", "Entity Types", "Physical electronic or mechanical machine"),
-        ("TYPE_ASTRONOMICAL_BODY", "Entity Types", "Celestial star, planet, or cosmic object"),
-        ("TYPE_GEOGRAPHICAL_LANDFORM", "Entity Types", "Topographic mountain, river, or biome"),
-    ]
-    b3.extend(entities)
-    # 448-479 (32 slots: Mathematical structures)
-    math_structures = [
-        ("STRUCT_SET_UNORDERED", "Discrete Math", "Unordered distinct element set {x, y, z}"),
-        ("STRUCT_SEQUENCE_ORDERED", "Discrete Math", "Ordered tuple / list sequence (x0, x1, ...)"),
-        ("STRUCT_GRAPH_NETWORK", "Discrete Math", "General graph G = (V, E)"),
-        ("STRUCT_TREE_HIERARCHY", "Discrete Math", "Rooted acyclic tree hierarchy"),
-        ("STRUCT_DIRECTED_ACYCLIC_DAG", "Discrete Math", "Directed Acyclic Graph DAG topology"),
-        ("STRUCT_LATTICE_ALGEBRA", "Abstract Algebra", "Partially ordered set with join/meet lattice"),
-        ("STRUCT_MONOID_SEMIGROUP", "Abstract Algebra", "Associative binary operator with identity element"),
-        ("STRUCT_GROUP_ALGEBRA", "Abstract Algebra", "Group (G, *): Monoid with element inverses"),
-        ("STRUCT_RING_FIELD", "Abstract Algebra", "Ring / Field (addition and multiplication arithmetic)"),
-        ("STRUCT_VECTOR_SPACE", "Linear Algebra", "Vector space over field F with scalar multiplication"),
-        ("STRUCT_MATRIX_TENSOR", "Linear Algebra", "Multi-dimensional tensor array / matrix"),
-        ("STRUCT_HILBERT_SPACE", "Functional Analysis", "Complete inner product vector space"),
-        ("STRUCT_BANACH_SPACE", "Functional Analysis", "Complete normed vector space"),
-        ("STRUCT_TOPOLOGICAL_MANIFOLD", "Topology", "Locally Euclidean topological manifold"),
-        ("STRUCT_FIBER_BUNDLE", "Differential Geometry", "Fiber bundle total space / base space"),
-        ("STRUCT_RIEMANNIAN_METRIC", "Differential Geometry", "Riemannian metric tensor g_ij for geodesics"),
-        ("STRUCT_CATEGORY_THEORY", "Category Theory", "Category C = (Objects, Morphisms)"),
-        ("STRUCT_FUNCTOR_MAP", "Category Theory", "Structure-preserving functor between categories"),
-        ("STRUCT_NATURAL_TRANSFORMATION", "Category Theory", "Morphism between functors (Natural transformation)"),
-        ("STRUCT_ADJUNCTION_MONAD", "Category Theory", "Adjoint functor pair / algebraic Monad"),
-        ("STRUCT_QUOTIENT_STRUCTURE", "Abstract Algebra", "Equivalence class partition quotient structure"),
-        ("STRUCT_DIRECT_PRODUCT", "Abstract Algebra", "Cartesian direct product A x B"),
-        ("STRUCT_COPRODUCT_DISJOINT_SUM", "Abstract Algebra", "Categorical coproduct / disjoint sum A + B"),
-        ("STRUCT_HOMOMORPHISM_MAP", "Abstract Algebra", "Structure-preserving algebraic homomorphism"),
-        ("STRUCT_ISOMORPHISM_BIJECTION", "Abstract Algebra", "Invertible bijective isomorphism"),
-        ("STRUCT_AUTOMORPHISM_SYMMETRY", "Abstract Algebra", "Self-isomorphism symmetry group action"),
-        ("STRUCT_PROBABILITY_MEASURE", "Measure Theory", "Probability space (Ω, Σ, P) measure triple"),
-        ("STRUCT_SIGMA_ALGEBRA", "Measure Theory", "Closed sigma-algebra of measurable events"),
-        ("STRUCT_RANDOM_VARIABLE", "Probability", "Measurable function X: Ω -> R"),
-        ("STRUCT_MARKOV_CHAIN", "Stochastic", "Memoryless Markov stochastic transition kernel"),
-        ("STRUCT_MARTINGALE_PROCESS", "Stochastic", "Conditional expectation invariant martingale"),
-        ("STRUCT_STOCHASTIC_DIFFUSION", "Stochastic", "Ito / Stratonovich continuous diffusion process"),
-    ]
-    b3.extend(math_structures)
-    # 480-511 (32 slots: SI Dimensions & Metrics)
-    si_dimensions = [
-        ("SI_DIM_LENGTH_L", "SI Dimensions", "SI Base: Length [L] (meter)"),
-        ("SI_DIM_MASS_M", "SI Dimensions", "SI Base: Mass [M] (kilogram)"),
-        ("SI_DIM_TIME_T", "SI Dimensions", "SI Base: Time [T] (second)"),
-        ("SI_DIM_ELECTRIC_CURRENT_I", "SI Dimensions", "SI Base: Electric Current [I] (ampere)"),
-        ("SI_DIM_TEMPERATURE_THETA", "SI Dimensions", "SI Base: Thermodynamic Temperature [Θ] (kelvin)"),
-        ("SI_DIM_SUBSTANCE_AMOUNT_N", "SI Dimensions", "SI Base: Amount of Substance [N] (mole)"),
-        ("SI_DIM_LUMINOUS_INTENSITY_J", "SI Dimensions", "SI Base: Luminous Intensity [J] (candela)"),
-        ("METRIC_FREQUENCY_HERTZ", "Derived Units", "Frequency [T^-1] (Hz)"),
-        ("METRIC_FORCE_NEWTON", "Derived Units", "Force [M L T^-2] (N)"),
-        ("METRIC_PRESSURE_PASCAL", "Derived Units", "Pressure / Stress [M L^-1 T^-2] (Pa)"),
-        ("METRIC_ENERGY_JOULE", "Derived Units", "Energy / Work / Heat [M L^2 T^-2] (J)"),
-        ("METRIC_POWER_WATT", "Derived Units", "Power / Radiant Flux [M L^2 T^-3] (W)"),
-        ("METRIC_ELECTRIC_CHARGE_COULOMB", "Derived Units", "Electric Charge [I T] (C)"),
-        ("METRIC_VOLTAGE_VOLT", "Derived Units", "Electrical Potential Difference [M L^2 T^-3 I^-1] (V)"),
-        ("METRIC_CAPACITANCE_FARAD", "Derived Units", "Electric Capacitance [M^-1 L^-2 T^4 I^2] (F)"),
-        ("METRIC_RESISTANCE_OHM", "Derived Units", "Electrical Resistance [M L^2 T^-3 I^-2] (Ω)"),
-        ("METRIC_CONDUCTANCE_SIEMENS", "Derived Units", "Electrical Conductance [M^-1 L^-2 T^3 I^2] (S)"),
-        ("METRIC_MAGNETIC_FLUX_WEBER", "Derived Units", "Magnetic Flux [M L^2 T^-2 I^-1] (Wb)"),
-        ("METRIC_MAGNETIC_FIELD_TESLA", "Derived Units", "Magnetic Flux Density [M T^-2 I^-1] (T)"),
-        ("METRIC_INDUCTANCE_HENRY", "Derived Units", "Inductance [M L^2 T^-2 I^-2] (H)"),
-        ("METRIC_LUMINOUS_FLUX_LUMEN", "Derived Units", "Luminous Flux [J] (lm)"),
-        ("METRIC_ILLUMINANCE_LUX", "Derived Units", "Illuminance [J L^-2] (lx)"),
-        ("METRIC_RADIOACTIVITY_BECQUEREL", "Derived Units", "Radioactivity Decay Rate [T^-1] (Bq)"),
-        ("METRIC_RADIATION_DOSE_GRAY", "Derived Units", "Absorbed Radiation Dose [L^2 T^-2] (Gy)"),
-        ("METRIC_DOSE_EQUIVALENT_SIEVERT", "Derived Units", "Equivalent Radiation Dose [L^2 T^-2] (Sv)"),
-        ("METRIC_CATALYTIC_ACTIVITY_KATAL", "Derived Units", "Catalytic Activity [N T^-1] (kat)"),
-        ("METRIC_CURRENCY_VALUE_FIAT", "Economic Units", "Financial currency value / economic purchasing power"),
-        ("METRIC_INFORMATION_ENTROPY_BIT", "Information Units", "Information entropy [bits / shannons]"),
-        ("METRIC_INFORMATION_NAT", "Information Units", "Information entropy in natural log base [nats]"),
-        ("METRIC_COMPUTE_FLOP_COUNT", "Computational", "Floating-point operations count (FLOP)"),
-        ("METRIC_COMPUTE_MEMORY_BYTE", "Computational", "Digital storage byte capacity (B)"),
-        ("METRIC_BANDWIDTH_BIT_PER_SEC", "Computational", "Network throughput bandwidth (bps)"),
-    ]
-    b3.extend(si_dimensions)
-    bands_data.append((3, "BAND_3_ONTOLOGY_STRUCTURES", b3))
+lines.extend(format_band('BAND_0_SLOTS', 'SlotBand.BAND_0_NSM_KINEMATICS', BAND_0_SLOTS))
+lines.extend(format_band('BAND_1_SLOTS', 'SlotBand.BAND_1_VALENCIES_TOPOLOGY', BAND_1_SLOTS))
+lines.extend(format_band('BAND_2_SLOTS', 'SlotBand.BAND_2_LOGIC_VARIABLES', BAND_2_SLOTS))
 
-    # BAND 4: 512-639
-    b4 = []
-    mech_affordances = [
-        ("AFFORD_INCISED_CUTTING", "Physical Affordance", "Cutting, slicing, or shearing matter with blade/edge"),
-        ("AFFORD_PERCUSSIVE_IMPACT", "Physical Affordance", "Delivering high-energy kinetic impact / striking"),
-        ("AFFORD_FLUID_CONTAINMENT", "Physical Affordance", "Enclosing and retaining liquid or gas volume"),
-        ("AFFORD_MECHANICAL_GRIP", "Physical Affordance", "Clamping, gripping, or friction grasping"),
-        ("AFFORD_PNEUMATIC_SUCTION", "Physical Affordance", "Vacuum pressure differential suction"),
-        ("AFFORD_THERMAL_EXCHANGE", "Physical Affordance", "Heating, cooling, or dissipating thermal energy"),
-        ("AFFORD_BALLISTIC_PROPULSION", "Physical Affordance", "Launching, ejecting, or firing projectile"),
-        ("AFFORD_ADHESIVE_BONDING", "Physical Affordance", "Joining surfaces via chemical adhesion or glue"),
-        ("AFFORD_LEVERAGE_PRY", "Physical Affordance", "Applying mechanical advantage torque / prying"),
-        ("AFFORD_TORQUE_ROTATION", "Physical Affordance", "Rotating, twisting, or threading fastener"),
-        ("AFFORD_DRILL_PENETRATE", "Physical Affordance", "Rotary penetration / boring cylindrical hole"),
-        ("AFFORD_ABRASIVE_GRINDING", "Physical Affordance", "Frictional surface smoothing, sanding, polishing"),
-        ("AFFORD_EXTRUSION_FORMING", "Physical Affordance", "Plastic extrusion / forming through die"),
-        ("AFFORD_FASTENER_BOLT_LATCH", "Physical Affordance", "Reversible mechanical locking / fastening"),
-        ("AFFORD_TENSION_CABLE_PULL", "Physical Affordance", "Tensile pulling via cable, winch, or tether"),
-        ("AFFORD_SPRING_SUSPENSION", "Physical Affordance", "Elastic kinetic shock absorption / suspension"),
-        ("AFFORD_HYDRAULIC_ACTUATION", "Physical Affordance", "High-force fluid cylinder displacement"),
-        ("AFFORD_ROLLING_WHEEL_BEARING", "Physical Affordance", "Rotary low-friction rolling displacement"),
-        ("AFFORD_VALVE_FLOW_CONTROL", "Physical Affordance", "Regulating / throttling fluid or gas conduit"),
-        ("AFFORD_FILTER_SEPARATION", "Physical Affordance", "Porous size-exclusion filtration of particulates"),
-        ("AFFORD_PUMP_FLUID_DISPLACEMENT", "Physical Affordance", "Active mechanical fluid pumping / circulation"),
-        ("AFFORD_NOZZLE_ATOMIZATION", "Physical Affordance", "Aerosol spray / jet dispersion through nozzle"),
-        ("AFFORD_OPTICAL_MAGNIFICATION", "Physical Affordance", "Optical refraction / lens magnification"),
-        ("AFFORD_OPTICAL_REFLECTION", "Physical Affordance", "Specular / diffuse mirror beam reflection"),
-        ("AFFORD_ELECTRICAL_SWITCH_CONTACT", "Physical Affordance", "Circuit contact switching / relay opening"),
-        ("AFFORD_ELECTROMAGNETIC_SOLENOID", "Physical Affordance", "Solenoid magnetic core linear actuation"),
-        ("AFFORD_PIEZOELECTRIC_PRECISION", "Physical Affordance", "Nanometer-precision piezoelectric displacement"),
-        ("AFFORD_THERMAL_INSULATION_SHIELD", "Physical Affordance", "Thermal barrier insulation / radiative shield"),
-        ("AFFORD_VIBRATION_DAMPING", "Physical Affordance", "Viscoelastic mechanical vibration absorption"),
-        ("AFFORD_FLOATATION_BUOYANT_HULL", "Physical Affordance", "Hydrostatic displacement hull buoyancy"),
-        ("AFFORD_AERODYNAMIC_AIRFOIL_LIFT", "Physical Affordance", "Bernoulli aerodynamic wing lift generation"),
-        ("AFFORD_PARACHUTE_DRAG_DECEL", "Physical Affordance", "Atmospheric aerodynamic drag deceleration"),
-    ]
-    b4.extend(mech_affordances)
-    digital_affordances = [
-        ("AFFORD_COMPUTE_EXECUTE", "Digital Affordance", "Executing machine bytecode / CPU instructions"),
-        ("AFFORD_PERSIST_STORAGE", "Digital Affordance", "Persisting durable data to disk / flash / NVMe"),
-        ("AFFORD_SOCKET_TRANSMIT", "Digital Affordance", "Sending network packet stream across socket"),
-        ("AFFORD_SOCKET_RECEIVE", "Digital Affordance", "Ingesting incoming network socket packet stream"),
-        ("AFFORD_ENCRYPT_CRYPTO", "Digital Affordance", "Symmetric/asymmetric cryptographic encryption"),
-        ("AFFORD_DECRYPT_CRYPTO", "Digital Affordance", "Cryptographic key decryption"),
-        ("AFFORD_SIGN_CRYPTOGRAPHIC", "Digital Affordance", "Generating digital signature ECDSA/Ed25519"),
-        ("AFFORD_VERIFY_SIGNATURE", "Digital Affordance", "Validating cryptographic signature authenticity"),
-        ("AFFORD_QUERY_DATABASE", "Digital Affordance", "Executing SQL/NoSQL structured database query"),
-        ("AFFORD_MUTATE_DATABASE", "Digital Affordance", "Executing ACID transactional insert/update/delete"),
-        ("AFFORD_AUTHENTICATE_AUTH", "Digital Affordance", "Validating identity credentials / OAuth tokens"),
-        ("AFFORD_AUTHORIZE_RBAC", "Digital Affordance", "Enforcing Role-Based Access Control permission"),
-        ("AFFORD_SERIALIZE_BUFFER", "Digital Affordance", "Serializing data structure to Protobuf/JSON/bytes"),
-        ("AFFORD_DESERIALIZE_BUFFER", "Digital Affordance", "Parsing binary buffer into native memory object"),
-        ("AFFORD_HTTP_REST_REQUEST", "Digital Affordance", "Dispatching RESTful HTTP/1.1 or HTTP/2 request"),
-        ("AFFORD_GRPC_RPC_INVOKE", "Digital Affordance", "Remote Procedure Call invocation across gRPC"),
-        ("AFFORD_WEBSOCKET_DUPLEX", "Digital Affordance", "Full-duplex WebSocket continuous streaming"),
-        ("AFFORD_PUBLISH_EVENT_BUS", "Digital Affordance", "Publishing message to Kafka/RabbitMQ broker"),
-        ("AFFORD_SUBSCRIBE_EVENT_BUS", "Digital Affordance", "Subscribing to asynchronous event topic"),
-        ("AFFORD_CACHE_LOOKUP_KV", "Digital Affordance", "Fast Redis / Memcached in-memory key lookup"),
-        ("AFFORD_CACHE_INVALIDATE", "Digital Affordance", "Evicting / invalidating stale cache keys"),
-        ("AFFORD_SPAWN_CONTAINER", "Digital Affordance", "Provisioning Docker / OCI isolated container"),
-        ("AFFORD_SCHEDULE_CRON_JOB", "Digital Affordance", "Scheduling timer cron job execution"),
-        ("AFFORD_LOG_DIAGNOSTIC", "Digital Affordance", "Emitting structured telemetry / audit log entry"),
-        ("AFFORD_METRIC_GAUGE_EMIT", "Digital Affordance", "Recording Prometheus counter/histogram metric"),
-        ("AFFORD_DISTRIBUTED_LOCK", "Digital Affordance", "Acquiring distributed lease via Raft/etcd"),
-        ("AFFORD_MAP_REDUCE_BATCH", "Digital Affordance", "Parallel distributed MapReduce computation"),
-        ("AFFORD_GPU_TENSOR_FORWARD", "Digital Affordance", "Executing PyTorch / TensorRT GPU forward pass"),
-        ("AFFORD_VECTOR_INDEX_SEARCH", "Digital Affordance", "Top-K approximate nearest neighbor HNSW search"),
-        ("AFFORD_FILE_COMPRESSION_ZIP", "Digital Affordance", "Zstandard / Gzip lossless compression"),
-        ("AFFORD_FILE_DECOMPRESSION", "Digital Affordance", "Decompressing compressed archive payload"),
-        ("AFFORD_SCHEMA_MIGRATION", "Digital Affordance", "Executing database DDL schema migration"),
-    ]
-    b4.extend(digital_affordances)
-    bio_sensory = [
-        ("AFFORD_INGEST_NUTRIENT", "Biological Affordance", "Oral ingestion / absorption of metabolic fuel"),
-        ("AFFORD_CHEMICAL_CATALYSIS", "Chemical Affordance", "Enzymatic or inorganic chemical reaction acceleration"),
-        ("AFFORD_OPTICAL_SENSE", "Sensory Affordance", "Focal photodiode / retinal photon detection"),
-        ("AFFORD_ACOUSTIC_SENSE", "Sensory Affordance", "Microphone / cochlear acoustic wave detection"),
-        ("AFFORD_TACTILE_SENSE", "Sensory Affordance", "Piezo / mechanoreceptor tactile surface contact"),
-        ("AFFORD_THERMAL_SENSE", "Sensory Affordance", "Thermocouple / thermoreceptor temperature sensing"),
-        ("AFFORD_CHEMICAL_OLFACTION", "Sensory Affordance", "Volatile molecule receptor binding (Smell)"),
-        ("AFFORD_CHEMICAL_GUSTATION", "Sensory Affordance", "Liquid solute chemical receptor binding (Taste)"),
-        ("AFFORD_PROPRIOCEPTIVE_SENSE", "Sensory Affordance", "Internal joint angle / muscle tension state sensing"),
-        ("AFFORD_VESTIBULAR_EQUILIBRIUM", "Sensory Affordance", "Inertial gyroscopic balance / gravity orientation"),
-        ("AFFORD_ELECTRORECEPTION_SENSE", "Sensory Affordance", "Bioelectric field detection in surrounding medium"),
-        ("AFFORD_MAGNETORECEPTION_SENSE", "Sensory Affordance", "Geomagnetic orientation sensing"),
-        ("AFFORD_ECHOLOCATION_SONAR", "Sensory Affordance", "Acoustic ping time-of-flight distance ranging"),
-        ("AFFORD_LIDAR_TIME_OF_FLIGHT", "Sensory Affordance", "Laser pulse photon time-of-flight spatial scanning"),
-        ("AFFORD_RADAR_RF_REFLECTION", "Sensory Affordance", "Microwave radio reflection target tracking"),
-        ("AFFORD_METABOLIC_RESPIRATION", "Biological Affordance", "Cellular ATP generation via oxidative respiration"),
-        ("AFFORD_PHOTOSYNTHESIS_LIGHT", "Biological Affordance", "Converting solar photons into carbohydrate bonds"),
-        ("AFFORD_DNA_REPLICATION_COPY", "Biological Affordance", "Polymerase nucleic acid template replication"),
-        ("AFFORD_RNA_TRANSCRIPTION", "Biological Affordance", "Gene sequence transcription to messenger RNA"),
-        ("AFFORD_PROTEIN_TRANSLATION", "Biological Affordance", "Ribosomal mRNA peptide chain translation"),
-        ("AFFORD_IMMUNE_ANTIBODY_BIND", "Biological Affordance", "Adaptive immune antigen-antibody recognition"),
-        ("AFFORD_CELLULAR_MITOSIS_SPLIT", "Biological Affordance", "Eukaryotic cell division and duplication"),
-        ("AFFORD_CELLULAR_APOPTOSIS", "Biological Affordance", "Programmed cell death / self-destruction"),
-        ("AFFORD_MEMBRANE_ION_CHANNEL", "Biological Affordance", "Voltage-gated sodium/potassium ion flux"),
-        ("AFFORD_SYNAPTIC_NEUROTRANSMIT", "Biological Affordance", "Neurotransmitter vesicle exocytosis across synapse"),
-        ("AFFORD_HORMONE_ENDOCRINE_SEC", "Biological Affordance", "Systemic endocrine chemical messenger release"),
-        ("AFFORD_TOXIN_NEUTRALIZATION", "Biological Affordance", "Hepatic enzymatic xenobiotic detoxification"),
-        ("AFFORD_WOUND_HEALING_CLOT", "Biological Affordance", "Fibrin platelet clotting and tissue repair"),
-        ("AFFORD_CIRCULATORY_PUMP_HEART", "Biological Affordance", "Pulsatile circulatory hemodynamic transport"),
-        ("AFFORD_NEURAL_PLASTICITY_LTP", "Biological Affordance", "Hebbian long-term potentiation synaptic tuning"),
-        ("AFFORD_CIRCADIAN_RHYTHM_TICK", "Biological Affordance", "Suprachiasmatic circadian clock oscillation"),
-        ("AFFORD_SYMBIOTIC_MICROBIOME", "Biological Affordance", "Mutualistic microbial metabolic collaboration"),
-        ("AFFORD_SPEECH_VOCALIZATION", "Sensory Output", "Phonetic vocal tract acoustic sound generation"),
-        ("AFFORD_DISPLAY_PIXEL_EMIT", "Sensory Output", "RGB matrix photon emission on visual display"),
-        ("AFFORD_HAPTIC_TACTILE_FEEDBACK", "Sensory Output", "Eccentric rotating mass / LRA haptic vibration"),
-        ("AFFORD_FERMENTATION_ANAEROBIC", "Chemical Affordance", "Anaerobic carbohydrate glycolysis to ethanol/acid"),
-        ("AFFORD_PRECIPITATION_SOLID", "Chemical Affordance", "Insoluble solid salt precipitation from solution"),
-        ("AFFORD_COMBUSTION_OXIDATION", "Chemical Affordance", "Exothermic rapid hydrocarbon oxidation"),
-        ("AFFORD_ELECTROLYSIS_SPLITTING", "Chemical Affordance", "Electrochemical voltage water/compound splitting"),
-        ("AFFORD_POLYMERIZATION_CHAIN", "Chemical Affordance", "Monomer radical / condensation chain polymerization"),
-        ("AFFORD_DISTILLATION_FRACTION", "Chemical Affordance", "Thermal boiling point vapor phase fractionation"),
-        ("AFFORD_CHROMATOGRAPHY_SEPARATE", "Chemical Affordance", "Stationary/mobile phase chemical separation"),
-        ("AFFORD_CRYSTALLIZATION_PURIFY", "Chemical Affordance", "Nucleation and crystal growth purification"),
-        ("AFFORD_LYOPHILIZATION_FREEZE_DRY", "Chemical Affordance", "Sublimation vacuum freeze drying"),
-        ("AFFORD_CENTRIFUGATION_SPIN", "Chemical Affordance", "High-G centrifugal density gradient separation"),
-        ("AFFORD_ULTRASONIC_CLEAN_CAV", "Physical Affordance", "Acoustic cavitation bubble surface scrubbing"),
-        ("AFFORD_AUTOCLAVE_STERILIZATION", "Physical Affordance", "High-pressure saturated steam pathogen kill"),
-        ("AFFORD_UV_GERMICIDAL_IRRAD", "Physical Affordance", "Ultraviolet-C nucleic acid dimer destruction"),
-        ("AFFORD_RADIATION_GAMMA_STERIL", "Physical Affordance", "High-energy cobalt-60 ionizing sterilization"),
-        ("AFFORD_CRYOGENIC_FREEZING", "Physical Affordance", "Liquid nitrogen vitrification / cryopreservation"),
-        ("AFFORD_MAGNETIC_LEVITATION", "Physical Affordance", "Meissner superconductor / active MagLev suspension"),
-        ("AFFORD_ION_THRUST_PROPULSION", "Physical Affordance", "Electrostatic xenon ion beam acceleration"),
-        ("AFFORD_SOLAR_SAIL_PRESSURE", "Physical Affordance", "Radiation pressure photon momentum transfer"),
-        ("AFFORD_RADIO_ANTENNA_EMISSION", "Physical Affordance", "Dipole / phased array electromagnetic RF radiation"),
-        ("AFFORD_LASER_COHERENT_BEAM", "Physical Affordance", "Stimulated photon emission coherent collimated beam"),
-        ("AFFORD_FIBER_OPTIC_INTERNAL_REF", "Physical Affordance", "Total internal reflection optical transmission"),
-        ("AFFORD_BATTERY_CHEMICAL_CHARGE", "Physical Affordance", "Reversible lithium ion intercalation storage"),
-        ("AFFORD_FUEL_CELL_CONVERSION", "Physical Affordance", "Direct electrochemical hydrogen-oxygen conversion"),
-        ("AFFORD_SUPERCAPACITOR_DISCHARGE", "Physical Affordance", "Electrostatic double-layer rapid power burst"),
-        ("AFFORD_THERMOELECTRIC_SEEBECK", "Physical Affordance", "Direct temperature gradient to voltage generation"),
-        ("AFFORD_SOLAR_PHOTOVOLTAIC", "Physical Affordance", "Semiconductor bandgap electron-hole pair generation"),
-        ("AFFORD_WIND_TURBINE_HARVEST", "Physical Affordance", "Aerodynamic kinetic energy to rotary shaft work"),
-        ("AFFORD_HYDROELECTRIC_HARVEST", "Physical Affordance", "Gravitational potential water head to turbine work"),
-        ("AFFORD_NUCLEAR_FISSION_HEAT", "Physical Affordance", "Uranium neutron-induced fission chain reaction"),
-    ]
-    b4.extend(bio_sensory)
-    bands_data.append((4, "BAND_4_AFFORDANCES_OPERATIONS", b4))
+# Format Band 3
+res_b3 = ['# ==============================================================================']
+res_b3.append('# BAND 3: BAND_3_ONTOLOGY_STRUCTURES (384–511) - ConceptNet Taxonomies & Domains')
+res_b3.append('# ==============================================================================')
+res_b3.append('BAND_3_SLOTS = [')
+for s in b3_cn:
+    desc_escaped = s.get('description', '').replace('"', '\\"')
+    cat_escaped = s.get('category', 'ConceptNet Taxonomy & Domain').replace('"', '\\"')
+    res_b3.append(f'    SlotDefinition({s["index"]}, "{s["name"]}", SlotBand.BAND_3_ONTOLOGY_STRUCTURES, "{cat_escaped}", "{desc_escaped}"),')
+res_b3.append(']')
+res_b3.append('')
+lines.extend(res_b3)
 
-    # BAND 5: 640-767
-    b5 = []
-    tom_epistemics = [
-        ("TOM_FIRST_ORDER_BELIEF", "Theory of Mind", "Agent A believes proposition P (B_A(P))"),
-        ("TOM_SECOND_ORDER_BELIEF", "Theory of Mind", "Agent A believes Agent B believes P (B_A(B_B(P)))"),
-        ("TOM_THIRD_ORDER_BELIEF", "Theory of Mind", "Agent A believes Agent B believes Agent C believes P"),
-        ("TOM_SHARED_COMMON_GROUND", "Theory of Mind", "Common knowledge / mutual grounding across all parties"),
-        ("TOM_FIRST_ORDER_KNOWLEDGE", "Theory of Mind", "Agent A knows true proposition P (K_A(P) -> P)"),
-        ("TOM_SECOND_ORDER_KNOWLEDGE", "Theory of Mind", "Agent A knows Agent B knows P"),
-        ("TOM_THIRD_ORDER_KNOWLEDGE", "Theory of Mind", "Agent A knows Agent B knows Agent C knows P"),
-        ("TOM_FALSE_BELIEF_DETECTED", "Theory of Mind", "Agent holds belief contrary to ground truth world state"),
-        ("TOM_PERSPECTIVE_TAKING_VISUAL", "Theory of Mind", "Simulating other agent's spatial field of view"),
-        ("TOM_EPISTEMIC_OPACITY_HIDDEN", "Theory of Mind", "Information hidden from specific observing agent"),
-        ("TOM_EPISTEMIC_TRANSPARENCY", "Theory of Mind", "Information publicly observable by all active agents"),
-        ("TOM_AGENT_SELF_ID_0", "Theory of Mind", "Self agent identity register (Agent 0)"),
-        ("TOM_AGENT_OTHER_ID_1", "Theory of Mind", "Interlocutor agent identity register (Agent 1)"),
-        ("TOM_AGENT_THIRD_ID_2", "Theory of Mind", "Third-party observer identity register (Agent 2)"),
-        ("TOM_AGENT_GROUP_COLLECTIVE", "Theory of Mind", "Collective team / organizational agent identity"),
-        ("TOM_SHARED_INTENTION_WE", "Theory of Mind", "Joint cooperative commitment / We-intention"),
-        ("TOM_JOINT_ATTENTION_FOCUS", "Theory of Mind", "Coordinated simultaneous visual/cognitive focus"),
-        ("TOM_EMPATHIC_STATE_MIRROR", "Theory of Mind", "Mirror neuron affective simulation of other state"),
-        ("TOM_COMPETITIVE_OPPONENT_MODEL", "Theory of Mind", "Adversarial game-theoretic minimax opponent model"),
-        ("TOM_COOPERATIVE_PARTNER_MODEL", "Theory of Mind", "Collaborative Pareto-optimal partner model"),
-        ("TOM_TRUST_REPUTATION_HIGH", "Theory of Mind", "High epistemic and behavioral trust assessment"),
-        ("TOM_TRUST_REPUTATION_LOW", "Theory of Mind", "Low trust / suspicious unreliability assessment"),
-        ("TOM_DECEPTIVE_INTENT_DETECTED", "Theory of Mind", "Interlocutor recognized as projecting deception"),
-        ("TOM_COMPETENCE_ESTIMATE_HIGH", "Theory of Mind", "Agent evaluated as highly competent in domain"),
-        ("TOM_COMPETENCE_ESTIMATE_LOW", "Theory of Mind", "Agent evaluated as naive / unskilled in domain"),
-        ("TOM_KNOWLEDGE_GAP_IDENTIFIED", "Theory of Mind", "Explicit recognition that other agent lacks info X"),
-        ("TOM_MISUNDERSTANDING_FLAG", "Theory of Mind", "Communication breakdown / semantic divergence"),
-        ("TOM_ALIGNMENT_VERIFIED", "Theory of Mind", "Explicit confirmation of shared mental model"),
-        ("TOM_COMMUNICATIVE_PRESUPPOSITION", "Theory of Mind", "Assumed unstated background presupposition"),
-        ("TOM_REFERENTIAL_COMMON_GROUND", "Theory of Mind", "Established definite referring expression target"),
-        ("TOM_SOCIAL_HIERARCHY_RANK", "Theory of Mind", "Relative status / organizational authority ranking"),
-        ("TOM_DEONTIC_ROLE_EXPECTATION", "Theory of Mind", "Social normative role duties expected of agent"),
-    ]
-    b5.extend(tom_epistemics)
-    teleo_goals = [
-        ("GOAL_ACTIVE_TOP_LEVEL", "Teleology", "Primary active top-level system goal"),
-        ("GOAL_SUBGOAL_INTERMEDIATE", "Teleology", "Decomposed intermediate hierarchical subgoal"),
-        ("GOAL_SATISFIED_SUCCESS", "Teleology", "Goal condition verified completely achieved"),
-        ("GOAL_BLOCKED_OBSTACLE", "Teleology", "Goal progression halted by unfulfilled dependency"),
-        ("GOAL_ABANDONED_UNFEASIBLE", "Teleology", "Goal discarded due to impossibility or timeout"),
-        ("GOAL_CONFLICT_MUTUAL_EXCL", "Teleology", "Two active goals mutually exclusive (trade-off)"),
-        ("PLAN_INTENDED_ACTION_STEP", "Planning", "Next scheduled atomic executable plan step"),
-        ("PLAN_CONTINGENCY_FALLBACK", "Planning", "Pre-computed alternative branch if action fails"),
-        ("PLAN_PRECONDITION_REQUIRED", "Planning", "Mandatory prerequisite state for plan execution"),
-        ("PLAN_POSTCONDITION_EFFECT", "Planning", "Guaranteed world state transition after execution"),
-        ("PLAN_RESOURCE_BUDGET_CAP", "Planning", "Computational / financial budget ceiling for plan"),
-        ("PLAN_TIME_HORIZON_DEADLINE", "Planning", "Hard temporal deadline for goal fulfillment"),
-        ("PLAN_HEURISTIC_ESTIMATE_H", "Planning", "A* search heuristic distance to goal state"),
-        ("PLAN_MONTE_CARLO_ROLLOUT", "Planning", "MCTS tree search rollout value estimate"),
-        ("PLAN_CRITICAL_PATH_NODE", "Planning", "Bottleneck action on project critical path"),
-        ("PLAN_OPPORTUNISTIC_BRANCH", "Planning", "Dynamic opportunistic branch capitalizing on event"),
-        ("PLAN_BACKTRACKING_REVISE", "Planning", "Rolling back failed plan branch to choice point"),
-        ("PLAN_COORDINATED_MULTI_AGENT", "Planning", "Synchronized action requiring concurrent peer"),
-        ("PLAN_SAFETY_INVARIANT_GUARD", "Planning", "Continuous safety constraint monitored during plan"),
-        ("PLAN_EXPLORATION_PROBE", "Planning", "Epistemic action taken solely to reduce uncertainty"),
-        ("DRIVE_SURVIVAL_SELF_PRESERVE", "Motivational Drives", "Primary drive for self-integrity and safety"),
-        ("DRIVE_ENERGY_CONSERVATION", "Motivational Drives", "Efficiency optimization minimizing spent effort"),
-        ("DRIVE_CURIOSITY_EPISTEMIC", "Motivational Drives", "Information-seeking intrinsic curiosity reward"),
-        ("DRIVE_ALTRUISM_HELP_OTHERS", "Motivational Drives", "Prosocial drive to assist other agents/humans"),
-        ("DRIVE_COMPETENCE_MASTERY", "Motivational Drives", "Drive to improve skill accuracy and capability"),
-        ("DRIVE_AUTONOMY_SELF_DIRECT", "Motivational Drives", "Drive to maintain independent decision agency"),
-        ("DRIVE_AFFILIATION_BONDING", "Motivational Drives", "Drive for social cohesion and peer acceptance"),
-        ("DRIVE_FAIRNESS_EQUITY", "Motivational Drives", "Normative drive for reciprocal fairness in rewards"),
-        ("DRIVE_STATUS_RECOGNITION", "Motivational Drives", "Drive for social esteem and reputation elevation"),
-        ("DRIVE_AVOID_HARM_PREVENT", "Motivational Drives", "Aversive motivation to prevent damage or distress"),
-        ("DRIVE_HOMEOSTATIC_BALANCE", "Motivational Drives", "Maintaining internal operational equilibrium"),
-        ("DRIVE_NOVELTY_SEEKING", "Motivational Drives", "Preference for unfamiliar states over repetitive loops"),
-    ]
-    b5.extend(teleo_goals)
-    affective_states = [
-        ("VALENCE_POSITIVE_PLEASURE", "Affective States", "Positive hedonic valence / satisfaction"),
-        ("VALENCE_NEGATIVE_DISTRESS", "Affective States", "Negative hedonic valence / dissatisfaction"),
-        ("AROUSAL_HIGH_ALERTNESS", "Affective States", "High sympathetic nervous activation / arousal"),
-        ("AROUSAL_LOW_QUIESCENCE", "Affective States", "Low arousal / calm / quiescent rest state"),
-        ("DOMINANCE_HIGH_AGENCY", "Affective States", "High perceived control and situational dominance"),
-        ("DOMINANCE_LOW_SUBMISSIVE", "Affective States", "Low perceived control / vulnerability"),
-        ("AFFECT_JOY_ELATION", "Discrete Emotions", "Joy / happiness at goal achievement"),
-        ("AFFECT_SADNESS_LOSS", "Discrete Emotions", "Sadness / dejection at irrevocable loss"),
-        ("AFFECT_ANGER_FRUSTRATION", "Discrete Emotions", "Anger / aggressive push against obstacle"),
-        ("AFFECT_FEAR_THREAT_DETECT", "Discrete Emotions", "Fear / defensive flight response to imminent hazard"),
-        ("AFFECT_DISGUST_AVERSION", "Discrete Emotions", "Disgust / visceral rejection of contaminant"),
-        ("AFFECT_SURPRISE_EXPECTATION", "Discrete Emotions", "Surprise at severe prediction error violation"),
-        ("AFFECT_ANTICIPATION_HOPE", "Discrete Emotions", "Hopeful anticipation of positive future event"),
-        ("AFFECT_ANXIETY_UNCERTAINTY", "Discrete Emotions", "Anxious apprehension regarding uncertain risk"),
-        ("AFFECT_GUILT_SELF_REPROACH", "Discrete Emotions", "Guilt over violating internal moral standard"),
-        ("AFFECT_SHAME_SOCIAL_EXPOSURE", "Discrete Emotions", "Shame over social norm violation exposure"),
-        ("AFFECT_PRIDE_ACHIEVEMENT", "Discrete Emotions", "Pride in personal or collective accomplishment"),
-        ("AFFECT_RELIEF_THREAT_PASSED", "Discrete Emotions", "Relief after averted danger or passed obstacle"),
-        ("AFFECT_CONFUSION_COGNITIVE", "Discrete Emotions", "Cognitive perplexity / model inconsistency"),
-        ("AFFECT_BOREDOM_UNDERSTIM", "Discrete Emotions", "Boredom due to lack of novel information/challenge"),
-        ("AFFECT_AWE_TRANSCENDENCE", "Discrete Emotions", "Awe at vast sublime structure exceeding scale"),
-        ("AFFECT_COMPASSION_SYMPATHY", "Discrete Emotions", "Compassionate urge to alleviate suffering"),
-        ("AFFECT_GRATITUDE_THANKFUL", "Discrete Emotions", "Gratitude toward benefactor for received aid"),
-        ("AFFECT_ENVY_RESENTMENT", "Discrete Emotions", "Envious resentment of another's advantage"),
-        ("AFFECT_NOSTALGIA_LONGING", "Discrete Emotions", "Nostalgic sentimental reflection on past"),
-        ("AFFECT_DETERMINATION_RESOLVE", "Discrete Emotions", "Steadfast resolve and grit in face of hardship"),
-        ("AFFECT_SERENITY_TRANQUIL", "Discrete Emotions", "Deep inner peace and emotional equilibrium"),
-        ("AFFECT_VULNERABILITY_OPEN", "Discrete Emotions", "Emotional openness risking rejection/injury"),
-        ("AFFECT_FRUSTRATION_IMPEDIMENT", "Discrete Emotions", "Acute frustration at repeated goal obstruction"),
-        ("AFFECT_CONTEMPT_DISDAIN", "Discrete Emotions", "Social disdain evaluating other as inferior"),
-        ("AFFECT_REGRET_RETROSPECTIVE", "Discrete Emotions", "Retrospective wish for alternative past choice"),
-        ("AFFECT_EXCITEMENT_ENTHUSIASM", "Discrete Emotions", "High-energy enthusiasm toward upcoming task"),
-    ]
-    b5.extend(affective_states)
-    discourse_intent = [
-        ("INTENT_INFORMATIVE_ASSERT", "Speech Acts", "Asserting declarative proposition as true (Constative)"),
-        ("INTENT_DIRECTIVE_COMMAND", "Speech Acts", "Instructing / commanding listener to perform action"),
-        ("INTENT_COMMISSIVE_PROMISE", "Speech Acts", "Committing speaker to future course of action"),
-        ("INTENT_EXPRESSIVE_EMOTE", "Speech Acts", "Expressing speaker's internal psychological state"),
-        ("INTENT_DECLARATIVE_PERFORM", "Speech Acts", "Institutional performative changing reality by decree"),
-        ("INTENT_QUERY_QUESTION_INFO", "Speech Acts", "Interrogative request for factual information"),
-        ("INTENT_QUERY_CONFIRMATION", "Speech Acts", "Yes/no polar confirmation inquiry (Is it true that P?)"),
-        ("INTENT_CLARIFICATION_REQUEST", "Speech Acts", "Requesting disambiguation or elaboration on utterance"),
-        ("INTENT_DECEPTIVE_PROJECTION", "Speech Acts", "Strategic deceptive assertion intended to mislead"),
-        ("INTENT_IRONY_SARCASM", "Speech Acts", "Sarcastic / ironic inversion of literal semantic meaning"),
-        ("INTENT_RHETORICAL_QUESTION", "Speech Acts", "Question asked for persuasive effect with obvious answer"),
-        ("INTENT_PERSUASIVE_ARGUMENT", "Speech Acts", "Rhetorical argument structured to change belief"),
-        ("INTENT_WARNING_ADVISORY", "Speech Acts", "Urgent alert warning listener of hazard/consequence"),
-        ("INTENT_SUGGESTION_PROPOSAL", "Speech Acts", "Non-coercive proposal offered for consideration"),
-        ("INTENT_CONCESSION_ADMISSION", "Speech Acts", "Conceding point or admitting error in debate"),
-        ("INTENT_REFUTATION_REBUTTAL", "Speech Acts", "Formal rebuttal disproving counterparty claim"),
-        ("INTENT_GREETING_OPENING", "Speech Acts", "Phatic greeting establishing social communication channel"),
-        ("INTENT_CLOSING_FAREWELL", "Speech Acts", "Phatic valediction terminating conversation"),
-        ("INTENT_APOLOGY_REPARATION", "Speech Acts", "Formal expression of remorse offering redress"),
-        ("INTENT_THANKS_APPRECIATION", "Speech Acts", "Expressing social appreciation for assistance"),
-        ("INTENT_CONGRATULATIONS_PRAISE", "Speech Acts", "Praising listener on success or milestone"),
-        ("INTENT_CONDOLENCE_COMFORT", "Speech Acts", "Offering solace to grieving or distressed party"),
-        ("INTENT_NEGOTIATION_BARGAIN", "Speech Acts", "Proposing contractual compromise or trade terms"),
-        ("INTENT_ULTIMATUM_THREAT", "Speech Acts", "Conditional threat imposing penalty on non-compliance"),
-        ("INTENT_INQUIRY_PERMISSION", "Speech Acts", "Deontic request seeking authorization to act"),
-        ("INTENT_GRANT_PERMISSION", "Speech Acts", "Deontic authorization granting requested action"),
-        ("INTENT_DENY_PROHIBIT", "Speech Acts", "Deontic refusal prohibiting requested action"),
-        ("INTENT_DELEGATION_HANDOFF", "Speech Acts", "Transferring task execution ownership to other agent"),
-        ("INTENT_STATUS_PING_HEARTBEAT", "Speech Acts", "Systemic liveness check inquiring operational state"),
-        ("INTENT_ACKNOWLEDGE_RECEIPT", "Speech Acts", "Confirmation that message was received and parsed"),
-        ("INTENT_HUMOR_WIT_PLAYFUL", "Speech Acts", "Playful humorous statement intended to amuse"),
-        ("INTENT_META_DISCOURSE_COMMENT", "Speech Acts", "Meta-commentary discussing conversation process itself"),
-    ]
-    b5.extend(discourse_intent)
-    bands_data.append((5, "BAND_5_TOM_PRAGMATICS", b5))
+# Format Band 4
+res_b4 = ['# ==============================================================================']
+res_b4.append('# BAND 4: BAND_4_AFFORDANCES_OPERATIONS (512–639) - ConceptNet Affordances & Actions')
+res_b4.append('# ==============================================================================')
+res_b4.append('BAND_4_SLOTS = [')
+for s in b4_cn:
+    desc_escaped = s.get('description', '').replace('"', '\\"')
+    cat_escaped = s.get('category', 'ConceptNet Affordance & Function').replace('"', '\\"')
+    res_b4.append(f'    SlotDefinition({s["index"]}, "{s["name"]}", SlotBand.BAND_4_AFFORDANCES_OPERATIONS, "{cat_escaped}", "{desc_escaped}"),')
+res_b4.append(']')
+res_b4.append('')
+lines.extend(res_b4)
 
-    # BAND 6: 768-895
-    b6 = []
-    epistemic_sources = [
-        ("EPIST_DIRECT_OBSERVATION", "Knowledge Source", "Empirically verified direct sensory observation"),
-        ("EPIST_DEDUCTIVE_INFERENCE", "Knowledge Source", "Sound deductive entailment from known axioms"),
-        ("EPIST_INDUCTIVE_GENERAL", "Knowledge Source", "Inductive statistical generalization from sample"),
-        ("EPIST_ABDUCTIVE_BEST_EXPL", "Knowledge Source", "Abductive inference to the best explanation"),
-        ("EPIST_HEARSAY_TESTIMONY", "Knowledge Source", "Indirect hearsay or second-hand testimony"),
-        ("EPIST_AXIOMATIC_PREMISE", "Knowledge Source", "Given ground truth or assumed formal premise"),
-        ("EPIST_SCIENTIFIC_EXPERIMENT", "Knowledge Source", "Controlled repeatable experimental empirical trial"),
-        ("EPIST_PEER_REVIEW_CONSENSUS", "Knowledge Source", "Peer-reviewed scientific community consensus"),
-        ("EPIST_CRYPTOGRAPHIC_PROOF", "Knowledge Source", "Cryptographically validated zero-knowledge/merkle proof"),
-        ("EPIST_ORACLE_TRUSTED_API", "Knowledge Source", "Hardware secure enclave or signed oracle feed"),
-        ("EPIST_HISTORICAL_RECORD", "Knowledge Source", "Archival historical documentary evidence"),
-        ("EPIST_ANALOGICAL_TRANSFER", "Knowledge Source", "Cross-domain analogical mapping inference"),
-        ("EPIST_INTUITIVE_HEURISTIC", "Knowledge Source", "System-1 fast pattern matching heuristic"),
-        ("EPIST_SIMULATION_MODEL_RUN", "Knowledge Source", "Computational Monte Carlo / physics simulation run"),
-        ("EPIST_FORMAL_VERIFIER_CERT", "Knowledge Source", "Isabelle/Coq/Lean machine-checked proof certificate"),
-        ("EPIST_LEGAL_STATUTORY_LAW", "Knowledge Source", "Enacted legislative statute / constitutional text"),
-        ("EPIST_JUDICIAL_PRECEDENT", "Knowledge Source", "Common law binding judicial precedent"),
-        ("EPIST_MEMORY_AUTOBIOGRAPH", "Knowledge Source", "Agent episodic memory recall of past event"),
-        ("EPIST_PROB_CERTAIN", "Probability", "P = 1.0 (Deterministic certainty)"),
-        ("EPIST_PROB_HIGH", "Probability", "P >= 0.8 (Strong probabilistic confidence)"),
-        ("EPIST_PROB_MARGINAL", "Probability", "P ~ 0.5 (Equi-probable or marginal)"),
-        ("EPIST_PROB_DISTRIBUTED", "Probability", "Multi-modal probability distribution"),
-        ("EPIST_STATISTICAL_EDGE", "Probability", "Plausible correlation with statistical edge"),
-        ("EPIST_FUZZY_PLAUSIBILITY", "Probability", "Possibilistic fuzzy truth degree in [0, 1]"),
-        ("EPIST_DEFAULT_HEURISTIC", "Probability", "Non-monotonic default presumption (Reiter logic)"),
-        ("EPIST_BAYESIAN_PRIOR", "Probability", "Initial prior probability distribution P(H)"),
-        ("EPIST_BAYESIAN_POSTERIOR", "Probability", "Updated posterior probability P(H|E) after evidence"),
-        ("EPIST_CONFIDENCE_INTERVAL_95", "Probability", "95% frequentist confidence interval bound"),
-        ("EPIST_EPISTEMIC_ENTROPY_HIGH", "Probability", "High informational uncertainty / entropy in belief"),
-        ("EPIST_EPISTEMIC_ENTROPY_LOW", "Probability", "Near-deterministic sharp belief distribution"),
-        ("EPIST_CONFIRMATION_BIAS_FLAG", "Epistemic Quality", "Detected selective evidence gathering bias"),
-        ("EPIST_HALLUCINATION_RISK_HIGH", "Epistemic Quality", "High risk of ungrounded neural hallucination"),
-    ]
-    b6.extend(epistemic_sources)
-    deontic_logic = [
-        ("EPIST_DEONTIC_OBLIGATION", "Deontic Modality", "Strict normative duty / requirement (Must / Obligatory)"),
-        ("EPIST_DEONTIC_PERMISSION", "Deontic Modality", "Normative permission (May / Permissible)"),
-        ("EPIST_DEONTIC_PROHIBITION", "Deontic Modality", "Normative prohibition (Must Not / Forbidden)"),
-        ("DEONTIC_SUPEREROGATORY_PRAISE", "Deontic Modality", "Morally praiseworthy beyond strict duty (Supererogatory)"),
-        ("DEONTIC_SUBNORM_FORGIVENESS", "Deontic Modality", "Imperfect duty / sub-normative recommendation"),
-        ("DEONTIC_CONTRACTUAL_LIABILITY", "Deontic Modality", "Legal liability incurred from breach of contract"),
-        ("DEONTIC_TORT_NEGLIGENCE_DUTY", "Deontic Modality", "Duty of care owed under tort law negligence doctrine"),
-        ("DEONTIC_STRICT_LIABILITY_FAULT", "Deontic Modality", "Strict liability independent of intention/fault"),
-        ("DEONTIC_IMMUNITY_PROTECTION", "Deontic Modality", "Sovereign / judicial legal immunity from prosecution"),
-        ("DEONTIC_RIGHT_ENTITLEMENT", "Deontic Modality", "Fundamental moral or legal claim-right"),
-        ("DEONTIC_PRIVILEGE_LIBERTY", "Deontic Modality", "Hohfeldian liberty / privilege (No-duty to refrain)"),
-        ("DEONTIC_POWER_LEGAL_CAPACITY", "Deontic Modality", "Hohfeldian legal power to alter legal relations"),
-        ("DEONTIC_INALIENABLE_HUMAN_RIGHT", "Deontic Modality", "Universal inalienable human right (UDHR)"),
-        ("DEONTIC_CONDITIONAL_OBLIGATION", "Deontic Modality", "Dyadic obligation O(A | B) given condition B"),
-        ("DEONTIC_DEFEASIBLE_OBLIGATION", "Deontic Modality", "Prima facie duty subject to defeasible override"),
-        ("DEONTIC_CHISHOLM_PARADOX_GUARD", "Deontic Modality", "Contrary-to-duty obligation handling secondary breach"),
-        ("DEONTIC_INFORMED_CONSENT_VALID", "Deontic Modality", "Explicit freely given informed consent authorization"),
-        ("DEONTIC_AUTONOMY_RESPECT", "Bioethics", "Bioethical principle: Respect for individual autonomy"),
-        ("DEONTIC_BENEFICENCE_ACTIVE", "Bioethics", "Bioethical principle: Active promotion of welfare"),
-        ("DEONTIC_NON_MALEFICENCE_HARM", "Bioethics", "Bioethical principle: Primum non nocere (Do no harm)"),
-        ("DEONTIC_JUSTICE_DISTRIBUTIVE", "Ethics", "Ethical principle: Fair distribution of burdens and goods"),
-        ("DEONTIC_JUSTICE_RETRIBUTIVE", "Ethics", "Proportional punitive justice for transgressions"),
-        ("DEONTIC_FIDUCIARY_DUTY_LOYAL", "Legal Norms", "Fiduciary duty of utmost loyalty and candor"),
-        ("DEONTIC_CONFIDENTIALITY_SECRECY", "Legal Norms", "Professional non-disclosure / secrecy obligation"),
-        ("DEONTIC_WHISTLEBLOWER_PROTECT", "Legal Norms", "Public interest disclosure protection mandate"),
-        ("DEONTIC_INTELLECTUAL_PROPERTY", "Legal Norms", "Copyright / patent monopoly exclusivity protection"),
-        ("DEONTIC_FORCE_MAJEURE_EXCUSE", "Legal Norms", "Exemption from liability due to unavoidable catastrophe"),
-        ("DEONTIC_DURESS_COERCION_DEFENSE", "Legal Norms", "Legal excuse based on imminent severe physical coercion"),
-        ("DEONTIC_SELF_DEFENSE_PROPORT", "Legal Norms", "Justified proportionate force used in self-defense"),
-        ("DEONTIC_PUBLIC_HEALTH_EMERGENCY", "Legal Norms", "Emergency police power override during epidemic/disaster"),
-        ("DEONTIC_ENVIRONMENTAL_STEWARD", "Environmental", "Precautionary principle protecting biosphere sustainability"),
-        ("DEONTIC_AI_SAFETY_ALIGNMENT", "AI Governance", "Mandate that autonomous AI systems align with human intent"),
-    ]
-    b6.extend(deontic_logic)
-    scasp_invariants = [
-        ("SOLVER_CWA_CLOSED_WORLD", "Solver Flags", "Closed World Assumption flag for s(CASP)"),
-        ("SOLVER_MUC_TARGETED", "Solver Flags", "Minimal Unsatisfiable Core candidate target"),
-        ("SOLVER_PROOF_VALIDATED", "Solver Flags", "Verified stable model theorem"),
-        ("SOLVER_CONTRADICTION_FLAG", "Solver Flags", "Integrity constraint contradiction identified"),
-        ("SOLVER_ABDUCIBLE_PREDICATE", "Solver Flags", "Abducible open predicate flag"),
-        ("SOLVER_COINDUCTION_COLOOP", "Solver Flags", "Co-inductive greatest fixed point hypothesis"),
-        ("SOLVER_EVEN_LOOP_OVER_NEG", "Solver Flags", "Even loop over negation choice branching"),
-        ("SOLVER_GLOBAL_CONSTRAINT", "Solver Flags", "Global headless integrity constraint (:- body)"),
-        ("SOLVER_DUAL_RULE_APPLIED", "Solver Flags", "Dual program rule negation verification"),
-        ("SOLVER_INCONSISTENCY_CORE", "Solver Flags", "Active membership in inconsistency core"),
-        ("SOLVER_EXPLANATION_REQUIRED", "Solver Flags", "Proof justification tree requested"),
-        ("SOLVER_RE_DENOISE_REQUIRED", "Solver Flags", "MUC triggers diffusion re-denoising cycle"),
-        ("SOLVER_ENTAILMENT_VERIFIED", "Solver Flags", "Formally proven entailed conclusion"),
-        ("SOLVER_COUNTEREXAMPLE_FOUND", "Solver Flags", "Counterexample model constructed"),
-        ("SOLVER_STABLE_MODEL_MEMBER", "Solver Flags", "Atom belongs to active answer set"),
-        ("SOLVER_PARTIAL_INTERPRETATION", "Solver Flags", "3-valued partial model assignment (True, False, Undef)"),
-        ("SOLVER_WELL_FOUNDED_MODEL", "Solver Flags", "Well-founded semantics deterministic core"),
-        ("SOLVER_NON_MONOTONIC_DEFAULT", "Solver Flags", "Non-monotonic default assumption holds"),
-        ("SOLVER_DEFEATER_APPLIED", "Solver Flags", "Defeater rule invalidated preliminary assumption"),
-        ("SOLVER_STABLE_MODEL_COUNT_K", "Solver Flags", "Cardinality of answer sets admitted by program"),
-        ("SOLVER_UNSAT_NO_MODELS_EXIST", "Solver Flags", "Program is strictly unsatisfiable (0 answer sets)"),
-        ("SOLVER_CHOICE_RULE_DISJUNCT", "Solver Flags", "Disjunctive choice rule head {A ; B} :- body"),
-        ("SOLVER_AGGREGATE_CARDINALITY", "Solver Flags", "ASP aggregate cardinality constraint (#count)"),
-        ("SOLVER_AGGREGATE_SUM_BOUND", "Solver Flags", "ASP aggregate weight sum constraint (#sum)"),
-        ("SOLVER_PREFERENCE_OPTIMIZATION", "Solver Flags", "Weak constraint optimization penalty (#minimize)"),
-        ("SOLVER_GROUNDING_TIME_LIMIT", "Solver Flags", "Grounder approached combinatorial cutoff limit"),
-        ("SOLVER_TOP_DOWN_GOAL_DIRECTED", "Solver Flags", "s(CASP) goal-directed query evaluation mode"),
-        ("SOLVER_CONSTRAINED_CLPQ_REAL", "Solver Flags", "CLP(Q) linear rational arithmetic constraint system"),
-        ("SOLVER_CONSTRAINED_CLPR_REAL", "Solver Flags", "CLP(R) continuous real arithmetic constraint system"),
-        ("SOLVER_CONSTRAINED_CLPFD_INT", "Solver Flags", "CLP(FD) finite domain integer constraint system"),
-        ("SOLVER_TREE_EQUAL_RATIONAL", "Solver Flags", "Colmerauer rational tree infinite unification constraint"),
-        ("SOLVER_DISJUNCTIVE_DEDUCTION_OK", "Solver Flags", "Disjunctive logic programming sound deduction verified"),
-    ]
-    b6.extend(scasp_invariants)
-    modal_epistemics = [
-        ("LOGIC_NECESSITY_BOX", "Formal Modal Logic", "Alethic necessity: Box P (Necessarily True in all accessible worlds)"),
-        ("LOGIC_POSSIBILITY_DIAMOND", "Formal Modal Logic", "Alethic possibility: Diamond P (True in at least one accessible world)"),
-        ("LOGIC_COMMON_KNOWLEDGE", "Formal Modal Logic", "Epistemic logic: Common knowledge in group C_G(P)"),
-        ("LOGIC_DISTRIBUTED_KNOW", "Formal Modal Logic", "Epistemic logic: Distributed knowledge D_G(P)"),
-        ("MODAL_SYSTEM_K_AXIOM", "Modal Axioms", "Kripke distribution axiom: □(P -> Q) -> (□P -> □Q)"),
-        ("MODAL_SYSTEM_T_REFLEXIVE", "Modal Axioms", "Truth axiom (Reflexive frame): □P -> P"),
-        ("MODAL_SYSTEM_4_POSITIVE_INTRO", "Modal Axioms", "Positive introspection (Transitive frame): □P -> □□P"),
-        ("MODAL_SYSTEM_5_NEGATIVE_INTRO", "Modal Axioms", "Negative introspection (Euclidean frame): ◇P -> □◇P"),
-        ("MODAL_SYSTEM_B_SYMMETRIC", "Modal Axioms", "Brouwerian symmetry axiom: P -> □◇P"),
-        ("MODAL_SYSTEM_D_SERIAL_DEONTIC", "Modal Axioms", "Seriality / consistency axiom: □P -> ◇P"),
-        ("MODAL_ACCESSIBILITY_TRANSITIVE", "Kripke Frames", "Kripke frame accessibility relation is transitive"),
-        ("MODAL_ACCESSIBILITY_SYMMETRIC", "Kripke Frames", "Kripke frame accessibility relation is symmetric"),
-        ("MODAL_ACCESSIBILITY_REFLEXIVE", "Kripke Frames", "Kripke frame accessibility relation is reflexive"),
-        ("MODAL_ACCESSIBILITY_EUCLIDEAN", "Kripke Frames", "Kripke frame accessibility relation is Euclidean"),
-        ("MODAL_DYNAMIC_ACTION_BOX", "Dynamic Logic", "Propositional Dynamic Logic: [α]P (After executing action α, P holds)"),
-        ("MODAL_DYNAMIC_ACTION_DIAMOND", "Dynamic Logic", "Propositional Dynamic Logic: <α>P (Possible to execute α and reach P)"),
-        ("MODAL_PROGRAM_SEQUENTIAL_COMP", "Dynamic Logic", "PDL action composition: α ; β"),
-        ("MODAL_PROGRAM_NON_DET_CHOICE", "Dynamic Logic", "PDL non-deterministic action choice: α ∪ β"),
-        ("MODAL_PROGRAM_KLEENE_STAR", "Dynamic Logic", "PDL iteration: α* (Repeat action α zero or more times)"),
-        ("MODAL_PROGRAM_TEST_ASSERTION", "Dynamic Logic", "PDL test action: ?P (Proceed only if P holds)"),
-        ("MODAL_EPISTEMIC_BELIEF_B_OP", "Doxastic Logic", "Doxastic logic belief operator B_i(P)"),
-        ("MODAL_JUSTIFICATION_LOGIC_T", "Justification Logic", "Justification logic: t : P (Term t is a justification for P)"),
-        ("MODAL_PUBLIC_ANNOUNCEMENT_ACT", "Dynamic Epistemic", "Public Announcement Logic: [!P]Q (After truthful announcement of P, Q holds)"),
-        ("MODAL_PRIVATE_MESSAGE_ACT", "Dynamic Epistemic", "Private communication action between agent subset"),
-        ("MODAL_GROUP_MUTUAL_BELIEF", "Epistemic Logic", "Mutual belief in group: Everyone believes P (E_G(P))"),
-        ("MODAL_KNOWLEDGE_UPDATE_COMM", "Dynamic Epistemic", "Epistemic state transition upon receiving new verified fact"),
-        ("MODAL_CONTINGENCY_OP", "Modal Logic", "Contingency operator ∇P (P is neither necessary nor impossible)"),
-        ("MODAL_NON_CONTINGENCY_DELTA", "Modal Logic", "Non-contingency operator ΔP (P is either necessary or impossible)"),
-        ("MODAL_ACTUALITY_OPERATOR_A", "Two-Dimensional", "Actuality operator A P (P holds in the actual world @)"),
-        ("MODAL_FIXED_POINT_MU_CALCULUS", "Modal Mu-Calculus", "Least fixed-point modal mu-calculus operator μZ.φ"),
-        ("MODAL_FIXED_POINT_NU_CALCULUS", "Modal Mu-Calculus", "Greatest fixed-point modal mu-calculus operator νZ.φ"),
-        ("MODAL_BISIMULATION_INVARIANT", "Model Theory", "Kripke model invariance under bisimulation relation"),
-    ]
-    b6.extend(modal_epistemics)
-    bands_data.append((6, "BAND_6_PROOF_DEONTICS", b6))
+lines.extend(format_band('BAND_5_SLOTS', 'SlotBand.BAND_5_TOM_PRAGMATICS', BAND_5_SLOTS))
+lines.extend(format_band('BAND_6_SLOTS', 'SlotBand.BAND_6_PROOF_DEONTICS', BAND_6_SLOTS))
+lines.extend(format_band('BAND_7_SLOTS', 'SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL', BAND_7_SLOTS))
 
-    # BAND 7: 896-1023
-    b7 = []
-    allen_temporal = [
-        ("TEMP_ALLEN_BEFORE", "Temporal Calculus", "Allen: X strictly precedes Y (X < Y)"),
-        ("TEMP_ALLEN_MEETS", "Temporal Calculus", "Allen: X touches start of Y at boundary (X m Y)"),
-        ("TEMP_ALLEN_OVERLAPS", "Temporal Calculus", "Allen: X starts before Y and overlaps (X o Y)"),
-        ("TEMP_ALLEN_STARTS", "Temporal Calculus", "Allen: X shares start boundary with Y (X s Y)"),
-        ("TEMP_ALLEN_DURING", "Temporal Calculus", "Allen: X strictly contained within Y interval (X d Y)"),
-        ("TEMP_ALLEN_FINISHES", "Temporal Calculus", "Allen: X shares end boundary with Y (X f Y)"),
-        ("TEMP_ALLEN_EQUALS", "Temporal Calculus", "Allen: X and Y are temporally congruent (X = Y)"),
-        ("TEMP_ALLEN_AFTER_INV", "Temporal Calculus", "Allen Inverse: X strictly succeeds Y (X > Y / X bi Y)"),
-        ("TEMP_ALLEN_MET_BY_INV", "Temporal Calculus", "Allen Inverse: X is met by Y at boundary (X mi Y)"),
-        ("TEMP_ALLEN_OVERLAPPED_BY_INV", "Temporal Calculus", "Allen Inverse: X is overlapped by Y (X oi Y)"),
-        ("TEMP_ALLEN_STARTED_BY_INV", "Temporal Calculus", "Allen Inverse: X is started by Y (X si Y)"),
-        ("TEMP_ALLEN_CONTAINS_INV", "Temporal Calculus", "Allen Inverse: X strictly contains Y interval (X di Y)"),
-        ("TEMP_ALLEN_FINISHED_BY_INV", "Temporal Calculus", "Allen Inverse: X is finished by Y (X fi Y)"),
-        ("TEMP_SYNCHRONOUS_COINCIDE", "Temporal Calculus", "Simultaneous synchronous occurrence at time point"),
-        ("TEMP_INTERVAL_START_POINT", "Temporal Metric", "Metric timestamp representing interval start t_0"),
-        ("TEMP_INTERVAL_END_POINT", "Temporal Metric", "Metric timestamp representing interval termination t_end"),
-        ("TEMP_INTERVAL_DURATION_LEN", "Temporal Metric", "Quantitative elapsed duration (t_end - t_0)"),
-        ("TEMP_POINT_IN_TIME_INSTANT", "Temporal Metric", "Zero-duration instantaneous point event"),
-        ("TEMP_PERIODIC_CYCLE_PERIOD", "Temporal Frequency", "Periodic repetition cycle period T"),
-        ("TEMP_PHASE_OFFSET_ANGLE", "Temporal Frequency", "Periodic phase offset angle φ"),
-        ("TEMP_DECAY_HALF_LIFE_TAU", "Temporal Dynamics", "Exponential decay half-life characteristic time τ"),
-        ("TEMP_TIME_DILATION_RELATIVISTIC", "Relativity", "Relativistic Lorentz time dilation factor γ"),
-        ("TEMP_CAUSAL_CONE_FUTURE", "Relativity", "Minkowski spacetime forward future light cone"),
-        ("TEMP_CAUSAL_CONE_PAST", "Relativity", "Minkowski spacetime backward past light cone"),
-        ("TEMP_SPACELIKE_SEPARATION", "Relativity", "Spacelike separation (Causally disconnected)"),
-        ("TEMP_TIMELIKE_SEPARATION", "Relativity", "Timelike separation (Causally connectable)"),
-        ("TEMP_LIGHTLIKE_NULL_RAY", "Relativity", "Null geodesic / lightlike speed-of-light connection"),
-        ("TEMP_ARROW_OF_TIME_ENTROPY", "Thermodynamics", "Thermodynamic forward arrow of time asymmetry"),
-        ("TEMP_DISCRETE_CLOCK_TICK", "Digital Time", "Discrete synchronous clock cycle counter"),
-        ("TEMP_ASYNCHRONOUS_DRIFT", "Distributed Clocks", "Distributed clock skew / drift delta"),
-        ("TEMP_LAMPORT_LOGICAL_CLOCK", "Distributed Clocks", "Lamport logical timestamp ordering"),
-        ("TEMP_VECTOR_CLOCK_ARRAY", "Distributed Clocks", "Vector clock causal dependency vector"),
-    ]
-    b7.extend(allen_temporal)
-    rcc8_spatial = [
-        ("SPATIAL_RCC_DISCONNECTED", "Spatial Mereotopology", "RCC-8: Disconnected regions (DC)"),
-        ("SPATIAL_RCC_EXT_CONNECTED", "Spatial Mereotopology", "RCC-8: Externally connected / boundary touching (EC)"),
-        ("SPATIAL_RCC_PARTIAL_OVERLAP", "Spatial Mereotopology", "RCC-8: Partially overlapping regions (PO)"),
-        ("SPATIAL_RCC_TANGENTIAL_PART", "Spatial Mereotopology", "RCC-8: Tangential proper part (TPP)"),
-        ("SPATIAL_RCC_NON_TANG_PART", "Spatial Mereotopology", "RCC-8: Non-tangential proper interior part (NTPP)"),
-        ("SPATIAL_RCC_TANG_PART_INV", "Spatial Mereotopology", "RCC-8: Tangential proper part inverse (TPPi)"),
-        ("SPATIAL_RCC_NON_TANG_PART_INV", "Spatial Mereotopology", "RCC-8: Non-tangential proper part inverse (NTPPi)"),
-        ("SPATIAL_RCC_CONGRUENT_EQ", "Spatial Mereotopology", "RCC-8: Geometrically congruent regions (EQ)"),
-        ("MEREOLOGY_HOLONYM_WHOLE", "Mereology", "Mereological composite whole entity"),
-        ("MEREOLOGY_MERONYM_PART", "Mereology", "Mereological constituent part"),
-        ("MEREOLOGY_SUM_FUSION", "Mereology", "Mereological fusion / sum of multiple individuals"),
-        ("MEREOLOGY_ESSENTIAL_PART", "Mereology", "Essential part necessary for identity persistence"),
-        ("DIR_3D_SUPERIOR_ABOVE_Z", "Directional Calculus", "Cardinal 3D orientation: Above / Superior (+Z)"),
-        ("DIR_3D_INFERIOR_BELOW_Z", "Directional Calculus", "Cardinal 3D orientation: Below / Inferior (-Z)"),
-        ("DIR_3D_ANTERIOR_FRONT_Y", "Directional Calculus", "Cardinal 3D orientation: In front / Anterior (+Y)"),
-        ("DIR_3D_POSTERIOR_BEHIND_Y", "Directional Calculus", "Cardinal 3D orientation: Behind / Posterior (-Y)"),
-        ("DIR_3D_DEXTRAL_RIGHT_X", "Directional Calculus", "Cardinal 3D orientation: Right / Dextral (+X)"),
-        ("DIR_3D_SINISTRAL_LEFT_X", "Directional Calculus", "Cardinal 3D orientation: Left / Sinistral (-X)"),
-        ("DIR_FRAME_INTRINSIC_OBJECT", "Directional Calculus", "Object-centric intrinsic spatial frame of reference"),
-        ("DIR_FRAME_EXTRINSIC_OBSERVER", "Directional Calculus", "Observer-centric deictic spatial frame of reference"),
-        ("DIR_FRAME_GLOBAL_ABSOLUTE", "Directional Calculus", "Global allocentric absolute compass frame (North/East)"),
-        ("TOPOLOGY_EULER_CHARACTERISTIC", "Topology", "Poincaré-Euler characteristic χ = V - E + F"),
-        ("TOPOLOGY_GENUS_HANDLE_COUNT", "Topology", "Topological genus (Number of handles / doughnut holes)"),
-        ("TOPOLOGY_ORIENTABILITY_FLAG", "Topology", "Orientability surface flag (Mobius strip vs sphere)"),
-        ("TOPOLOGY_HOMOTOPY_FUNDAMENTAL", "Topology", "Fundamental group π_1 loop structure"),
-        ("TOPOLOGY_CONVEX_HULL_VOLUME", "Computational Geometry", "Minimum enclosing convex hull manifold"),
-        ("TOPOLOGY_VORONOI_TESSELLATION", "Computational Geometry", "Voronoi proximity cell boundary"),
-        ("TOPOLOGY_DELAUNAY_TRIANGULATE", "Computational Geometry", "Delaunay triangular mesh dual"),
-        ("TOPOLOGY_DISTANCE_EUCLIDEAN_L2", "Metric Space", "Standard Euclidean L2 distance norm"),
-        ("TOPOLOGY_DISTANCE_MANHATTAN_L1", "Metric Space", "Grid / Manhattan L1 distance norm"),
-        ("TOPOLOGY_DISTANCE_MINKOWSKI_LP", "Metric Space", "Generalized Lp metric space norm"),
-        ("TOPOLOGY_DISTANCE_GEODESIC", "Differential Geometry", "Shortest curved surface path geodesic distance"),
-    ]
-    b7.extend(rcc8_spatial)
-    pearl_causal = [
-        ("CAUSAL_L1_ASSOCIATIONAL", "Pearl Hierarchy", "Level 1: Observational association P(y | x)"),
-        ("CAUSAL_L2_INTERVENTIONAL_DO", "Pearl Hierarchy", "Level 2: Active intervention do-calculus P(y | do(x))"),
-        ("CAUSAL_L3_COUNTERFACTUAL", "Pearl Hierarchy", "Level 3: Retrospective counterfactual P(y_x | x', y')"),
-        ("CAUSAL_DIRECT_MECHANISM", "Causal Structure", "Direct physical causal link (X -> Y)"),
-        ("CAUSAL_ENABLING_CONDITION", "Causal Structure", "Necessary enabling background precondition"),
-        ("CAUSAL_PREVENTIVE_BLOCK", "Causal Structure", "Active causal inhibitor or blocker"),
-        ("CAUSAL_COMMON_CONFOUNDER", "Causal Graphs", "Fork structure: Unobserved/common confounder (X <- Z -> Y)"),
-        ("CAUSAL_COLLIDER_EFFECT", "Causal Graphs", "Collider structure: Joint effect sink (X -> Z <- Y)"),
-        ("CAUSAL_CHAIN_MEDIATOR_STEP", "Causal Graphs", "Chain structure: Intermediate causal mediator (X -> M -> Y)"),
-        ("CAUSAL_INSTRUMENTAL_VARIABLE", "Causal Identification", "Instrumental variable Z satisfying exclusion restriction"),
-        ("CAUSAL_BACKDOOR_CRITERION", "Causal Identification", "Backdoor adjustment formula satisfied"),
-        ("CAUSAL_FRONTDOOR_CRITERION", "Causal Identification", "Frontdoor adjustment mediator formula satisfied"),
-        ("CAUSAL_D_SEPARATION_BLOCKED", "Causal Graphs", "d-separation path conditional independence (X ⊥ Y | Z)"),
-        ("CAUSAL_COUNTERFACTUAL_NEC", "Counterfactuals", "Probability of Necessity PN (But-for causation)"),
-        ("CAUSAL_COUNTERFACTUAL_SUFF", "Counterfactuals", "Probability of Sufficiency PS (Sufficient cause)"),
-        ("CAUSAL_COUNTERFACTUAL_PNS", "Counterfactuals", "Probability of Necessity and Sufficiency PNS"),
-        ("CAUSAL_STRUCTURAL_EQUATION", "Structural Causal Model", "Non-parametric SCM structural equation: y = f_Y(x, u_Y)"),
-        ("CAUSAL_EXOGENOUS_BACKGROUND_U", "Structural Causal Model", "Unobserved exogenous background disturbance variable U"),
-        ("CAUSAL_ENDOGENOUS_VARIABLE_V", "Structural Causal Model", "Observed endogenous causal variable V"),
-        ("CAUSAL_AVERAGE_TREATMENT_ATE", "Causal Metrics", "Average Treatment Effect ATE = E[Y | do(X=1)] - E[Y | do(X=0)]"),
-        ("CAUSAL_CONDITIONAL_ATE_CATE", "Causal Metrics", "Conditional Average Treatment Effect CATE(z)"),
-        ("CAUSAL_ATTRIBUTABLE_FRACTION", "Causal Metrics", "Excess risk fraction attributable to exposure"),
-        ("CAUSAL_GRANGER_TIME_SERIES", "Causal Time Series", "Granger predictive temporal causality test"),
-        ("CAUSAL_TRANSFER_ENTROPY", "Information Theory", "Transfer entropy T_{X->Y} information flow"),
-        ("CAUSAL_FAITHFULNESS_AXIOM", "Causal Discovery", "Causal faithfulness assumption (No exact parameter cancellations)"),
-        ("CAUSAL_MARKOV_PROPERTY", "Causal Discovery", "Causal Markov condition (Node independent of non-descendants given parents)"),
-        ("CAUSAL_DISCOVERY_PC_ALGO", "Causal Discovery", "Constraint-based PC algorithm skeleton learned"),
-        ("CAUSAL_DISCOVERY_GES_SCORE", "Causal Discovery", "Score-based Greedy Equivalence Search learned"),
-        ("CAUSAL_NON_LINEAR_ANM_MODEL", "Causal Discovery", "Additive Noise Model ANM asymmetry identified"),
-        ("CAUSAL_CYCLIC_EQUILIBRIUM", "Causal Feedback", "Dynamic cyclic feedback loop equilibrium"),
-        ("CAUSAL_ACTUAL_HALPERN_PEARL", "Actual Causation", "Halpern-Pearl actual cause definition satisfied"),
-        ("CAUSAL_ROBUSTNESS_INVARIANCE", "Causal Invariance", "Invariant causal prediction across heterogeneous environments"),
-    ]
-    b7.extend(pearl_causal)
-    temporal_logics = [
-        ("LOGIC_TEMPORAL_ALWAYS_G", "Linear Temporal Logic", "LTL: Globally / Always operator (G P)"),
-        ("LOGIC_TEMPORAL_EVENTUALLY_F", "Linear Temporal Logic", "LTL: Eventually / Finally operator (F P)"),
-        ("LOGIC_TEMPORAL_NEXT_X", "Linear Temporal Logic", "LTL: Next state operator (X P)"),
-        ("LOGIC_TEMPORAL_UNTIL_U", "Linear Temporal Logic", "LTL: Strong until operator (P U Q)"),
-        ("LOGIC_TEMPORAL_RELEASE_R", "Linear Temporal Logic", "LTL: Release operator (P R Q)"),
-        ("LOGIC_TEMPORAL_WEAK_UNTIL_W", "Linear Temporal Logic", "LTL: Weak until operator (P W Q)"),
-        ("LTL_PAST_HISTORICALLY_H", "Past LTL", "Past LTL: Historically / Always in the past (H P)"),
-        ("LTL_PAST_ONCE_O", "Past LTL", "Past LTL: Once in the past (O P)"),
-        ("LTL_PAST_PREVIOUS_Y", "Past LTL", "Past LTL: Previous state (Y P / Yesterday)"),
-        ("LTL_PAST_SINCE_S", "Past LTL", "Past LTL: Since operator (P S Q)"),
-        ("CTL_ALL_PATHS_A", "Computation Tree Logic", "CTL Path Quantifier: For all future paths A"),
-        ("CTL_EXISTS_PATH_E", "Computation Tree Logic", "CTL Path Quantifier: There exists a path E"),
-        ("CTL_ALL_ALWAYS_AG", "Computation Tree Logic", "CTL: Invariant along all branching paths (AG P)"),
-        ("CTL_EXISTS_ALWAYS_EG", "Computation Tree Logic", "CTL: Exists path where P holds globally (EG P)"),
-        ("CTL_ALL_FINALLY_AF", "Computation Tree Logic", "CTL: Inevitable on all paths (AF P)"),
-        ("CTL_EXISTS_FINALLY_EF", "Computation Tree Logic", "CTL: Reachable on some path (EF P)"),
-        ("CTL_ALL_NEXT_AX", "Computation Tree Logic", "CTL: Holds in all next states (AX P)"),
-        ("CTL_EXISTS_NEXT_EX", "Computation Tree Logic", "CTL: Holds in some next state (EX P)"),
-        ("CTL_ALL_UNTIL_AU", "Computation Tree Logic", "CTL: P holds until Q on all paths (A[P U Q])"),
-        ("CTL_EXISTS_UNTIL_EU", "Computation Tree Logic", "CTL: P holds until Q on some path (E[P U Q])"),
-        ("CTL_STAR_GENERALIZED", "CTL*", "Full generalized branching temporal logic CTL* formula"),
-        ("MU_CALCULUS_MODAL_DIAMOND", "Modal Mu-Calculus", "Modal mu-calculus transition step ⟨a⟩φ"),
-        ("MU_CALCULUS_MODAL_BOX", "Modal Mu-Calculus", "Modal mu-calculus transition step [a]φ"),
-        ("MODEL_CHECK_BUCHI_AUTOMATON", "Model Checking", "Büchi automaton for infinite word omega-regular language"),
-        ("MODEL_CHECK_LIVENESS_PROPERTY", "Model Checking", "Liveness property: Something good eventually happens"),
-        ("MODEL_CHECK_SAFETY_PROPERTY", "Model Checking", "Safety property: Nothing bad ever happens"),
-        ("MODEL_CHECK_FAIRNESS_WEAK", "Model Checking", "Weak fairness: If action continuously enabled, taken infinitely often"),
-        ("MODEL_CHECK_FAIRNESS_STRONG", "Model Checking", "Strong fairness: If action repeatedly enabled, taken infinitely often"),
-        ("MODEL_CHECK_STATE_EXPLOSION", "Model Checking", "State space explosion warning / abstraction boundary"),
-        ("MODEL_CHECK_CEGAR_REFINEMENT", "Model Checking", "Counterexample-Guided Abstraction Refinement loop pass"),
-        ("MODEL_CHECK_SYMBOLIC_BDD", "Model Checking", "Binary Decision Diagram BDD symbolic state set"),
-        ("MODEL_CHECK_PROBABILISTIC_PRISM", "Model Checking", "Probabilistic model checking PCTL constraint verified"),
-    ]
-    b7.extend(temporal_logics)
-    bands_data.append((7, "BAND_7_SPATIOTEMPORAL_CAUSAL", b7))
+lines.append('# Combined canonical list of all 1024 slots')
+lines.append('CANONICAL_SLOTS: List[SlotDefinition] = (')
+lines.append('    BAND_0_SLOTS + BAND_1_SLOTS + BAND_2_SLOTS + BAND_3_SLOTS +')
+lines.append('    BAND_4_SLOTS + BAND_5_SLOTS + BAND_6_SLOTS + BAND_7_SLOTS')
+lines.append(')')
+lines.append('')
+lines.append('assert len(CANONICAL_SLOTS) == 1024, f"Expected 1024 slots, got {len(CANONICAL_SLOTS)}"')
+lines.append('for i, slot in enumerate(CANONICAL_SLOTS):')
+lines.append('    assert slot.index == i, f"Slot {slot.name} index mismatch: expected {i}, got {slot.index}"')
+lines.append('')
+lines.append('SLOT_NAME_TO_INDEX: Dict[str, int] = {slot.name: slot.index for slot in CANONICAL_SLOTS}')
+lines.append('SLOT_INDEX_TO_NAME: Dict[int, str] = {slot.index: slot.name for slot in CANONICAL_SLOTS}')
+lines.append('')
 
-    for band_idx, band_enum_name, band_items in bands_data:
-        lines.append(f"# ==============================================================================")
-        lines.append(f"# BAND {band_idx}: {band_enum_name} ({band_idx * 128:03d}–{(band_idx + 1) * 128 - 1:03d})")
-        lines.append(f"# ==============================================================================")
-        lines.append(f"BAND_{band_idx}_SLOTS = [")
-        for local_idx, (name, category, description) in enumerate(band_items):
-            global_idx = band_idx * 128 + local_idx
-            lines.append(f'    SlotDefinition({global_idx}, "{name}", SlotBand.{band_enum_name}, "{category}", "{description}"),')
-        lines.append(f"]\n")
+lines.append('# Semantic Bridge Alias Layer & Backward Compatibility')
+lines.append('LEGACY_ONTOLOGY_ALIASES: Dict[str, str] = {')
+lines.append('    # Entity Types')
+lines.append('    "TYPE_ANIMATE": "CN_Q011_ANIMAL",')
+lines.append('    "TYPE_HUMAN": "CN_Q015_PERSON",')
+lines.append('    "TYPE_INANIMATE_PHYSICAL": "CN_Q012_TANGIBLE_THING",')
+lines.append('    "TYPE_NATURAL_OBJECT": "CN_Q012_TANGIBLE_THING",')
+lines.append('    "TYPE_ARTIFACT": "CN_Q042_DEVICE",')
+lines.append('    "TYPE_SUBSTANCE_MASS": "CN_Q195_MASS",')
+lines.append('    "TYPE_COLLECTION_SET": "CN_Q102_SET",')
+lines.append('    "TYPE_ABSTRACT_CONCEPT": "CN_Q113_LOGIC",')
+lines.append('    "TYPE_PROPOSITION": "CN_Q084_INFORMATION",')
+lines.append('    "TYPE_EVENT": "CN_Q144_EVENT",')
+lines.append('    "TYPE_STATE": "CN_Q026_STATE",')
+lines.append('    "TYPE_PROCESS": "CN_Q252_ACTIVITY",')
+lines.append('    "TYPE_TEMPORAL_INTERVAL": "CN_Q021_TIME",')
+lines.append('    "TYPE_SPATIAL_REGION": "CN_Q204_AREA",')
+lines.append('    "TYPE_MEASURE_SCALAR": "CN_Q077_UNIT",')
+lines.append('    "TYPE_NUMERIC_VALUE": "CN_Q008_MATHEMATICS",')
+lines.append('    "TYPE_ORGANIZATION": "CN_Q014_GROUP",')
+lines.append('    "TYPE_COMMUNICATION_MSG": "CN_Q061_LANGUAGE",')
+lines.append('    "TYPE_ATTRIBUTE_PROPERTY": "CN_Q088_QUALITY",')
+lines.append('    "TYPE_RELATION_ROLE": "CN_Q120_LINE",')
+lines.append('    "TYPE_ALGORITHM_PROCEDURE": "CN_Q154_PROGRAMMING",')
+lines.append('    "TYPE_LEGAL_CONTRACT": "CN_Q003_LEGAL",')
+lines.append('    "TYPE_BIOLOGICAL_ORGANISM": "CN_Q121_ORGANISM",')
+lines.append('    "TYPE_SOFTWARE_SYSTEM": "CN_Q001_COMPUTING",')
+lines.append('    "TYPE_HARDWARE_DEVICE": "CN_Q042_DEVICE",')
+lines.append('    "TYPE_ASTRONOMICAL_BODY": "CN_Q024_ASTRONOMY",')
+lines.append('    "TYPE_GEOGRAPHICAL_LANDFORM": "CN_Q233_LAND",')
+lines.append('    # Capabilities & Roles')
+lines.append('    "ROLE_AGENT_CAPABLE": "CN_Q255_ABILITY",')
+lines.append('    "ROLE_SENTIENT": "CN_Q186_SENSE",')
+lines.append('    "ROLE_MOVEABLE": "CN_Q028_MOVE",')
+lines.append('    "ROLE_COMMUNICATOR": "CN_Q254_SPEAK",')
+lines.append('    "ROLE_CONSUMABLE": "CN_Q069_FOOD",')
+lines.append('    "ROLE_CONTAINER": "CN_Q229_BOX",')
+lines.append('    "ROLE_INSTRUMENT_USABLE": "CN_Q094_USE",')
+lines.append('    "ROLE_VOLITIONAL_SOURCE": "CN_Q153_DESIRE",')
+lines.append('    "ROLE_COGNITIVE_SUBJECT": "CN_Q043_MIND",')
+lines.append('    "ROLE_AFFECTIVE_TARGET": "CN_Q171_HAPPY",')
+lines.append('    "ROLE_EPISTEMIC_AUTHORITY": "CN_Q124_KNOWLEDGE",')
+lines.append('    "ROLE_PATIENT_TARGET": "CN_Q146_TAKE",')
+lines.append('    # Modalities')
+lines.append('    "MODALITY_LITERAL": "CN_Q140_TRUE",')
+lines.append('    "MODALITY_FIGURATIVE": "CN_Q190_FORMAL",')
+lines.append('    "MODALITY_HYPOTHETICAL": "CN_Q113_LOGIC",')
+lines.append('    "MODALITY_COUNTERFACTUAL": "CN_Q188_LIE",')
+lines.append('    # WordNet Roots')
+lines.append('    "WN_ACT_ACTION": "CN_Q104_ACT",')
+lines.append('    "WN_ANIMAL_FAUNA": "CN_Q011_ANIMAL",')
+lines.append('    "WN_ARTIFACT_OBJECT": "CN_Q042_DEVICE",')
+lines.append('    "WN_ATTRIBUTE_PROP": "CN_Q088_QUALITY",')
+lines.append('    "WN_BODY_PART": "CN_Q002_BODY",')
+lines.append('    "WN_COGNITION_THOUGHT": "CN_Q043_MIND",')
+lines.append('    "WN_COMMUNICATION_INFO": "CN_Q084_INFORMATION",')
+lines.append('    "WN_EVENT_OCCURRENCE": "CN_Q144_EVENT",')
+lines.append('    "WN_FEELING_EMOTION": "CN_Q171_HAPPY",')
+lines.append('    "WN_FOOD_NUTRITION": "CN_Q069_FOOD",')
+lines.append('    "WN_GROUP_SOCIAL": "CN_Q014_GROUP",')
+lines.append('    "WN_LOCATION_PLACE": "CN_Q073_PLACE",')
+lines.append('    "WN_MOTIVE_REASON": "CN_Q081_CAUSE",')
+lines.append('    "WN_OBJECT_NATURAL": "CN_Q012_TANGIBLE_THING",')
+lines.append('    "WN_PERSON_HUMAN": "CN_Q015_PERSON",')
+lines.append('    "WN_PHENOMENON_NATURE": "CN_Q052_GEOLOGY",')
+lines.append('    "WN_PLANT_FLORA": "CN_Q004_PLANT",')
+lines.append('    "WN_POSSESSION_ASSET": "CN_Q017_MONEY",')
+lines.append('    "WN_PROCESS_SERIES": "CN_Q252_ACTIVITY",')
+lines.append('    "WN_QUANTITY_NUMBER": "CN_Q203_AMOUNT",')
+lines.append('    "WN_RELATION_LINK": "CN_Q120_LINE",')
+lines.append('    # Physical & Cyber Affordances')
+lines.append('    "AFFORD_INCISED_CUTTING": "CN_Q108_CUT",')
+lines.append('    "AFFORD_PERCUSSIVE_IMPACT": "CN_Q142_FORCE",')
+lines.append('    "AFFORD_FLUID_CONTAINMENT": "CN_Q049_WATER",')
+lines.append('    "AFFORD_MECHANICAL_GRIP": "CN_Q087_HAND",')
+lines.append('    "AFFORD_PNEUMATIC_SUCTION": "CN_Q049_WATER",')
+lines.append('    "AFFORD_THERMAL_EXCHANGE": "CN_Q180_HOT",')
+lines.append('    "AFFORD_BALLISTIC_PROPULSION": "CN_Q142_FORCE",')
+lines.append('    "AFFORD_ADHESIVE_BONDING": "CN_Q245_MATERIAL",')
+lines.append('    "AFFORD_LEVERAGE_PRY": "CN_Q142_FORCE",')
+lines.append('    "AFFORD_TORQUE_ROTATION": "CN_Q028_MOVE",')
+lines.append('    "AFFORD_DRILL_PENETRATE": "CN_Q108_CUT",')
+lines.append('    "AFFORD_ABRASIVE_GRINDING": "CN_Q095_SURFACE",')
+lines.append('    "AFFORD_EXTRUSION_FORMING": "CN_Q245_MATERIAL",')
+lines.append('    "AFFORD_FASTENER_BOLT_LATCH": "CN_Q225_FIT",')
+lines.append('    "AFFORD_TENSION_CABLE_PULL": "CN_Q120_LINE",')
+lines.append('    "AFFORD_SPRING_SUSPENSION": "CN_Q028_MOVE",')
+lines.append('    "AFFORD_HYDRAULIC_ACTUATION": "CN_Q049_WATER",')
+lines.append('    "AFFORD_ROLLING_WHEEL_BEARING": "CN_Q028_MOVE",')
+lines.append('    "AFFORD_VALVE_FLOW_CONTROL": "CN_Q130_STOP",')
+lines.append('    "AFFORD_FILTER_SEPARATION": "CN_Q108_CUT",')
+lines.append('    "AFFORD_PUMP_FLUID_DISPLACEMENT": "CN_Q049_WATER",')
+lines.append('    "AFFORD_NOZZLE_ATOMIZATION": "CN_Q049_WATER",')
+lines.append('    "AFFORD_OPTICAL_MAGNIFICATION": "CN_Q148_APPEARANCE",')
+lines.append('    "AFFORD_OPTICAL_REFLECTION": "CN_Q148_APPEARANCE",')
+lines.append('    "AFFORD_ELECTRICAL_SWITCH_CONTACT": "CN_Q051_POWER",')
+lines.append('    "AFFORD_ELECTROMAGNETIC_SOLENOID": "CN_Q051_POWER",')
+lines.append('    "AFFORD_PIEZOELECTRIC_PRECISION": "CN_Q051_POWER",')
+lines.append('    "AFFORD_THERMAL_INSULATION_SHIELD": "CN_Q180_HOT",')
+lines.append('    "AFFORD_VIBRATION_DAMPING": "CN_Q028_MOVE",')
+lines.append('    "AFFORD_FLOATATION_BUOYANT_HULL": "CN_Q007_NAUTICAL",')
+lines.append('    "AFFORD_AERODYNAMIC_AIRFOIL_LIFT": "CN_Q151_BIRD",')
+lines.append('    "AFFORD_PARACHUTE_DRAG_DECEL": "CN_Q130_STOP",')
+lines.append('    "AFFORD_COMPUTE_EXECUTE": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_PERSIST_STORAGE": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_SOCKET_TRANSMIT": "CN_Q037_INTERNET",')
+lines.append('    "AFFORD_SOCKET_RECEIVE": "CN_Q037_INTERNET",')
+lines.append('    "AFFORD_ENCRYPT_CRYPTO": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_DECRYPT_CRYPTO": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_SIGN_CRYPTOGRAPHIC": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_VERIFY_SIGNATURE": "CN_Q140_TRUE",')
+lines.append('    "AFFORD_QUERY_DATABASE": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_MUTATE_DATABASE": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_AUTHENTICATE_AUTH": "CN_Q003_LEGAL",')
+lines.append('    "AFFORD_AUTHORIZE_RBAC": "CN_Q003_LEGAL",')
+lines.append('    "AFFORD_SERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_DESERIALIZE_BUFFER": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_HTTP_REST_REQUEST": "CN_Q037_INTERNET",')
+lines.append('    "AFFORD_GRPC_RPC_INVOKE": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_WEBSOCKET_DUPLEX": "CN_Q037_INTERNET",')
+lines.append('    "AFFORD_PUBLISH_EVENT_BUS": "CN_Q084_INFORMATION",')
+lines.append('    "AFFORD_SUBSCRIBE_EVENT_BUS": "CN_Q084_INFORMATION",')
+lines.append('    "AFFORD_CACHE_LOOKUP_KV": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_CACHE_INVALIDATE": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_SPAWN_CONTAINER": "CN_Q229_BOX",')
+lines.append('    "AFFORD_SCHEDULE_CRON_JOB": "CN_Q021_TIME",')
+lines.append('    "AFFORD_LOG_DIAGNOSTIC": "CN_Q084_INFORMATION",')
+lines.append('    "AFFORD_METRIC_GAUGE_EMIT": "CN_Q077_UNIT",')
+lines.append('    "AFFORD_DISTRIBUTED_LOCK": "CN_Q130_STOP",')
+lines.append('    "AFFORD_MAP_REDUCE_BATCH": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_GPU_TENSOR_FORWARD": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_VECTOR_INDEX_SEARCH": "CN_Q001_COMPUTING",')
+lines.append('    "AFFORD_FILE_COMPRESSION_ZIP": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_FILE_DECOMPRESSION": "CN_Q154_PROGRAMMING",')
+lines.append('    "AFFORD_SCHEMA_MIGRATION": "CN_Q029_CHANGE",')
+lines.append('    "AFFORD_INGEST_NUTRIENT": "CN_Q069_FOOD",')
+lines.append('    "AFFORD_CHEMICAL_CATALYSIS": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_OPTICAL_SENSE": "CN_Q186_SENSE",')
+lines.append('    "AFFORD_ACOUSTIC_SENSE": "CN_Q059_SOUND",')
+lines.append('    "AFFORD_TACTILE_SENSE": "CN_Q186_SENSE",')
+lines.append('    "AFFORD_THERMAL_SENSE": "CN_Q180_HOT",')
+lines.append('    "AFFORD_CHEMICAL_OLFACTION": "CN_Q186_SENSE",')
+lines.append('    "AFFORD_CHEMICAL_GUSTATION": "CN_Q069_FOOD",')
+lines.append('    "AFFORD_PROPRIOCEPTIVE_SENSE": "CN_Q186_SENSE",')
+lines.append('    "AFFORD_VESTIBULAR_EQUILIBRIUM": "CN_Q234_CALM",')
+lines.append('    "AFFORD_ELECTRORECEPTION_SENSE": "CN_Q051_POWER",')
+lines.append('    "AFFORD_MAGNETORECEPTION_SENSE": "CN_Q051_POWER",')
+lines.append('    "AFFORD_ECHOLOCATION_SONAR": "CN_Q059_SOUND",')
+lines.append('    "AFFORD_LIDAR_TIME_OF_FLIGHT": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_RADAR_RF_REFLECTION": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_METABOLIC_RESPIRATION": "CN_Q150_LIFE",')
+lines.append('    "AFFORD_PHOTOSYNTHESIS_LIGHT": "CN_Q004_PLANT",')
+lines.append('    "AFFORD_DNA_REPLICATION_COPY": "CN_Q208_GENETICS",')
+lines.append('    "AFFORD_RNA_TRANSCRIPTION": "CN_Q208_GENETICS",')
+lines.append('    "AFFORD_PROTEIN_TRANSLATION": "CN_Q208_GENETICS",')
+lines.append('    "AFFORD_IMMUNE_ANTIBODY_BIND": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_CELLULAR_MITOSIS_SPLIT": "CN_Q022_BIOLOGY",')
+lines.append('    "AFFORD_CELLULAR_APOPTOSIS": "CN_Q213_DEATH",')
+lines.append('    "AFFORD_MEMBRANE_ION_CHANNEL": "CN_Q022_BIOLOGY",')
+lines.append('    "AFFORD_SYNAPTIC_NEUROTRANSMIT": "CN_Q043_MIND",')
+lines.append('    "AFFORD_HORMONE_ENDOCRINE_SEC": "CN_Q002_BODY",')
+lines.append('    "AFFORD_TOXIN_NEUTRALIZATION": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_WOUND_HEALING_CLOT": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_CIRCULATORY_PUMP_HEART": "CN_Q002_BODY",')
+lines.append('    "AFFORD_NEURAL_PLASTICITY_LTP": "CN_Q043_MIND",')
+lines.append('    "AFFORD_CIRCADIAN_RHYTHM_TICK": "CN_Q021_TIME",')
+lines.append('    "AFFORD_SYMBIOTIC_MICROBIOME": "CN_Q022_BIOLOGY",')
+lines.append('    "AFFORD_SPEECH_VOCALIZATION": "CN_Q254_SPEAK",')
+lines.append('    "AFFORD_DISPLAY_PIXEL_EMIT": "CN_Q148_APPEARANCE",')
+lines.append('    "AFFORD_HAPTIC_TACTILE_FEEDBACK": "CN_Q186_SENSE",')
+lines.append('    "AFFORD_FERMENTATION_ANAEROBIC": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_PRECIPITATION_SOLID": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_COMBUSTION_OXIDATION": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_ELECTROLYSIS_SPLITTING": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_POLYMERIZATION_CHAIN": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_DISTILLATION_FRACTION": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_CHROMATOGRAPHY_SEPARATE": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_CRYSTALLIZATION_PURIFY": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_LYOPHILIZATION_FREEZE_DRY": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_CENTRIFUGATION_SPIN": "CN_Q028_MOVE",')
+lines.append('    "AFFORD_ULTRASONIC_CLEAN_CAV": "CN_Q059_SOUND",')
+lines.append('    "AFFORD_AUTOCLAVE_STERILIZATION": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_UV_GERMICIDAL_IRRAD": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_RADIATION_GAMMA_STERIL": "CN_Q006_MEDICINE",')
+lines.append('    "AFFORD_CRYOGENIC_FREEZING": "CN_Q010_CHEMISTRY",')
+lines.append('    "AFFORD_MAGNETIC_LEVITATION": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_ION_THRUST_PROPULSION": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_SOLAR_SAIL_PRESSURE": "CN_Q024_ASTRONOMY",')
+lines.append('    "AFFORD_RADIO_ANTENNA_EMISSION": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_LASER_COHERENT_BEAM": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_FIBER_OPTIC_INTERNAL_REF": "CN_Q013_PHYSICS",')
+lines.append('    "AFFORD_BATTERY_CHEMICAL_CHARGE": "CN_Q051_POWER",')
+lines.append('    "AFFORD_FUEL_CELL_CONVERSION": "CN_Q051_POWER",')
+lines.append('    "AFFORD_SUPERCAPACITOR_DISCHARGE": "CN_Q051_POWER",')
+lines.append('    "AFFORD_THERMOELECTRIC_SEEBECK": "CN_Q051_POWER",')
+lines.append('    "AFFORD_SOLAR_PHOTOVOLTAIC": "CN_Q051_POWER",')
+lines.append('    "AFFORD_WIND_TURBINE_HARVEST": "CN_Q051_POWER",')
+lines.append('    "AFFORD_HYDROELECTRIC_HARVEST": "CN_Q051_POWER",')
+lines.append('    "AFFORD_NUCLEAR_FISSION_HEAT": "CN_Q051_POWER",')
+lines.append('    # Discrete Math, SI, Metric structures')
+lines.append('    "STRUCT_SET_UNORDERED": "CN_Q102_SET",')
+lines.append('    "STRUCT_SEQUENCE_ORDERED": "CN_Q120_LINE",')
+lines.append('    "STRUCT_GRAPH_NETWORK": "CN_Q120_LINE",')
+lines.append('    "STRUCT_TREE_HIERARCHY": "CN_Q127_TREE",')
+lines.append('    "STRUCT_DIRECTED_ACYCLIC_DAG": "CN_Q120_LINE",')
+lines.append('    "STRUCT_LATTICE_ALGEBRA": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_MONOID_SEMIGROUP": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_GROUP_ALGEBRA": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_RING_FIELD": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_VECTOR_SPACE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_MATRIX_TENSOR": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_HILBERT_SPACE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_BANACH_SPACE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_TOPOLOGICAL_MANIFOLD": "CN_Q132_GEOMETRY",')
+lines.append('    "STRUCT_FIBER_BUNDLE": "CN_Q132_GEOMETRY",')
+lines.append('    "STRUCT_RIEMANNIAN_METRIC": "CN_Q132_GEOMETRY",')
+lines.append('    "STRUCT_CATEGORY_THEORY": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_FUNCTOR_MAP": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_NATURAL_TRANSFORMATION": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_ADJUNCTION_MONAD": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_QUOTIENT_STRUCTURE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_DIRECT_PRODUCT": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_COPRODUCT_DISJOINT_SUM": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_HOMOMORPHISM_MAP": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_ISOMORPHISM_BIJECTION": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_AUTOMORPHISM_SYMMETRY": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_PROBABILITY_MEASURE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_SIGMA_ALGEBRA": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_RANDOM_VARIABLE": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_MARKOV_CHAIN": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_MARTINGALE_PROCESS": "CN_Q008_MATHEMATICS",')
+lines.append('    "STRUCT_STOCHASTIC_DIFFUSION": "CN_Q008_MATHEMATICS",')
+lines.append('    "SI_DIM_LENGTH_L": "CN_Q077_UNIT",')
+lines.append('    "SI_DIM_MASS_M": "CN_Q195_MASS",')
+lines.append('    "SI_DIM_TIME_T": "CN_Q021_TIME",')
+lines.append('    "SI_DIM_ELECTRIC_CURRENT_I": "CN_Q051_POWER",')
+lines.append('    "SI_DIM_TEMPERATURE_THETA": "CN_Q180_HOT",')
+lines.append('    "SI_DIM_SUBSTANCE_AMOUNT_N": "CN_Q203_AMOUNT",')
+lines.append('    "SI_DIM_LUMINOUS_INTENSITY_J": "CN_Q088_QUALITY",')
+lines.append('    "METRIC_FREQUENCY_HERTZ": "CN_Q077_UNIT",')
+lines.append('    "METRIC_FORCE_NEWTON": "CN_Q142_FORCE",')
+lines.append('    "METRIC_PRESSURE_PASCAL": "CN_Q077_UNIT",')
+lines.append('    "METRIC_ENERGY_JOULE": "CN_Q051_POWER",')
+lines.append('    "METRIC_POWER_WATT": "CN_Q051_POWER",')
+lines.append('    "METRIC_ELECTRIC_CHARGE_COULOMB": "CN_Q051_POWER",')
+lines.append('    "METRIC_VOLTAGE_VOLT": "CN_Q051_POWER",')
+lines.append('    "METRIC_CAPACITANCE_FARAD": "CN_Q051_POWER",')
+lines.append('    "METRIC_RESISTANCE_OHM": "CN_Q051_POWER",')
+lines.append('    "METRIC_CONDUCTANCE_SIEMENS": "CN_Q051_POWER",')
+lines.append('    "METRIC_MAGNETIC_FLUX_WEBER": "CN_Q051_POWER",')
+lines.append('    "METRIC_MAGNETIC_FIELD_TESLA": "CN_Q051_POWER",')
+lines.append('    "METRIC_INDUCTANCE_HENRY": "CN_Q051_POWER",')
+lines.append('    "METRIC_LUMINOUS_FLUX_LUMEN": "CN_Q077_UNIT",')
+lines.append('    "METRIC_ILLUMINANCE_LUX": "CN_Q077_UNIT",')
+lines.append('    "METRIC_RADIOACTIVITY_BECQUEREL": "CN_Q077_UNIT",')
+lines.append('    "METRIC_RADIATION_DOSE_GRAY": "CN_Q077_UNIT",')
+lines.append('    "METRIC_DOSE_EQUIVALENT_SIEVERT": "CN_Q077_UNIT",')
+lines.append('    "METRIC_CATALYTIC_ACTIVITY_KATAL": "CN_Q077_UNIT",')
+lines.append('    "METRIC_CURRENCY_VALUE_FIAT": "CN_Q017_MONEY",')
+lines.append('    "METRIC_INFORMATION_ENTROPY_BIT": "CN_Q084_INFORMATION",')
+lines.append('    "METRIC_INFORMATION_NAT": "CN_Q084_INFORMATION",')
+lines.append('    "METRIC_COMPUTE_FLOP_COUNT": "CN_Q001_COMPUTING",')
+lines.append('    "METRIC_COMPUTE_MEMORY_BYTE": "CN_Q001_COMPUTING",')
+lines.append('    "METRIC_BANDWIDTH_BIT_PER_SEC": "CN_Q001_COMPUTING",')
+lines.append('}')
+lines.append('')
+lines.append('SLOT_ALIASES: Dict[str, str] = {')
+lines.append('    "TOM_BELIEF_FIRST_ORDER": "TOM_FIRST_ORDER_BELIEF",')
+lines.append('    "TOM_BELIEF_SECOND_ORDER": "TOM_SECOND_ORDER_BELIEF",')
+lines.append('    "TOM_SHARED_ATTENTION": "TOM_JOINT_ATTENTION_FOCUS",')
+lines.append('    "TOM_INTENTION": "PLAN_INTENDED_ACTION_STEP",')
+lines.append('    "TOM_DESIRE": "DRIVE_CURIOSITY_EPISTEMIC",')
+lines.append('    "ROLE_DECEPTIVE_PROJECTION": "INTENT_DECEPTIVE_PROJECTION",')
+lines.append('    "ROLE_SARCASM_IRONY": "INTENT_IRONY_SARCASM",')
+lines.append('    **LEGACY_ONTOLOGY_ALIASES,')
+lines.append('}')
+lines.append('')
+lines.append('for alias_k, target_v in list(SLOT_ALIASES.items()):')
+lines.append('    if target_v in SLOT_NAME_TO_INDEX:')
+lines.append('        SLOT_NAME_TO_INDEX[alias_k] = SLOT_NAME_TO_INDEX[target_v]')
+lines.append('')
+lines.append('')
+lines.append('def get_slot_by_name(name: str) -> Optional[SlotDefinition]:')
+lines.append('    """Retrieves slot definition by exact name (supporting legacy aliases)."""')
+lines.append('    idx = SLOT_NAME_TO_INDEX.get(name)')
+lines.append('    if idx is not None:')
+lines.append('        return CANONICAL_SLOTS[idx]')
+lines.append('    return None')
+lines.append('')
+lines.append('')
+lines.append('def get_slot_by_index(index: int) -> SlotDefinition:')
+lines.append('    """Retrieves slot definition by index [0, 1023]."""')
+lines.append('    if not (0 <= index < 1024):')
+lines.append('        raise IndexError(f"Slot index {index} out of range [0, 1023]")')
+lines.append('    return CANONICAL_SLOTS[index]')
+lines.append('')
+lines.append('')
+lines.append('def get_slot_names() -> List[str]:')
+lines.append('    """Returns an ordered list of all 1024 canonical slot names."""')
+lines.append('    return [slot.name for slot in CANONICAL_SLOTS]')
+lines.append('')
+lines.append('')
+lines.append('# Expose all 1024 slot definitions as module-level immutable integer constants')
+lines.append('for _slot in CANONICAL_SLOTS:')
+lines.append('    globals()[_slot.name] = _slot.index')
+lines.append('')
+lines.append('# Expose legacy aliases at module level')
+lines.append('for alias_k, target_v in SLOT_ALIASES.items():')
+lines.append('    if target_v in SLOT_NAME_TO_INDEX:')
+lines.append('        globals()[alias_k] = SLOT_NAME_TO_INDEX[target_v]')
+lines.append('')
+lines.append('')
+lines.append('def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canonical_slots_layout.json") -> Path:')
+lines.append('    """Exports the 1024 canonical slot definitions to a JSON file."""')
+lines.append('    p = Path(output_path)')
+lines.append('    p.parent.mkdir(parents=True, exist_ok=True)')
+lines.append('    slots_layout = [')
+lines.append('        {')
+lines.append('            "index": s.index,')
+lines.append('            "name": s.name,')
+lines.append('            "band_id": int(s.band),')
+lines.append('            "band_name": s.band.name,')
+lines.append('            "category": s.category,')
+lines.append('            "description": s.description,')
+lines.append('        }')
+lines.append('        for s in CANONICAL_SLOTS')
+lines.append('    ]')
+lines.append('    with open(p, "w", encoding="utf-8") as f:')
+lines.append('        json.dump(slots_layout, f, indent=2)')
+lines.append('    return p')
+lines.append('')
+lines.append('')
+lines.append('__all__ = [')
+lines.append('    "SlotBand",')
+lines.append('    "SlotDefinition",')
+lines.append('    "BAND_0_SLOTS",')
+lines.append('    "BAND_1_SLOTS",')
+lines.append('    "BAND_2_SLOTS",')
+lines.append('    "BAND_3_SLOTS",')
+lines.append('    "BAND_4_SLOTS",')
+lines.append('    "BAND_5_SLOTS",')
+lines.append('    "BAND_6_SLOTS",')
+lines.append('    "BAND_7_SLOTS",')
+lines.append('    "CANONICAL_SLOTS",')
+lines.append('    "SLOT_NAME_TO_INDEX",')
+lines.append('    "SLOT_INDEX_TO_NAME",')
+lines.append('    "SLOT_ALIASES",')
+lines.append('    "LEGACY_ONTOLOGY_ALIASES",')
+lines.append('    "get_slot_by_name",')
+lines.append('    "get_slot_by_index",')
+lines.append('    "get_slot_names",')
+lines.append('    "export_canonical_slots_layout",')
+lines.append('] + [slot.name for slot in CANONICAL_SLOTS] + list(SLOT_ALIASES.keys())')
+lines.append('')
 
-    lines.append("# Combined canonical list of all 1024 slots")
-    lines.append("CANONICAL_SLOTS: List[SlotDefinition] = (")
-    lines.append("    BAND_0_SLOTS + BAND_1_SLOTS + BAND_2_SLOTS + BAND_3_SLOTS +")
-    lines.append("    BAND_4_SLOTS + BAND_5_SLOTS + BAND_6_SLOTS + BAND_7_SLOTS")
-    lines.append(")")
-    lines.append("")
-    lines.append('assert len(CANONICAL_SLOTS) == 1024, f"Expected 1024 slots, got {len(CANONICAL_SLOTS)}"')
-    lines.append("for i, slot in enumerate(CANONICAL_SLOTS):")
-    lines.append('    assert slot.index == i, f"Slot {slot.name} index mismatch: expected {i}, got {slot.index}"')
-    lines.append("")
-    lines.append("SLOT_NAME_TO_INDEX: Dict[str, int] = {slot.name: slot.index for slot in CANONICAL_SLOTS}")
-    lines.append("SLOT_INDEX_TO_NAME: Dict[int, str] = {slot.index: slot.name for slot in CANONICAL_SLOTS}")
-    lines.append("")
-    lines.append("# Backward compatibility aliases for historical or synonymous slot names")
-    lines.append("SLOT_ALIASES: Dict[str, str] = {")
-    lines.append('    "TOM_BELIEF_FIRST_ORDER": "TOM_FIRST_ORDER_BELIEF",')
-    lines.append('    "TOM_BELIEF_SECOND_ORDER": "TOM_SECOND_ORDER_BELIEF",')
-    lines.append('    "TOM_SHARED_ATTENTION": "TOM_JOINT_ATTENTION_FOCUS",')
-    lines.append('    "TOM_INTENTION": "PLAN_INTENDED_ACTION_STEP",')
-    lines.append('    "TOM_DESIRE": "DRIVE_CURIOSITY_EPISTEMIC",')
-    lines.append('    "ROLE_DECEPTIVE_PROJECTION": "INTENT_DECEPTIVE_PROJECTION",')
-    lines.append('    "ROLE_SARCASM_IRONY": "INTENT_IRONY_SARCASM",')
-    lines.append("}")
-    lines.append("")
-    lines.append("for alias_k, target_v in list(SLOT_ALIASES.items()):")
-    lines.append("    if target_v in SLOT_NAME_TO_INDEX:")
-    lines.append("        SLOT_NAME_TO_INDEX[alias_k] = SLOT_NAME_TO_INDEX[target_v]")
-    lines.append("")
-    lines.append("")
-    lines.append("def get_slot_by_name(name: str) -> Optional[SlotDefinition]:")
-    lines.append('    """Retrieves slot definition by exact name (supporting legacy aliases)."""')
-    lines.append("    idx = SLOT_NAME_TO_INDEX.get(name)")
-    lines.append("    if idx is not None:")
-    lines.append("        return CANONICAL_SLOTS[idx]")
-    lines.append("    return None")
-    lines.append("")
-    lines.append("")
-    lines.append("def get_slot_by_index(index: int) -> SlotDefinition:")
-    lines.append('    """Retrieves slot definition by index [0, 1023]."""')
-    lines.append("    if not (0 <= index < 1024):")
-    lines.append('        raise IndexError(f"Slot index {index} out of range [0, 1023]")')
-    lines.append("    return CANONICAL_SLOTS[index]")
-    lines.append("")
-    lines.append("")
-    lines.append("def get_slot_names() -> List[str]:")
-    lines.append('    """Returns an ordered list of all 1024 canonical slot names."""')
-    lines.append("    return [slot.name for slot in CANONICAL_SLOTS]")
-    lines.append("")
-    lines.append("")
-    lines.append("# Expose all 1024 slot definitions as module-level immutable integer constants")
-    lines.append("for _slot in CANONICAL_SLOTS:")
-    lines.append("    globals()[_slot.name] = _slot.index")
-    lines.append("")
-    lines.append("# Expose legacy aliases at module level")
-    lines.append("for alias_k, target_v in SLOT_ALIASES.items():")
-    lines.append("    if target_v in SLOT_NAME_TO_INDEX:")
-    lines.append("        globals()[alias_k] = SLOT_NAME_TO_INDEX[target_v]")
-    lines.append("")
-    lines.append("")
-    lines.append('def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canonical_slots_layout.json") -> Path:')
-    lines.append('    """Exports the 1024 canonical slot definitions to a JSON file."""')
-    lines.append("    p = Path(output_path)")
-    lines.append("    p.parent.mkdir(parents=True, exist_ok=True)")
-    lines.append("    slots_layout = [")
-    lines.append("        {")
-    lines.append('            "index": s.index,')
-    lines.append('            "name": s.name,')
-    lines.append('            "band_id": int(s.band),')
-    lines.append('            "band_name": s.band.name,')
-    lines.append('            "category": s.category,')
-    lines.append('            "description": s.description,')
-    lines.append("        }")
-    lines.append("        for s in CANONICAL_SLOTS")
-    lines.append("    ]")
-    lines.append('    with open(p, "w", encoding="utf-8") as f:')
-    lines.append("        json.dump(slots_layout, f, indent=2)")
-    lines.append("    return p")
-    lines.append("")
-    lines.append("")
-    lines.append("__all__ = [")
-    lines.append('    "SlotBand",')
-    lines.append('    "SlotDefinition",')
-    lines.append('    "BAND_0_SLOTS",')
-    lines.append('    "BAND_1_SLOTS",')
-    lines.append('    "BAND_2_SLOTS",')
-    lines.append('    "BAND_3_SLOTS",')
-    lines.append('    "BAND_4_SLOTS",')
-    lines.append('    "BAND_5_SLOTS",')
-    lines.append('    "BAND_6_SLOTS",')
-    lines.append('    "BAND_7_SLOTS",')
-    lines.append('    "CANONICAL_SLOTS",')
-    lines.append('    "SLOT_NAME_TO_INDEX",')
-    lines.append('    "SLOT_INDEX_TO_NAME",')
-    lines.append('    "SLOT_ALIASES",')
-    lines.append('    "get_slot_by_name",')
-    lines.append('    "get_slot_by_index",')
-    lines.append('    "get_slot_names",')
-    lines.append('    "export_canonical_slots_layout",')
-    lines.append("] + [slot.name for slot in CANONICAL_SLOTS] + list(SLOT_ALIASES.keys())")
-    lines.append("")
+target = Path("src/core/slots.py")
+with open(target, "w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
 
-    return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    code = generate_slots_code()
-    target = Path("src/core/slots.py")
-    with open(target, "w", encoding="utf-8") as f:
-        f.write(code)
-    print(f"Generated {target.resolve()} successfully with 1024 slots!")
+print(f"Successfully generated {target.resolve()} with 1024 slots!")

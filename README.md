@@ -86,8 +86,8 @@ To prevent circular dictionary definitions, Mentalese roots its non-primitive vo
 ### 1.3 Unambiguous Topology & Categorical Anchors
 
 Syntactic structure is governed by Lojban construct grammar, utilizing fixed predicate place structures (*brivla* valencies like `klama` agent/destination/origin slots) and structural logic operators (*cmavo*). This design eliminates syntactical ambiguity. Leaf entities and relational edges are tied to established categorical taxonomies:
-* **WordNet Synsets:** Map concrete concepts to top-level hypernyms to preserve domain categorization.
-* **FrameNet Roles:** Map semantic edges to validated thematic roles (such as `Agent`, `Patient`, `Donor`, `Theme`, `Instrument`, `Location`).
+* **ConceptNet 5.7.0 Offline Knowledge Graph:** Grounds concepts into 256 data-driven taxonomic and affordance dimensions across 403,503 concepts and 713,784 multi-POS entries stored in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **WordNet Synsets & FrameNet Roles:** Provide fine-grained lexical anchors and thematic place roles (`Agent`, `Patient`, `Donor`, `Theme`, `Instrument`, `Location`).
 
 ### 1.4 Cryptographic Merkle-Tree Sub-Graph Folding
 
@@ -129,15 +129,15 @@ Mentalese operates over a **1024-dimension quaternary vector space** ($\Sigma = 
 ├────────────────────────────┬────────────────────────────┬────────────────────────────┬─────────────────────────────────┤
 │ Band 0 (Slots 000-127)     │ Band 1 (Slots 128-255)     │ Band 2 (Slots 256-383)     │ Band 3 (Slots 384-511)          │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
-│ Universal NSM Primes,      │ Structural Valencies,      │ Formal Logic Quantifiers,  │ Ontological Types & Taxonomies, │
-│ Classical Kinematics &     │ Grammatical Tense/Aspect,  │ Variable Binding Registers │ Abstract Math Structures,       │
-│ Continuous Physics Fields  │ AST & Concurrency Markers  │ (X0..X7) & Sequent Proofs  │ SI Metrology Metric Scales      │
+│ Universal NSM Primes,      │ Structural Valencies,      │ Formal Logic Quantifiers,  │ ConceptNet 5.7.0 Taxonomies,    │
+│ Classical Kinematics &     │ Grammatical Tense/Aspect,  │ Variable Binding Registers │ Scientific Domains & Structures │
+│ Continuous Physics Fields  │ AST & Concurrency Markers  │ (X0..X7) & Sequent Proofs  │ (CN_Q001_COMPUTING..CN_Q128)    │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
 │ Band 4 (Slots 512-639)     │ Band 5 (Slots 640-767)     │ Band 6 (Slots 768-895)     │ Band 7 (Slots 896-1023)         │
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
-│ Cyber-Physical Tool        │ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
-│ Affordances & Executable   │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
-│ Digital Software APIs      │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
+│ ConceptNet Tool Affordances│ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
+│ Cyber-Physical Actions     │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
+│ (CN_Q129_LEAVE..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
 └────────────────────────────┴────────────────────────────┴────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -164,17 +164,21 @@ Enables algebraic variable unification and formal deductive sequent derivations 
 * **`280–319` (Variable Binding & Query Unification Registers):** Dedicated algebraic register slots (`VAR_SLOT_X0` through `VAR_SLOT_X7`, unification targets `QUERY_TARGET_?X`, `QUERY_TARGET_?Y`, `QUERY_TARGET_?Z`, and lambda parameter closures `LAMBDA_PARAM_0` $\dots$ `LAMBDA_PARAM_3`, `LAMBDA_BODY_HEAD`).
 * **`320–383` (Sequent Calculus & Derivation Operators):** Formal proof step transitions (`SEQ_ENTAILMENT_TURNSTILE`, `SEQ_MODUS_PONENS_STEP`, `SEQ_RESOLUTION_STEP`, `SEQ_CUT_RULE_APPLIED`, `SEQ_HYPOTHESIS_INTRO`, `SEQ_AXIOM_DISCHARGE`, `SEQ_CONTRADICTION_CORE`).
 
-#### Band 3: Ontological Types, Abstract Mathematical Structures & SI Scales (384–511)
-Categorical foundations, abstract data structures, and physical dimensional analysis.
-* **`384–431` (Entity Taxonomies & Thematic Roles):** Core entity classifications (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_INANIMATE_PHYSICAL`, `TYPE_NATURAL_OBJECT`, `TYPE_ARTIFACT`, `TYPE_SUBSTANCE_MASS`, `TYPE_COLLECTION_SET`, `TYPE_ABSTRACT_CONCEPT`, `TYPE_PROPOSITION`, `TYPE_EVENT`, `TYPE_STATE`, `TYPE_PROCESS`, `TYPE_TEMPORAL_INTERVAL`, `TYPE_SPATIAL_REGION`, `TYPE_MEASURE_SCALAR`, `TYPE_NUMERIC_VALUE`, `TYPE_ORGANIZATION`, `TYPE_COMMUNICATION_MSG`).
-* **`432–471` (Abstract Mathematical & Data Structures):** Pure mathematical algebraic structures (`STRUCT_GRAPH_NETWORK`, `STRUCT_TREE_HIERARCHY`, `STRUCT_MATRIX_TENSOR`, `STRUCT_SET_UNORDERED`, `STRUCT_SEQUENCE_ORDERED`, `STRUCT_LATTICE_ALGEBRA`, `STRUCT_TOPOLOGICAL_MANIFOLD`, `STRUCT_GROUPOID_CATEGORY`).
-* **`472–511` (SI Metric Dimensions & Units):** Fundamental dimensional physical units (`SI_DIM_LENGTH_METER`, `SI_DIM_MASS_KILOGRAM`, `SI_DIM_TIME_SECOND`, `SI_DIM_CURRENT_AMPERE`, `SI_DIM_TEMPERATURE_KELVIN`, `SI_DIM_AMOUNT_MOLE`, `SI_DIM_LUMINOUS_CANDELA`, `SI_DIM_CURRENCY_VALUE`, `SI_DIM_INFORMATION_SHANNON`).
+#### Band 3: ConceptNet Ontological Taxonomies, Scientific Domains & Structures (384–511)
+128 data-driven dimensions derived via **Usage-Weighted Ontological Density Scoring (U-ODS)** and an **Inverted-Index Partition Refinement Solver** over 34M ConceptNet 5.7.0 assertions with 2-hop matrix propagation ($M_{\text{inherited}} = M + TM + T^2M$):
+* **`384–407` (Core Technical & Formal Domains):** `CN_Q001_COMPUTING`, `CN_Q002_BODY`, `CN_Q003_LEGAL`, `CN_Q004_PLANT`, `CN_Q005_MUSIC`, `CN_Q006_MEDICINE`, `CN_Q007_NAUTICAL`, `CN_Q008_MATHEMATICS`, `CN_Q009_MILITARY`, `CN_Q010_CHEMISTRY`, `CN_Q011_ANIMAL`, `CN_Q012_TANGIBLE_THING`, `CN_Q013_AUSTRALIA`, `CN_Q014_GROUP`, `CN_Q015_PERSON`, `CN_Q016_SPORTS`, `CN_Q017_MONEY`, `CN_Q018_CHESS`, `CN_Q019_LINGUISTICS`, `CN_Q020_COUNTY_SEAT`, `CN_Q021_TIME`, `CN_Q022_BIOLOGY`, `CN_Q023_WORK`, `CN_Q024_CARDS`.
+* **`408–455` (Scientific & Structural Categories):** `CN_Q025_TRANSPORT`, `CN_Q026_STATE`, `CN_Q027_SUGAR`, `CN_Q028_MOVE`, `CN_Q029_ZOOLOGY`, `CN_Q030_ANATOMY`, `CN_Q031_DISEASE`, `CN_Q032_GOOD`, `CN_Q033_CANADA`, `CN_Q034_WATER_CRAFT`, `CN_Q035_GRAMMAR`, `CN_Q036_HAPPINESS`, `CN_Q037_INTERNET`, `CN_Q038_BOTANY`, `CN_Q039_FINANCE`, `CN_Q040_PERSON`, `CN_Q041_SCOTLAND`, `CN_Q042_DEVICE`, `CN_Q043_MIND`, `CN_Q044_FURNITURE`, `CN_Q045_SKIN`, `CN_Q046_ACTION`, `CN_Q047_CLOTHING`, `CN_Q048_PHYSICS`, `CN_Q049_WATER`, `CN_Q050_CLASS`, `CN_Q051_NEW_ZEALAND`, `CN_Q052_GEOLOGY`, `CN_Q053_GOD`, `CN_Q054_IRELAND`, `CN_Q055_BASEBALL`, `CN_Q056_COLOR`, `CN_Q057_PHILOSOPHY`, `CN_Q058_NORTH_AMERICA`, `CN_Q059_CHURCH`, `CN_Q060_BIRD`, `CN_Q061_LANGUAGE`, `CN_Q062_CHRISTIANITY`, `CN_Q063_POINT`, `CN_Q064_PATHOLOGY`, `CN_Q065_FISH`, `CN_Q066_BIOCHEMISTRY`, `CN_Q067_BAD`, `CN_Q068_WRONG`, `CN_Q069_FOOD`, `CN_Q070_VALUE`, `CN_Q071_CRICKET`, `CN_Q072_HUMAN_ACTIVITY`.
+* **`456–511` (Contextual & Structural Taxonomies):** `CN_Q073_PLACE` $\dots$ `CN_Q128_MANNER`.
 
-#### Band 4: Cyber-Physical Tool Affordances & Digital Software Operations (512–639)
-Enables anchor-free functional reasoning over physical robotics tools and digital software APIs before knowing explicit surface nouns.
-* **`512–543` (Mechanical & Physical Tool Affordances):** Functional physical capabilities (`AFFORD_INCISED_CUTTING` [blades/lasers], `AFFORD_PERCUSSIVE_IMPACT` [hammers/axes], `AFFORD_FLUID_CONTAINMENT` [beakers/tanks], `AFFORD_MECHANICAL_GRIP` [robotic clamps], `AFFORD_PNEUMATIC_SUCTION` [vacuum grippers], `AFFORD_THERMAL_EXCHANGE` [heaters/heat sinks], `AFFORD_BALLISTIC_PROPULSION` [thrusters/cannons], `AFFORD_ADHESIVE_BONDING`, `AFFORD_PUMP_FLUID_DISPLACEMENT`, `AFFORD_OPTICAL_MAGNIFICATION`).
-* **`544–575` (Digital, API & Software Affordances):** Executable software operations (`AFFORD_COMPUTE_EXECUTE`, `AFFORD_PERSIST_STORAGE`, `AFFORD_SOCKET_TRANSMIT`, `AFFORD_ENCRYPT_CRYPTO`, `AFFORD_QUERY_DATABASE`, `AFFORD_AUTHENTICATE_AUTH`, `AFFORD_SERIALIZE_BUFFER`, `AFFORD_ASYNC_DISPATCH`).
-* **`576–639` (Chemical, Biological & Sensory Affordances):** Environmental interfaces (`AFFORD_INGEST_NUTRIENT`, `AFFORD_CHEMICAL_CATALYSIS`, `AFFORD_OPTICAL_SENSE_RGB`, `AFFORD_ACOUSTIC_SENSE_MIC`, `AFFORD_SPECTROSCOPIC_SENSE`).
+#### Band 4: ConceptNet Cyber-Physical Tool Affordances & Actions (512–639)
+128 data-driven affordance and action dimensions enabling anchor-free physical/functional reasoning and **2-tier vector decoding**:
+* **`512–543` (Physical Dynamics & Action Affordances):** `CN_Q129_LEAVE`, `CN_Q130_STOP`, `CN_Q135_DANCE`, `CN_Q142_FORCE`, `CN_Q144_EVENT`, `CN_Q146_TAKE`, `CN_Q158_KILL`, `CN_Q166_OPEN`, `CN_Q174_ATTACK`, `CN_Q183_MAKE`, `CN_Q194_FIGHT`, `CN_Q244_HIT`, `CN_Q252_ACTIVITY`.
+* **`544–580` (Material, Spatial & Structural Affordances):** `CN_Q137_METAL`, `CN_Q139_SCHOOL`, `CN_Q148_APPEARANCE`, `CN_Q161_DESK`, `CN_Q165_RING`, `CN_Q180_HOT`, `CN_Q189_ISLAND`, `CN_Q195_MASS`, `CN_Q204_AREA`, `CN_Q207_VEHICLE`, `CN_Q229_BOX`, `CN_Q245_MATERIAL`.
+* **`581–639` (Cognitive, Sensory & Functional Capabilities):** `CN_Q140_TRUE`, `CN_Q150_LIFE`, `CN_Q153_DESIRE`, `CN_Q154_PROGRAMMING`, `CN_Q171_HAPPY`, `CN_Q186_SENSE`, `CN_Q188_LIE`, `CN_Q196_OPINION`, `CN_Q208_GENETICS`, `CN_Q213_DEATH`, `CN_Q215_DRUG`, `CN_Q234_CALM`, `CN_Q254_SPEAK`, `CN_Q255_ABILITY`, `CN_Q256_WORTHY`.
+* **2-Tier Realization Decoding:**
+  1. *Tier 1 (In-Memory SIMD)*: 23,383 singletons (mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<10\text{ ms}$.
+  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query SQLite clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) resolve directly into canonical `CN_Q*` indices via `src/core/slots.py`.
 
 #### Band 5: Theory of Mind, Multi-Agent Beliefs, Goals & Pragmatics (640–767)
 Models recursive social cognition, intentions, affective drives, and pragmatic speech acts.
@@ -304,6 +308,19 @@ $$\max_{S \subset \mathcal{F}, \vert{}S\vert{}=256} \left[ \frac{1}{\vert{}S\ver
 2. **Forward Map to Candidate Tensors:** Parse the corpus into quaternary arrays.
 3. **Run Information Profiler:** Flag slots with $H(D_i) < 0.1\text{ bits}$ or $I(D_i; D_j) > 0.5\text{ bits}$.
 4. **Refactor & Lock:** Reallocate slots to high-value discriminating concepts until average entropy is maximized.
+
+### 4.4. ConceptNet 256-D Optimization & 2-Tier Vector Decoding
+
+To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/conceptnetDimensions.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/conceptnetDimensions.md)):
+
+* **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix propagation ($M_{\text{inherited}} = M + TM + T^2M$) expanding 34M assertions to **54.61M non-zero connections** in **1.42s**.
+* **Usage-Weighted Ontological Density Scoring (U-ODS)**: Ranks concept utility by combining direct degree, relation entropy, affordance ratio, DAG centrality, and real-world Zipf corpus frequency:
+  $$\text{U-ODS}(c) = \left[ \log_2(1 + \text{deg}(c)) \cdot (1.0 + 1.2 H_{\text{rel}}(c)) \cdot (1.0 + 1.5 \alpha(c)) + 0.5 \min(3, \tau(c)) \right] \cdot \left(1.0 + 2.0 \frac{\text{Zipf}(c)}{8.0}\right)$$
+* **Inverted-Index Hopcroft Partition Solver**: Solves the optimal 256 dimensions across 72,930 unique semantic archetypes in **40.39s** ($157.76\text{ ms/question}$).
+* **2-Tier Vector Decoding Architecture**:
+  1. **Tier 1 (In-Memory SIMD)**: **23,383 singletons (32.1% of archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage)** decode in **$<10\text{ ms}$** via bitwise distance search over [`data/concept_codebook.csv.gz`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/concept_codebook.csv.gz).
+  2. **Tier 2 (Category Basin Search)**: Specialized technical/taxonomic terms query indexed category clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Reconciles legacy symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) with canonical `CN_Q*` slots, preserving 100% solver test compatibility.
 
 ---
 

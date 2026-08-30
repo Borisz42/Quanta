@@ -20,7 +20,7 @@ The **Quaternary Universal Abstract Natural Topology Architecture (QUANTA)** bui
 | :--- | :--- | :--- | :--- | :--- |
 | **Representational Domain** | Unbounded continuous floating-point vectors ($\mathbf{x} \in \mathbb{R}^d$)[^1] | Unconstrained token strings (Python / JSON)[^5] | Symbolic probabilistic expressions[^6] | Discrete quaternary vector space ($\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$, 256 Bytes) |
 | **Epistemic Valuation** | Implicit via soft activation logits | Implicit via text tokens | Probabilistic priors and posteriors[^6] | Explicit 4-valued epistemic logic ($\mathcal{B}_4 \in \{0, 1, 2, 3\}$)[^7] |
-| **Semantic Grounding** | Distributional semantics via co-occurrence | Task-specific syntax (e.g., AST syntax) | Domain-specific primitives | Natural Semantic Metalanguage (NSM) + WordNet/FrameNet + SI Metrology |
+| **Semantic Grounding** | Distributional semantics via co-occurrence | Task-specific syntax (e.g., AST syntax) | Domain-specific primitives | Natural Semantic Metalanguage (NSM) + ConceptNet 5.7.0 (256-D U-ODS Taxonomies & Affordances) + WordNet/FrameNet + SI Metrology |
 | **Syntactic Unambiguity** | Probable token sequences; ambiguous | Program syntax; semi-unambiguous | Formal syntax | Lojban predicate valency (*brivla/cmavo*) + AST graph grammar |
 | **Logical Verification** | Statistical approximation (prone to hallucination)[^1] | External code execution runtime | Probabilistic inference engine | Dual-gate: LTNs[^12] + Top-down $s(\text{CASP})$ / Clingo coinductive ASP[^13] |
 | **Context Overhead** | Quadratic scaling $\mathcal{O}(N^2)$ in VRAM | Linear token sequence scaling $\mathcal{O}(N)$[^5] | Variable tree-search scaling | Cryptographic Merkle CID folding + Page-Table RAG ($\mathcal{O}(1)$ VRAM) |
@@ -93,8 +93,8 @@ where $\mathcal{L}_{\text{Distortion}}(d)$ represents semantic concept aliasing/
 * **Band 0 (000–127)**: Universal NSM Primes (0–63), Continuous Classical Kinematics & Trajectories (64–95), Vector Fields & Material States (96–127).
 * **Band 1 (128–255)**: Lojban Predicate Valencies $x_1 \dots x_7$ (128–143), Grammatical Tense/Aspect (144–167), AST Compiler Topologies (168–215), OS Concurrency Primitives (216–255).
 * **Band 2 (256–383)**: Formal Logic Quantifiers $\forall, \exists, \exists!, \text{MOST}$ (256–279), Variable Binding Registers $X_0 \dots X_7$ & Query Heads (280–319), Sequent Calculus & Derivation Operators (320–383).
-* **Band 3 (384–511)**: Entity Taxonomies & Roles (384–431), Abstract Mathematical Structures: Graphs, Trees, Lattices, Tensors (432–471), SI Metric Dimensions & Units (472–511).
-* **Band 4 (512–639)**: Mechanical/Physical Tool Affordances (512–543), Digital Software API Affordances (544–575), Chemical, Biological & Sensory Interfaces (576–639).
+* **Band 3 (384–511)**: 128 ConceptNet Ontological Taxonomies & Scientific Domains (`CN_Q001_COMPUTING` $\dots$ `CN_Q128_MANNER`) derived via Usage-Weighted Ontological Density Scoring (U-ODS) across 34M ConceptNet assertions.
+* **Band 4 (512–639)**: 128 ConceptNet Cyber-Physical Tool Affordances, Mechanical Actions & Functional Capabilities (`CN_Q129_LEAVE` $\dots$ `CN_Q256_WORTHY`), enabling 2-tier vector decoding (23,383 singletons in $<10\text{ ms}$ SIMD + SQLite category basin fallback).
 * **Band 5 (640–767)**: Nested Multi-Agent Theory of Mind (1st, 2nd, 3rd-order beliefs) (640–671), Teleological Goal Hierarchies & Plans (672–703), Affective Drives (704–735), Pragmatic Speech Acts (736–767).
 * **Band 6 (768–895)**: Epistemic Knowledge Sources (768–799), Deontic Normative Logic (800–831), $s(\text{CASP})$ Stable Model Invariants (832–863), Modal Alethic Logic (864–895).
 * **Band 7 (896–1023)**: Full 13-Relation Allen Temporal Interval Calculus & Inverses (896–927), Full RCC-8 Spatial Mereotopology (928–959), Pearl Causal Hierarchy $L_1, L_2, L_3$ & Counterfactuals (960–991), LTL / Branching CTL Model Checking (992–1023).
