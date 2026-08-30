@@ -7,7 +7,15 @@ import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.asg import QuantaGraph, QuantaNode
-from core.types import QuantaVector, QuaternaryValue
+from core.types import (
+    QuantaVector,
+    QuaternaryValue,
+    EpistemicValue,
+    StructuralValue,
+    RoutingValue,
+    RegisterValue,
+    BandContract,
+)
 from parser.lexical_grounder import WordNetLexicalGrounder
 
 
@@ -311,7 +319,7 @@ class FOLParser:
         has_xor = any(t.type == FOLTokenType.XOR for t in tokens)
 
         if has_implication:
-            root_node.set_slot("LJB_GANAI_IF_THEN", 3 if is_query else 1)
+            root_node.set_slot("LJB_GANAI_IF_THEN", 1)
             root_node.set_slot("GRAPH_ENTAILMENT_EDGE", 1)
             root_node.set_slot("GRAPH_BRANCH_COND", 1)
             root_node.set_slot("GRAPH_BRANCH_THEN", 1)

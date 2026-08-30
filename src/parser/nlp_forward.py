@@ -1475,7 +1475,7 @@ class NLPForwardParser:
         if any(w in tokens for w in ("touch", "touching", "contact", "connected", "attached", "against")):
             node.set_slot("NSM_TOUCHING", 2 if has_negation else 1)
         if any(w in tokens for w in ("where", "place", "location", "area", "zone", "region", "garden", "room", "hallway", "kitchen", "bathroom", "office", "bedroom")):
-            node.set_slot("VAL_LOCATION_SLOT", 3 if has_uncertainty else 1)
+            node.set_slot("VAL_LOCATION_SLOT", 1)
 
         # 6. Concurrency & Synchronization
         if any(w in tokens for w in ("concurrent", "parallel", "simultaneously", "meanwhile", "async")):
@@ -1512,7 +1512,7 @@ class NLPForwardParser:
         if "either" in tokens or "xor" in tokens:
             node.set_slot("LJB_JON_XOR", 1)
         if any(w in tokens for w in ("if", "suppose", "assuming", "whether", "provided")):
-            node.set_slot("LJB_GANAI_IF_THEN", 3 if has_uncertainty else 1)
+            node.set_slot("LJB_GANAI_IF_THEN", 1)
         if any(w in tokens for w in ("because", "since", "due to", "explains", "causes")):
             node.set_slot("LJB_GANAI_IF_THEN", 1)
             node.set_slot("EPIST_ABDUCTIVE_BEST_EXPL", 1)

@@ -18,6 +18,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
+from core.types import BandContract
+
 
 class SlotBand(enum.IntEnum):
     BAND_0_NSM_KINEMATICS = 0
@@ -33,6 +35,18 @@ class SlotBand(enum.IntEnum):
     BAND_3_EPISTEMIC_METARULES = 6
 
 
+BAND_CONTRACTS: Dict[SlotBand, BandContract] = {
+    SlotBand.BAND_0_NSM_KINEMATICS: BandContract.EPISTEMIC,
+    SlotBand.BAND_1_VALENCIES_TOPOLOGY: BandContract.STRUCTURAL,
+    SlotBand.BAND_2_LOGIC_VARIABLES: BandContract.REGISTER,
+    SlotBand.BAND_3_ONTOLOGY_STRUCTURES: BandContract.EPISTEMIC,
+    SlotBand.BAND_4_AFFORDANCES_OPERATIONS: BandContract.EPISTEMIC,
+    SlotBand.BAND_5_TOM_PRAGMATICS: BandContract.EPISTEMIC,
+    SlotBand.BAND_6_PROOF_DEONTICS: BandContract.EPISTEMIC,
+    SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL: BandContract.EPISTEMIC,
+}
+
+
 @dataclass(frozen=True)
 class SlotDefinition:
     index: int
@@ -40,6 +54,10 @@ class SlotDefinition:
     band: SlotBand
     category: str
     description: str
+
+    @property
+    def contract(self) -> BandContract:
+        return BAND_CONTRACTS.get(self.band, BandContract.EPISTEMIC)
 
 # ==============================================================================
 # BAND_0_SLOTS
@@ -1428,6 +1446,26 @@ def get_slot_names() -> List[str]:
     return [slot.name for slot in CANONICAL_SLOTS]
 
 
+def get_band_contract(band: Union[SlotBand, int]) -> BandContract:
+    """Retrieves the polymorphic contract for a band."""
+    band_enum = SlotBand(band)
+    return BAND_CONTRACTS.get(band_enum, BandContract.EPISTEMIC)
+
+
+def get_slot_contract(slot: Union[int, str]) -> BandContract:
+    """Retrieves the polymorphic contract for a slot index or name."""
+    if isinstance(slot, str):
+        s_def = get_slot_by_name(slot)
+        if s_def is None:
+            raise KeyError(f"Unknown slot name: {slot}")
+        return get_band_contract(s_def.band)
+    idx = int(slot)
+    if not (0 <= idx < 1024):
+        raise IndexError(f"Slot index {idx} out of range [0, 1023]")
+    s_def = get_slot_by_index(idx)
+    return get_band_contract(s_def.band)
+
+
 # Expose all 1024 slot definitions as module-level immutable integer constants
 for _slot in CANONICAL_SLOTS:
     globals()[_slot.name] = _slot.index
@@ -1450,6 +1488,7 @@ def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canoni
             "band_name": s.band.name,
             "category": s.category,
             "description": s.description,
+            "contract": s.contract.value,
         }
         for s in CANONICAL_SLOTS
     ]
@@ -1461,6 +1500,9 @@ def export_canonical_slots_layout(output_path: Union[str, Path] = "output/canoni
 __all__ = [
     "SlotBand",
     "SlotDefinition",
+    "BAND_CONTRACTS",
+    "get_band_contract",
+    "get_slot_contract",
     "BAND_0_SLOTS",
     "BAND_1_SLOTS",
     "BAND_2_SLOTS",

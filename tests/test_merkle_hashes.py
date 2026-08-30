@@ -134,7 +134,7 @@ def test_subgraph_folding_and_unfolding_roundtrip():
     assert graph.get_node(dog_cid) is None
     pointer_node = graph.get_node(pointer_cid)
     assert pointer_node is not None
-    assert pointer_node.get_slot("GRAPH_MERKLE_FOLD_POINT") == 1
+    assert pointer_node.get_slot("GRAPH_MERKLE_FOLD_POINT") == 3  # StructuralValue.ACTIVE_MERKLE
     assert pointer_node.anchor == f"merkle:{sub_merkle}"
 
     # Unfold dog node subtree

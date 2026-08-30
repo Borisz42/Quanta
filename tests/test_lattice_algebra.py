@@ -138,8 +138,8 @@ def test_lattice_algebraic_properties():
 
 
 def test_quanta_vector_join_and_meet():
-    """Verify QuantaVector slot-wise join and meet."""
-    from src.core.types import QuantaVector
+    """Verify QuantaVector slot-wise polymorphic join and meet."""
+    from src.core.types import QuantaVector, StructuralValue
 
     # Create v1 with alternating 0, 1, 2, 3
     arr1 = [i % 4 for i in range(256)]
@@ -156,10 +156,16 @@ def test_quanta_vector_join_and_meet():
     assert v_meet == (v1 & v2)
 
     for i in range(256):
-        q1 = QuaternaryValue(arr1[i])
-        q2 = QuaternaryValue(arr2[i])
-        assert v_join[i] == (q1 | q2)
-        assert v_meet[i] == (q1 & q2)
+        if 64 <= i < 128:  # Band 1: Structural
+            s1 = StructuralValue(arr1[i])
+            s2 = StructuralValue(arr2[i])
+            assert v_join[i] == (s1 | s2)
+            assert v_meet[i] == (s1 & s2)
+        else:  # Epistemic Bands
+            q1 = QuaternaryValue(arr1[i])
+            q2 = QuaternaryValue(arr2[i])
+            assert v_join[i] == (q1 | q2)
+            assert v_meet[i] == (q1 & q2)
 
 
 def test_quanta_vector_hashability():

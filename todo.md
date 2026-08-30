@@ -93,6 +93,16 @@ Connecting to Finite Scalar Quantization (FSQ), discretizing each slot independe
 - [x] **1B.6** 🧪 Write unit tests: zero vector, full-TRUE vector, mixed vectors, round-trip serialization
 - [x] **1B.7** 🧪 Test that Hamming distance is 0 only for identical vectors and symmetric
 
+#### 1C — Polymorphic 2-Bit Typing & Band Contracts
+- [x] **1C.1** Define `BandContract` enum: `EPISTEMIC`, `STRUCTURAL`, `REGISTER`
+- [x] **1C.2** Define `StructuralValue` / `RoutingValue`: `INACTIVE=0`, `ACTIVE_LOCAL=1`, `ACTIVE_EXTERNAL=2`, `ACTIVE_MERKLE=3`
+- [x] **1C.3** Define `RegisterValue`: `UNBOUND=0`, `BOUND_LOCAL=1`, `BOUND_EXTERNAL=2`, `QUERY_TARGET=3`
+- [x] **1C.4** Define `EpistemicValue` alias to `QuaternaryValue` (`IRRELEVANT=0`, `TRUE=1`, `FALSE=2`, `UNKNOWN=3`)
+- [x] **1C.5** Implement polymorphic lattice algebra ($\sqcup_{\text{poly}}, \sqcap_{\text{poly}}$) where structural bands apply locality priority ($01 \sqcup 10 = 10$, $01 \sqcup 11 = 11$) preventing spurious Merkle fold page-faults
+- [x] **1C.6** Implement typed slot accessors on `QuantaVector` and `QuantaNode`: `get_structural_slot`, `get_register_slot`, `get_epistemic_slot`, `get_routing_type`, `semantic_similarity`
+- [x] **1C.7** Add `contract` metadata to `SlotDefinition` and band contract lookups `get_band_contract`, `get_slot_contract`
+- [x] **1C.8** 🧪 Write comprehensive unit tests in `tests/test_polymorphic_typing.py` validating contracts, polymorphic lattice operations, and round-trips
+
 ---
 
 ## Phase 2: Canonical Slot Layout (1024 Dimensions - 8 Bands)

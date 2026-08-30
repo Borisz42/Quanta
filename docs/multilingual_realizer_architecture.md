@@ -8,7 +8,7 @@ QUANTA resolves this by treating the discrete quaternary vector space ($\Sigma^{
 
 $$\text{Source Surface Language } \mathcal{L}_1 \xrightarrow{\text{Forward Parser}} \mathcal{G}_{\text{ASG}} \in \Sigma^{1024} \xrightarrow{\text{Reverse Realizer}} \text{Target Surface Language } \mathcal{L}_2$$
 
-Because $\mathcal{G}_{\text{ASG}}$ is grounded in Natural Semantic Metalanguage (NSM) primes (Band 0), structural valency roles (Band 1), and ConceptNet 5.7.0 256-D data-driven ontological/affordance dimensions (Bands 3 & 4), reverse realizers unroll pure abstract meaning into arbitrary human natural languages without relying on intermediate pairwise translation models.
+Because $\mathcal{G}_{\text{ASG}}$ is grounded in Natural Semantic Metalanguage (NSM) primes (Band 0), structural valency routing (Band 1), register scoping (Band 2), and ConceptNet 5.7.0 256-D data-driven ontological/affordance dimensions (Bands 3 & 4) governed by Polymorphic 2-Bit Typing per Band, reverse realizers unroll pure abstract meaning into arbitrary human natural languages without relying on intermediate pairwise translation models.
 
 ---
 

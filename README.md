@@ -63,19 +63,41 @@ QUANTA establishes an end-to-end synthesis spanning language design, a non-autor
 
 Rather than treating language as continuous high-dimensional vector embeddings ($\mathbb{R}^d$), QUANTA structures internal knowledge as Abstract Syntax Graphs (ASGs) constructed over a discrete, canonical vector alphabet.
 
-### 1.1 Discrete Quaternary Vector Space
+### 1.1 Discrete Quaternary Vector Space & Polymorphic 2-Bit Typing per Band
 
-Mentalese operates over a 1024-dimension quaternary vector space (packed into 256 bytes):
+Mentalese operates over a 1024-dimension quaternary vector space (packed into exactly 256 bytes = 4 CPU cache lines / 4 AVX-512 `zmm` registers):
 
 $$\Sigma = \{0, 1, 2, 3\}^{1024}$$
 
-Every vector slot evaluates strictly according to epistemic 4-valued logic ($\mathcal{FOUR}$):
-* `0 (IRRELEVANT / INACTIVE)`: Feature is unasserted or structurally non-applicable.
-* `1 (TRUE / AFFIRMED)`: Confirmed presence, positive assertion, or affirmed existence.
-* `2 (FALSE / NEGATED)`: Explicit epistemic negation, confirmed absence, or contradictory property.
-* `3 (UNKNOWN / MODAL / QUERY)`: Epistemic uncertainty, question query target, or hypothetical conjecture.
+To maximize expressive power, eliminate meaningless states (such as *"Maybe Root Node"*), and provide native hardware-routing and register-scoping capabilities, the 2-bit state of each slot is interpreted **polymorphically** based on its semantic band contract:
 
-Discretizing the state space maps conceptual states directly to fixed discrete symbols, halting the accumulation of continuous floating-point noise across deep neural layers. Quaternary encoding provides dedicated bit positions for structural logic states, quantifiers, modal operators, and argument bindings without representation collapse.
+1. **The Epistemic Contract (Bands 0, 3, 4, 5, 6, 7):**
+   Operates under standard Belnap 4-valued epistemic logic ($\mathcal{B}_4$ or $\mathcal{FOUR}$):
+   * `00_2 (0 - IRRELEVANT)`: Feature is unasserted or structurally non-applicable.
+   * `01_2 (1 - TRUE)`: Confirmed presence, positive assertion, or affirmed existence.
+   * `10_2 (2 - FALSE)`: Explicit epistemic negation or contradictory property.
+   * `11_2 (3 - UNKNOWN / QUERY / MAYBE)`: Epistemic uncertainty, question query target, or hypothetical conjecture.
+
+2. **The Structural Contract (Band 1 - Valencies, Topologies, Code AST, Concurrency):**
+   The 2 bits express strict structural and hardware-routing instructions:
+   * `00_2 (0 - INACTIVE)`: Valency/slot empty or unattached.
+   * `01_2 (1 - ACTIVE_LOCAL)`: In-canvas memory node (Standard True).
+   * `02_2 (2 - ACTIVE_EXTERNAL)`: Pointer to Host System RAM / SQLite Cache.
+   * `11_2 (3 - ACTIVE_MERKLE)`: Cryptographic Merkle CID hash / folded sub-graph requiring disk unfolding.
+
+3. **The Register Contract (Band 2 - Formal Logic Quantifiers & Variable Scoping):**
+   The 2 bits express variable binding scopes and unification targets:
+   * `00_2 (0 - UNBOUND)`: Variable register unassigned.
+   * `01_2 (1 - BOUND_LOCAL)`: Bound to local scope variable register ($X_0 \dots X_7$).
+   * `10_2 (2 - BOUND_EXTERNAL)`: Bound to outer / foreign lexical scope register.
+   * `11_2 (3 - QUERY_TARGET)`: Unification query target ($?X, ?Y, ?Z$).
+
+#### Polymorphic Lattice Algebra ($\sqcup_{\text{poly}}, \sqcap_{\text{poly}}$)
+Lattice operations dynamically apply the correct algebraic table per band:
+* **Epistemic Bands:** $\text{TRUE} \sqcup \text{FALSE} = \text{UNKNOWN}$ ($01 \sqcup 10 = 11$, Belnap knowledge aggregation).
+* **Structural Bands:** $\text{ACTIVE\_LOCAL} \sqcup \text{ACTIVE\_EXTERNAL} = \text{ACTIVE\_EXTERNAL}$ ($01 \sqcup 10 = 10$, External pointer priority) and $\text{ACTIVE\_LOCAL} \sqcup \text{ACTIVE\_MERKLE} = \text{ACTIVE\_MERKLE}$ ($01 \sqcup 11 = 11$), preventing local/external nodes from accidentally collapsing into Merkle cryptographic page-faults upon join.
+
+Discretizing the state space maps conceptual states directly to fixed discrete symbols, halting the accumulation of continuous floating-point noise across deep neural layers while preserving the 256-byte cache-line footprint.
 
 ### 1.2 Universal Primitive Grounding (Natural Semantic Metalanguage)
 
@@ -145,21 +167,21 @@ Mentalese operates over a **1024-dimension quaternary vector space** ($\Sigma = 
 
 ### 3.1 Detailed Breakdown of the 8 Bands & Dimensions
 
-#### Band 0: Universal NSM Primes, Classical Kinematics & Continuous Physics (000–127)
-Anchors internal cognition into language-universal semantic primes, continuous kinematic trajectories, and material physics.
+#### Band 0: Universal NSM Primes, Classical Kinematics & Continuous Physics (000–127) `[Contract: EPISTEMIC]`
+Anchors internal cognition into language-universal semantic primes, continuous kinematic trajectories, and material physics (`00=IRRELEVANT, 01=TRUE, 10=FALSE, 11=UNKNOWN/QUERY`).
 * **`000–063` (Universal NSM Primes):** The ~65 core NSM Primes (`NSM_I`, `NSM_YOU`, `NSM_SOMEONE`, `NSM_SOMETHING`, `NSM_PEOPLE`, `NSM_BODY`, `NSM_THIS`, `NSM_SAME`, `NSM_OTHER`, `NSM_ONE`, `NSM_TWO`, `NSM_MUCH`, `NSM_LITTLE`, `NSM_SOME`, `NSM_ALL`, `NSM_MORE`, `NSM_FEW`, `NSM_PART`, `NSM_GOOD`, `NSM_BAD`, `NSM_BIG`, `NSM_SMALL`, `NSM_VERY`, `NSM_TRUE`, `NSM_THINK`, `NSM_KNOW`, `NSM_WANT`, `NSM_FEEL`, `NSM_SEE`, `NSM_HEAR`, `NSM_SAY`, `NSM_WORDS`, `NSM_DO`, `NSM_HAPPEN`, `NSM_MOVE`, `NSM_TOUCH`, `NSM_BE_SOMEWHERE`, `NSM_THERE_IS`, `NSM_HAVE`, `NSM_LIVE`, `NSM_DIE`, `NSM_BORN`, `NSM_GROW`, `NSM_NOW`, `NSM_BEFORE`, `NSM_AFTER`, `NSM_HERE`, `NSM_ABOVE`, `NSM_BELOW`, `NSM_FAR`, `NSM_NEAR`, `NSM_INSIDE`, `NSM_CAN`, `NSM_MAYBE`).
 * **`064–095` (Continuous Kinematics & Trajectories):** Linear/angular kinematics (`PHYS_ACCELERATION_LINEAR`, `PHYS_ANGULAR_VELOCITY`, `PHYS_FORCE_IMPULSE_J`, `PHYS_TORQUE_MOMENT`, `PHYS_MASS_INERTIA`, `PHYS_MOMENTUM_P`, `PHYS_KINETIC_ENERGY_E`, `PHYS_POTENTIAL_ENERGY`, `PHYS_PRESSURE_PASCAL`, `PHYS_VISCOSITY_DYNAMIC`, `PHYS_SURFACE_TENSION`, `PHYS_THERMAL_HEAT_Q`, `PHYS_TEMPERATURE_KELVIN`, `PHYS_ENTROPY_DELTA_S`).
 * **`096–127` (Vector Fields, Material States & Properties):** Matter phases and physical fields (`STATE_SOLID_RIGID`, `STATE_LIQUID_NEWTONIAN`, `STATE_GAS_COMPRESSIBLE`, `STATE_PLASMA_IONIZED`, `FIELD_GRAVITATIONAL`, `FIELD_ELECTROSTATIC`, `FIELD_MAGNETIC`, `FIELD_ELECTROMAGNETIC`, `PROP_DENSITY_MASS`, `PROP_CONDUCTIVITY_ELECTRICAL`, `PROP_CONDUCTIVITY_THERMAL`, `PROP_HARDNESS_INDENTATION`, `PROP_REFRACTIVE_INDEX`, `PROP_PH_ACID_BASE`, `PROP_SOLUBILITY_SOLVENT`).
 
-#### Band 1: Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency (128–255)
-Defines predicate-argument topologies, code syntax graphs, and asynchronous execution markers.
+#### Band 1: Structural Valencies, Grammatical Tense/Aspect, Code AST & Concurrency (128–255) `[Contract: STRUCTURAL]`
+Defines predicate-argument topologies, code syntax graphs, and hardware routing markers (`00=INACTIVE, 01=ACTIVE_LOCAL, 10=ACTIVE_EXTERNAL, 11=ACTIVE_MERKLE`).
 * **`128–143` (Lojban Predicate Valencies):** Case argument place slots (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_X3_DESTINATION`, `VAL_X4_SOURCE`, `VAL_X5_INSTRUMENT`, `VAL_X6_BENEFICIARY`, `VAL_X7_PURPOSE_GOAL`, `VAL_EXPERIENCER`, `VAL_LOCATION_SLOT`, `VAL_TIME_SLOT`, `VAL_MANNER_SLOT`, `VAL_PURPOSE_SLOT`, `VAL_RESULT_SLOT`, `VAL_MEDIUM_SLOT`, `VAL_CONDITION_SLOT`, `VAL_DEGREE_SLOT`).
 * **`144–167` (Grammatical Aspect & Tense):** Tense and aspect markers (`LJB_PU_PAST_TENSE`, `LJB_CA_PRESENT_TENSE`, `LJB_BA_FUTURE_TENSE`, `ASPECT_PERFECTIVE_ACHIEVE`, `ASPECT_IMPERFECTIVE_PROG`, `ASPECT_ITERATIVE_REPEAT`, `ASPECT_HABITUAL_CUSTOM`, `ASPECT_INCHOATIVE_BEGIN`, `ASPECT_CESSATIVE_END`).
 * **`168–215` (Abstract Syntax Graph & Code AST Topologies):** Universal compiler AST constructs (`GRAPH_ROOT_NODE`, `GRAPH_LEAF`, `GRAPH_RECURSIVE_REF`, `GRAPH_IS_SUB_EXP`, `GRAPH_CYCLIC_BACKLINK`, `GRAPH_ORDERED_SEQ`, `GRAPH_BRANCH_COND`, `GRAPH_BRANCH_THEN`, `GRAPH_BRANCH_ELSE`, `EXT_AST_FUNCTION_DEF`, `EXT_AST_CONTROL_LOOP`, `EXT_AST_VARIABLE_BINDING`, `EXT_AST_RETURN`, `EXT_AST_SCOPE_ENTER`, `EXT_AST_SCOPE_EXIT`, `EXT_AST_TRY_CATCH`, `EXT_AST_DYNAMIC_DISPATCH`, `EXT_AST_PATTERN_MATCH`).
 * **`216–255` (Concurrency, OS & Graph Networking):** Parallel execution and memory markers (`LJB_ASYNC_CONCURRENT`, `LJB_MUTEX_DEPENDENCY`, `LJB_RACE_CONDITION`, `OS_PROCESS_SPAWN`, `OS_THREAD_FORK`, `OS_CHANNEL_IPC_SEND`, `GRAPH_MERKLE_FOLD_POINT`, `GRAPH_VIRTUAL_PAGE_LINK`, `GRAPH_IMMUTABLE_HASH_LOCK`).
 
-#### Band 2: Formal Logic Quantifiers, Variable Binding Registers & Sequent Proof Calculus (256–383)
-Enables algebraic variable unification and formal deductive sequent derivations without string variable names.
+#### Band 2: Formal Logic Quantifiers, Variable Binding Registers & Sequent Proof Calculus (256–383) `[Contract: REGISTER]`
+Enables algebraic variable unification, lexical register scoping, and formal deductive sequent derivations (`00=UNBOUND, 01=BOUND_LOCAL, 10=BOUND_EXTERNAL, 11=QUERY_TARGET`).
 * **`256–279` (Formal Quantifiers & Connectives):** Generalized formal logic operators (`QUANT_UNIVERSAL_FORALL` $\forall$, `QUANT_EXISTENTIAL_EXISTS` $\exists$, `QUANT_UNIQUENESS_EXISTS_ONE` $\exists!$, `QUANT_MAJORITY_MOST`, `QUANT_PAUCAL_FEW`, `QUANT_EXACT_COUNT_K`, `LJB_NA_NEGATION`, `LJB_JE_AND`, `LJB_JA_OR`, `LJB_JON_XOR`, `LJB_GANAI_IF_THEN`, `LJB_DU_IDENTITY`, `LJB_SOI_RECIPROCAL`).
 * **`280–319` (Variable Binding & Query Unification Registers):** Dedicated algebraic register slots (`VAR_SLOT_X0` through `VAR_SLOT_X7`, unification targets `QUERY_TARGET_?X`, `QUERY_TARGET_?Y`, `QUERY_TARGET_?Z`, and lambda parameter closures `LAMBDA_PARAM_0` $\dots$ `LAMBDA_PARAM_3`, `LAMBDA_BODY_HEAD`).
 * **`320–383` (Sequent Calculus & Derivation Operators):** Formal proof step transitions (`SEQ_ENTAILMENT_TURNSTILE`, `SEQ_MODUS_PONENS_STEP`, `SEQ_RESOLUTION_STEP`, `SEQ_CUT_RULE_APPLIED`, `SEQ_HYPOTHESIS_INTRO`, `SEQ_AXIOM_DISCHARGE`, `SEQ_CONTRADICTION_CORE`).

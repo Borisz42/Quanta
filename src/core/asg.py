@@ -5,8 +5,16 @@ import json
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import blake3
 
-from core.types import QuantaVector, QuaternaryValue
-from core.slots import SLOT_NAME_TO_INDEX, get_slot_by_name
+from core.types import (
+    QuantaVector,
+    QuaternaryValue,
+    EpistemicValue,
+    StructuralValue,
+    RoutingValue,
+    RegisterValue,
+    BandContract,
+)
+from core.slots import SLOT_NAME_TO_INDEX, get_slot_by_name, get_slot_contract
 
 
 def _blake3_hash(data: bytes) -> str:
@@ -74,7 +82,7 @@ class QuantaNode:
         """Invalidates cached CID."""
         self._cid_cache = None
 
-    def set_slot(self, slot: Union[int, str], value: Union[int, QuaternaryValue]):
+    def set_slot(self, slot: Union[int, str], value: Union[int, QuaternaryValue, StructuralValue, RegisterValue]):
         """Sets a slot by index or name."""
         self.vector[slot] = value
         self.invalidate_cache()
@@ -82,6 +90,37 @@ class QuantaNode:
     def get_slot(self, slot: Union[int, str]) -> QuaternaryValue:
         """Gets slot value by index or name."""
         return self.vector[slot]
+
+    def get_structural_slot(self, slot: Union[int, str]) -> StructuralValue:
+        """Gets slot value as a strongly-typed StructuralValue (Band 1 routing)."""
+        return self.vector.get_structural_slot(slot)
+
+    def set_structural_slot(self, slot: Union[int, str], value: Union[int, StructuralValue]):
+        """Sets structural routing slot (Band 1)."""
+        self.vector[slot] = value
+        self.invalidate_cache()
+
+    def get_register_slot(self, slot: Union[int, str]) -> RegisterValue:
+        """Gets slot value as a strongly-typed RegisterValue (Band 2 scoping)."""
+        return self.vector.get_register_slot(slot)
+
+    def set_register_slot(self, slot: Union[int, str], value: Union[int, RegisterValue]):
+        """Sets register scoping slot (Band 2)."""
+        self.vector[slot] = value
+        self.invalidate_cache()
+
+    def get_epistemic_slot(self, slot: Union[int, str]) -> EpistemicValue:
+        """Gets slot value as a strongly-typed EpistemicValue (Bands 0, 3..7)."""
+        return self.vector.get_epistemic_slot(slot)
+
+    def set_epistemic_slot(self, slot: Union[int, str], value: Union[int, EpistemicValue]):
+        """Sets epistemic slot (Bands 0, 3..7)."""
+        self.vector[slot] = value
+        self.invalidate_cache()
+
+    def get_routing_type(self, relation_or_slot: Union[int, str]) -> StructuralValue:
+        """Determines the routing type for a given relation slot."""
+        return self.vector.get_structural_slot(relation_or_slot)
 
     def add_edge(self, relation: str, target_cid: str):
         """Adds a directed relation edge to a child CID."""
@@ -426,8 +465,8 @@ class QuantaGraph:
 
         # 3. Create pointer node in main graph preserving aggregate semantic proposition vector
         pointer_vec = sub_graph.to_proposition_vector()
-        pointer_vec["GRAPH_MERKLE_FOLD_POINT"] = 1
-        pointer_vec["GRAPH_EXT_REFERENCE"] = 1
+        pointer_vec["GRAPH_MERKLE_FOLD_POINT"] = StructuralValue.ACTIVE_MERKLE
+        pointer_vec["GRAPH_EXT_REFERENCE"] = StructuralValue.ACTIVE_MERKLE
         pointer_vec["TYPE_PROPOSITION"] = 1
 
         pointer_node = QuantaNode(

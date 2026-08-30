@@ -9,7 +9,15 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 
-from core.types import QuantaVector, QuaternaryValue
+from core.types import (
+    QuantaVector,
+    QuaternaryValue,
+    EpistemicValue,
+    StructuralValue,
+    RoutingValue,
+    RegisterValue,
+    BandContract,
+)
 from core.asg import QuantaNode
 from core.slots import (
     # Band 0 Primes
@@ -507,13 +515,17 @@ class TypeConstraintRegistry:
 
         # 1. Figurative modality bypass: Metaphors suspend physical domain constraints
         if (
-            p_vec[MODALITY_FIGURATIVE] == QuaternaryValue.TRUE
-            or c_vec[MODALITY_FIGURATIVE] == QuaternaryValue.TRUE
+            p_vec[MODALITY_FIGURATIVE] != 0
+            or c_vec[MODALITY_FIGURATIVE] != 0
         ):
             return True
 
         # 2. Variable binding bypass: FOL variables (x, y) are typed at quantification/runtime
-        if c_vec[GRAPH_VARIABLE_BIND] == QuaternaryValue.TRUE:
+        if c_vec[GRAPH_VARIABLE_BIND] != 0:
+            return True
+
+        # 3. Merkle fold pointer bypass: Cryptographic folded sub-trees represent valid composite propositions
+        if c_vec["GRAPH_MERKLE_FOLD_POINT"] != 0:
             return True
 
         slot_idx = _to_slot_idx(relation_slot)

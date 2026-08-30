@@ -1,7 +1,15 @@
 """QUANTA: Quaternary Universal Abstract Natural Topology Architecture."""
 
-from core.types import QuantaVector, QuaternaryValue
-from core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_by_name, get_slot_names
+from core.types import (
+    BandContract,
+    QuantaVector,
+    QuaternaryValue,
+    EpistemicValue,
+    StructuralValue,
+    RoutingValue,
+    RegisterValue,
+)
+from core.slots import CANONICAL_SLOTS, get_slot_by_index, get_slot_by_name, get_slot_names, get_band_contract, get_slot_contract
 from core.asg import QuantaNode, QuantaGraph, fold_subgraph, unfold_subgraph
 from parser.nlp_forward import NLPForwardParser
 from parser.lexical_grounder import WordNetLexicalGrounder
@@ -18,12 +26,19 @@ from pipeline.translator_pipeline import TwoWayTranslationPipeline, TranslationR
 __version__ = "0.1.0"
 
 __all__ = [
+    "BandContract",
     "QuantaVector",
     "QuaternaryValue",
+    "EpistemicValue",
+    "StructuralValue",
+    "RoutingValue",
+    "RegisterValue",
     "CANONICAL_SLOTS",
     "get_slot_by_index",
     "get_slot_by_name",
     "get_slot_names",
+    "get_band_contract",
+    "get_slot_contract",
     "QuantaNode",
     "QuantaGraph",
     "fold_subgraph",

@@ -5,7 +5,15 @@ import ast
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.asg import QuantaGraph, QuantaNode
-from core.types import QuantaVector, QuaternaryValue
+from core.types import (
+    QuantaVector,
+    QuaternaryValue,
+    EpistemicValue,
+    StructuralValue,
+    RoutingValue,
+    RegisterValue,
+    BandContract,
+)
 from parser.lexical_grounder import WordNetLexicalGrounder
 
 

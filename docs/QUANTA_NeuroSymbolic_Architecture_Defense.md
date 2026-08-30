@@ -28,26 +28,45 @@ The **Quaternary Universal Abstract Natural Topology Architecture (QUANTA)** bui
 
 ---
 
-### 1.2 Mathematical Grounding of the Discrete Quaternary State Space
+### 1.2 Mathematical Grounding of the Discrete Quaternary State Space & Polymorphic 2-Bit Typing per Band
 
-QUANTA structures conceptual states using a 1024-dimension quaternary vector space defined as $\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$. Every coordinate $v_i \in \{0, 1, 2, 3\}$ ($i \in \{0, \dots, 1023\}$) evaluates strictly according to Belnap’s epistemic four-valued logic ($\mathcal{FOUR} \cong \mathcal{B}_4$)[^7]:
+QUANTA structures conceptual states using a 1024-dimension quaternary vector space defined as $\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$, packed into exactly 256 bytes ($4 \times 64\text{B}$ CPU cache lines). To maximize expressive power, eliminate meaningless states (such as *"Maybe Root Node"* or *"Maybe Valency Slot"*), and provide native hardware routing and register scoping, the 2-bit state of each slot is interpreted **polymorphically** according to its semantic band contract:
 
-* **`0 (IRRELEVANT / INACTIVE)`**: Feature is unasserted or structurally non-applicable.
-* **`1 (TRUE / AFFIRMED)`**: Confirmed presence, positive assertion, or affirmed existence.
-* **`2 (FALSE / NEGATED)`**: Explicit epistemic negation, confirmed absence, or contradictory property.
-* **`3 (UNKNOWN / MODAL / QUERY)`**: Epistemic uncertainty, question query target, or hypothetical conjecture.
+1. **The Epistemic Contract (Bands 0, 3, 4, 5, 6, 7):**
+   Coordinates evaluate strictly according to Belnap’s epistemic four-valued logic ($\mathcal{FOUR} \cong \mathcal{B}_4$)[^7]:
+   * **`00_2 (0 - IRRELEVANT)`**: Feature is unasserted or structurally non-applicable.
+   * **`01_2 (1 - TRUE)`**: Confirmed presence, positive assertion, or affirmed existence.
+   * **`10_2 (2 - FALSE)`**: Explicit epistemic negation, confirmed absence, or contradictory property.
+   * **`11_2 (3 - UNKNOWN / QUERY / MAYBE)`**: Epistemic uncertainty, question query target, or hypothetical conjecture.
+
+2. **The Structural Contract (Band 1 - Valency, AST Topologies, Mereotopology, Concurrency):**
+   The 2 bits express strict structural routing and memory location instructions:
+   * **`00_2 (0 - INACTIVE)`**: Slot or valency empty/unattached.
+   * **`01_2 (1 - ACTIVE_LOCAL)`**: In-canvas active memory node (Standard True).
+   * **`10_2 (2 - ACTIVE_EXTERNAL)`**: Pointer to Host System RAM / SQLite Cache.
+   * **`11_2 (3 - ACTIVE_MERKLE)`**: Cryptographic Merkle CID hash / folded sub-graph requiring disk unfolding.
+
+3. **The Register Contract (Band 2 - Formal Logic Quantifiers & Variable Scoping):**
+   The 2 bits express variable binding scopes and unification query targets:
+   * **`00_2 (0 - UNBOUND)`**: Variable register unassigned.
+   * **`01_2 (1 - BOUND_LOCAL)`**: Bound to local scope variable register ($X_0 \dots X_7$).
+   * **`10_2 (2 - BOUND_EXTERNAL)`**: Bound to outer / foreign lexical scope register.
+   * **`11_2 (3 - QUERY_TARGET)`**: Unification query target ($?X, ?Y, ?Z$).
 
 The discretization of continuous neural activations into a fixed quaternary alphabet connects directly to advancements in Finite Scalar Quantization (FSQ)[^8][^9]. Standard Vector Quantization frameworks (VQ-VAE / RVQ) project continuous latents onto learned codebooks, requiring auxiliary commitment losses, codebook reseeding, and entropy penalties to prevent codebook collapse.
 
 In contrast, FSQ projects continuous latents onto a small number of scalar channels, quantizing each dimension independently over fixed grid levels[^8]. FSQ eliminates commitment loss and code collapse, providing full codebook utilization and bit-level perturbation robustness across noisy transmission channels[^8][^9].
 
-QUANTA extends the mathematical principles of FSQ by replacing arbitrary scalar quantization grids with an epistemically partitioned 1024-dimension lattice. Rather than treating latent channels as homogeneous continuous variables, QUANTA bounds each vector slot to the discrete algebraic lattice of $\mathcal{B}_4$, governed by partial order relationships where $0 \le_k \{1, 2\} \le_k 3$ (knowledge ordering) and $2 \le_t \{0, 3\} \le_t 1$ (truth ordering). The lattice operations of join ($\sqcup$) and meet ($\sqcap$) are defined slot-wise across vector dimensions:
+QUANTA extends the mathematical principles of FSQ by replacing arbitrary scalar quantization grids with an epistemically and structurally partitioned 1024-dimension lattice. Rather than treating latent channels as homogeneous continuous variables, QUANTA bounds each vector slot to the discrete algebraic lattice corresponding to its band contract.
 
-$$(\mathbf{u} \sqcup \mathbf{v})_i = u_i \sqcup v_i, \quad \forall i \in \{0, \dots, 1023\}$$
+#### Polymorphic Lattice Operations ($\sqcup_{\text{poly}}, \sqcap_{\text{poly}}$)
+For epistemic bands (Bands 0, 3..7), partial orders are governed by knowledge order ($0 \le_k \{1, 2\} \le_k 3$) and truth order ($2 \le_t \{0, 3\} \le_t 1$), yielding Belnap contradiction/uncertainty upon conflict:
 
-$$(\mathbf{u} \sqcap \mathbf{v})_i = u_i \sqcap v_i, \quad \forall i \in \{0, \dots, 1023\}$$
+$$(\mathbf{u} \sqcup \mathbf{v})_i = u_i \sqcup v_i, \quad (\mathbf{u} \sqcap \mathbf{v})_i = u_i \sqcap v_i$$
 
-This discrete formulation functions as an explicit semantic error-correcting code. By mapping neural features to discrete lattice points, QUANTA prevents continuous floating-point noise accumulation across recursive processing steps, guaranteeing that logical operations maintain exact state boundaries.
+For structural bands (Band 1), join operations enforce **locality and external priority** ($01 \sqcup 10 = 10$, $01 \sqcup 11 = 11$), ensuring that merging local and external nodes promotes them to external/Merkle pointers rather than accidentally collapsing into cryptographic page-faults.
+
+This discrete formulation functions as an explicit semantic error-correcting code. By mapping neural features to discrete lattice points, QUANTA prevents continuous floating-point noise accumulation across recursive processing steps, guaranteeing that logical operations maintain exact state boundaries while preserving the 256-byte cache-line footprint.
 
 ---
 

@@ -115,13 +115,14 @@ Following the evaluation of information-theoretic bottlenecks and lexical ground
 
 ### Neuro-Symbolic Solver Alignment & Verification
 * **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `AFFORD_INCISED_CUTTING`) mapped to `CN_Q*` slots, preserving Clingo/ASP and s(CASP) solver invariants.
-* **Regression Test Status**: **147 / 147 tests passing (100%)** across the complete test suite.
+* **Polymorphic 2-Bit Typing per Band**: Implemented distinct contracts across epistemic bands (Bands 0, 3..7), structural routing (Band 1), and register scoping (Band 2) with band-polymorphic lattice joins.
+* **Regression Test Status**: **185 / 185 tests passing (100%)** across the complete test suite.
 
 ---
 
 ## 5. Key Takeaways & Recommended Roadmap
 
-1. **Keep the 1024 Quaternary Architecture:** The discrete 8-band design is solid, mathematically sound, and proven orthogonal.
+1. **Keep the 1024 Quaternary Architecture & Polymorphic Contracts:** The discrete 8-band design with polymorphic 2-bit typing (Epistemic, Structural, Register) is solid, mathematically sound, and proven orthogonal.
 2. **Data-Driven Bands 3 & 4:** ConceptNet 256 dimensions provide real-world common-sense affordances without manual ontology engineering bottlenecks.
 3. **Translator Improvement Target:** Use the [`verifier_report.json`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/verifier_report.json) per-slot breakdown to add forward-parser explication templates for deeper NSM primes.
 4. **Multilingual Extension:** ConceptNet language prefixes (`cn:de:`, `cn:fr:`, `cn:zh:`) allow drop-in multilingual forward parsers mapping into the same 256-D quaternary space without changing the core vector layout.

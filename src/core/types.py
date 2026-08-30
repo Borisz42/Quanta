@@ -1,4 +1,4 @@
-"""Quaternary logic types and 1024-dimensional vector representations for QUANTA."""
+"""Quaternary and Polymorphic 2-bit logic types and 1024-dimensional vector representations for QUANTA."""
 
 from __future__ import annotations
 import enum
@@ -9,13 +9,20 @@ import torch
 DEFAULT_DIMENSION = 1024
 
 
+class BandContract(str, enum.Enum):
+    """Polymorphic contract applied to dimensions depending on their Band."""
+    EPISTEMIC = "EPISTEMIC"      # Bands 0, 3, 4, 5, 6, 7: Truth & Uncertainty (Belnap FOUR)
+    STRUCTURAL = "STRUCTURAL"    # Band 1: Valencies, AST Topology, Concurrency Routing
+    REGISTER = "REGISTER"        # Band 2: Formal Logic Quantifiers & Variable Scoping
+
+
 class QuaternaryValue(enum.IntEnum):
-    """Epistemic 4-valued logic states (FOUR).
+    """Epistemic 4-valued logic states (Belnap FOUR).
     
     0 - IRRELEVANT (00_2): Absent, not applicable, default.
     1 - TRUE (01_2): Affirmed, verified true, positive existence.
     2 - FALSE (10_2): Negated, affirmed false, positive absence/contradiction.
-    3 - UNKNOWN (11_2): Epistemic uncertainty, maybe, indeterminate.
+    3 - UNKNOWN (11_2): Epistemic uncertainty, maybe, query target.
     """
     IRRELEVANT = 0
     TRUE = 1
@@ -105,19 +112,115 @@ class QuaternaryValue(enum.IntEnum):
         return self.meet(other)
 
 
-_LATTICE_JOIN_TABLE = np.array([
+# Alias for epistemic contract clarity
+EpistemicValue = QuaternaryValue
+
+
+class StructuralValue(enum.IntEnum):
+    """Structural routing 4-valued states (For Valency, AST Topologies, and Concurrency Bands).
+    
+    0 - INACTIVE (00_2): Slot empty, uninstantiated argument / non-applicable relation.
+    1 - ACTIVE_LOCAL (01_2): Standard local concept / child node in active graph canvas.
+    2 - ACTIVE_EXTERNAL (10_2): External pointer (Host RAM Virtual Page-Table / SQLite WordNet/ConceptNet cache).
+    3 - ACTIVE_MERKLE (11_2): Cryptographic Merkle CID pointer / folded sub-graph requiring disk unfolding.
+    """
+    INACTIVE = 0
+    ACTIVE_LOCAL = 1
+    ACTIVE_EXTERNAL = 2
+    ACTIVE_MERKLE = 3
+
+    @property
+    def is_active(self) -> bool:
+        return self != StructuralValue.INACTIVE
+
+    def join(self, other: Union[StructuralValue, int]) -> StructuralValue:
+        """Structural lattice join: locality priority widening max(self, other)."""
+        return StructuralValue(max(int(self), int(other)))
+
+    def meet(self, other: Union[StructuralValue, int]) -> StructuralValue:
+        """Structural lattice meet: min(self, other)."""
+        return StructuralValue(min(int(self), int(other)))
+
+    def __or__(self, other: Union[StructuralValue, int]) -> StructuralValue:
+        return self.join(other)
+
+    def __and__(self, other: Union[StructuralValue, int]) -> StructuralValue:
+        return self.meet(other)
+
+
+# Alias for routing clarity
+RoutingValue = StructuralValue
+
+
+class RegisterValue(enum.IntEnum):
+    r"""Register and scoping 4-valued states (For Logic Quantifiers and Variable Binding Bands).
+    
+    0 - UNBOUND (00_2): Register unassigned / unbound slot.
+    1 - BOUND_LOCAL (01_2): Bound to local scoped variable register ($X_0 \dots X_7$).
+    2 - BOUND_EXTERNAL (10_2): Bound to outer / foreign lexical scope register.
+    3 - QUERY_TARGET (11_2): Unification query variable target ($?X, ?Y, ?Z$).
+    """
+    UNBOUND = 0
+    BOUND_LOCAL = 1
+    BOUND_EXTERNAL = 2
+    QUERY_TARGET = 3
+
+    @property
+    def is_bound(self) -> bool:
+        return self in (RegisterValue.BOUND_LOCAL, RegisterValue.BOUND_EXTERNAL)
+
+    @property
+    def is_query(self) -> bool:
+        return self == RegisterValue.QUERY_TARGET
+
+    def join(self, other: Union[RegisterValue, int]) -> RegisterValue:
+        """Register lattice join: priority widening max(self, other)."""
+        return RegisterValue(max(int(self), int(other)))
+
+    def meet(self, other: Union[RegisterValue, int]) -> RegisterValue:
+        """Register lattice meet: min(self, other)."""
+        return RegisterValue(min(int(self), int(other)))
+
+    def __or__(self, other: Union[RegisterValue, int]) -> RegisterValue:
+        return self.join(other)
+
+    def __and__(self, other: Union[RegisterValue, int]) -> RegisterValue:
+        return self.meet(other)
+
+
+# Epistemic Belnap lattice tables
+_EPISTEMIC_JOIN_TABLE = np.array([
     [0, 1, 2, 3],
     [1, 1, 3, 3],
     [2, 3, 2, 3],
     [3, 3, 3, 3]
 ], dtype=np.uint8)
 
-_LATTICE_MEET_TABLE = np.array([
+_EPISTEMIC_MEET_TABLE = np.array([
     [0, 0, 0, 0],
     [0, 1, 0, 1],
     [0, 0, 2, 2],
     [0, 1, 2, 3]
 ], dtype=np.uint8)
+
+# Structural priority lattice tables (Widening max/min)
+_STRUCTURAL_JOIN_TABLE = np.array([
+    [0, 1, 2, 3],
+    [1, 1, 2, 3],
+    [2, 2, 2, 3],
+    [3, 3, 3, 3]
+], dtype=np.uint8)
+
+_STRUCTURAL_MEET_TABLE = np.array([
+    [0, 0, 0, 0],
+    [0, 1, 1, 1],
+    [0, 1, 2, 2],
+    [0, 1, 2, 3]
+], dtype=np.uint8)
+
+# Backward-compatibility aliases
+_LATTICE_JOIN_TABLE = _EPISTEMIC_JOIN_TABLE
+_LATTICE_MEET_TABLE = _EPISTEMIC_MEET_TABLE
 
 
 def pack_quaternary_array(arr: Union[Sequence[int], np.ndarray]) -> bytes:
@@ -229,6 +332,20 @@ class QuantaVector:
             t = t.to(device=device)
         return t
 
+    def get_band_contract(self, band: int) -> BandContract:
+        """Returns the polymorphic contract for the specified band."""
+        if len(self._data) == 1024:
+            if band == 1:
+                return BandContract.STRUCTURAL
+            elif band == 2:
+                return BandContract.REGISTER
+            return BandContract.EPISTEMIC
+        elif len(self._data) == 256:
+            if band == 1:
+                return BandContract.STRUCTURAL
+            return BandContract.EPISTEMIC
+        return BandContract.EPISTEMIC
+
     def get_band(self, band: int, slots_per_band: Optional[int] = None) -> np.ndarray:
         """Extracts a slice for a specific band index."""
         n_slots = len(self._data)
@@ -284,6 +401,17 @@ class QuantaVector:
         len_diff = abs(len(self._data) - len(other._data))
         return diff + len_diff
 
+    def semantic_similarity(self, other: QuantaVector) -> float:
+        """Computes slot-wise agreement ratio across Epistemic bands only."""
+        if len(self._data) == 1024 and len(other._data) == 1024:
+            # Mask out Band 1 (128..255) and Band 2 (256..383)
+            mask = np.ones(1024, dtype=bool)
+            mask[128:384] = False
+            diff = int(np.count_nonzero((self._data != other._data) & mask))
+            total_semantic_slots = 1024 - 256
+            return 1.0 - (diff / float(total_semantic_slots))
+        return self.similarity(other)
+
     def similarity(self, other: QuantaVector) -> float:
         """Computes slot-wise agreement ratio in [0.0, 1.0]."""
         max_len = max(len(self._data), len(other._data))
@@ -310,7 +438,22 @@ class QuantaVector:
         idx = self._resolve_slot_idx(key)
         return QuaternaryValue(int(self._data[idx]))
 
-    def __setitem__(self, key: Union[int, str], value: Union[int, QuaternaryValue]):
+    def get_structural_slot(self, key: Union[int, str]) -> StructuralValue:
+        """Gets slot as a strongly-typed StructuralValue (Band 1)."""
+        idx = self._resolve_slot_idx(key)
+        return StructuralValue(int(self._data[idx]))
+
+    def get_register_slot(self, key: Union[int, str]) -> RegisterValue:
+        """Gets slot as a strongly-typed RegisterValue (Band 2)."""
+        idx = self._resolve_slot_idx(key)
+        return RegisterValue(int(self._data[idx]))
+
+    def get_epistemic_slot(self, key: Union[int, str]) -> EpistemicValue:
+        """Gets slot as a strongly-typed EpistemicValue (Bands 0, 3..7)."""
+        idx = self._resolve_slot_idx(key)
+        return EpistemicValue(int(self._data[idx]))
+
+    def __setitem__(self, key: Union[int, str], value: Union[int, QuaternaryValue, StructuralValue, RegisterValue]):
         idx = self._resolve_slot_idx(key)
         self._data[idx] = int(value) & 0x03
 
@@ -323,34 +466,72 @@ class QuantaVector:
         return bool(np.array_equal(self._data, other._data))
 
     def join(self, other: QuantaVector) -> QuantaVector:
-        """Computes element-wise lattice join (⊔_k) across all dimensions."""
+        """Computes element-wise polymorphic lattice join across all dimensions."""
         if not isinstance(other, QuantaVector):
             raise TypeError(f"Cannot join QuantaVector with {type(other)}")
-        if len(self._data) != len(other._data):
-            max_len = max(len(self._data), len(other._data))
-            d1 = np.zeros(max_len, dtype=np.uint8)
-            d2 = np.zeros(max_len, dtype=np.uint8)
-            d1[:len(self._data)] = self._data
-            d2[:len(other._data)] = other._data
-            joined_data = _LATTICE_JOIN_TABLE[d1, d2]
+        
+        n_slots = max(len(self._data), len(other._data))
+        d1 = np.zeros(n_slots, dtype=np.uint8)
+        d2 = np.zeros(n_slots, dtype=np.uint8)
+        d1[:len(self._data)] = self._data
+        d2[:len(other._data)] = other._data
+
+        out = np.empty(n_slots, dtype=np.uint8)
+
+        if n_slots == 1024:
+            # Band 0 (0..127): Epistemic
+            out[0:128] = _EPISTEMIC_JOIN_TABLE[d1[0:128], d2[0:128]]
+            # Band 1 (128..255): Structural
+            out[128:256] = _STRUCTURAL_JOIN_TABLE[d1[128:256], d2[128:256]]
+            # Band 2 (256..383): Register
+            out[256:384] = _STRUCTURAL_JOIN_TABLE[d1[256:384], d2[256:384]]
+            # Bands 3..7 (384..1023): Epistemic
+            out[384:1024] = _EPISTEMIC_JOIN_TABLE[d1[384:1024], d2[384:1024]]
+        elif n_slots == 256:
+            # Band 0 (0..63): Epistemic
+            out[0:64] = _EPISTEMIC_JOIN_TABLE[d1[0:64], d2[0:64]]
+            # Band 1 (64..127): Structural
+            out[64:128] = _STRUCTURAL_JOIN_TABLE[d1[64:128], d2[64:128]]
+            # Bands 2..3 (128..255): Epistemic
+            out[128:256] = _EPISTEMIC_JOIN_TABLE[d1[128:256], d2[128:256]]
         else:
-            joined_data = _LATTICE_JOIN_TABLE[self._data, other._data]
-        return QuantaVector(joined_data)
+            out[:] = _EPISTEMIC_JOIN_TABLE[d1, d2]
+
+        return QuantaVector(out)
 
     def meet(self, other: QuantaVector) -> QuantaVector:
-        """Computes element-wise lattice meet (⊓_k) across all dimensions."""
+        """Computes element-wise polymorphic lattice meet across all dimensions."""
         if not isinstance(other, QuantaVector):
             raise TypeError(f"Cannot meet QuantaVector with {type(other)}")
-        if len(self._data) != len(other._data):
-            max_len = max(len(self._data), len(other._data))
-            d1 = np.zeros(max_len, dtype=np.uint8)
-            d2 = np.zeros(max_len, dtype=np.uint8)
-            d1[:len(self._data)] = self._data
-            d2[:len(other._data)] = other._data
-            met_data = _LATTICE_MEET_TABLE[d1, d2]
+
+        n_slots = max(len(self._data), len(other._data))
+        d1 = np.zeros(n_slots, dtype=np.uint8)
+        d2 = np.zeros(n_slots, dtype=np.uint8)
+        d1[:len(self._data)] = self._data
+        d2[:len(other._data)] = other._data
+
+        out = np.empty(n_slots, dtype=np.uint8)
+
+        if n_slots == 1024:
+            # Band 0 (0..127): Epistemic
+            out[0:128] = _EPISTEMIC_MEET_TABLE[d1[0:128], d2[0:128]]
+            # Band 1 (128..255): Structural
+            out[128:256] = _STRUCTURAL_MEET_TABLE[d1[128:256], d2[128:256]]
+            # Band 2 (256..383): Register
+            out[256:384] = _STRUCTURAL_MEET_TABLE[d1[256:384], d2[256:384]]
+            # Bands 3..7 (384..1023): Epistemic
+            out[384:1024] = _EPISTEMIC_MEET_TABLE[d1[384:1024], d2[384:1024]]
+        elif n_slots == 256:
+            # Band 0 (0..63): Epistemic
+            out[0:64] = _EPISTEMIC_MEET_TABLE[d1[0:64], d2[0:64]]
+            # Band 1 (64..127): Structural
+            out[64:128] = _STRUCTURAL_MEET_TABLE[d1[64:128], d2[64:128]]
+            # Bands 2..3 (128..255): Epistemic
+            out[128:256] = _EPISTEMIC_MEET_TABLE[d1[128:256], d2[128:256]]
         else:
-            met_data = _LATTICE_MEET_TABLE[self._data, other._data]
-        return QuantaVector(met_data)
+            out[:] = _EPISTEMIC_MEET_TABLE[d1, d2]
+
+        return QuantaVector(out)
 
     def __or__(self, other: QuantaVector) -> QuantaVector:
         return self.join(other)
@@ -371,7 +552,12 @@ class QuantaVector:
 
 __all__ = [
     "DEFAULT_DIMENSION",
+    "BandContract",
     "QuaternaryValue",
+    "EpistemicValue",
+    "StructuralValue",
+    "RoutingValue",
+    "RegisterValue",
     "QuantaVector",
     "pack_quaternary_array",
     "unpack_quaternary_bytes",

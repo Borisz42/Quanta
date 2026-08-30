@@ -12,16 +12,35 @@ from rich.box import ROUNDED, ASCII
 from rich.markup import escape
 
 from core.asg import QuantaGraph, QuantaNode
-from core.slots import get_slot_by_index, SlotBand
-from core.types import QuaternaryValue
+from core.slots import get_slot_by_index, SlotBand, SlotDefinition, get_slot_contract
+from core.types import QuaternaryValue, BandContract
 
 
 class ASGVisualizer:
     """Renders QuantaGraph and QuantaNodes into structured ASCII/Unicode art, tables, and Mermaid graphs."""
 
     @staticmethod
-    def _val_name(val: int | QuaternaryValue) -> str:
+    def _val_name(val: int | QuaternaryValue, slot_def: Optional[SlotDefinition] = None) -> str:
         v = int(val)
+        if slot_def is not None:
+            contract = slot_def.contract
+            if contract == BandContract.STRUCTURAL:
+                if v == 1:
+                    return "ACTIVE_LOCAL (1)"
+                elif v == 2:
+                    return "ACTIVE_EXTERNAL (2)"
+                elif v == 3:
+                    return "ACTIVE_MERKLE (3)"
+                return "INACTIVE (0)"
+            elif contract == BandContract.REGISTER:
+                if v == 1:
+                    return "BOUND_LOCAL (1)"
+                elif v == 2:
+                    return "BOUND_EXTERNAL (2)"
+                elif v == 3:
+                    return "QUERY_TARGET (3)"
+                return "UNBOUND (0)"
+
         if v == 1:
             return "TRUE (1)"
         elif v == 2:
@@ -62,7 +81,7 @@ class ASGVisualizer:
                 return
 
             if show_slots and node.vector.active_slots():
-                slot_strs = [f"{get_slot_by_index(k).name}: {cls._val_name(v)}" for k, v in node.vector.active_slots().items()]
+                slot_strs = [f"{get_slot_by_index(k).name}: {cls._val_name(v, slot_def=get_slot_by_index(k))}" for k, v in node.vector.active_slots().items()]
                 parent_tree.add(escape(f"Slots: [{', '.join(slot_strs[:6])}{'...' if len(slot_strs) > 6 else ''}]"))
 
             for rel in sorted(node.edges.keys()):
@@ -98,7 +117,7 @@ class ASGVisualizer:
         SlotBand.BAND_4_AFFORDANCES_OPERATIONS: "Band 4 (Affordances & Operations)",
         SlotBand.BAND_5_TOM_PRAGMATICS: "Band 5 (Theory of Mind & Pragmatics)",
         SlotBand.BAND_6_PROOF_DEONTICS: "Band 6 (Proof Solvers & Deontics)",
-        SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL: "Band 7 (Spatiotemporal & Causal)",
+        SlotBand.BAND_7_SPATIOTEMPORAL_CAUSAL: "Band 7 (Spatio-Temporal & Causal)",
     }
 
     @classmethod
@@ -163,6 +182,7 @@ class ASGVisualizer:
             anchor_lines.append(f"Active Slots: {len(active_slots)}")
             concept_text = "\n".join(anchor_lines)
 
+            # Format Edges
             edges_lines = []
             for rel in sorted(node.edges.keys()):
                 for tgt in sorted(node.edges[rel]):
@@ -237,7 +257,14 @@ class ASGVisualizer:
             for rel in sorted(node.edges.keys()):
                 for tgt_cid in sorted(node.edges[rel]):
                     tgt_id = f"node_{tgt_cid[:8]}"
-                    lines.append(f"    {src_id} -->|{rel}| {tgt_id}")
+                    tgt_node = graph.get_node(tgt_cid)
+                    # Style edge based on Merkle fold vs normal
+                    if tgt_node and tgt_node.anchor and tgt_node.anchor.startswith("merkle:"):
+                        lines.append(f"    {src_id} ==>|{rel} (Merkle CID)| {tgt_id}")
+                    elif rel in ("GRAPH_EXT_REFERENCE", "GRAPH_SQLITE_REF"):
+                        lines.append(f"    {src_id} -.->|{rel} (External)| {tgt_id}")
+                    else:
+                        lines.append(f"    {src_id} -->|{rel}| {tgt_id}")
                     has_edges = True
 
         if not has_edges and len(graph.nodes) > 1:

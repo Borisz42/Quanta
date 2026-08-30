@@ -72,9 +72,23 @@ class SCaspBridge:
 
             active = node.vector.active_slots()
             for idx, qval in active.items():
-                slot_name = get_slot_by_index(idx).name
+                slot_def = get_slot_by_index(idx)
+                slot_name = slot_def.name
                 val_int = int(qval)
                 lines.append(f"slot('{cid}', '{slot_name}', {val_int}).")
+                
+                # Polymorphic contract-specific Prolog assertions
+                contract = slot_def.contract
+                if contract.value == "EPISTEMIC":
+                    val_str = "true" if val_int == 1 else ("false" if val_int == 2 else "unknown")
+                    lines.append(f"epistemic_slot('{cid}', '{slot_name}', {val_str}).")
+                elif contract.value == "STRUCTURAL":
+                    routing_str = "local" if val_int == 1 else ("external" if val_int == 2 else "merkle")
+                    lines.append(f"structural_routing('{cid}', '{slot_name}', {routing_str}).")
+                elif contract.value == "REGISTER":
+                    reg_str = "bound_local" if val_int == 1 else ("bound_external" if val_int == 2 else "query_target")
+                    lines.append(f"register_scope('{cid}', '{slot_name}', {reg_str}).")
+
                 for alias in inv_aliases.get(slot_name, []):
                     lines.append(f"slot('{cid}', '{alias}', {val_int}).")
 
