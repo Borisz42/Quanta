@@ -146,12 +146,12 @@ Handwritten regexes cannot generalize to open-domain English. We employ a quanti
   - Exact Allen interval relations and causal mechanism strings.
 
 ### Checklist
-- [ ] **3.1** Define typed intermediate schema in `src/parser/schema.py`: `DiscourseExtractionResult`, `ExtractedEntity`, `ExtractedEvent`, `ExtractedRelation`, `ExtractedProposition`.
-- [ ] **3.2** Implement `LMStudioTransducer` in `src/parser/transducer.py` with connection health-check, retry logic, and strict JSON parsing.
-- [ ] **3.3** Implement `LocalGGUFTransducer` using `llama-cpp-python` as a direct in-process alternative.
-- [ ] **3.4** Implement `MockTransducer` returning pre-recorded fixture outputs for offline regression testing.
-- [ ] **3.5** Optimize system prompt with a 1-shot demonstration enforcing entity ID foreign keys (`agent_id: "E1"`) and synonym consolidation.
-- [ ] **3.6** 🧪 Write integration tests in `tests/test_transducer.py` verifying that parsing the Eleanor Vance paragraph produces the validated 5-entity, 6-event schema.
+- [x] **3.1** Define typed intermediate schema in `src/parser/schema.py`: `DiscourseExtractionResult`, `ExtractedEntity`, `ExtractedEvent`, `ExtractedRelation`, `ExtractedProposition`.
+- [x] **3.2** Implement `LMStudioTransducer` in `src/parser/transducer.py` with connection health-check, retry logic, and strict JSON parsing.
+- [x] **3.3** Implement `LocalGGUFTransducer` using `llama-cpp-python` as a direct in-process alternative.
+- [x] **3.4** Implement `MockTransducer` returning pre-recorded fixture outputs for offline regression testing.
+- [x] **3.5** Optimize system prompt with a 1-shot demonstration enforcing entity ID foreign keys (`agent_id: "E1"`) and synonym consolidation.
+- [x] **3.6** 🧪 Write integration tests in `tests/test_transducer.py` verifying that parsing the Eleanor Vance paragraph produces the validated 5-entity, 6-event schema.
 
 ---
 

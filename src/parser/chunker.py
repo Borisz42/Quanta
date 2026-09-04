@@ -493,3 +493,7 @@ class DiscourseChunker:
     def chunk_document(self, text: str) -> List[DiscourseChunk]:
         """Convenience method to chunk an entire document string into a list of DiscourseChunks."""
         return list(self.stream_chunks(text))
+
+    def chunk(self, text: str) -> List[DiscourseChunk]:
+        """Alias for chunk_document."""
+        return self.chunk_document(text)

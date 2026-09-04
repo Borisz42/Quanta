@@ -12,6 +12,20 @@ from parser.entity_manifest import (
     EntityMatcher,
     EntityPagingEngine,
 )
+from parser.schema import (
+    DiscourseExtractionResult,
+    ExtractedEntity,
+    ExtractedEvent,
+    ExtractedRelation,
+    ExtractedProposition,
+)
+from parser.transducer import (
+    BaseDiscourseTransducer,
+    LMStudioTransducer,
+    LocalGGUFTransducer,
+    MockTransducer,
+    create_transducer,
+)
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -27,5 +41,15 @@ __all__ = [
     "ActiveEntityManifest",
     "EntityMatcher",
     "EntityPagingEngine",
+    "DiscourseExtractionResult",
+    "ExtractedEntity",
+    "ExtractedEvent",
+    "ExtractedRelation",
+    "ExtractedProposition",
+    "BaseDiscourseTransducer",
+    "LMStudioTransducer",
+    "LocalGGUFTransducer",
+    "MockTransducer",
+    "create_transducer",
 ]
 
