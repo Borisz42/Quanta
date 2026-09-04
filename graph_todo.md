@@ -46,6 +46,7 @@
 │ • Temporal consistency (no A < B & B < A)                                 │ • Hierarchical Merkle Sub-Graph Folding   │
 │ • Minimal Unsatisfiable Core (MUC)    │                                   │ • Host RAM / SQLite 1M+ Node Storage      │
 └───────────────────────────────────────┘                                   │ • Sub-10ms Bitwise SIMD Hamming Retrieval │
+                                                                            │ • PHASE 9: WIKIPEDIA / WIKIDATA KB MOUNT  │
                                                                             └─────────────────────┬─────────────────────┘
                                                                                                   │
                                                                                                   ▼
@@ -252,12 +253,12 @@ The previous realizer cheated round-trip evaluation by collecting raw literal st
   - Support query prompts (e.g. *"What did Eleanor Vance verify?"*): traverse the graph directly to the target event and emit the concise factual answer.
 
 ### Checklist
-- [ ] **7.1** Permanently delete `_collect_descendant_tokens` and `_format_token_sequence` from `src/realizer/english_nlg.py`.
-- [ ] **7.2** Implement compositional clause realization: unroll `VAL_X1_AGENT + Predicate + VAL_X2_PATIENT + Modifiers` directly from ConceptNet anchors and Band 1 tense slots.
-- [ ] **7.3** Implement discourse-aware anaphoric referring expression generator (first mention full name, subsequent mention pronoun/definite NP).
-- [ ] **7.4** Implement discourse narrative sequencing: traverse events along Band 7 temporal edges and insert fluent transition phrases ("immediately", "three hours later").
-- [ ] **7.5** Implement graph-query answer generator for zero-attention-cost question answering over Host-RAM graphs.
-- [ ] **7.6** 🧪 Write unit tests in `tests/test_honest_realizer.py`: Realize the Eleanor Vance ASG; verify generated text is grammatically fluent, preserves all facts, and uses proper pronouns without inspecting verbatim token lists.
+- [x] **7.1** Permanently delete `_collect_descendant_tokens` and `_format_token_sequence` from `src/realizer/english_nlg.py`.
+- [x] **7.2** Implement compositional clause realization: unroll `VAL_X1_AGENT + Predicate + VAL_X2_PATIENT + Modifiers` directly from ConceptNet anchors and Band 1 tense slots.
+- [x] **7.3** Implement discourse-aware anaphoric referring expression generator (first mention full name, subsequent mention pronoun/definite NP).
+- [x] **7.4** Implement discourse narrative sequencing: traverse events along Band 7 temporal edges and insert fluent transition phrases ("immediately", "three hours later").
+- [x] **7.5** Implement graph-query answer generator for zero-attention-cost question answering over Host-RAM graphs.
+- [x] **7.6** 🧪 Write unit tests in `tests/test_honest_realizer.py`: Realize the Eleanor Vance ASG; verify generated text is grammatically fluent, preserves all facts, and uses proper pronouns without inspecting verbatim token lists.
 
 ---
 
@@ -276,3 +277,48 @@ Demonstrate the end-to-end cognitive cycle on both complex single paragraphs and
   - Merkle root is deterministically computed.
   - Questions about Chapter 1 asked after Chapter 10 are answered in $< 10\text{ ms}$ with zero hallucination.
 - [ ] **8.4** Regenerate `output/complex_translation_graphs_eng_eng.md` and `output/all_complex_translation_graphs.md` with authentic, deduplicated ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
+
+---
+
+## Phase 9: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation)
+
+### Context & Architectural Rationale
+To scale from document context to universal human knowledge (~6.8M English Wikipedia articles, ~100M Wikidata entities and relational triples):
+- In continuous transformers, holding 6 billion tokens requires **~3.1 Petabytes of GPU VRAM**—physically impossible.
+- In QUANTA, the entire encyclopedic knowledge base is pre-compiled into a memory-mapped database (`data/wikipedia_quanta.db`, ~25–40 GB on NVMe SSD or Host RAM).
+- Any conversation or trivia query mounts this global knowledge base in read-only mode.
+- **Physical GPU VRAM remains strictly $O(1)$ ($M=512$ nodes $\approx 128\text{ KB}$)**, while multi-hop trivia queries traverse the graph in **$< 10\text{ ms}$** with **$0.000000\%$ hallucination**.
+
+```text
+[ User Trivia Query ] ──> [ Query Signature: (?X, ?Y) ]
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Sub-Millisecond Host Page-Table Traversal (< 5 ms):                         │
+│ • "Gustave Eiffel" (Q208) ──> Death: 1923                                   │
+│ • "Titanic Sinking" (Q25252) ──> Event: 1912                                │
+│ • Constraint: 1923 > 1912 ──> TEMP_ALLEN_AFTER ──> Proof Validated (YES)    │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Page into Active GPU Canvas: ONLY 3 nodes (768 bytes!)                      │
+│ Instant, Verifiable Answer: "Yes, Gustave Eiffel passed away in 1923..."    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Guidelines
+- Implement streaming Wikidata JSON/RDF ingester in `src/data/wikidata_ingester.py`.
+- Map Wikidata Q-IDs to canonical ConceptNet 5.7.0 anchors, WordNet synsets, and 1024-dimension QuantaVectors.
+- Map properties (P19 place of birth, P569 date of birth, etc.) to Band 1 valencies and Band 7 temporal anchors.
+- Implement `GlobalKnowledgeBase` in `src/memory/global_kb.py` providing background read-only mounting into `PageTable`.
+- Implement `WikipediaQueryResolver` for sub-10ms multi-hop factual and relational trivia resolution.
+
+### Checklist
+- [ ] **9.1** Implement streaming Wikidata/Wikipedia dump ingester in `src/data/wikidata_ingester.py` supporting filtered entity categories (people, places, scientific concepts, events).
+- [ ] **9.2** Implement entity and property mapper converting Wikidata Q-IDs and P-ID triples into ConceptNet 5.7.0 anchors, 1024-d QuantaVectors, and 256-bit BLAKE3 CIDs.
+- [ ] **9.3** Implement persistent storage compiler creating memory-mapped `data/wikipedia_quanta.db` (SQLite/LMDB) with fast inverted B-Tree index on canonical names and aliases.
+- [ ] **9.4** Implement `GlobalKnowledgeBase` mount interface in `src/memory/global_kb.py` allowing runtime background mounting of the encyclopedic database into `PageTable`.
+- [ ] **9.5** Implement multi-hop graph trivia resolver (`WikipediaQueryResolver`): resolves complex relational questions via graph edge traversal in $< 5\text{ ms}$.
+- [ ] **9.6** 🧪 Write benchmark test in `tests/test_wikipedia_kb.py`: Mount a 100,000-entity slice of Wikidata; verify multi-hop queries execute in $< 10\text{ ms}$ with $O(1)$ VRAM usage ($128\text{ KB}$) and zero hallucination.
+

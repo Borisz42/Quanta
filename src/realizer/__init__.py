@@ -1,6 +1,11 @@
 """QUANTA Realizer package for unrolling ASGs into Natural Language, Logic, and Code."""
 
-from realizer.english_nlg import EnglishRealizer
+from realizer.english_nlg import (
+    ConceptVectorDecoder,
+    EnglishRealizer,
+    GraphQueryAnswerer,
+    ReferringExpressionGenerator,
+)
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
 from realizer.multilingual import (
@@ -15,7 +20,10 @@ from realizer.multilingual import (
 )
 
 __all__ = [
+    "ConceptVectorDecoder",
     "EnglishRealizer",
+    "GraphQueryAnswerer",
+    "ReferringExpressionGenerator",
     "FOLEmitter",
     "CodeEmitter",
     "MorphologicalType",
@@ -27,4 +35,5 @@ __all__ = [
     "FusionalLanguageAdapter",
     "MultilingualRealizerRegistry",
 ]
+
 

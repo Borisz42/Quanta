@@ -214,6 +214,11 @@ class ASGCompiler:
                     validation_result=val_res,
                 )
 
+        # 10. Attach extraction result & entity/event maps to graph for honest NLG realization
+        setattr(graph, "extraction_result", extraction_result)
+        setattr(graph, "entity_nodes", entity_nodes)
+        setattr(graph, "event_nodes", event_nodes)
+
         return graph
 
     def compile_entity(self, entity: ExtractedEntity, register_index: int = 0) -> QuantaNode:
