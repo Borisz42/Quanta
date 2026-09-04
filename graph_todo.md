@@ -209,10 +209,10 @@ In long-form documents (500 pages), maintaining every individual event node in a
 - Unfolding dynamically restores the full sub-graph from disk/database when needed.
 
 ### Checklist
-- [ ] **5.1** Implement `fold_discourse_episode(graph, chunk_id) -> QuantaNode` producing a 32-byte Merkle fold node with aggregate quaternary vector.
-- [ ] **5.2** Implement hierarchical folding: combine chunk fold nodes into Chapter Merkle roots and Book Merkle roots.
-- [ ] **5.3** Implement dynamic unfolding: `unfold_subgraph(cid, storage) -> QuantaGraph` verifying exact cryptographic SHA-256/BLAKE3 hash integrity.
-- [ ] **5.4** 🧪 Write unit tests in `tests/test_merkle_folding.py`: Fold a 10-chunk narrative into a single Book CID; verify any tamper in Chunk 3 invalidates the Book Merkle root.
+- [x] **5.1** Implement `fold_discourse_episode(graph, chunk_id) -> QuantaNode` producing a 32-byte Merkle fold node with aggregate quaternary vector.
+- [x] **5.2** Implement hierarchical folding: combine chunk fold nodes into Chapter Merkle roots and Book Merkle roots.
+- [x] **5.3** Implement dynamic unfolding: `unfold_subgraph(cid, storage) -> QuantaGraph` verifying exact cryptographic SHA-256/BLAKE3 hash integrity.
+- [x] **5.4** 🧪 Write unit tests in `tests/test_merkle_folding.py`: Fold a 10-chunk narrative into a single Book CID; verify any tamper in Chunk 3 invalidates the Book Merkle root.
 
 ---
 

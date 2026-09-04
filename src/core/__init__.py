@@ -20,7 +20,17 @@ from core.slots import (
     get_slot_names,
     export_canonical_slots_layout,
 )
-from core.asg import QuantaNode, QuantaGraph
+from core.asg import (
+    QuantaNode,
+    QuantaGraph,
+    fold_subgraph,
+    unfold_subgraph,
+    fold_discourse_episode,
+    fold_chapter,
+    fold_book,
+    HierarchicalMerkleBook,
+)
+from core.page_table import PageTableStorage
 from core.valency import TypeConstraintRegistry, ValencyConstraint, validate_valency
 
 __all__ = [
@@ -42,6 +52,13 @@ __all__ = [
     "export_canonical_slots_layout",
     "QuantaNode",
     "QuantaGraph",
+    "fold_subgraph",
+    "unfold_subgraph",
+    "fold_discourse_episode",
+    "fold_chapter",
+    "fold_book",
+    "HierarchicalMerkleBook",
+    "PageTableStorage",
     "TypeConstraintRegistry",
     "ValencyConstraint",
     "validate_valency",

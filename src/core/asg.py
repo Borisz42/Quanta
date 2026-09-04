@@ -1,6 +1,8 @@
 """Abstract Syntax Graph (ASG) and Content-Addressed Merkle nodes for QUANTA."""
 
 from __future__ import annotations
+from collections.abc import MutableMapping
+import hashlib
 import json
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import blake3
@@ -398,9 +400,16 @@ class QuantaGraph:
             return self.get_node(self.root_cid)
         return None
 
-    def compute_merkle_root(self) -> str:
-        """Folds all nodes in the graph into a top-level Merkle root CID hash."""
-        hasher = blake3.blake3()
+    def compute_merkle_root(self, algorithm: str = "blake3") -> str:
+        """Folds all nodes in the graph into a top-level Merkle root CID hash.
+        
+        Args:
+            algorithm: Cryptographic hashing algorithm ('blake3' or 'sha256').
+        """
+        if algorithm.lower() == "sha256":
+            hasher = hashlib.sha256()
+        else:
+            hasher = blake3.blake3()
         current_nodes = self.nodes
         sorted_cids = sorted(current_nodes.keys())
         hasher.update(len(sorted_cids).to_bytes(4, "big"))
@@ -525,11 +534,12 @@ class QuantaGraph:
         else:
             raise TypeError(f"Unsupported storage payload type: {type(stored_data)}")
 
-        # Verify tamper integrity
-        actual_merkle = sub_graph.compute_merkle_root()
-        if actual_merkle != sub_merkle_cid:
+        # Verify tamper integrity across BLAKE3 (default) or SHA-256
+        actual_merkle_blake3 = sub_graph.compute_merkle_root(algorithm="blake3")
+        actual_merkle_sha256 = sub_graph.compute_merkle_root(algorithm="sha256")
+        if sub_merkle_cid.lower() not in (actual_merkle_blake3.lower(), actual_merkle_sha256.lower()):
             raise ValueError(
-                f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle} (storage payload tampered)"
+                f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle_blake3} (storage payload tampered)"
             )
 
         restored_root_cid = sub_graph.root_cid
@@ -700,12 +710,40 @@ def fold_subgraph(
     return graph.fold_subgraph(subtree_root_cid, storage=storage)
 
 
+def _is_entity_node(node: QuantaNode) -> bool:
+    """Identifies whether a QuantaNode represents an external entity (character, place, substance, etc.)."""
+    if node.get_slot("TYPE_EVENT") != 0 or node.get_slot("WN_ACT_ACTION") != 0:
+        return False
+    if node.get_slot("GRAPH_VARIABLE_BIND") != 0:
+        return True
+    entity_slots = (
+        "TYPE_HUMAN",
+        "TYPE_ANIMATE",
+        "TYPE_SPATIAL_REGION",
+        "TYPE_ARTIFACT",
+        "TYPE_NATURAL_OBJECT",
+        "CN_Q072_SUBSTANCE",
+        "TYPE_ORGANIZATION",
+        "ROLE_AGENT_CAPABLE",
+        "ROLE_SENTIENT",
+        "ROLE_PATIENT_TARGET",
+    )
+    for slot in entity_slots:
+        if node.get_slot(slot) != 0:
+            return True
+    if node.anchor and (node.anchor.startswith("cn:en:") and "(n)" in node.anchor):
+        return True
+    return False
+
+
 def unfold_subgraph(
     folded_cid_or_node: Union[str, QuantaNode],
-    storage: Dict[str, Any],
+    storage: Union[Dict[str, Any], MutableMapping],
     target_graph: Optional[QuantaGraph] = None,
 ) -> Union[str, QuantaGraph]:
-    """Unfolds a Merkle pointer node.
+    """Unfolds a Merkle pointer node or Merkle CID with cryptographic verification.
+    
+    Verifies exact BLAKE3 / SHA-256 Merkle root integrity and rejects tampered storage payloads.
     
     Args:
         folded_cid_or_node: Pointer node instance, pointer node CID, or Merkle CID.
@@ -715,9 +753,13 @@ def unfold_subgraph(
                       
     Returns:
         Restored root CID string if target_graph is provided, or QuantaGraph if target_graph is None.
+        
+    Raises:
+        KeyError: If Merkle CID is not found in storage.
+        ValueError: If payload hash does not match expected Merkle CID (tamper detected).
     """
     if target_graph is not None:
-        cid = folded_cid_or_node.cid if isinstance(folded_cid_or_node, QuantaNode) else folded_cid_or_node
+        cid = folded_cid_or_node.cid if isinstance(folded_cid_or_node, QuantaNode) else str(folded_cid_or_node)
         return target_graph.unfold_subgraph(cid, storage)
 
     if isinstance(folded_cid_or_node, QuantaNode):
@@ -728,6 +770,24 @@ def unfold_subgraph(
         cid_str = str(folded_cid_or_node)
         if cid_str.startswith("merkle:"):
             sub_merkle_cid = cid_str.split("merkle:")[1]
+        elif cid_str in storage:
+            stored_val = storage[cid_str]
+            if isinstance(stored_val, dict) and "merkle_root" in stored_val:
+                sub_merkle_cid = cid_str
+            elif isinstance(stored_val, dict) and "anchor" in stored_val and str(stored_val["anchor"]).startswith("merkle:"):
+                sub_merkle_cid = str(stored_val["anchor"]).split("merkle:")[1]
+            elif isinstance(stored_val, str) and stored_val.startswith("merkle:"):
+                sub_merkle_cid = stored_val.split("merkle:")[1]
+            elif isinstance(stored_val, str) and (len(stored_val) == 64 and all(c in "0123456789abcdefABCDEF" for c in stored_val)):
+                sub_merkle_cid = stored_val
+            else:
+                sub_merkle_cid = cid_str
+        elif f"chunk:{cid_str}" in storage:
+            sub_merkle_cid = storage[f"chunk:{cid_str}"]
+        elif f"chapter:{cid_str}" in storage:
+            sub_merkle_cid = storage[f"chapter:{cid_str}"]
+        elif f"book:{cid_str}" in storage:
+            sub_merkle_cid = storage[f"book:{cid_str}"]
         else:
             sub_merkle_cid = cid_str
 
@@ -739,14 +799,413 @@ def unfold_subgraph(
         sub_graph = QuantaGraph.from_dict(stored_data)
     elif isinstance(stored_data, QuantaGraph):
         sub_graph = stored_data
+    elif isinstance(stored_data, str):
+        sub_graph = QuantaGraph.from_json(stored_data)
     else:
         raise TypeError(f"Unsupported storage payload type: {type(stored_data)}")
 
-    actual_merkle = sub_graph.compute_merkle_root()
-    if actual_merkle != sub_merkle_cid:
+    actual_merkle_blake3 = sub_graph.compute_merkle_root(algorithm="blake3")
+    actual_merkle_sha256 = sub_graph.compute_merkle_root(algorithm="sha256")
+    if sub_merkle_cid.lower() not in (actual_merkle_blake3.lower(), actual_merkle_sha256.lower()):
         raise ValueError(
-            f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle} (storage payload tampered)"
+            f"Merkle CID mismatch during unfold: expected {sub_merkle_cid}, but computed {actual_merkle_blake3} (storage payload tampered)"
         )
     return sub_graph
+
+
+def fold_discourse_episode(
+    graph: QuantaGraph,
+    chunk_id: str,
+    storage: Optional[Union[Dict[str, Any], MutableMapping]] = None,
+    keep_entities: bool = True,
+) -> QuantaNode:
+    """Folds the internal event DAG of a discourse episode into a 32-byte Merkle fold node.
+    
+    In long-form documents, maintaining every individual event node in active memory
+    is unnecessary. Once a paragraph/chunk is compiled and validated, its event DAG is
+    sealed into a Sub-Graph Merkle CID (GRAPH_MERKLE_FOLD_POINT).
+    
+    External entity references are kept intact on the resulting fold node so that the
+    working memory / active graph retains the entity-to-episode valencies.
+    
+    Args:
+        graph: The QuantaGraph containing the episode (modified in-place).
+        chunk_id: Identifier of the chunk (e.g. 'chunk_0001').
+        storage: Optional dictionary or PageTableStorage to persist the folded sub-graph.
+        keep_entities: If True, entity nodes remain in the active graph and are wired
+                       to the fold node.
+                       
+    Returns:
+        The fold QuantaNode (32-byte Merkle CID node) with aggregate quaternary vector.
+    """
+    if len(graph) == 0:
+        raise ValueError("Cannot fold an empty QuantaGraph")
+
+    # 1. Classify nodes: external entities vs internal episode nodes
+    if keep_entities:
+        entity_cids = {cid for cid, n in graph.nodes.items() if _is_entity_node(n)}
+        internal_cids = {cid for cid in graph.nodes.keys() if cid not in entity_cids}
+        if not internal_cids:
+            # If no distinct internal nodes found, treat all nodes as internal
+            internal_cids = set(graph.nodes.keys())
+            entity_cids = set()
+    else:
+        internal_cids = set(graph.nodes.keys())
+        entity_cids = set()
+
+    # 2. Build isolated episode sub-graph
+    episode_subgraph = QuantaGraph()
+    for cid in internal_cids:
+        node = graph.get_node(cid)
+        if node is not None:
+            cloned = QuantaNode(
+                vector=node.vector.copy(),
+                anchor=node.anchor,
+                literal=node.literal,
+                parent_cid=node.parent_cid,
+            )
+            cloned.edges = {k: list(v) for k, v in node.edges.items()}
+            episode_subgraph.add_node(cloned)
+
+    if graph.root_cid in internal_cids:
+        episode_subgraph.root_cid = graph.root_cid
+    else:
+        for n in episode_subgraph.nodes.values():
+            if n.get_slot("GRAPH_ROOT_NODE") == 1:
+                episode_subgraph.root_cid = n.cid
+                break
+        if not episode_subgraph.root_cid and episode_subgraph.nodes:
+            episode_subgraph.root_cid = next(iter(episode_subgraph.nodes.keys()))
+
+    sub_merkle_cid = episode_subgraph.compute_merkle_root()
+
+    # 3. Store sub-graph if storage provided
+    if storage is not None:
+        storage[sub_merkle_cid] = episode_subgraph.to_dict()
+        storage[f"chunk:{chunk_id}"] = sub_merkle_cid
+
+    # 4. Compute aggregate quaternary proposition vector via lattice join
+    aggregate_vec = episode_subgraph.to_proposition_vector()
+    aggregate_vec["GRAPH_MERKLE_FOLD_POINT"] = StructuralValue.ACTIVE_MERKLE
+    aggregate_vec["GRAPH_EXT_REFERENCE"] = StructuralValue.ACTIVE_MERKLE
+    aggregate_vec["TYPE_PROPOSITION"] = 1
+
+    # 5. Extract and preserve external entity edges
+    external_edges: Dict[str, List[str]] = {}
+    for cid in internal_cids:
+        node = graph.get_node(cid)
+        if node is None:
+            continue
+        for rel, targets in node.edges.items():
+            for t in targets:
+                if t in entity_cids:
+                    if rel not in external_edges:
+                        external_edges[rel] = []
+                    if t not in external_edges[rel]:
+                        external_edges[rel].append(t)
+
+    # 6. Create fold QuantaNode
+    fold_node = QuantaNode(
+        vector=aggregate_vec,
+        anchor=f"merkle:{sub_merkle_cid}",
+        literal={
+            "chunk_id": chunk_id,
+            "merkle_cid": sub_merkle_cid,
+            "type": "discourse_episode_fold",
+        },
+    )
+    for rel, targets in external_edges.items():
+        for t in targets:
+            fold_node.add_edge(rel, t)
+
+    fold_cid = fold_node.compute_cid()
+
+    # 7. Update target graph in-place
+    graph._node_list = [n for n in graph._node_list if n.cid not in internal_cids]
+    for cid in list(internal_cids):
+        graph._cid_to_node.pop(cid, None)
+
+    graph._node_list.append(fold_node)
+    graph._cid_to_node[fold_cid] = fold_node
+
+    if graph.root_cid in internal_cids or graph.root_cid is None:
+        graph.root_cid = fold_cid
+
+    replacements = {cid: fold_cid for cid in internal_cids}
+    graph._propagate_cid_updates(replacements)
+
+    return fold_node
+
+
+def fold_chapter(
+    chunk_nodes: Sequence[QuantaNode],
+    chapter_id: str,
+    chapter_title: Optional[str] = None,
+    storage: Optional[Union[Dict[str, Any], MutableMapping]] = None,
+) -> QuantaNode:
+    """Folds constituent chunk fold nodes into a Chapter Merkle fold node.
+    
+    Args:
+        chunk_nodes: Sequence of QuantaNode instances representing folded chunk episodes.
+        chapter_id: Unique chapter identifier (e.g. 'chapter_01').
+        chapter_title: Optional human-readable chapter heading/title.
+        storage: Optional storage backend to persist the chapter sub-graph.
+        
+    Returns:
+        The Chapter fold QuantaNode with Merkle CID and aggregate quaternary vector.
+    """
+    if not chunk_nodes:
+        raise ValueError("Cannot fold an empty sequence of chunk nodes into a chapter")
+
+    chapter_graph = QuantaGraph()
+    for c_node in chunk_nodes:
+        cloned = QuantaNode(
+            vector=c_node.vector.copy(),
+            anchor=c_node.anchor,
+            literal=c_node.literal,
+            parent_cid=c_node.parent_cid,
+        )
+        cloned.edges = {k: list(v) for k, v in c_node.edges.items()}
+        chapter_graph.add_node(cloned)
+
+    for i in range(len(chunk_nodes) - 1):
+        chapter_graph.add_edge(chunk_nodes[i].cid, "TEMP_ALLEN_MEETS", chunk_nodes[i + 1].cid)
+
+    chapter_merkle_cid = chapter_graph.compute_merkle_root()
+
+    if storage is not None:
+        storage[chapter_merkle_cid] = chapter_graph.to_dict()
+        storage[f"chapter:{chapter_id}"] = chapter_merkle_cid
+
+    chapter_vec = chapter_graph.to_proposition_vector()
+    chapter_vec["GRAPH_MERKLE_FOLD_POINT"] = StructuralValue.ACTIVE_MERKLE
+    chapter_vec["GRAPH_EXT_REFERENCE"] = StructuralValue.ACTIVE_MERKLE
+    chapter_vec["TYPE_PROPOSITION"] = 1
+
+    chapter_node = QuantaNode(
+        vector=chapter_vec,
+        anchor=f"merkle:{chapter_merkle_cid}",
+        literal={
+            "chapter_id": chapter_id,
+            "chapter_title": chapter_title,
+            "chunk_cids": [c.cid for c in chunk_nodes],
+            "type": "chapter_fold",
+        },
+    )
+    for c_node in chunk_nodes:
+        chapter_node.add_edge("GRAPH_MERKLE_FOLD_POINT", c_node.cid)
+
+    chapter_node.compute_cid()
+    return chapter_node
+
+
+def fold_book(
+    chapter_nodes: Sequence[QuantaNode],
+    book_id: str = "book_1",
+    book_title: Optional[str] = None,
+    storage: Optional[Union[Dict[str, Any], MutableMapping]] = None,
+) -> QuantaNode:
+    """Folds constituent chapter fold nodes into the top-level Book Merkle root.
+    
+    Args:
+        chapter_nodes: Sequence of QuantaNode instances representing folded chapters.
+        book_id: Unique book identifier (e.g. 'book_01').
+        book_title: Optional human-readable book title.
+        storage: Optional storage backend to persist the book graph.
+        
+    Returns:
+        The Book Root fold QuantaNode with Book Root CID and aggregate quaternary vector.
+    """
+    if not chapter_nodes:
+        raise ValueError("Cannot fold an empty sequence of chapter nodes into a book")
+
+    book_graph = QuantaGraph()
+    for ch_node in chapter_nodes:
+        cloned = QuantaNode(
+            vector=ch_node.vector.copy(),
+            anchor=ch_node.anchor,
+            literal=ch_node.literal,
+            parent_cid=ch_node.parent_cid,
+        )
+        cloned.edges = {k: list(v) for k, v in ch_node.edges.items()}
+        book_graph.add_node(cloned)
+
+    for i in range(len(chapter_nodes) - 1):
+        book_graph.add_edge(chapter_nodes[i].cid, "TEMP_ALLEN_MEETS", chapter_nodes[i + 1].cid)
+
+    book_merkle_cid = book_graph.compute_merkle_root()
+
+    if storage is not None:
+        storage[book_merkle_cid] = book_graph.to_dict()
+        storage[f"book:{book_id}"] = book_merkle_cid
+
+    book_vec = book_graph.to_proposition_vector()
+    book_vec["GRAPH_MERKLE_FOLD_POINT"] = StructuralValue.ACTIVE_MERKLE
+    book_vec["GRAPH_EXT_REFERENCE"] = StructuralValue.ACTIVE_MERKLE
+    book_vec["TYPE_PROPOSITION"] = 1
+
+    book_node = QuantaNode(
+        vector=book_vec,
+        anchor=f"merkle:{book_merkle_cid}",
+        literal={
+            "book_id": book_id,
+            "book_title": book_title,
+            "chapter_cids": [ch.cid for ch in chapter_nodes],
+            "type": "book_fold",
+        },
+    )
+    for ch_node in chapter_nodes:
+        book_node.add_edge("GRAPH_MERKLE_FOLD_POINT", ch_node.cid)
+
+    book_node.compute_cid()
+    return book_node
+
+
+class HierarchicalMerkleBook:
+    """High-level hierarchical Merkle coordinator for book-scale narrative memory."""
+
+    def __init__(
+        self,
+        book_id: str = "book_1",
+        title: Optional[str] = None,
+        storage: Optional[Union[Dict[str, Any], MutableMapping]] = None,
+    ):
+        self.book_id = book_id
+        self.title = title
+        self.storage = storage if storage is not None else {}
+        self.chapters: Dict[str, List[QuantaNode]] = {}
+        self.chapter_nodes: Dict[str, QuantaNode] = {}
+        self.book_node: Optional[QuantaNode] = None
+
+    def add_chunk_episode(
+        self,
+        chunk_id: str,
+        graph: QuantaGraph,
+        chapter_id: str = "chapter_1",
+        keep_entities: bool = True,
+    ) -> QuantaNode:
+        """Folds a discourse episode and records it in the given chapter."""
+        chunk_node = fold_discourse_episode(
+            graph=graph,
+            chunk_id=chunk_id,
+            storage=self.storage,
+            keep_entities=keep_entities,
+        )
+        if chapter_id not in self.chapters:
+            self.chapters[chapter_id] = []
+        self.chapters[chapter_id].append(chunk_node)
+        return chunk_node
+
+    def add_chunk_node(self, chunk_node: QuantaNode, chapter_id: str = "chapter_1"):
+        """Registers an already-folded chunk node into a chapter."""
+        if chapter_id not in self.chapters:
+            self.chapters[chapter_id] = []
+        self.chapters[chapter_id].append(chunk_node)
+
+    def fold_chapter(self, chapter_id: str, chapter_title: Optional[str] = None) -> QuantaNode:
+        """Folds all registered chunk nodes for the given chapter into a Chapter Merkle fold node."""
+        chunk_nodes = self.chapters.get(chapter_id, [])
+        if not chunk_nodes:
+            raise ValueError(f"No chunk episodes found for chapter '{chapter_id}'")
+        ch_node = fold_chapter(
+            chunk_nodes=chunk_nodes,
+            chapter_id=chapter_id,
+            chapter_title=chapter_title,
+            storage=self.storage,
+        )
+        self.chapter_nodes[chapter_id] = ch_node
+        return ch_node
+
+    def fold_book(self) -> QuantaNode:
+        """Folds all chapters in order into the Book Merkle root node."""
+        ordered_chapters: List[QuantaNode] = []
+        for ch_id in self.chapters.keys():
+            if ch_id not in self.chapter_nodes:
+                self.fold_chapter(ch_id)
+            ordered_chapters.append(self.chapter_nodes[ch_id])
+
+        if not ordered_chapters:
+            raise ValueError("No chapters available to fold into book")
+
+        self.book_node = fold_book(
+            chapter_nodes=ordered_chapters,
+            book_id=self.book_id,
+            book_title=self.title,
+            storage=self.storage,
+        )
+        return self.book_node
+
+    @property
+    def book_root_cid(self) -> Optional[str]:
+        """The 32-byte (64-char hex) BLAKE3 Content Identifier of the Book Root Node."""
+        return self.book_node.cid if self.book_node else None
+
+    @property
+    def book_merkle_cid(self) -> Optional[str]:
+        """The Merkle CID of the folded book sub-graph."""
+        if not self.book_node or not self.book_node.anchor:
+            return None
+        return self.book_node.anchor.split("merkle:")[1]
+
+    def unfold_chunk(self, chunk_id_or_merkle_cid: str) -> QuantaGraph:
+        """Dynamically unfolds a chunk episode sub-graph from storage with tamper verification."""
+        cid = chunk_id_or_merkle_cid
+        if f"chunk:{chunk_id_or_merkle_cid}" in self.storage:
+            cid = self.storage[f"chunk:{chunk_id_or_merkle_cid}"]
+        return unfold_subgraph(cid, self.storage)
+
+    def unfold_chapter(self, chapter_id_or_merkle_cid: str) -> QuantaGraph:
+        """Dynamically unfolds a chapter sub-graph from storage with tamper verification."""
+        cid = chapter_id_or_merkle_cid
+        if f"chapter:{chapter_id_or_merkle_cid}" in self.storage:
+            cid = self.storage[f"chapter:{chapter_id_or_merkle_cid}"]
+        return unfold_subgraph(cid, self.storage)
+
+    def unfold_book(self) -> QuantaGraph:
+        """Dynamically unfolds the book sub-graph from storage with tamper verification."""
+        if not self.book_merkle_cid:
+            raise ValueError("Book has not been folded yet")
+        return unfold_subgraph(self.book_merkle_cid, self.storage)
+
+    def verify_integrity(self) -> Tuple[bool, List[str]]:
+        """Verifies cryptographic integrity across all stored chunks, chapters, and the book root."""
+        errors: List[str] = []
+        for ch_id, chunk_list in self.chapters.items():
+            for c_node in chunk_list:
+                if not c_node.anchor or not c_node.anchor.startswith("merkle:"):
+                    errors.append(f"Chunk node {c_node.cid} missing merkle anchor")
+                    continue
+                merkle_cid = c_node.anchor.split("merkle:")[1]
+                try:
+                    self.unfold_chunk(merkle_cid)
+                except Exception as e:
+                    errors.append(f"Chunk {c_node.cid} integrity failed: {e}")
+
+        for ch_id, ch_node in self.chapter_nodes.items():
+            merkle_cid = ch_node.anchor.split("merkle:")[1]
+            try:
+                self.unfold_chapter(merkle_cid)
+            except Exception as e:
+                errors.append(f"Chapter '{ch_id}' integrity failed: {e}")
+
+        if self.book_merkle_cid:
+            try:
+                self.unfold_book()
+            except Exception as e:
+                errors.append(f"Book integrity failed: {e}")
+
+        return len(errors) == 0, errors
+
+
+__all__ = [
+    "QuantaNode",
+    "QuantaGraph",
+    "fold_subgraph",
+    "unfold_subgraph",
+    "fold_discourse_episode",
+    "fold_chapter",
+    "fold_book",
+    "HierarchicalMerkleBook",
+]
 
 
