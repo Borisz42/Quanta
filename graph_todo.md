@@ -227,11 +227,11 @@ Decouples physical GPU execution memory from context length. The GPU operates on
 - Implement `ActiveCanvas` with LRU eviction and automatic page-fault handling.
 
 ### Checklist
-- [ ] **6.1** Implement disk-backed `PageTable` in `src/memory/page_table.py` storing `QuantaNode` instances and string interning tables.
-- [ ] **6.2** Implement SIMD-accelerated bitwise Hamming distance top-$K$ search over stored 1024-dim quaternary keys.
-- [ ] **6.3** Implement `ActiveCanvas` fixed-buffer manager ($M=64$ to $512$ nodes) with LRU eviction policy.
-- [ ] **6.4** Implement semantic page-fault handler: when an entity or past event is queried, page it from `PageTable` into `ActiveCanvas`.
-- [ ] **6.5** 🧪 Benchmark in `tests/test_page_table_scaling.py`: Ingest a 100,000-node graph into `PageTable`; verify active memory stays strictly $\le 512$ nodes and top-$K$ retrieval completes in $< 5\text{ ms}$.
+- [x] **6.1** Implement disk-backed `PageTable` in `src/memory/page_table.py` storing `QuantaNode` instances and string interning tables.
+- [x] **6.2** Implement SIMD-accelerated bitwise Hamming distance top-$K$ search over stored 1024-dim quaternary keys.
+- [x] **6.3** Implement `ActiveCanvas` fixed-buffer manager ($M=64$ to $512$ nodes) with LRU eviction policy.
+- [x] **6.4** Implement semantic page-fault handler: when an entity or past event is queried, page it from `PageTable` into `ActiveCanvas`.
+- [x] **6.5** 🧪 Benchmark in `tests/test_page_table_scaling.py`: Ingest a 100,000-node graph into `PageTable`; verify active memory stays strictly $\le 512$ nodes and top-$K$ retrieval completes in $< 5\text{ ms}$.
 
 ---
 

@@ -22,6 +22,7 @@ from realizer.english_nlg import EnglishRealizer
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
 from pipeline.translator_pipeline import TwoWayTranslationPipeline, TranslationResult, RoundTripResult
+from memory.page_table import PageTable, ActiveCanvas, SemanticPageFaultHandler, SimdHammingIndex
 
 __version__ = "0.1.0"
 
@@ -43,6 +44,10 @@ __all__ = [
     "QuantaGraph",
     "fold_subgraph",
     "unfold_subgraph",
+    "PageTable",
+    "ActiveCanvas",
+    "SemanticPageFaultHandler",
+    "SimdHammingIndex",
     "NLPForwardParser",
     "WordNetLexicalGrounder",
     "FOLParser",
@@ -58,3 +63,4 @@ __all__ = [
     "TranslationResult",
     "RoundTripResult",
 ]
+

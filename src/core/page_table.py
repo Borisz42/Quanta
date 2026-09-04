@@ -204,6 +204,10 @@ class PageTableStorage(MutableMapping):
             self._sqlite_conn = None
 
 
+from memory.page_table import PageTable
+
 __all__ = [
     "PageTableStorage",
+    "PageTable",
 ]
+

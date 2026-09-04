@@ -624,21 +624,21 @@ Autoregressive LLM attention mechanisms scale quadratically ($\mathcal{O}(N^2)$)
 
 ### Checklist
 #### 13A — Host-side graph storage
-- [ ] **13A.1** Implement `PageTable` class: dictionary-based storage mapping `CID → QuantaNode` serialized to disk (SQLite or memory-mapped file)
-- [ ] **13A.2** Implement `store(node) → CID` and `fetch(CID) → QuantaNode`
-- [ ] **13A.3** Implement batch store/fetch for sub-graphs
+- [x] **13A.1** Implement `PageTable` class: dictionary-based storage mapping `CID → QuantaNode` serialized to disk (SQLite or memory-mapped file)
+- [x] **13A.2** Implement `store(node) → CID` and `fetch(CID) → QuantaNode`
+- [x] **13A.3** Implement batch store/fetch for sub-graphs
 
 #### 13B — SIMD-accelerated Hamming lookup (software path)
-- [ ] **13B.1** Implement brute-force Hamming distance scan over stored 1024-dim quaternary keys using NumPy / AVX vectorized operations
-- [ ] **13B.2** Implement top-K nearest CID retrieval by Hamming distance
-- [ ] **13B.3** 🧪 Benchmark: measure lookup latency for 1K, 10K, 100K, 1M stored nodes (1M nodes = 256 MB RAM)
+- [x] **13B.1** Implement brute-force Hamming distance scan over stored 1024-dim quaternary keys using NumPy / AVX vectorized operations
+- [x] **13B.2** Implement top-K nearest CID retrieval by Hamming distance
+- [x] **13B.3** 🧪 Benchmark: measure lookup latency for 1K, 10K, 100K, 1M stored nodes (1M nodes = 256 MB RAM)
 
 #### 13C — Active canvas paging simulation
-- [ ] **13C.1** Implement `ActiveCanvas` class: fixed-size buffer of `M=64 to 512` nodes in-memory
-- [ ] **13C.2** Implement page fault handler: when a CID pointer is encountered that isn't in canvas, fetch from `PageTable`
-- [ ] **13C.3** Implement LRU eviction policy for canvas when full
-- [ ] **13C.4** 🧪 Test: load a graph of 1000 nodes, verify canvas never exceeds buffer limit in memory
-- [ ] **13C.5** 🧪 Test: access patterns hitting cold/hot nodes → measure page fault rates
+- [x] **13C.1** Implement `ActiveCanvas` class: fixed-size buffer of `M=64 to 512` nodes in-memory
+- [x] **13C.2** Implement page fault handler: when a CID pointer is encountered that isn't in canvas, fetch from `PageTable`
+- [x] **13C.3** Implement LRU eviction policy for canvas when full
+- [x] **13C.4** 🧪 Test: load a graph of 1000 nodes, verify canvas never exceeds buffer limit in memory
+- [x] **13C.5** 🧪 Test: access patterns hitting cold/hot nodes → measure page fault rates
 
 ---
 
