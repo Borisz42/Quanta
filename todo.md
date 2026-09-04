@@ -3,7 +3,10 @@
 > [!IMPORTANT]
 > **QUANTA (Quaternary Universal Abstract Natural Topology Architecture)** is a neuro-symbolic cognitive architecture that replaces unconstrained continuous token streams with a discrete, strongly-typed semantic metalanguage (*Mentalese*).
 > 
-> This document serves as the comprehensive implementation roadmap, technical specification, and verification manual for AI agents and human contributors. Every milestone item is scoped to fit a single atomic git commit. Items marked with 🧪 include an explicit testing or evaluation step.
+> **Active Master Roadmap Notice:**
+> The active, production engineering roadmap for the Neuro-Symbolic Cognitive Engine (Streaming Discourse Chunker, Qwen-4B Neural Transducer, Symbolic ASG Compiler, Hierarchical Merkle Folding, Virtual Page-Table Attention, and Honest Semantic NLG) is defined in [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md).
+> 
+> This document serves as the comprehensive implementation roadmap, technical specification, and verification manual for foundational sub-systems. Every milestone item is scoped to fit a single atomic git commit. Items marked with 🧪 include an explicit testing or evaluation step.
 >
 > **Core Architectural Pillars:**
 > 1. **Discrete Quaternary Vector Space ($\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$):** Epistemic 4-valued logic ($\mathcal{B}_4$) preventing continuous floating-point noise drift and representation collapse across 8 isolated 128-slot bands.
@@ -276,12 +279,15 @@ To ensure $\mathcal{O}(1)$ deterministic lexical anchoring with rich real-world 
 
 ### Context & Architectural Rationale
 The forward parser transforms heterogeneous surface expressions (natural language sentences, First-Order Logic formulas, and Python source code) into canonical Quanta Abstract Syntax Graphs ($\Sigma^{1024}$).
-- **Natural Language Parsing:** Uses spaCy dependency trees + `ConceptNetLexicalGrounder` (with WordNet/FrameNet fallback) to ground nominal and verbal nodes with `cn:en:<lemma> (<pos>)` anchors, extract thematic valency structures, tenses, determiners, negations (setting polarity `2`), and questions/modals (setting polarity `3`). Multiword compound expressions (e.g. *"golden retriever"*) are grounded as unified concepts before defaulting to head noun + descriptor unrolling.
+- **Natural Language Parsing Evolution:**
+  - *Baseline Scaffolding (Completed):* Single-sentence dependency parsing via spaCy + `ConceptNetLexicalGrounder` (with WordNet/FrameNet fallback) extracting baseline SVO predicates, determiners, tenses, and polarities.
+  - *Production Neuro-Symbolic Evolution (Master Roadmap: [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phases 1–4):* Natural English discourse evolves from handcrafted syntactic regexes and token-trees to the two-stage **Neural Discourse Transducer (local Qwen-4B via LM Studio / GGUF)** emitting typed intermediate JSON-ASG (`src/parser/schema.py`), followed by the **QUANTA Symbolic ASG Compiler (`src/parser/asg_compiler.py`)** compiling canonical **Entity-Event DAGs** (purging word-token/punctuation trees) with ConceptNet 5.7.0 grounding, Band 1 thematic valencies, Band 2 variable registers, Band 7 Allen interval/causal DAG links, and 256-bit BLAKE3 Merkle CIDs.
 - **FOL Formula Parsing:** Converts quantified logic expressions ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$) into propositional AST graphs.
 - **Python AST Parsing:** Converts Python AST nodes (`FunctionDef`, `If`, `Return`, `For`/`While`, recursive calls) into graph topologies with cyclic self-CID links for recursive routines.
 
 ### Implementation Guidelines
 - `nlp_forward.py`: Convert spaCy dependency trees into Quanta ASG topologies using `ConceptNetLexicalGrounder`. Handle determiners ("a" $\to$ `NSM_ONE=1`, "the" $\to$ `NSM_THIS=1`, "every" $\to$ `NSM_ALL=1`). Negations set `LJB_NA_NEGATION=2` and flip action primes (`NSM_DO=2`). Interrogatives set `GRAPH_QUERY_TARGET=3` and modal primes (`NSM_MAYBE=3`).
+- For open-domain narrative and multi-chapter text, see [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) for `DiscourseChunker` (`src/parser/chunker.py`), `EntityManifest` (`src/parser/entity_manifest.py`), `transducer.py`, and `asg_compiler.py`.
 - `fol_parser.py`: Tokenize and recursively parse FOL strings into structured ASGs.
 - `ast_parser.py`: Walk Python `ast` nodes, mapping control flow, variable bindings, and self-referential recursive calls (`GRAPH_RECURSIVE_REF=1` pointing to root function CID).
 
@@ -291,6 +297,7 @@ The forward parser transforms heterogeneous surface expressions (natural languag
 - Code test: `def factorial(n): ...` generates the canonical recursive AST topology (Example F).
 - Run test item **6B.11** for epistemic uncertainty query parsing.
 - Implement and test **6D.6** (recursion detection), **6D.8** (exception handling), and **6D.9** (`factorial(n)` AST generation).
+- Production multi-chunk narrative and entity-event DAG verification is governed by [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phases 1–4.
 
 ### Checklist
 #### 6A — spaCy NLP pipeline integration
@@ -388,12 +395,17 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
   - *Tier 1 (In-Memory SIMD)*: Instant decoding across 25,292 singletons ($<5\text{ ms}$) loaded from `data/concept_codebook.csv.gz`.
   - *Tier 2 (Category Basin Fallback)*: Category basin lookup in `data/conceptnet_offline.db`.
   - Parses canonical `cn:en:<lemma> (<pos>)`, `cn:...`, and legacy `wn:...` anchors, as well as anchor-free semantic vector decoding.
+- **Honest Semantic Realizer Overhaul (Master Roadmap: [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phase 7):**
+  - Completely purges verbatim token bypass routines (`_format_token_sequence` and `_collect_descendant_tokens`).
+  - Realization is performed strictly from the **Entity-Event DAG**: compositional clause generation from event predicates, Band 1 thematic arguments (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT`), ConceptNet lemmas, discourse referring expressions (first mention full name, subsequent mention pronoun/definite NP), and Band 7 temporal narrative sequencing.
+  - Supports graph-native question answering with zero LLM attention cost.
 - **FOL Emitter (`FOLEmitter`):** Emits standard First-Order Logic syntax with correct operator precedence.
 - **Code Emitter (`CodeEmitter`):** Emits executable Python source code from AST topologies.
 - *(Note: Specific language realizers like Hungarian have been removed in favor of a future generalized multilingual architecture).*
 
 ### Implementation Guidelines
 - `english_nlg.py`: Construct grammatical English prose from ASG traversal and instantiate `ConceptVectorDecoder`.
+- For production honest semantic generation over entity-event narrative DAGs, see [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phase 7.
 - `fol_emitter.py`: Traverse quantified sub-expressions and format formulas ($\forall x (\text{Dog}(x) \rightarrow \text{Animal}(x))$).
 - `code_emitter.py`: Format Python functions, loops, and recursive calls with proper indentation.
 
@@ -404,6 +416,7 @@ To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta 
 - Example E graph $\to$ FOL string: `∀x(Dog(x) → Animal(x))`.
 - Example F graph $\to$ Executable Python code; running `factorial(5)` returns `120`.
 - 2-Tier vector decoding test: Pure 256-D vector with zero anchors resolves correctly to "dog" via Tier 1 codebook table.
+- Honest DAG-based paragraph narrative realization test: see [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) item 7.6.
 
 ### Checklist
 #### 8A — English Realizer & ConceptVectorDecoder

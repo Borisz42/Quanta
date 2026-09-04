@@ -1,7 +1,3 @@
-Viewed verifier_report.json:1-100
-Viewed verifier_report.json:2480-2530
-Viewed information_profiler_report.txt:1-60
-
 ## Comprehensive Evaluation of the Generated Artifacts
 
 ### Executive Summary
@@ -10,7 +6,7 @@ Viewed information_profiler_report.txt:1-60
 | :--- | :--- | :--- | :--- |
 | [`output/verifier_report.json`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/verifier_report.json) | **Macro F1: 0.467**<br>Cycle Fidelity: **0.895** | 🟢 **Sound** | Establishes an independent, empirical audit of translator reliability against gold ground-truth formalisms. |
 | [`output/information_profiler_report.txt`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/information_profiler_report.txt) | **Total Correlation: 26.90 bits**<br>Collision Rate: **0.0104** | 🟢 **Significantly Improved** | Multi-information redundancy dropped from **58.06 bits to 26.90 bits**; dead slots are now systematically diagnosed. |
-| [`output/optimal_256_dimensions.csv`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/optimal_256_dimensions.csv) | **Clean Multi-Objective Ranking** | 🟢 **Sanitized & General** | 100% free of benchmark tokens (`PROOFWRITER_*`, `FOLIO_*`); ordered by true neuro-symbolic information utility. |
+| [`output/optimal_1024_dimensions.csv`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/optimal_1024_dimensions.csv) | **Clean Multi-Objective Ranking** | 🟢 **Sanitized & General** | 100% free of benchmark tokens (`PROOFWRITER_*`, `FOLIO_*`); ordered by true neuro-symbolic information utility. |
 | [`output/candidate_pool.json`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/candidate_pool.json) | **512 Clean Candidates** | 🟢 **Orthogonal** | Removed synonym duplicates and dataset-specific tags. |
 
 ---
@@ -64,7 +60,7 @@ Causal Reasoning Necessity Mean: 0.114
 
 ---
 
-## 3. Deep Dive: [`optimal_256_dimensions.csv`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/optimal_256_dimensions.csv)
+## 3. Deep Dive: [`optimal_1024_dimensions.csv`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/optimal_1024_dimensions.csv)
 
 ### Before vs. After Comparison
 

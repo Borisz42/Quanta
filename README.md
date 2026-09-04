@@ -17,30 +17,33 @@ QUANTA establishes an end-to-end synthesis spanning language design, a non-autor
 
 ```text
                                  ┌────────────────────────────────────────────────────────┐
-                                 │                QUANTA COGNITIVE CYCLE                  │
+                                 │          QUANTA COGNITIVE CYCLE (v2.0)                 │
                                  └────────────────────────────────────────────────────────┘
                                                              │
-  [ Natural Language / Multimodal Sensory Input ]            │         [ Host RAM / NVMe Page-Table ]
+  [ ANY English Input: Single Sentence, Narrative, Book ]    │         [ Host RAM / NVMe Page-Table ]
                          │                                   │          ┌──────────────────────────┐
                          ▼                                   │          │  Merkle CID Graph Nodes  │
        ┌───────────────────────────────────┐                 │          │  Discrete Quaternary     │
-       │   Forward Bidirectional Parser    │                 │          │  Bit Vectors (Σ^256)     │
-       │   - spaCy / FrameNet / WordNet    │                 │          └─────────────┬────────────┘
-       │   - Camxes PEG Grammar            │                 │                        │ (O(1) Bitwise
+       │   Streaming Discourse Chunker     │                 │          │  Bit Vectors (Σ^1024)    │
+       │   - 150-400 words per chunk       │                 │          └─────────────┬────────────┘
+       │   - Paragraph & Scene boundaries  │                 │                        │ (O(1) Bitwise
        └─────────────────┬─────────────────┘                 │                        │  Hamming Lookup)
-                         │                                   │                        ▼
+                         │ + Active Entity Manifest (~150 tok)│                        ▼
                          ▼                                   │          ┌──────────────────────────┐
        ┌───────────────────────────────────┐                 │          │ Virtual Page-Table RAG   │
-       │ Abstract Syntax Graph (ASG) (Σ^256│                 │          │ - Physical Canvas (B=512)│
-       │ - BLAKE3 Merkle Tree Folded CIDs  │                 │          └─────────────┬────────────┘
+       │   Neural Discourse Transducer     │                 │          │ - Physical Canvas (B=512)│
+       │   - Local Qwen-4B (LM Studio/GGUF)│                 │          └─────────────┬────────────┘
+       │   - Normalized Intermediate JSON  │                 │                        │
        └─────────────────┬─────────────────┘                 │                        │
-                         │                                   │                        ▼
+                         │ Normalized JSON-ASG               │                        ▼
                          ▼                                   │          ┌──────────────────────────┐
        ┌───────────────────────────────────┐                 │          │ Non-Autoregressive       │
-       │  Discrete Diffusion Backbone      │ ◄───────────────┼──────────┤ Graph Diffusion Proposer │
-       │  (Fast-dLLM v2 - Parallel Denoise)│                 │          │ (Parallel Block Canvas)  │
-       └─────────────────┬─────────────────┘                 │          └──────────────────────────┘
-                         │                                   │
+       │   QUANTA Symbolic ASG Compiler    │ ◄───────────────┼──────────┤ Graph Diffusion Proposer │
+       │   - ConceptNet 5.7.0 & WordNet    │                 │          │ (Parallel Block Canvas)  │
+       │   - 1024-D Quaternary Vectors     │                 │          └──────────────────────────┘
+       │   - BLAKE3 Merkle Tree Folded CIDs│                 │
+       └─────────────────┬─────────────────┘                 │
+                         │ Verified Entity-Event DAG         │
                          ▼                                   │
        ┌───────────────────────────────────┐                 │
        │ Strict Neuro-Symbolic Gate        │                 │
@@ -50,8 +53,8 @@ QUANTA establishes an end-to-end synthesis spanning language design, a non-autor
                  │ [Violation / MUC] │ [Formal Proof Trace]  │
                  ▼                   ▼                       │
     ┌──────────────────────────┐   ┌─────────────────────────┴─────────┐
-    │ Closed-Loop Repair Loop  │   │ Reverse Realization & Execution   │
-    │ - Isolate Minimal        │   │ - Natural English NLG             │
+    │ Closed-Loop Repair Loop  │   │ Honest Semantic Reverse Realizer  │
+    │ - Isolate Minimal        │   │ - Natural English NLG from DAG    │
     │   Unsatisfiable Core     │   │ - Standard First-Order Logic (FOL)│
     │ - Targeted Re-Denoising  │   │ - Executable Python / C++ Code    │
     └──────────────────────────┘   └───────────────────────────────────┘
@@ -413,45 +416,117 @@ When the $s(\text{CASP})$ solver detects a rule violation or contradiction, it i
 
 ---
 
-## 6. Multimodal Integration & Bidirectional Translation
+## 6. Multimodal Integration & Neuro-Symbolic Translation Pipeline
 
-### 6.1 Two-Way Interface & Translation Pipeline
+### 6.1 Two-Stage Neuro-Symbolic Translation Pipeline
 
-Human and software interaction occurs through a deterministic bidirectional translation pipeline:
-* **Forward Translator (Natural Language / Intent $\to$ Mentalese):** Integrates an instruction-tuned small model with pure-Python Parsing Expression Grammar (`camxes-py`), spaCy, and WordNet/FrameNet resolvers to convert natural language into canonical NSM explication schemas and Lojban-anchored ASGs.
-* **Structural Validation Gate ($s(\text{CASP})$ / PyClingo):** Checks domain/range violations (e.g., `+ABSTRACT_CONCEPT` acting as `+AGENT_CAPABLE`) and validates Merkle hash integrity.
-* **Virtual Page-Table Graph RAG:** Bitwise Hamming distance matching on host CPU inlines referenced schemas (e.g., importing `python.builtins.list.sort`).
-* **Reverse Realizer (Mentalese $\to$ English / FOL / Code):** Converts verified ASGs back into human languages or code via deterministic rule-based surface realization engines:
-  * `EnglishRealizer`: Thematic role unrolling into natural SVO English prose.
-  * `FOLEmitter`: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$).
-  * `CodeEmitter`: Executable Python / C++ code generation from AST topology.
-* **Complete Human Inspectability:** Internal Merkle hashes can be unrolled into plain-language NSM prime scripts, and every decision is accompanied by a readable $s(\text{CASP})$ execution proof trace.
+Rather than relying on brittle, handcrafted syntactic regexes or word-token trees, QUANTA processes natural language through a decoupled two-stage **Neuro-Symbolic Pipeline**:
+
+1. **Stage 1: Local Neural Discourse Transducer (`src/parser/transducer.py`):**
+   * Employs a quantized local model (e.g. 4-bit Qwen-4B via LM Studio on `http://localhost:1234/v1` or direct GGUF via `llama-cpp-python`).
+   * Operates strictly as an open-domain **Discourse Transducer** with temperature 0.0 and JSON response mode.
+   * **Input:** Current discourse chunk (150–400 words) + Active Entity Manifest (~150 tokens).
+   * **Output:** Normalized intermediate JSON schema (`DiscourseExtractionResult`) containing:
+     * Discovered entities with surface aliases (`canonical_name`, `aliases`, `category`).
+     * Semantic events anchored to entity IDs (`agent_id: "E1"`, `patient_id: "E2"`).
+     * Temporal relations in Allen interval algebra (`TEMP_ALLEN_MEETS`, `TEMP_ALLEN_AFTER`).
+     * Causal dependencies (`CAUSAL_MECHANISM_LINK`).
+     * Epistemic assertions and Theory of Mind attributions (`believes`, `doubts`, `prohibits`).
+
+2. **Stage 2: QUANTA Symbolic ASG Compiler (`src/parser/asg_compiler.py`):**
+   * Ingests the normalized intermediate JSON and executes deterministic mathematical compilation:
+     * **Lexical & Ontological Grounding:** Queries ConceptNet 5.7.0 (403,503 concepts across 54.42M assertions in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db)) and WordNet for canonical concept anchors and 256-D taxonomy/affordance vectors (Bands 3 & 4).
+     * **1024-Dimension Quaternary Vector Synthesis:** Populates Band 0 (universal NSM primes like `NSM_DO`, `NSM_TOUCH`), Band 1 (thematic valencies `VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT` and tense `LJB_PU_PAST_TENSE`), Band 2 (variable binding registers `VAR_SLOT_X0`..`X7`), Band 5 & 6 (epistemic provenance, Theory of Mind beliefs), and Band 7 (Allen interval and Pearl causal DAG edges).
+     * **Cryptographic Content Addressing:** Deterministically computes 256-bit BLAKE3 Merkle Content Identifiers (CIDs) bottom-up: Entity CIDs $\to$ Event Predicate CIDs incorporating argument CIDs $\to$ Proposition / Sub-Graph CIDs.
+
+3. **Structural Validation Gate ($s(\text{CASP})$ / PyClingo):**
+   * Audits compiled graphs for domain/range violations, temporal contradictions (e.g. asserting both $A < B$ and $B < A$), and ontological integrity.
+   * If a contradiction is detected, isolates the Minimal Unsatisfiable Core (MUC) for closed-loop repair.
+
+4. **Honest Semantic Reverse Realizer (`src/realizer/english_nlg.py`):**
+   * Compositionally unrolls verified ASG graphs back into natural language, FOL, or executable code strictly from graph relations, event predicates, ConceptNet anchors, and discourse referring expressions—completely without verbatim word-token bypass trees.
 
 ```text
-[ Natural Language / Intent ]
-         │
-         ▼
-1. Forward Parser (spaCy, FrameNet, WordNet offline DB, camxes-py)
-   - Resolves thematic structure and lexical hypernyms.
-   - Outputs unverified Quanta ASG.
-         │
-         ▼
-2. Structural Validation Gate (s(CASP) / PyClingo)
-   - Checks Domain/Range violations (e.g., +ABSTRACT_CONCEPT acting as +AGENT_CAPABLE).
-   - Validates Graph Merkle integrity.
-         │
-         ▼
-3. Virtual Page-Table Graph RAG
-   - Bitwise Hamming distance matching on host CPU.
-   - Inlines schemas (e.g., importing python.builtins.list.sort).
-         │
-         ▼
-4. Reverse Realizer (English NLG, FOL Emitter, Code Emitter)
-   - Deterministic unrolling of Merkle pointers.
-   - Outputs human syntax or executable code (Python, C++).
+[ ANY English Input: Single Sentence, Narrative, or Entire Book ]
+                         │
+                         ▼
+1. Streaming Discourse Chunker (150–400 words / chunk)
+   - Paragraph, scene, and dialogue turn boundaries.
+   - Character and token offset provenance tracking.
+                         │ + Active Entity Manifest (~150 tokens)
+                         ▼
+2. Local Neural Discourse Transducer (Qwen-4B @ Q4)
+   - Zero hardcoded regexes; 100% open-domain English extraction.
+   - Emits normalized JSON (Entities, Events, Allen Intervals, Causal Links).
+                         │ Normalized JSON-ASG
+                         ▼
+3. QUANTA Symbolic ASG Compiler
+   - Offline ConceptNet 5.7.0 (403,503 concepts) & WordNet grounding.
+   - 1024-D Quaternary Vector synthesis (Bands 0–7, 256 bytes per node).
+   - Band 1 Valencies, Band 2 Registers, Band 7 Temporal & Causal edges.
+   - BLAKE3 256-bit Merkle CID hashing.
+                         │ Verified Entity-Event DAG
+                         ▼
+4. Structural Validation Gate (Clingo / s(CASP))
+   - Formal ontology constraints & temporal consistency.
+   - Minimal Unsatisfiable Core (MUC) extraction on violation.
+                         │
+                         ▼
+5. Honest Semantic Reverse Realizer (English NLG, FOL, Code)
+   - Compositional SVO clause unrolling from DAG topology.
+   - Graph-native question answering with zero LLM attention cost.
 ```
 
-### 6.2 Multimodal Vision Integration
+### 6.2 The Entity-Event DAG Schema (Purging Word-Token Trees)
+
+Early syntactic parsers constructed dense, overfitted word-token trees that preserved every punctuation mark, determiner token, and syntactic bracket as graph nodes. This caused quadratic node explosion, contaminated semantic similarity comparisons, and compromised round-trip evaluation through literal string collection bypasses.
+
+QUANTA establishes a clean **Entity-Event Directed Acyclic Graph (DAG)** schema:
+
+* **Canonical Entity Nodes ($E_1, E_2, \dots$):**
+  * Represent unique real-world discourse referents (people, organizations, physical objects, locations, substances).
+  * Carry a canonical ID (`E1`), canonical name (*"Dr. Eleanor Vance"*), ontological category (`cn:en:person (n)`), and surface alias registry (`["Eleanor", "Vance", "she"]`).
+  * Grounded into ConceptNet 5.7.0 taxonomy vectors and assigned Band 2 local variable registers (`VAR_SLOT_X0`..`X7`).
+* **Event Predicate Nodes ($Ev_1, Ev_2, \dots$):**
+  * Represent discrete physical, cognitive, communicative, or relational occurrences.
+  * Predicate verb grounded to universal NSM primes (`NSM_DO`, `NSM_MOVE`, `NSM_THINK`) and ConceptNet action affordances.
+  * Direct Band 1 thematic valency edges pointing directly to participant Entity CIDs:
+    * `VAL_X1_AGENT` $\to \text{CID}(E_1)$ (*Dr. Eleanor Vance*)
+    * `VAL_X2_PATIENT` $\to \text{CID}(E_2)$ (*synthetic compound*)
+    * `VAL_LOCATION_SLOT` $\to \text{CID}(E_3)$ (*cryogenic containment cell*)
+  * Encode grammatical tense (`LJB_PU_PAST_TENSE`), aspect, and epistemic certainty.
+* **Inter-Event Spatio-Temporal & Causal Edges:**
+  * Events are linked directly to each other via Band 7 relations:
+    * **Allen Interval Temporal Calculus:** `TEMP_ALLEN_MEETS`, `TEMP_ALLEN_AFTER`, `TEMP_ALLEN_DURING`.
+    * **Pearl Causal Hierarchy:** `CAUSAL_MECHANISM_LINK` (e.g. *expansion strongly suggested phase transition*).
+* **Zero Syntactic Debris:** No punctuation nodes, no raw token leaves, no grammatical wrapper tokens. The DAG represents pure propositional semantics.
+
+### 6.3 Streaming Discourse Chunker & Active Entity Manifest (Unlimited Context Horizons)
+
+Standard LLMs face severe attention degradation and quadratic VRAM exhaustion when processing documents longer than a few thousand tokens. QUANTA overcomes this via **Streaming Discourse Chunking** and **Working Memory Entity Paging**:
+
+1. **Streaming Discourse Chunker (`DiscourseChunker` in `src/parser/chunker.py`):**
+   * Automatically segments continuous text into cohesive episodic chunks of **150–400 words** (~200–500 tokens).
+   * Splits along natural rhetorical boundaries: paragraph breaks (double newlines), dialogue speaker turns, and section/chapter headings (`#`, `***`, `---`).
+   * Maintains character and token span offsets, anchoring every compiled node to its source provenance in the document.
+
+2. **Active Entity Manifest (`ActiveEntityManifest` in `src/parser/entity_manifest.py`):**
+   * Acts as the model's active working memory across chunks (target size: 5–15 entities).
+   * For each chunk, the active manifest is serialized into a concise **~100–150 token prompt prefix**:
+     ```text
+     ACTIVE ENTITIES:
+     - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance, she)
+     - E2: synthetic compound (aliases: specimen, polymer)
+     - E3: cryogenic containment cell (aliases: cell, vessel)
+     ```
+   * The neural transducer reuses existing canonical IDs (`E1`, `E2`...) rather than minting redundant duplicate entities, guaranteeing 100% global coreference across chapters.
+
+3. **Sub-2ms Entity Paging Engine:**
+   * Dormant entities that have not appeared recently are evicted via LRU policy to the Host-RAM SQLite Page Table.
+   * Prior to processing each chunk, a high-speed surface matcher ($< 1\text{ ms}$) scans chunk text against the entity registry and **pages dormant entities back into the active manifest** before prompting the transducer.
+   * Decouples context horizon from prompt size: a 100-chapter book can be processed chunk-by-chunk with constant prompt latency (2–3 seconds per chunk) and zero cross-chapter coreference drift.
+
+### 6.4 Multimodal Vision Integration
 
 Vision is integrated by translating raw sensor data into explicit graph topologies:
 1. **Perception Module:** Lightweight neural detectors paired with Vision-Language Models (e.g., InternVL) extract entities, 3D point cloud depths, bounding boxes, and visual attributes.
@@ -705,54 +780,69 @@ Prototyping, training, and running the QUANTA architecture is fully feasible on 
 ```bash
 quanta/
 ├── data/
-│   ├── wordnet_offline.db        # O(1) Anchor lookup indices (SQLite cache)
+│   ├── conceptnet_offline.db     # 403k concept quaternary vectors (SQLite)
+│   ├── concept_codebook.csv.gz   # Dense 403k x 256 codebook matrix (25k singletons)
+│   ├── wordnet_offline.db        # O(1) WordNet synset lookup (SQLite cache)
 │   ├── framenet_valency.json     # Role template matrices & FrameNet frames
-│   ├── validation_corpus/        # 5k proposition validation set (FOLIO, bAbI, CLUTRR)
-│   ├── virtual_page_table/       # Merkle-folded library schemas
-│   └── raw/                      # Raw benchmark datasets (FOLIO, bAbI, ProofWriter, CLUTRR)
+│   ├── validation_corpus/        # Benchmark validation datasets (FOLIO, bAbI, CLUTRR)
+│   └── virtual_page_table/       # Merkle-folded library schemas
 ├── docs/
-│   ├── forward_translation_pipeline.md  # 5-stage forward mapping specification
-│   └── translation_pipeline.md          # Comprehensive end-to-end translation docs
+│   ├── dim1024.md                # 1024-dimension 8-band architecture & hardware feasibility
+│   ├── conceptnetDimensions.md   # ConceptNet 5.7.0 256-D U-ODS derivation & Belnap lattice
+│   ├── QUANTA_NeuroSymbolic_Architecture_Defense.md # Formal theoretical literature defense
+│   ├── DimensionEval.md          # Information profiler & dimension evaluation
+│   └── multilingual_realizer_architecture.md # Typological cross-lingual realizer design
 ├── output/
-│   ├── canonical_slots_layout.json      # 256-dimension canonical slot definitions
-│   ├── optimal_256_dimensions.csv       # mRMR ranked dimensions
-│   ├── optimal_256_dimensions.json      # Full mRMR dimension metadata
+│   ├── canonical_slots_layout.json      # 1024-dimension canonical slot definitions (8 bands)
+│   ├── optimal_1024_dimensions.csv      # mRMR ranked 1024 dimensions
+│   ├── optimal_1024_dimensions.json     # Full dimension metadata
+│   ├── dimension_sweep_report.md        # Comprehensive empirical dimension sweep report
+│   ├── dimension_sweep_results.csv      # Tabular sweep benchmark metrics
 │   └── information_profiler_report.txt  # Entropy & mutual information metrics
 ├── src/
 │   ├── core/
 │   │   ├── asg.py            # QuantaNode & QuantaGraph with BLAKE3 Merkle hashing
-│   │   ├── slots.py          # 256 canonical slots across 4 isolated bands
+│   │   ├── slots.py          # 1024 canonical slots across 8 isolated bands
 │   │   └── types.py          # QuantaVector & QuaternaryValue {0,1,2,3} lattice algebra
 │   ├── parser/
-│   │   ├── nlp_forward.py    # spaCy -> Quanta ASG forward parser
-│   │   ├── lexical_grounder.py # WordNet synset & hypernym resolver
+│   │   ├── chunker.py        # [Phase 1] Streaming Discourse Chunker (paragraph/scene)
+│   │   ├── entity_manifest.py# [Phase 2] Working Memory Entity Manifest & Paging Engine
+│   │   ├── schema.py         # [Phase 3] Normalized intermediate JSON-ASG schema
+│   │   ├── transducer.py     # [Phase 3] Neural Discourse Transducer (Qwen-4B / GGUF / Mock)
+│   │   ├── asg_compiler.py   # [Phase 4] QUANTA Symbolic ASG Compiler (ConceptNet & BLAKE3)
+│   │   ├── lexical_grounder.py # ConceptNet 5.7.0 & WordNet resolver
 │   │   ├── fol_parser.py     # First-Order Logic formula parser
-│   │   └── ast_parser.py     # Python AST recursive forward parser
+│   │   ├── ast_parser.py     # Python AST recursive forward parser
+│   │   └── nlp_forward.py    # spaCy dependency parser & surface pre-scan matcher
+│   ├── memory/
+│   │   └── page_table.py     # [Phase 6] Virtual Page-Table & SIMD Hamming matcher
 │   ├── solver/
 │   │   ├── scasp_rules.lp    # Clingo ASP invariants & integrity constraints
 │   │   ├── scasp_rules.pl    # s(CASP) / Prolog invariants & MUC definitions
 │   │   └── validator_gate.py # Neuro-symbolic validator gate & MUC extractor
 │   ├── profiler/
-│   │   ├── candidate_pool.py # 512+ candidate dimension pool builder
+│   │   ├── candidate_pool.py # 2048 candidate dimension pool builder
 │   │   ├── info_profiler.py  # Slot entropy H(D_i) & redundancy TC(D) profiler
 │   │   └── mrmr_selector.py  # Minimal Redundancy Maximal Relevance selector
 │   ├── realizer/
-│   │   ├── english_nlg.py    # Quanta ASG -> SVO English NLG realizer
+│   │   ├── english_nlg.py    # Honest Semantic Reverse Realizer (DAG-native NLG)
 │   │   ├── fol_emitter.py    # Quanta ASG -> First-Order Logic formula emitter
 │   │   └── code_emitter.py   # Quanta ASG -> Executable Python code emitter
 │   ├── pipeline/
 │   │   └── translator_pipeline.py # Unified Two-Way Translation & Execution Pipeline
 │   ├── models/
-│   │   ├── fast_dllm.py      # [Phase 3] Discrete Diffusion v2 backbone
-│   │   └── ltn_loss.py       # [Phase 3] Logic Tensor Network differentiable loss
+│   │   ├── fast_dllm.py      # Discrete Diffusion v2 backbone
+│   │   └── ltn_loss.py       # Logic Tensor Network differentiable loss
 │   ├── data/
 │   │   ├── corpus_generator.py # Synthetic validation corpus generator
 │   │   └── real_loader.py    # Benchmark dataset ingestion stream
 │   └── scripts/
-│       └── export_phase1_data.py # Data export & profiler runner
+│       ├── run_dimension_sweep.py # Automated 64..2048 dimension sweep benchmark
+│       └── generate_slots_registry.py # 1024-dimension slot schema exporter
 ├── tests/
 │   ├── test_dimension_entropy.py # Information bottleneck & redundancy validation
-│   ├── test_lexical_grounder.py  # WordNet hypernym path & slot grounding
+│   ├── test_dimension_sweep.py   # Empirical dimension sweep tests
+│   ├── test_lexical_grounder.py  # ConceptNet & WordNet slot grounding
 │   ├── test_merkle_hashes.py     # BLAKE3 topological mismatch testing
 │   ├── test_nlp_forward.py       # Forward sentence parsing to ASG
 │   ├── test_quaternary_tensors.py # Quaternary lattice algebra tests
@@ -760,40 +850,35 @@ quanta/
 │   ├── test_realizers.py         # Reverse realizers (English, FOL, Code)
 │   ├── test_round_trip.py        # English/FOL/Code -> QUANTA -> Target round-trip
 │   └── test_validation_pipeline.py # End-to-end translation & validation pipeline
+├── graph_todo.md                 # Active Master Roadmap: Neuro-Symbolic Graph Pipeline
+├── todo.md                       # Implementation Roadmap & AI Agent Engineering Manual
 └── README.md
 ```
 
 ---
 
-## 11. Implementation Roadmap & Milestones
+## 11. Implementation Roadmap & Master Milestones
 
-* **Phase 1: Formalization, Dimension Optimization & Core Symbolic Engine** *(Completed)*
-  * Implement $\Sigma = \{0, 1, 2, 3\}^{256}$ tensor layouts and quaternary lattice algebra in Python.
-  * Execute mRMR dimension selection across candidate pool ($K = 512\text{--}1024$) from NSM, WordNet, and FrameNet.
-  * Run Information Profiler on real reasoning benchmarks (FOLIO, ProofWriter, bAbI, CLUTRR, Python ASTs) to eliminate dead slots ($H(D_i) < 0.1\text{ bits}$) and verify low redundancy.
-  * Build Python `clingo`/`s(CASP)` validator gate with Minimal Unsatisfiable Core (MUC) extraction and offline WordNet schema cache.
+The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md):
 
-* **Phase 2: Bidirectional Realizers, Extended Invariants & Verification Pipeline** *(Active)*
-  * **Reverse Realizer Suite (`quanta.realizer`)**:
-    * `EnglishRealizer`: ASG traversal unrolling thematic roles (`VAL_X1_AGENT`, `VAL_X2_PATIENT`), tense inflection (`LJB_PU_PAST_TENSE`), modals (`EPIST_DEONTIC_*`), negation (`LJB_NA_NEGATION`), and descriptors into natural SVO English.
-    * `FOLEmitter`: Standard First-Order Logic formula reconstruction ($\forall x, \exists x, \land, \lor, \rightarrow, \neg, \oplus, P(x, y)$).
-    * `CodeEmitter`: Executable Python AST/code reconstruction from `GRAPH_*` program topology.
-  * **Extended Neuro-Symbolic Invariants (`scasp_rules.lp` / `scasp_rules.pl`)**:
-    * Full 4-band integrity rules: Ontological domain/range exclusivity, RCC-8 spatial mereotopology, Allen interval temporal calculus, and causal hierarchy invariants.
-  * **Unified Two-Way Translation & Execution Pipeline (`quanta.pipeline`)**:
-    * End-to-end: $\text{Input} \to \text{Forward Parser} \to \text{ASP Gating} \to \text{Merkle Address} \to \text{Reverse Realizer}$.
-    * Strict round-trip invariance benchmarking ($\text{NL} \leftrightarrow \text{Quanta ASG}$, $\text{FOL} \leftrightarrow \text{Quanta ASG}$, $\text{Code} \leftrightarrow \text{Quanta ASG}$) with Hamming distance = 0 verification.
-
-* **Phase 3: Diffusion Backbone & Compilation Loop**
-  * Train Fast-dLLM v2 discrete diffusion masking mechanism over $\Sigma^{256}$.
-  * Integrate Logic Tensor Network (LTN) loss for early denoising and MUC invalidation.
-
-* **Phase 4: Empirical Evaluation**
-  * Benchmark ProofWriter, CLUTRR, and FOLIO for 0% hallucination verification.
-  * Test context scaling (1k to 128k nodes) on sub-8GB VRAM RTX 3070 environments.
-
-* **Phase 5: Publication Writing**
-  * Target conferences: NeurIPS, NeSy, ACL.
+* **Phase 0: Documentation Audit, Clean-Up & Architectural Alignment** *(Completed)*
+  * Clean up redundant scratch files; align `README.md`, `todo.md`, and architectural defense documentation.
+* **Phase 1: Streaming Discourse Chunker & Segmentation Engine**
+  * Implement `DiscourseChunker` (`src/parser/chunker.py`) with 150–400 word window boundaries and source offset provenance tracking.
+* **Phase 2: Working Memory Entity Manifest & Paging Engine**
+  * Implement `ActiveEntityManifest` and sub-2ms SQLite `EntityPagingEngine` (`src/parser/entity_manifest.py`) for unlimited context coreference.
+* **Phase 3: Local Neural Discourse Transducer**
+  * Build `LMStudioTransducer` & `LocalGGUFTransducer` (`src/parser/transducer.py`) for open-domain English extraction into intermediate JSON-ASG schema (`src/parser/schema.py`).
+* **Phase 4: QUANTA Symbolic ASG Compiler**
+  * Build `ASGCompiler` (`src/parser/asg_compiler.py`) compiling JSON into 1024-D Quaternary Vectors grounded to ConceptNet 5.7.0, Band 1 Valencies, Band 2 Registers, Band 7 Spatio-Temporal/Causal Edges, and BLAKE3 CIDs.
+* **Phase 5: Hierarchical Merkle Sub-Graph Folding**
+  * Implement hierarchical folding (Paragraph CID $\to$ Chapter CID $\to$ Book Merkle Root) in `src/core/asg.py`.
+* **Phase 6: Virtual Page-Table Attention & $O(1)$ VRAM Memory Offloading**
+  * Host-RAM SQLite `PageTable` with AVX-512 SIMD bitwise Hamming retrieval ($51.3\text{ M nodes/sec}$) and fixed GPU canvas ($M = 512$ nodes).
+* **Phase 7: Honest Semantic Reverse Realizer (NLG) Overhaul**
+  * Compositional English unrolling from Entity-Event DAG without verbatim token bypass strings (`src/realizer/english_nlg.py`).
+* **Phase 8: End-to-End Multi-Chapter & Book Benchmark Suite**
+  * Full integration evaluation across paragraph narratives and multi-chapter books demonstrating zero hallucination and constant VRAM execution.
 
 ---
 
