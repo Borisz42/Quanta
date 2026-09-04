@@ -800,6 +800,12 @@ class ActiveCanvas:
         with self._lock:
             return dict(self._nodes)
 
+    @property
+    def nodes(self) -> Dict[str, QuantaNode]:
+        """Alias for active_nodes."""
+        return self.active_nodes
+
+
     def active_memory_bytes(self) -> int:
         """Computes physical quaternary vector footprint in bytes (256 bytes per node)."""
         with self._lock:
@@ -826,6 +832,15 @@ class ActiveCanvas:
 
     def __contains__(self, cid: str) -> bool:
         return cid in self._nodes
+
+    def clear(self):
+        """Clear all nodes, pinned nodes, and telemetry from active canvas."""
+        with self._lock:
+            self._nodes.clear()
+            self._pinned.clear()
+            self.hits = 0
+            self.misses = 0
+            self.evictions = 0
 
 
 # -----------------------------------------------------------------------------

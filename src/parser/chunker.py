@@ -497,3 +497,13 @@ class DiscourseChunker:
     def chunk(self, text: str) -> List[DiscourseChunk]:
         """Alias for chunk_document."""
         return self.chunk_document(text)
+
+    def chunk_text(self, text: str, chapter_id: Optional[str] = None) -> List[DiscourseChunk]:
+        """Chunk text with optional default chapter_id assignment."""
+        chunks = self.chunk_document(text)
+        if chapter_id:
+            for chk in chunks:
+                if not chk.chapter_id:
+                    chk.chapter_id = chapter_id
+        return chunks
+

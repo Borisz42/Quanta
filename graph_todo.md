@@ -268,15 +268,15 @@ The previous realizer cheated round-trip evaluation by collecting raw literal st
 Demonstrate the end-to-end cognitive cycle on both complex single paragraphs and multi-chapter documents, proving that the architecture achieves zero hallucination, 100% coreference integrity, constant $O(1)$ VRAM usage, and sub-10ms query execution.
 
 ### Checklist
-- [ ] **8.1** Re-run the Dr. Eleanor Vance narrative through the complete pipeline:
+- [x] **8.1** Re-run the Dr. Eleanor Vance narrative through the complete pipeline:
   - Input text $\to$ Qwen-4B Transducer $\to$ ASG Compiler $\to$ Clingo Verification $\to$ Honest English Realizer.
   - Verify graph contains exactly 5 entities, 6 events, 0 token nodes.
-- [ ] **8.2** Multi-Chunk Continuity Test: Run a 3-chunk continuous story through the pipeline; verify entities introduced in Chunk 1 are correctly reused in Chunk 3 without passing Chunk 1 text tokens.
-- [ ] **8.3** Long-Context Book Benchmark: Ingest a multi-chapter text ($>10,000$ words) into `PageTable`; verify:
+- [x] **8.2** Multi-Chunk Continuity Test: Run a 3-chunk continuous story through the pipeline; verify entities introduced in Chunk 1 are correctly reused in Chunk 3 without passing Chunk 1 text tokens.
+- [x] **8.3** Long-Context Book Benchmark: Ingest a multi-chapter text ($>10,000$ words) into `PageTable`; verify:
   - VRAM usage remains flat ($\le 512$ nodes).
   - Merkle root is deterministically computed.
   - Questions about Chapter 1 asked after Chapter 10 are answered in $< 10\text{ ms}$ with zero hallucination.
-- [ ] **8.4** Regenerate `output/complex_translation_graphs_eng_eng.md` and `output/all_complex_translation_graphs.md` with authentic, deduplicated ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
+- [x] **8.4** Regenerate `output/complex_translation_graphs_eng_eng.md` and `output/all_complex_translation_graphs.md` with authentic, deduplicated ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
 
 ---
 

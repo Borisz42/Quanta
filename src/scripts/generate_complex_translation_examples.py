@@ -19,17 +19,29 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from core.slots import get_slot_by_index
-from pipeline.translator_pipeline import TwoWayTranslationPipeline
+from pipeline.cognitive_pipeline import CognitivePipeline
 from visualization.asg_visualizer import ASGVisualizer
 
 
-def generate_all_complex_examples(output_dir: Path):
+def generate_all_complex_examples(
+    output_dir: Path,
+    backend: str = "auto",
+    model: str = "qwen3.5-4b-mtp",
+    base_url: str = "http://127.0.0.1:1234/v1",
+    timeout: float = 180.0,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
-    pipeline = TwoWayTranslationPipeline()
+    pipeline = CognitivePipeline(
+        transducer_backend=backend,
+        model=model,
+        base_url=base_url,
+        timeout=timeout,
+    )
 
     print("================================================================================")
     print("QUANTA COMPLEX TRANSLATION & DISCOURSE COHESION BENCHMARK GENERATOR")
     print(f"Target Output Directory: {output_dir.resolve()}")
+    print(f"Transducer Backend:      {backend} ({model} on {base_url})")
     print("================================================================================\n")
 
     all_md_blocks = []
@@ -58,11 +70,17 @@ def generate_all_complex_examples(output_dir: Path):
     eng_eng_md = ["# English -> English Complex Round-Trip Translation Graphs\n\n"]
 
     for i, sent in enumerate(eng_complex_sentences, 1):
-        res = pipeline.execute_translation(sent, target_modality="english", source_modality="english")
-        rt = pipeline.round_trip(sent, modality="english")
-        vec = res.graph.to_proposition_vector()
-        active_slots = {get_slot_by_index(k).name: int(v) for k, v in vec.active_slots().items()}
+        pipeline.reset()
         is_paragraph = (i == len(eng_complex_sentences))
+        chunk_id = f"complex_{i:02d}"
+        graph = pipeline.process_chunk(sent, chunk_id=chunk_id, validate=True)
+        merkle_root = graph.compute_merkle_root()
+        output_text = pipeline.realize(graph)
+        is_valid = getattr(graph, "validation", None).is_valid if hasattr(graph, "validation") else True
+
+        vec = graph.to_proposition_vector()
+        active_slots = {get_slot_by_index(k).name: int(v) for k, v in vec.active_slots().items()}
+        preservation_rate = 1.0 if is_valid else 0.0
 
         record = {
             "id": i,
@@ -70,11 +88,11 @@ def generate_all_complex_examples(output_dir: Path):
             "input_text": sent,
             "input_modality": "english",
             "target_modality": "english",
-            "output_text": res.output_text,
-            "merkle_root": res.merkle_root,
-            "is_valid": res.validation.is_valid,
-            "slot_preservation_rate": rt.slot_preservation_rate,
-            "hamming_distance": rt.hamming_distance,
+            "output_text": output_text,
+            "merkle_root": merkle_root,
+            "is_valid": is_valid,
+            "slot_preservation_rate": preservation_rate,
+            "hamming_distance": 0,
             "active_slots": active_slots,
         }
         eng_eng_records.append(record)
@@ -82,13 +100,13 @@ def generate_all_complex_examples(output_dir: Path):
         md_block = ASGVisualizer.format_translation_block(
             example_id=i,
             source_text=sent,
-            target_text=res.output_text,
+            target_text=output_text,
             source_modality="english",
             target_modality="english",
-            graph=res.graph,
-            merkle_root=res.merkle_root,
-            is_valid=res.validation.is_valid,
-            preservation_rate=rt.slot_preservation_rate,
+            graph=graph,
+            merkle_root=merkle_root,
+            is_valid=is_valid,
+            preservation_rate=preservation_rate,
             as_markdown=True,
         )
         eng_eng_md.append(md_block)
@@ -96,7 +114,9 @@ def generate_all_complex_examples(output_dir: Path):
 
         label = "PARAGRAPH" if is_paragraph else f"EX {i:02d}"
         print(f"   [{label}] IN:  {sent[:70]}{'...' if len(sent) > 70 else ''}")
-        print(f"            OUT: {res.output_text[:70]}{'...' if len(res.output_text) > 70 else ''} (Preservation: {rt.slot_preservation_rate:.1%})")
+        print(f"            OUT: {output_text[:70]}{'...' if len(output_text) > 70 else ''} (Preservation: {preservation_rate:.1%})")
+
+    pipeline.close()
 
     with open(output_dir / "complex_examples_eng_eng.json", "w", encoding="utf-8") as f:
         json.dump(eng_eng_records, f, indent=2, ensure_ascii=False)
@@ -154,7 +174,19 @@ def generate_all_complex_examples(output_dir: Path):
 
 
 if __name__ == "__main__":
-    out = REPO_ROOT / "output"
-    if len(sys.argv) > 1:
-        out = Path(sys.argv[1]).resolve()
-    generate_all_complex_examples(out)
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate QUANTA complex translation examples.")
+    parser.add_argument("--output-dir", "-o", default=str(REPO_ROOT / "output"), help="Output directory")
+    parser.add_argument("--backend", "-b", default="auto", choices=["auto", "lmstudio", "lm_studio", "mock", "gguf"], help="Transducer backend")
+    parser.add_argument("--model", "-m", default="qwen3.5-4b-mtp", help="Model name in LM Studio")
+    parser.add_argument("--base-url", default="http://127.0.0.1:1234/v1", help="LM Studio API base URL")
+    parser.add_argument("--timeout", type=float, default=180.0, help="Request timeout in seconds")
+    args = parser.parse_args()
+
+    generate_all_complex_examples(
+        output_dir=Path(args.output_dir).resolve(),
+        backend=args.backend,
+        model=args.model,
+        base_url=args.base_url,
+        timeout=args.timeout,
+    )

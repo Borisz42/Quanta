@@ -323,6 +323,290 @@ CANONICAL_ELEANOR_VANCE_FIXTURE = DiscourseExtractionResult(
 )
 
 
+CANONICAL_STRESS_1_TEXT = (
+    "Had Alice not falsely pretended to know that Bob believed her investment was secure, "
+    "the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius."
+)
+
+CANONICAL_STRESS_1_FIXTURE = DiscourseExtractionResult(
+    chunk_id="chunk_stress_1",
+    entities=[
+        ExtractedEntity(id="E1", canonical_name="Alice", category="PERSON", surface_aliases=["her"]),
+        ExtractedEntity(id="E2", canonical_name="Bob", category="PERSON", surface_aliases=["Bob"]),
+        ExtractedEntity(id="E3", canonical_name="investment", category="OBJECT", surface_aliases=["her investment"]),
+        ExtractedEntity(id="E4", canonical_name="auditor", category="PERSON", surface_aliases=["the auditor"]),
+        ExtractedEntity(id="E5", canonical_name="due diligence", category="ARTIFACT", surface_aliases=["her due diligence", "stroke of genius"]),
+    ],
+    events=[
+        ExtractedEvent(
+            id="Ev1",
+            predicate="pretend",
+            agent_id="E1",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=False,
+            raw_text="Had Alice not falsely pretended to know",
+        ),
+        ExtractedEvent(
+            id="Ev2",
+            predicate="know",
+            agent_id="E1",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="to know that Bob believed her investment was secure",
+        ),
+        ExtractedEvent(
+            id="Ev3",
+            predicate="believe",
+            agent_id="E2",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="Bob believed her investment was secure",
+        ),
+        ExtractedEvent(
+            id="Ev4",
+            predicate="secure",
+            agent_id=None,
+            patient_id="E3",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="her investment was secure",
+        ),
+        ExtractedEvent(
+            id="Ev5",
+            predicate="remark",
+            agent_id="E4",
+            patient_id="E5",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=False,
+            raw_text="the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius",
+        ),
+    ],
+    relations=[
+        ExtractedRelation(relation_type="CAUSAL_MECHANISM_LINK", source_id="Ev1", target_id="Ev5", mechanism="counterfactual condition"),
+        ExtractedRelation(relation_type="TEMP_ALLEN_BEFORE", source_id="Ev1", target_id="Ev5", mechanism="prior pretence"),
+    ],
+    propositions=[
+        ExtractedProposition(id="P1", claim_text="Alice falsely pretended", epistemic_status="HYPOTHESIS", subject_id="E1", event_id="Ev1"),
+        ExtractedProposition(id="P2", claim_text="Bob believed investment secure", epistemic_status="FACT", subject_id="E2", event_id="Ev3"),
+        ExtractedProposition(id="P3", claim_text="auditor sarcastically remarked", epistemic_status="DOUBTED", subject_id="E4", event_id="Ev5"),
+    ],
+    metadata={"provenance": "canonical_fixture", "source": "Stress Test 1"},
+)
+
+CANONICAL_STRESS_2_TEXT = (
+    "While the drone was accelerating into the restricted airspace before dusk, "
+    "the operator plausibly suspected, but could not deduce with certainty, "
+    "that the left wingtip was tangentially touching the perimeter wire."
+)
+
+CANONICAL_STRESS_2_FIXTURE = DiscourseExtractionResult(
+    chunk_id="chunk_stress_2",
+    entities=[
+        ExtractedEntity(id="E1", canonical_name="drone", category="ARTIFACT", surface_aliases=["the drone"]),
+        ExtractedEntity(id="E2", canonical_name="restricted airspace", category="LOCATION", surface_aliases=["the restricted airspace"]),
+        ExtractedEntity(id="E3", canonical_name="operator", category="PERSON", surface_aliases=["the operator"]),
+        ExtractedEntity(id="E4", canonical_name="left wingtip", category="ARTIFACT", surface_aliases=["the left wingtip"]),
+        ExtractedEntity(id="E5", canonical_name="perimeter wire", category="ARTIFACT", surface_aliases=["the perimeter wire"]),
+    ],
+    events=[
+        ExtractedEvent(
+            id="Ev1",
+            predicate="accelerate",
+            agent_id="E1",
+            location_id="E2",
+            temporal_anchor="before dusk",
+            tense="PAST",
+            aspect="PROGRESSIVE",
+            polarity=True,
+            raw_text="While the drone was accelerating into the restricted airspace before dusk",
+        ),
+        ExtractedEvent(
+            id="Ev2",
+            predicate="suspect",
+            agent_id="E3",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="the operator plausibly suspected",
+        ),
+        ExtractedEvent(
+            id="Ev3",
+            predicate="deduce",
+            agent_id="E3",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=False,
+            raw_text="could not deduce with certainty",
+        ),
+        ExtractedEvent(
+            id="Ev4",
+            predicate="touch",
+            agent_id="E4",
+            patient_id="E5",
+            temporal_anchor=None,
+            tense="PAST",
+            aspect="PROGRESSIVE",
+            polarity=True,
+            raw_text="the left wingtip was tangentially touching the perimeter wire",
+        ),
+    ],
+    relations=[
+        ExtractedRelation(relation_type="TEMP_ALLEN_DURING", source_id="Ev1", target_id="Ev2", mechanism="during acceleration"),
+        ExtractedRelation(relation_type="TEMP_ALLEN_DURING", source_id="Ev4", target_id="Ev2", mechanism="concurrent touch"),
+    ],
+    propositions=[
+        ExtractedProposition(id="P1", claim_text="drone accelerating into restricted airspace", epistemic_status="OBSERVATION", subject_id="E1", event_id="Ev1"),
+        ExtractedProposition(id="P2", claim_text="operator suspected touch", epistemic_status="HYPOTHESIS", subject_id="E3", event_id="Ev2"),
+        ExtractedProposition(id="P3", claim_text="deduction not certain", epistemic_status="DOUBTED", subject_id="E3", event_id="Ev3"),
+    ],
+    metadata={"provenance": "canonical_fixture", "source": "Stress Test 2"},
+)
+
+CANONICAL_STRESS_3_TEXT = (
+    "Every investigator who doubted that any suspect had necessarily committed every crime "
+    "secretly wanted someone to prove the absolute impossibility of an accomplice's alibi."
+)
+
+CANONICAL_STRESS_3_FIXTURE = DiscourseExtractionResult(
+    chunk_id="chunk_stress_3",
+    entities=[
+        ExtractedEntity(id="E1", canonical_name="investigator", category="PERSON", surface_aliases=["Every investigator"]),
+        ExtractedEntity(id="E2", canonical_name="suspect", category="PERSON", surface_aliases=["any suspect"]),
+        ExtractedEntity(id="E3", canonical_name="crime", category="OBJECT", surface_aliases=["every crime"]),
+        ExtractedEntity(id="E4", canonical_name="accomplice", category="PERSON", surface_aliases=["someone", "an accomplice"]),
+        ExtractedEntity(id="E5", canonical_name="alibi", category="ARTIFACT", surface_aliases=["an accomplice's alibi"]),
+    ],
+    events=[
+        ExtractedEvent(
+            id="Ev1",
+            predicate="doubt",
+            agent_id="E1",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="Every investigator who doubted",
+        ),
+        ExtractedEvent(
+            id="Ev2",
+            predicate="commit",
+            agent_id="E2",
+            patient_id="E3",
+            temporal_anchor=None,
+            tense="PAST",
+            aspect="PERFECT",
+            polarity=True,
+            raw_text="any suspect had necessarily committed every crime",
+        ),
+        ExtractedEvent(
+            id="Ev3",
+            predicate="want",
+            agent_id="E1",
+            patient_id=None,
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="secretly wanted someone to prove",
+        ),
+        ExtractedEvent(
+            id="Ev4",
+            predicate="prove",
+            agent_id="E4",
+            patient_id="E5",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="to prove the absolute impossibility of an accomplice's alibi",
+        ),
+    ],
+    relations=[
+        ExtractedRelation(relation_type="TEMP_ALLEN_BEFORE", source_id="Ev1", target_id="Ev3", mechanism="prior doubt"),
+    ],
+    propositions=[
+        ExtractedProposition(id="P1", claim_text="investigator doubted", epistemic_status="DOUBTED", subject_id="E1", event_id="Ev1"),
+        ExtractedProposition(id="P2", claim_text="wanted proof of impossibility", epistemic_status="FACT", subject_id="E1", event_id="Ev3"),
+    ],
+    metadata={"provenance": "canonical_fixture", "source": "Stress Test 3"},
+)
+
+CANONICAL_STRESS_4_TEXT = (
+    "By declaring this very decree to be legally void, the council obligated the commissioner "
+    "to prevent its future enforcement unless the clause could recursively validate its own origin."
+)
+
+CANONICAL_STRESS_4_FIXTURE = DiscourseExtractionResult(
+    chunk_id="chunk_stress_4",
+    entities=[
+        ExtractedEntity(id="E1", canonical_name="decree", category="ARTIFACT", surface_aliases=["this very decree"]),
+        ExtractedEntity(id="E2", canonical_name="council", category="ORGANIZATION", surface_aliases=["the council"]),
+        ExtractedEntity(id="E3", canonical_name="commissioner", category="PERSON", surface_aliases=["the commissioner"]),
+        ExtractedEntity(id="E4", canonical_name="clause", category="ARTIFACT", surface_aliases=["the clause"]),
+    ],
+    events=[
+        ExtractedEvent(
+            id="Ev1",
+            predicate="declare",
+            agent_id="E2",
+            patient_id="E1",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="declaring this very decree to be legally void",
+        ),
+        ExtractedEvent(
+            id="Ev2",
+            predicate="obligate",
+            agent_id="E2",
+            patient_id="E3",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="the council obligated the commissioner",
+        ),
+        ExtractedEvent(
+            id="Ev3",
+            predicate="prevent",
+            agent_id="E3",
+            patient_id="E1",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="to prevent its future enforcement",
+        ),
+        ExtractedEvent(
+            id="Ev4",
+            predicate="validate",
+            agent_id="E4",
+            patient_id="E4",
+            temporal_anchor=None,
+            tense="PAST",
+            polarity=True,
+            raw_text="the clause could recursively validate its own origin",
+        ),
+    ],
+    relations=[
+        ExtractedRelation(relation_type="CAUSAL_MECHANISM_LINK", source_id="Ev1", target_id="Ev2", mechanism="declaration caused obligation"),
+        ExtractedRelation(relation_type="CAUSAL_PREVENTIVE_BLOCK", source_id="Ev3", target_id="Ev1", mechanism="prevention blocks enforcement"),
+    ],
+    propositions=[
+        ExtractedProposition(id="P1", claim_text="decree legally void", epistemic_status="FACT", subject_id="E2", event_id="Ev1"),
+        ExtractedProposition(id="P2", claim_text="commissioner obligated to prevent", epistemic_status="PROHIBITED", subject_id="E3", event_id="Ev2"),
+        ExtractedProposition(id="P3", claim_text="clause validates origin", epistemic_status="HYPOTHESIS", subject_id="E4", event_id="Ev4"),
+    ],
+    metadata={"provenance": "canonical_fixture", "source": "Stress Test 4"},
+)
+
+
 # ---------------------------------------------------------------------------
 # Base Transducer Abstract Class
 # ---------------------------------------------------------------------------
@@ -379,6 +663,15 @@ class MockTransducer(BaseDiscourseTransducer):
         # Pre-seed canonical Eleanor Vance fixture
         self.register_fixture("eleanor_vance", CANONICAL_ELEANOR_VANCE_FIXTURE)
         self.register_fixture(CANONICAL_ELEANOR_VANCE_TEXT, CANONICAL_ELEANOR_VANCE_FIXTURE)
+        # Pre-seed stress test fixtures 1-4
+        self.register_fixture("stress_1", CANONICAL_STRESS_1_FIXTURE)
+        self.register_fixture(CANONICAL_STRESS_1_TEXT, CANONICAL_STRESS_1_FIXTURE)
+        self.register_fixture("stress_2", CANONICAL_STRESS_2_FIXTURE)
+        self.register_fixture(CANONICAL_STRESS_2_TEXT, CANONICAL_STRESS_2_FIXTURE)
+        self.register_fixture("stress_3", CANONICAL_STRESS_3_FIXTURE)
+        self.register_fixture(CANONICAL_STRESS_3_TEXT, CANONICAL_STRESS_3_FIXTURE)
+        self.register_fixture("stress_4", CANONICAL_STRESS_4_FIXTURE)
+        self.register_fixture(CANONICAL_STRESS_4_TEXT, CANONICAL_STRESS_4_FIXTURE)
 
         if fixtures:
             for k, v in fixtures.items():
@@ -396,16 +689,30 @@ class MockTransducer(BaseDiscourseTransducer):
         **kwargs,
     ) -> DiscourseExtractionResult:
         """Return fixture if matched, or generate synthetic extraction result."""
+        norm_text = " ".join(chunk_text.split()).strip()
+
         # 1. Exact match in fixtures
         if chunk_text in self.fixtures:
-            result = self._clone_result(self.fixtures[chunk_text], chunk_id)
-            return result
+            return self._clone_result(self.fixtures[chunk_text], chunk_id)
+        if norm_text in self.fixtures:
+            return self._clone_result(self.fixtures[norm_text], chunk_id)
 
         # 2. Key/substring match
+        lower = chunk_text.lower()
+        if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
+            return self._clone_result(CANONICAL_ELEANOR_VANCE_FIXTURE, chunk_id)
+        if "alice" in lower and "auditor" in lower:
+            return self._clone_result(CANONICAL_STRESS_1_FIXTURE, chunk_id)
+        if "drone" in lower and "airspace" in lower:
+            return self._clone_result(CANONICAL_STRESS_2_FIXTURE, chunk_id)
+        if "investigator" in lower and "alibi" in lower:
+            return self._clone_result(CANONICAL_STRESS_3_FIXTURE, chunk_id)
+        if "decree" in lower and "commissioner" in lower:
+            return self._clone_result(CANONICAL_STRESS_4_FIXTURE, chunk_id)
+
         for key, fix in self.fixtures.items():
-            if key.lower() in chunk_text.lower() or ("eleanor" in key.lower() and "eleanor" in chunk_text.lower()):
-                result = self._clone_result(fix, chunk_id)
-                return result
+            if key.lower() in lower:
+                return self._clone_result(fix, chunk_id)
 
         # 3. Fallback heuristic extraction for arbitrary chunks
         return self._heuristic_fallback(chunk_text, chunk_id, active_manifest_prompt)
@@ -485,7 +792,7 @@ class LMStudioTransducer(BaseDiscourseTransducer):
     def __init__(
         self,
         base_url: str = "http://localhost:1234/v1",
-        model: str = "qwen2.5-4b-instruct",
+        model: Optional[str] = None,
         timeout: float = 60.0,
         max_retries: int = 3,
         retry_backoff: float = 0.5,
@@ -495,12 +802,33 @@ class LMStudioTransducer(BaseDiscourseTransducer):
     ):
         super().__init__(system_prompt=system_prompt)
         self.base_url = base_url.rstrip("/")
-        self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
         self.api_key = api_key or "lm-studio"
         self.session = session or requests.Session()
+        self.model = model or self._detect_model()
+
+    def _detect_model(self) -> str:
+        """Query /models to find the currently active or preferred model."""
+        url = f"{self.base_url}/models"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        try:
+            resp = self.session.get(url, headers=headers, timeout=2.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = [m.get("id") for m in data.get("data", []) if "id" in m]
+                for m in models:
+                    if "qwen3.5-4b" in m.lower():
+                        return m
+                for m in models:
+                    if "qwen" in m.lower():
+                        return m
+                if models:
+                    return models[0]
+        except Exception:
+            pass
+        return "qwen3.5-4b-mtp"
 
     def check_health(self) -> bool:
         """Check if LM Studio endpoint is reachable and responsive."""
@@ -530,14 +858,18 @@ class LMStudioTransducer(BaseDiscourseTransducer):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
+        target_model = kwargs.get("model") or self.model or self._detect_model()
+        # Use assistant prefill to prevent runaway reasoning loops and guarantee prompt JSON start
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user_prompt},
+            {"role": "assistant", "content": "{\n"},
+        ]
         payload = {
-            "model": kwargs.get("model", self.model),
-            "messages": [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0.0,
-            "response_format": {"type": "json_object"},
+            "model": target_model,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.0),
+            "max_tokens": kwargs.get("max_tokens", 2048),
         }
 
         last_err: Optional[Exception] = None
@@ -554,7 +886,8 @@ class LMStudioTransducer(BaseDiscourseTransducer):
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    raw_text_resp = data["choices"][0]["message"]["content"]
+                    content = data["choices"][0]["message"]["content"]
+                    raw_text_resp = content
                     break
                 elif resp.status_code in {500, 502, 503, 504}:
                     last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
@@ -575,7 +908,7 @@ class LMStudioTransducer(BaseDiscourseTransducer):
         extracted = self._parse_json_response(raw_text_resp, chunk_id)
         extracted.metadata["latency_sec"] = latency_sec
         extracted.metadata["backend"] = "lm_studio"
-        extracted.metadata["model"] = self.model
+        extracted.metadata["model"] = target_model
         return extracted
 
     def _parse_json_response(
@@ -583,18 +916,95 @@ class LMStudioTransducer(BaseDiscourseTransducer):
         text: str,
         chunk_id: Optional[str],
     ) -> DiscourseExtractionResult:
-        """Parse raw model output, stripping markdown formatting if present."""
+        """Parse raw model output, stripping reasoning tags and markdown formatting if present."""
         clean = text.strip()
+        # Strip <think>...</think> reasoning blocks if model generated them
+        clean = re.sub(r"<think>.*?</think>", "", clean, flags=re.DOTALL).strip()
         # Strip ```json ... ``` code fences if model generated them
-        if clean.startswith("```"):
+        fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", clean)
+        if fence_match:
+            clean = fence_match.group(1).strip()
+        elif clean.startswith("```"):
             clean = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", clean)
             clean = re.sub(r"\n?```$", "", clean).strip()
+        # If model output continued from assistant prefill '{\n', prepend the missing '{'
+        if not clean.startswith("{") and any(k in clean for k in ('"entities"', '"events"', '"chunk_id"', '"propositions"')):
+            clean = "{\n" + clean
 
-        parsed = json.loads(clean)
+        # Auto-repair omitted 'canonical_name' key in entity entries if model emits compact objects
+        clean = re.sub(
+            r'("id":\s*"[^"]+",)\s*"([^":\n]+)",\s*("(?:category|surface_aliases|properties)":)',
+            r'\1 "canonical_name": "\2", \3',
+            clean,
+        )
+
+        # Isolate the outermost JSON object using balanced bracket counting
+        start_idx = clean.find("{")
+        if start_idx != -1:
+            depth = 0
+            in_str = False
+            esc = False
+            matched = False
+            for i in range(start_idx, len(clean)):
+                c = clean[i]
+                if esc:
+                    esc = False
+                    continue
+                if c == "\\":
+                    esc = True
+                    continue
+                if c == '"':
+                    in_str = not in_str
+                    continue
+                if not in_str:
+                    if c == "{":
+                        depth += 1
+                    elif c == "}":
+                        depth -= 1
+                        if depth == 0:
+                            clean = clean[start_idx : i + 1]
+                            matched = True
+                            break
+            if not matched:
+                clean = clean[start_idx:]
+
+        # Strip trailing commas that violate standard JSON
+        clean = re.sub(r",\s*([\]}])", r"\1", clean)
+        clean = re.sub(r",\s*([\]}])", r"\1", clean)
+
+        try:
+            parsed = json.loads(clean)
+        except json.JSONDecodeError:
+            # Fallback attempt with more aggressive comma cleaning
+            clean_fixed = re.sub(r",\s*([\]}])", r"\1", clean)
+            parsed = json.loads(clean_fixed)
         if chunk_id:
             parsed["chunk_id"] = chunk_id
+
+        # Auto-sanitize categories and foreign keys
+        entities = parsed.get("entities", [])
+        events = parsed.get("events", [])
+        known_entity_ids = {e.get("id") for e in entities if isinstance(e, dict) and "id" in e}
+
+        valid_categories = {
+            "PERSON", "OBJECT", "SUBSTANCE", "LOCATION",
+            "ORGANIZATION", "ANIMAL", "ARTIFACT", "NATURAL_OBJECT",
+        }
+        for e in entities:
+            if isinstance(e, dict):
+                cat = str(e.get("category", "OBJECT")).upper()
+                if cat not in valid_categories:
+                    e["category"] = "OBJECT"
+
+        for ev in events:
+            if isinstance(ev, dict):
+                for k in ("agent_id", "patient_id", "theme_id", "location_id", "instrument_id"):
+                    val = ev.get(k)
+                    if val and val not in known_entity_ids:
+                        ev[k] = None
+
         result = DiscourseExtractionResult.from_dict(parsed)
-        
+
         # Log validation warnings if foreign keys dangle
         errs = result.validate_foreign_keys()
         if errs:

@@ -7,6 +7,7 @@ from pipeline.translator_pipeline import (
     RoundTripResult,
     StageLog,
 )
+from pipeline.cognitive_pipeline import CognitivePipeline
 
 __all__ = [
     "TwoWayTranslationPipeline",
@@ -14,5 +15,6 @@ __all__ = [
     "TranslationResult",
     "RoundTripResult",
     "StageLog",
+    "CognitivePipeline",
 ]
 

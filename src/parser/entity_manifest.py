@@ -312,6 +312,12 @@ class EntityStorage:
             )
             return cur.rowcount > 0
 
+    def clear(self):
+        """Clear all entities and aliases from storage."""
+        with self._conn:
+            self._conn.execute("DELETE FROM entity_aliases")
+            self._conn.execute("DELETE FROM entities")
+
     def close(self):
         """Close SQLite database connection."""
         self._conn.close()
@@ -394,6 +400,12 @@ class ActiveEntityManifest:
         cid = f"E{self._next_id_num}"
         self._next_id_num += 1
         return cid
+
+    def reset(self):
+        """Reset active in-memory manifest state and register bindings."""
+        self._active.clear()
+        self._register_bindings.clear()
+        self._next_id_num = 1
 
     def _allocate_register(self, record: EntityRecord):
         """Assign an available Band 2 register slot to an active entity."""
@@ -541,8 +553,24 @@ class ActiveEntityManifest:
             records.sort(key=lambda r: (r.salience_score, r.last_seen_chunk), reverse=True)
         return records
 
+    def values(self):
+        """Return collection of active EntityRecords."""
+        return self._active.values()
+
+    def keys(self):
+        """Return collection of active canonical IDs."""
+        return self._active.keys()
+
+    def items(self):
+        """Return collection of (canonical_id, EntityRecord) pairs."""
+        return self._active.items()
+
+    def __iter__(self):
+        return iter(self._active)
+
     def __len__(self) -> int:
         return len(self._active)
+
 
 
 class EntityMatcher:
@@ -765,6 +793,12 @@ class EntityPagingEngine:
             lines.append(f"- {ent.canonical_id}: {ent.canonical_name}{aliases_str}")
 
         return "\n".join(lines)
+
+    def reset(self):
+        """Reset working memory storage, manifest, and matcher for a fresh document."""
+        self.storage.clear()
+        self.manifest.reset()
+        self._sync_matcher()
 
     def close(self):
         """Clean up SQLite connection."""

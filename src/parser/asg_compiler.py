@@ -146,13 +146,45 @@ class ASGCompiler:
 
         # 4. Event compilation (Phase 4.3)
         entity_cids = {ent_id: node.cid for ent_id, node in entity_nodes.items()}
-        for ev in extraction_result.events:
+        for i, ev in enumerate(extraction_result.events):
             node = self.compile_event(
                 ev,
                 entity_cids=entity_cids,
                 propositions=extraction_result.propositions,
             )
-            cid = graph.add_node(node)
+            if i == 0:
+                node.set_slot("GRAPH_ROOT_NODE", 1)
+
+            # Set thematic valency structural routing slots BEFORE computing CID
+            if ev.agent_id and ev.agent_id in entity_nodes:
+                node.set_structural_slot("VAL_X1_AGENT", StructuralValue.ACTIVE_LOCAL)
+            if ev.patient_id and ev.patient_id in entity_nodes:
+                node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
+            elif ev.theme_id and ev.theme_id in entity_nodes:
+                node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
+            if ev.location_id and ev.location_id in entity_nodes:
+                node.set_structural_slot("VAL_LOCATION_SLOT", StructuralValue.ACTIVE_LOCAL)
+            if ev.instrument_id and ev.instrument_id in entity_nodes:
+                node.set_structural_slot("VAL_X5_INSTRUMENT", StructuralValue.ACTIVE_LOCAL)
+
+            # Set self-relations and causal slots BEFORE computing CID
+            for rel in extraction_result.relations:
+                rel_type = rel.relation_type
+                if rel_type == "CAUSAL_MECHANISM_LINK":
+                    slot_name = "CAUSAL_DIRECT_MECHANISM"
+                elif rel_type == "CAUSAL_PREVENTIVE_BLOCK":
+                    slot_name = "CAUSAL_PREVENTIVE_BLOCK"
+                else:
+                    slot_name = rel_type
+
+                if rel.source_id == rel.target_id == ev.id:
+                    if slot_name in SLOT_NAME_TO_INDEX:
+                        node.set_slot(slot_name, 1)
+                elif rel.source_id == ev.id and slot_name in SLOT_NAME_TO_INDEX and slot_name.startswith("CAUSAL_"):
+                    node.set_slot(slot_name, 1)
+
+            node.compute_cid()
+            graph.add_node(node)
             event_nodes[ev.id] = node
 
         # 5. Wire Thematic Valencies from events to entities
@@ -160,41 +192,32 @@ class ASGCompiler:
             ev_node = event_nodes[ev.id]
             if ev.agent_id and ev.agent_id in entity_nodes:
                 ent_node = entity_nodes[ev.agent_id]
-                ev_node.set_structural_slot("VAL_X1_AGENT", StructuralValue.ACTIVE_LOCAL)
                 graph.add_edge(ev_node.cid, "VAL_X1_AGENT", ent_node.cid)
 
             if ev.patient_id and ev.patient_id in entity_nodes:
                 ent_node = entity_nodes[ev.patient_id]
-                ev_node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
                 graph.add_edge(ev_node.cid, "VAL_X2_PATIENT", ent_node.cid)
             elif ev.theme_id and ev.theme_id in entity_nodes:
                 ent_node = entity_nodes[ev.theme_id]
-                ev_node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
                 graph.add_edge(ev_node.cid, "VAL_X2_PATIENT", ent_node.cid)
 
             if ev.location_id and ev.location_id in entity_nodes:
                 ent_node = entity_nodes[ev.location_id]
-                ev_node.set_structural_slot("VAL_LOCATION_SLOT", StructuralValue.ACTIVE_LOCAL)
                 graph.add_edge(ev_node.cid, "VAL_LOCATION_SLOT", ent_node.cid)
 
             if ev.instrument_id and ev.instrument_id in entity_nodes:
                 ent_node = entity_nodes[ev.instrument_id]
-                ev_node.set_structural_slot("VAL_X5_INSTRUMENT", StructuralValue.ACTIVE_LOCAL)
                 graph.add_edge(ev_node.cid, "VAL_X5_INSTRUMENT", ent_node.cid)
 
         # 6. Spatio-temporal & causal edge wiring (Phase 4.4)
         for rel in extraction_result.relations:
-            self._wire_relation(rel, graph, entity_nodes, event_nodes)
+            if rel.source_id != rel.target_id:
+                self._wire_relation(rel, graph, entity_nodes, event_nodes)
 
-        # 7. Designate Root Event Node & compute Merkle Root
+        # 7. Designate Root Event Node
         if extraction_result.events:
             root_ev_id = extraction_result.events[0].id
-            root_node = event_nodes[root_ev_id]
-            graph.root_cid = root_node.cid
-            root_node.set_slot("GRAPH_ROOT_NODE", 1)
-            root_node.compute_cid()
-            # Update root_cid mapping in graph
-            graph.root_cid = root_node.cid
+            graph.root_cid = event_nodes[root_ev_id].cid
 
         # 8. Structural integrity validation
         struct_valid, struct_errors = graph.validate_integrity()
@@ -283,19 +306,29 @@ class ASGCompiler:
             node.set_slot("CN_Q072_SUBSTANCE", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
             node.set_slot("ROLE_SENTIENT", 0)
+            node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
         elif cat == "LOCATION":
             node.set_slot("TYPE_SPATIAL_REGION", 1)
             node.set_slot("WN_LOCATION_PLACE", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
+            node.set_slot("ROLE_SENTIENT", 0)
+            node.set_slot("TYPE_ANIMATE", 0)
+            node.set_slot("TYPE_HUMAN", 0)
         elif cat in ("OBJECT", "ARTIFACT", "INSTRUMENT"):
             node.set_slot("TYPE_ARTIFACT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
             node.set_slot("TYPE_NATURAL_OBJECT", 0)
+            node.set_slot("ROLE_SENTIENT", 0)
+            node.set_slot("TYPE_ANIMATE", 0)
+            node.set_slot("TYPE_HUMAN", 0)
         elif cat == "NATURAL_OBJECT":
             node.set_slot("TYPE_NATURAL_OBJECT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
             node.set_slot("TYPE_ARTIFACT", 0)
+            node.set_slot("ROLE_SENTIENT", 0)
+            node.set_slot("TYPE_ANIMATE", 0)
+            node.set_slot("TYPE_HUMAN", 0)
         elif cat == "ORGANIZATION":
             node.set_slot("TYPE_ORGANIZATION", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
@@ -441,12 +474,8 @@ class ASGCompiler:
             edge_type = rel_type
             slot_name = rel_type
 
-        # Case A: Self-relation (e.g. Ev5 -> Ev5 TEMP_ALLEN_DURING)
+        # Case A: Self-relation (handled during event compilation)
         if src_id == tgt_id:
-            target_node = event_nodes.get(src_id) or entity_nodes.get(src_id)
-            if target_node and slot_name in SLOT_NAME_TO_INDEX:
-                target_node.set_slot(slot_name, 1)
-                target_node.compute_cid()
             return
 
         # Case B: Directed edge between distinct nodes
@@ -454,8 +483,6 @@ class ASGCompiler:
         tgt_node = event_nodes.get(tgt_id) or entity_nodes.get(tgt_id)
 
         if src_node and tgt_node:
-            if slot_name in SLOT_NAME_TO_INDEX and slot_name.startswith("CAUSAL_"):
-                src_node.set_slot(slot_name, 1)
             graph.add_edge(src_node.cid, edge_type, tgt_node.cid)
 
 

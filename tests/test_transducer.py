@@ -392,7 +392,7 @@ def test_lm_studio_successful_transduction(mock_post):
     call_args = mock_post.call_args
     sent_payload = call_args.kwargs["json"]
     assert sent_payload["temperature"] == 0.0
-    assert sent_payload["response_format"] == {"type": "json_object"}
+    assert any(m.get("role") == "assistant" for m in sent_payload["messages"])
     assert any("ACTIVE ENTITIES:" in m["content"] for m in sent_payload["messages"])
 
 
