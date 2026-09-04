@@ -5,6 +5,13 @@ from parser.nlp_forward import NLPForwardParser
 from parser.fol_parser import FOLParser
 from parser.ast_parser import ASTForwardParser
 from parser.chunker import DiscourseChunk, SentenceSpan, DiscourseChunker
+from parser.entity_manifest import (
+    EntityRecord,
+    EntityStorage,
+    ActiveEntityManifest,
+    EntityMatcher,
+    EntityPagingEngine,
+)
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -15,4 +22,10 @@ __all__ = [
     "DiscourseChunk",
     "SentenceSpan",
     "DiscourseChunker",
+    "EntityRecord",
+    "EntityStorage",
+    "ActiveEntityManifest",
+    "EntityMatcher",
+    "EntityPagingEngine",
 ]
+

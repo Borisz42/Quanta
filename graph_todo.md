@@ -117,16 +117,16 @@ To maintain global coreference across 100 chapters without passing past text tok
 - Pre-chunk surface scan: Use fast regex / spaCy token match against the entity registry to page in dormant entities prior to calling the neural transducer.
 
 ### Checklist
-- [ ] **2.1** Implement `EntityRecord` dataclass in `src/parser/entity_manifest.py` with alias list, category, register binding, and recency tracking.
-- [ ] **2.2** Implement `ActiveEntityManifest` managing the in-memory working set (target size: 5–15 entities) with LRU eviction to persistent storage.
-- [ ] **2.3** Implement fast pre-scan entity matcher: scans chunk text in $< 1\text{ ms}$ to resurrect dormant entities from the Host-RAM SQLite Page Table.
-- [ ] **2.4** Implement prompt formatter that renders the active manifest into a compact ~100-token prompt block:
+- [x] **2.1** Implement `EntityRecord` dataclass in `src/parser/entity_manifest.py` with alias list, category, register binding, and recency tracking.
+- [x] **2.2** Implement `ActiveEntityManifest` managing the in-memory working set (target size: 5–15 entities) with LRU eviction to persistent storage.
+- [x] **2.3** Implement fast pre-scan entity matcher: scans chunk text in $< 1\text{ ms}$ to resurrect dormant entities from the Host-RAM SQLite Page Table.
+- [x] **2.4** Implement prompt formatter that renders the active manifest into a compact ~100-token prompt block:
   ```text
   ACTIVE ENTITIES:
   - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
   - E2: synthetic compound (aliases: polymer, specimen)
   ```
-- [ ] **2.5** 🧪 Write unit tests in `tests/test_entity_manifest.py`: Simulate a 5-chunk story; verify entity `E1` introduced in Chunk 1 is correctly paged into the manifest and reused in Chunk 5.
+- [x] **2.5** 🧪 Write unit tests in `tests/test_entity_manifest.py`: Simulate a 5-chunk story; verify entity `E1` introduced in Chunk 1 is correctly paged into the manifest and reused in Chunk 5.
 
 ---
 
