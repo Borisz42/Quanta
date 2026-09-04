@@ -65,7 +65,7 @@ class ConceptVectorDecoder:
         [0.0, 1.0, 1.0, 0.2],  # Stored 0 (Irrelevant)
         [1.0, 0.0, 2.0, 0.1],  # Stored 1 (True - contradiction with 2 has cost 2.0)
         [1.0, 2.0, 0.0, 0.1],  # Stored 2 (False - contradiction with 1 has cost 2.0)
-        [0.2, 0.1, 0.1, 0.0],  # Stored 3 (Maybe / Inherited - soft wildcard)
+        [0.2, 0.1, 0.1, 0.0],  # Stored 3 (Maybe / 1st-Hop Inherited - soft wildcard)
     ], dtype=np.float32)
 
     def decode_vector(self, vector_256: np.ndarray, distance_threshold: float = 0.15) -> Tuple[Optional[str], float]:

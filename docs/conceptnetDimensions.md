@@ -21,10 +21,10 @@ Every dimension in Band 3 and Band 4 takes a value in $\mathcal{B}_4 = \{0, 1, 2
 
 | State | Bit Pattern | Epistemic Status | Derivation Policy |
 | :--- | :--- | :--- | :--- |
-| **`0`** | `00_2` | **IRRELEVANT / INACTIVE** | Unasserted dimension; orthogonal domain; distant negative deductions ($d_{\text{neg}} \ge 2$). |
-| **`1`** | `01_2` | **TRUE / YES / AFFIRMED** | Direct positive assertion ($d_{\text{pos}} = 0$) or 1st-order taxonomic positive ($d_{\text{pos}} = 1$). |
-| **`2`** | `10_2` | **FALSE / NO / NEGATED** | Direct explicit negation ($d_{\text{neg}} = 0$) or 1st-order taxonomic negative ($d_{\text{neg}} = 1$). |
-| **`3`** | `11_2` | **MAYBE / INHERITED / UNCERTAIN** | 2nd-order transitive positive deduction ($d_{\text{pos}} = 2$). Acts as soft wildcard in querying. |
+| **`0`** | `00_2` | **IRRELEVANT / INACTIVE** | Unasserted dimension; orthogonal domain; 2nd-order+ associative drift ($d \ge 2$). |
+| **`1`** | `01_2` | **TRUE / YES / AFFIRMED** | Direct positive assertion ($d_{\text{pos}} = 0$) affirmed explicitly for the concept. |
+| **`2`** | `10_2` | **FALSE / NO / NEGATED** | Direct explicit negation ($d_{\text{neg}} = 0$) or 1st-order parent taxonomic negative ($d_{\text{neg}} = 1$). |
+| **`3`** | `11_2` | **MAYBE / INHERITED / UNCERTAIN** | 1st-order taxonomic positive ($d_{\text{pos}} = 1$) inherited from immediate parent. Soft wildcard in querying. |
 
 ### 2.2 Dual Negative Relation Mapping
 Negative assertions in ConceptNet are mapped directly to the canonical positive question column to form unified dual-polarity axes:
@@ -34,19 +34,19 @@ Negative assertions in ConceptNet are mapped directly to the canonical positive 
 * `/r/Antonym(c, p)` $\to$ Column for `/r/RelatedTo(c, p)` with value **`2` (FALSE)**.
 * `/r/DistinctFrom(c, p)` $\to$ Column for `/r/IsA(c, p)` with value **`2` (FALSE)**.
 
-### 2.3 Non-Monotonic Sparse Inheritance & Precedence
-Taxonomic links (`/r/IsA`) form a sparse adjacency operator $T$. We propagate positive ($M_{\text{pos}}$) and negative ($M_{\text{neg}}$) assertions across taxonomic depth $d \in \{1, 2\}$:
-1. $M_{\text{pos}, 0}, M_{\text{pos}, 1} = T \cdot M_{\text{pos}, 0}, M_{\text{pos}, 2} = T \cdot M_{\text{pos}, 1}$
-2. $M_{\text{neg}, 0}, M_{\text{neg}, 1} = T \cdot M_{\text{neg}, 0}$
+### 2.3 Non-Monotonic Sparse Inheritance & Precedence (Clean 1st-Hop Model)
+Taxonomic links (`/r/IsA`) form a sparse adjacency operator $T$. We propagate positive ($M_{\text{pos}}$) and negative ($M_{\text{neg}}$) assertions strictly across depth $d = 1$ (2nd-order drift $d \ge 2$ is discarded):
+1. $M_{\text{pos}, 0}, \quad M_{\text{pos}, 1} = T \cdot M_{\text{pos}, 0}$
+2. $M_{\text{neg}, 0}, \quad M_{\text{neg}, 1} = T \cdot M_{\text{neg}, 0}$
 
-To prevent positive inheritance from overriding direct negative exceptions (e.g. *Penguin IsA Bird* inheriting *CapableOf Fly*), we apply strict **non-monotonic precedence**:
+To prevent positive inheritance from overriding direct negative exceptions (e.g. *Penguin IsA Bird* inheriting *CapableOf Fly*), and to keep direct intrinsic properties distinct from inherited generalities, we apply strict **non-monotonic precedence**:
 
 $$M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$$
 
 $$\begin{aligned}
 M_{\text{false}} &= (M_{\text{neg}, 0} + M_{\text{neg}, 1}) > 0 \\
-M_{\text{true}} &= \left[(M_{\text{pos}, 0} + M_{\text{pos}, 1}) > 0\right] \setminus M_{\text{false}} \\
-M_{\text{maybe}} &= \left[M_{\text{pos}, 2} > 0\right] \setminus (M_{\text{false}} \cup M_{\text{true}}) \\
+M_{\text{true}} &= (M_{\text{pos}, 0} > 0) \setminus M_{\text{false}} \\
+M_{\text{maybe}} &= (M_{\text{pos}, 1} > 0) \setminus (M_{\text{false}} \cup M_{\text{true}}) \\
 M_{\text{CSR}} &= 1 \cdot M_{\text{true}} + 2 \cdot M_{\text{false}} + 3 \cdot M_{\text{maybe}}
 \end{aligned}$$
 
@@ -87,16 +87,16 @@ The 256 globally optimal dimensions selected by the solver populate **Band 3** (
 
 ### Band 3 (Slots 384–511: 128 Slots) — Ontological Taxonomies & Domains
 Primary axes separating broad formal, physical, biological, social, and structural domains:
-* **Slots 384–395**: Computing, Body, Legal, Plant, Music, Medicine, Nautical, Mathematics, Military, Chemistry, Animal, Physics.
-* **Slots 396–420**: Group, Tangible Thing, Person, Sports, Money, Australia, Linguistics, County Seat, Time, Biology, Astronomy, State, Change, Move, Hand, Quality, Device, Mind, Water, Power, Geology, England, Language, Food, Sound.
-* **Slots 421–460**: Place, Unit, Cause, Information, Activity, Surface, Set, Action, Cut, Logic, Line, Organism, Knowledge, Tree, Manner, Stop, Geometry, Appearance, Life, Desire, Programming, Sense, Hot, Lie, Formal, Mass, Amount, Area, Genetics, Death, Fit, Box, Land, Calm, Speech.
-* **Slots 461–511**: Astronomy, Geology, Pathology, Biochemistry, Religion, Transportation, Government, Economics, Mechanics, Material, Literature, Psychology.
+* **Slots 384–395**: Computing (`CN_Q001`), Legal, Plant, Nautical, Medicine, Music, Person (`CN_Q007`), Mathematics, Tangible Thing, Military, Animal (`CN_Q011`), Chemistry.
+* **Slots 396–420**: Place, Physics, Australia, Sports, Anatomy, Group, Money, Action, County Seat, Astronomy, Food, Line, Linguistics, Botany, Time, Person-Related, Device, Business, Pathology, Biology, Canada, Baseball, Water, State, House.
+* **Slots 421–460**: Body, Performing, Grammar, Genus, North America, Law, Politics, Horse, Change, Fun, Finance, Power, Work, Mind, Internet, Scotland, God, Game, Point, Order, Move, Hand, Cut (`CN_Q074`), Family, Animal-Taxonomy (`CN_Q087`), Quality, Bird, Character.
+* **Slots 461–511**: Surface, Set, Public, Organism, Tree, Manner, Stop, Geometry, Appearance, Life, Desire, Sense, Hot, Lie, Formal, Mass, Amount, Area, Genetics, Death, Fit, Box, Land, Calm, Speech, Unit (`CN_Q128`).
 
 ### Band 4 (Slots 512–639: 128 Slots) — Affordances, Actions & Cyber-Physical Properties
 Primary axes capturing physical interactions, containment, and operational capabilities:
-* **Slots 512–530**: Leave, House, Fear, Bible, Electronics, Stay, Worthy, Room, Light, Vehicle, Tool, Container, Weapon, Fuel, Heat, Sleep, Building, City, Road.
-* **Slots 531–580**: Communication, Computation, Game, Work, Flight, Protection, Energy, Ingestion, Motion, Force, Time, Repair, Measurement, Security, Storage, Generation, Display.
-* **Slots 581–639**: Fluid Containment, Cutting, Fastening, Rotation, Suction, Compression, Encryption, Network Sockets, Database Mutations, Authentication, Authorization, Distributed Locks, Batch Processing, Containerization, Cron Scheduling.
+* **Slots 512–530**: Logic (`CN_Q129`), Woman, Knowledge, Television, Class, Language, Film, Religion, Economics, Car, Desk, Sugar, Mind, Space, Earth, Poker, Happy, Vehicle (`CN_Q185`), Bone.
+* **Slots 531–580**: Communication, Computation, Airport (`CN_Q204`), Blood, Bear, Garage, Blow, Formal, Genetics, Attack, Hotel, Ability, Fluid Containment, Cutting, Fastening, Rotation.
+* **Slots 581–639**: China, Organic Compound, Compression, Encryption, Network Sockets, Database Mutations, Authentication, Authorization, Distributed Locks, Batch Processing, Containerization, Cron Scheduling, Image (`CN_Q256`).
 
 ---
 
@@ -105,10 +105,10 @@ Primary axes capturing physical interactions, containment, and operational capab
 To decode continuous or quaternary proposition vectors back into natural language concepts in real-time ($<5\text{ ms}$), the NLG realizer uses a vectorized $4 \times 4$ cost matrix $\mathbf{C}$:
 
 $$\mathbf{C} = \begin{pmatrix}
-0.0 & 1.0 & 1.0 & 0.0 \\
+0.0 & 1.0 & 1.0 & 0.2 \\
 1.0 & 0.0 & 2.0 & 0.1 \\
 1.0 & 2.0 & 0.0 & 0.1 \\
-0.0 & 0.1 & 0.1 & 0.0
+0.2 & 0.1 & 0.1 & 0.0
 \end{pmatrix}$$
 
 Where:
@@ -127,24 +127,24 @@ $$\text{dist}(c) = \frac{1}{256} \sum_{j=1}^{256} \mathbf{C}\left[V_{\text{query
 | Artifact Path | Format | Size / Count | Description |
 | :--- | :--- | :--- | :--- |
 | `data/conceptnet_slots.json` | JSON | 256 Definitions | Canonical definitions for Band 3 (slots 384–511) and Band 4 (slots 512–639) with relational targets and natural language queries. |
-| `data/conceptnet_offline.db` | SQLite3 | 495.29 MB | 403,503 grounded concepts and 1,028,125 indexed lookup keys with pre-packed 256-byte quaternary vectors. |
+| `data/conceptnet_offline.db` | SQLite3 | 452.75 MB | 403,503 grounded concepts and 1,028,125 indexed lookup keys with pre-packed 256-byte quaternary vectors. |
 | `data/concept_codebook.csv.gz` | Gzip CSV | $403,503 \times 256$ | Dense 4-valued codebook matrix ($\{0, 1, 2, 3\}$) across all clean English concepts. |
 | `output/canonical_slots_layout.json` | JSON | 1024 Definitions | Full 1024-dimension slot layout across Bands 0–7 with polymorphic band contracts. |
 | `src/core/slots.py` | Python 3 | 1024 Constants | Strongly-typed Python slot constants, polymorphic contracts, and legacy alias layer. |
-| `scripts/concept_solver.py` | Python 3 | 976 Lines | Reproducible ingestion, ODS scoring, 4-valued sparse inheritance, partition solver, and SQLite compiler pipeline. |
+| `scripts/concept_solver.py` | Python 3 | 1085 Lines | CLI pipeline with `--depth 1 --k 256`, ODS scoring, 1-hop epistemic inheritance, partition solver, and SQLite compiler. |
 
 ---
 
 ## 8. Verified Performance Benchmarks
 
-* **ConceptNet Assertion Ingestion**: 34,074,917 assertions streamed in **110.4s** ($308.6\text{k lines/s}$).
-* **Usage-Weighted U-ODS Scoring**: 685,582 concepts scored in **8.94s**.
-* **Epistemic 4-Valued BLAS Inheritance**:
-  * **TRUE (1)**: 13,305,413 assertions
-  * **FALSE (2)**: 23,115 assertions
-  * **MAYBE (3)**: 41,090,887 assertions
-  * **Total Active Non-Zeros**: 54,419,415 assertions in **4.35s**.
-* **Profile Deduplication**: 75,000 core concepts deduplicated into **72,953 archetypes** in **0.71s**.
-* **256-Dimension Multi-Way Solver**: Solved all 256 questions across 72,953 archetypes with **25,292 unique singletons (34.67%)** in **647.6s**.
-* **SQLite Database Serialization**: 403,503 concepts bit-packed to SQLite in **78.6s** (495.29 MB).
-* **Test Suite Verification**: **100% pass rate** across all unit and regression test suites.
+* **ConceptNet Assertion Ingestion**: 34,074,917 assertions streamed in **100.5s** ($338.2\text{k lines/s}$).
+* **Usage-Weighted U-ODS Scoring**: 685,582 concepts scored in **7.52s**.
+* **Epistemic 4-Valued BLAS Inheritance (Depth = 1)**:
+  * **TRUE (1)**: 2,214,010 direct positive assertions
+  * **FALSE (2)**: 23,115 assertions (direct + 1st-order parent negations)
+  * **MAYBE (3)**: 11,091,403 assertions (1st-order taxonomic parent properties)
+  * **Total Active Non-Zeros**: 13,328,528 assertions in **0.90s**.
+* **Profile Deduplication**: 75,000 core concepts deduplicated into **72,950 archetypes** in **0.15s**.
+* **256-Dimension Multi-Way Solver**: Solved all 256 questions across 72,950 archetypes in **303.83s** ($1186.85\text{ms/question}$).
+* **SQLite Database Serialization**: 403,503 concepts bit-packed to SQLite in **67.0s** (452.75 MB).
+* **Test Suite Verification**: **100% pass rate (192/192 passed)** across all test suites.

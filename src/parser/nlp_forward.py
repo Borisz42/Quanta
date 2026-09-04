@@ -590,7 +590,7 @@ class NLPForwardParser:
                 is_past_discourse = True
 
             for node in sub_graph._node_list:
-                if node.get_slot("TYPE_HUMAN") == 1 or node.get_slot("WN_PERSON_HUMAN") == 1:
+                if node.get_slot("TYPE_HUMAN") in (1, 3) or node.get_slot("WN_PERSON_HUMAN") == 1:
                     known_entities["human"] = node
                 if node.anchor and "dog" in node.anchor:
                     known_entities["dog"] = node
@@ -815,7 +815,7 @@ class NLPForwardParser:
             if det_slot:
                 agent_node.set_slot(det_slot, 1)
 
-            if agent_node.get_slot("TYPE_ANIMATE") == 1 and agent_node.get_slot("TYPE_HUMAN") != 1:
+            if agent_node.get_slot("TYPE_ANIMATE") in (1, 3) and agent_node.get_slot("TYPE_HUMAN") not in (1, 3):
                 agent_node.set_slot("ROLE_MOVEABLE", 1)
                 agent_node.set_slot("ROLE_SENTIENT", 1)
 
@@ -856,7 +856,7 @@ class NLPForwardParser:
             if det_slot:
                 patient_node.set_slot(det_slot, 1)
 
-            if patient_node.get_slot("TYPE_HUMAN") == 1:
+            if patient_node.get_slot("TYPE_HUMAN") in (1, 3) or patient_node.get_slot("WN_PERSON_HUMAN") == 1:
                 patient_node.set_slot("TYPE_ANIMATE", 1)
                 patient_node.set_slot("ROLE_COMMUNICATOR", 1)
                 patient_node.set_slot("ROLE_SENTIENT", 1)
@@ -886,7 +886,7 @@ class NLPForwardParser:
                     prep_node.set_slot(det_slot, 1)
 
                 if prep_lemma in ("to", "into", "towards"):
-                    if prep_lemma != "into" and (prep_node.get_slot("TYPE_HUMAN") == 1 or prep_node.get_slot("CN_Q015_PERSON") == 1):
+                    if prep_lemma != "into" and (prep_node.get_slot("TYPE_HUMAN") in (1, 3) or prep_node.get_slot("WN_PERSON_HUMAN") == 1):
                         prep_node.set_slot("VAL_EXPERIENCER", 1)
                         root_node.set_slot("VAL_EXPERIENCER", 1)
                         prep_attachments.append(("VAL_EXPERIENCER", prep_node))

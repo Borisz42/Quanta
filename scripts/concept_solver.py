@@ -9,12 +9,13 @@ and split the ontology into:
   assertions post-inheritance, fully grounded in 256-byte packed quaternary vectors in SQLite.
 
 Epistemic 4-Valued Belnap Logic Grounding:
-- Direct positive & 1st-order positive -> 1 (TRUE / YES)
+- Direct positive -> 1 (TRUE / YES)
 - Direct negative & 1st-order transitive negation -> 2 (FALSE / NO / NEGATED)
-- 2nd-order transitive positive -> 3 (MAYBE / INHERITED)
-- 2nd-order transitive negation & unasserted -> 0 (IRRELEVANT / INACTIVE)
+- 1st-order transitive positive -> 3 (MAYBE / INHERITED)
+- 2nd-order transitive & unasserted -> 0 (IRRELEVANT / INACTIVE)
 """
 
+import argparse
 from collections import Counter, defaultdict
 import gzip
 import json
@@ -44,7 +45,7 @@ MAX_CANDIDATE_QUESTIONS = 120000  # Deep candidate pool of 120,000 relations
 MAX_SOLVER_ROUNDS = 256  # 256 primary axes
 MIN_CONCEPT_ASSERTIONS = 2  # Retention cutoff for Tier-2 grounding lexicon
 MIN_EDGE_WEIGHT = 1.0  # Filter out low-confidence assertions
-ISA_INHERITANCE_DEPTH = 2  # Max transitive closure depth for property inheritance
+ISA_INHERITANCE_DEPTH = 1  # 1-hop epistemic property inheritance (depth >= 2 discarded)
 
 ALLOWED_POS = {"n", "v", "a", "r"}  # Noun, Verb, Adjective, Adverb
 
@@ -475,7 +476,8 @@ def build_and_inherit_matrices(
     ods_scores,
     max_candidate_q=40000,
     min_assertions=2,
-    inheritance_depth=2,
+    inheritance_depth=1,
+    target_tier1=TARGET_TIER1_CONCEPTS,
 ):
     """Builds Tier-2 sparse matrix, executes 4-valued BLAS inheritance, and extracts Tier-1 Core submatrix."""
     print(f"[*] Building full Tier-2 grounding universe (min assertions >= {min_assertions})...", flush=True)
@@ -550,11 +552,6 @@ def build_and_inherit_matrices(
         m_pos_1.data = (m_pos_1.data > 0).astype(np.float32)
         m_pos_1.eliminate_zeros()
 
-        # 2nd-hop positive: M_pos_2 = T . M_pos_1
-        m_pos_2 = T.dot(m_pos_1)
-        m_pos_2.data = (m_pos_2.data > 0).astype(np.float32)
-        m_pos_2.eliminate_zeros()
-
         # 1st-hop negative: M_neg_1 = T . M_neg_0
         m_neg_1 = T.dot(m_neg_0)
         m_neg_1.data = (m_neg_1.data > 0).astype(np.float32)
@@ -566,17 +563,14 @@ def build_and_inherit_matrices(
         m_false.data = (m_false.data > 0).astype(np.uint8)
         m_false.eliminate_zeros()
 
-        # 2. Affirmed Positive (d_pos in {0, 1} \ M_false) -> 1 (TRUE)
-        m_pos_0_1 = m_pos_0 + m_pos_1
-        m_pos_0_1.data = (m_pos_0_1.data > 0).astype(np.uint8)
-        m_pos_0_1.eliminate_zeros()
-        m_true = m_pos_0_1 - m_pos_0_1.multiply(m_false)
+        # 2. Affirmed Direct Positive (d_pos = 0 \ M_false) -> 1 (TRUE)
+        m_true = m_pos_0 - m_pos_0.multiply(m_false)
         m_true.eliminate_zeros()
         m_true.data = (m_true.data > 0).astype(np.uint8)
 
-        # 3. Inherited Positive (d_pos = 2 \ (M_false | M_true)) -> 3 (MAYBE)
+        # 3. 1st-Hop Inherited Positive (d_pos = 1 \ (M_false | M_true)) -> 3 (MAYBE)
         m_claimed = m_false + m_true
-        m_maybe = m_pos_2 - m_pos_2.multiply(m_claimed)
+        m_maybe = m_pos_1 - m_pos_1.multiply(m_claimed)
         m_maybe.eliminate_zeros()
         m_maybe.data = (m_maybe.data > 0).astype(np.uint8)
 
@@ -606,7 +600,7 @@ def build_and_inherit_matrices(
     t2_ods_scores = np.array([ods_scores.get(cid, 0.0) for cid in tier2_cids])
     
     sorted_concept_indices = np.argsort(-t2_ods_scores)
-    target_n = min(TARGET_TIER1_CONCEPTS, len(sorted_concept_indices))
+    target_n = min(target_tier1, len(sorted_concept_indices))
     tier1_raw_indices = sorted_concept_indices[:target_n]
     N_raw = len(tier1_raw_indices)
     min_ods = t2_ods_scores[tier1_raw_indices[-1]]
@@ -999,13 +993,23 @@ def export_quanta_artifacts(
 # MAIN EXECUTION
 # ==============================================================================
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="QUANTA ConceptNet ODS Universal Dimension Solver & Lexicon Engine")
+    parser.add_argument("--depth", type=int, default=ISA_INHERITANCE_DEPTH, help="Taxonomic inheritance depth (default: 1)")
+    parser.add_argument("--k", type=int, default=TARGET_BAND_QUESTIONS, help="Target number of Band 3 & 4 questions (default: 256)")
+    parser.add_argument("--tier1-concepts", type=int, default=TARGET_TIER1_CONCEPTS, help="Number of Tier 1 concepts (default: 75000)")
+    parser.add_argument("--max-candidates", type=int, default=MAX_CANDIDATE_QUESTIONS, help="Max candidate questions pool (default: 120000)")
+    parser.add_argument("--min-assertions", type=int, default=MIN_CONCEPT_ASSERTIONS, help="Min assertions per concept (default: 2)")
+    parser.add_argument("--output-dir", type=str, default="data", help="Output directory for artifacts (default: data)")
+    parser.add_argument("--dump-file", type=str, default=LOCAL_DUMP_FILE, help="Path to ConceptNet dump file")
+    args = parser.parse_args()
+
     t_global = time.time()
     print("==================================================================", flush=True)
     print("  QUANTA CONCEPTNET ODS UNIVERSAL DIMENSION SOLVER & LEXICON ENGINE", flush=True)
     print("==================================================================", flush=True)
 
     # 1. Download ConceptNet
-    download_conceptnet(DUMP_URL, LOCAL_DUMP_FILE)
+    download_conceptnet(DUMP_URL, args.dump_file)
 
     # 2. Fast Streaming & Integer ID Parsing
     (
@@ -1020,7 +1024,7 @@ if __name__ == "__main__":
         concept_freq,
         predicate_freq,
         concept_rel_counts,
-    ) = extract_knowledge_graph_fast(LOCAL_DUMP_FILE)
+    ) = extract_knowledge_graph_fast(args.dump_file)
 
     # 3. Ontological Density Scoring (ODS)
     ods_scores = compute_ontological_density_scores(
@@ -1052,9 +1056,10 @@ if __name__ == "__main__":
         concept_freq,
         predicate_freq,
         ods_scores,
-        max_candidate_q=MAX_CANDIDATE_QUESTIONS,
-        min_assertions=MIN_CONCEPT_ASSERTIONS,
-        inheritance_depth=ISA_INHERITANCE_DEPTH,
+        max_candidate_q=args.max_candidates,
+        min_assertions=args.min_assertions,
+        inheritance_depth=args.depth,
+        target_tier1=args.tier1_concepts,
     )
 
     # 5. Solve for Multi-Valued Incremental Discrimination on Tier-1 Universe
@@ -1064,8 +1069,8 @@ if __name__ == "__main__":
         questions,
         mat_csr_t1,
         mat_csc_t1,
-        target_k=TARGET_BAND_QUESTIONS,
-        max_rounds=MAX_SOLVER_ROUNDS,
+        target_k=args.k,
+        max_rounds=args.k,
     )
 
     # 6. Export QUANTA Artifacts across Full Tier-2 Grounding Lexicon
@@ -1075,7 +1080,7 @@ if __name__ == "__main__":
         questions,
         selected_indices,
         mat_csr_t2,
-        output_dir="data",
+        output_dir=args.output_dir,
     )
 
     print(f"\n[+] Full 4-valued ODS pipeline completed successfully in {time.time() - t_global:.1f}s.", flush=True)

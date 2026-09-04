@@ -159,7 +159,7 @@ Mentalese operates over a **1024-dimension quaternary vector space** ($\Sigma = 
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
 │ ConceptNet Tool Affordances│ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
 │ Cyber-Physical Actions     │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
-│ (CN_Q129_LEAVE..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
+│ (CN_Q129_LOGIC..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
 └────────────────────────────┴────────────────────────────┴────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -188,24 +188,24 @@ Enables algebraic variable unification, lexical register scoping, and formal ded
 
 #### Band 3: ConceptNet Ontological Taxonomies, Scientific Domains & Structures (384–511)
 128 data-driven dimensions derived via **Usage-Weighted Ontological Density Scoring (U-ODS)** and a **Multi-Way Inverted-Index Partition Refinement Solver** over 34M ConceptNet 5.7.0 assertions operating on the full **epistemic 4-valued Belnap lattice** ($\mathcal{B}_4 = \{0, 1, 2, 3\}$) with non-monotonic transitive property inheritance ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$):
-* **`384–407` (Core Technical & Formal Domains):** `CN_Q001_COMPUTING`, `CN_Q002_BODY`, `CN_Q003_LEGAL`, `CN_Q004_PLANT`, `CN_Q005_MUSIC`, `CN_Q006_MEDICINE`, `CN_Q007_NAUTICAL`, `CN_Q008_MATHEMATICS`, `CN_Q009_MILITARY`, `CN_Q010_CHEMISTRY`, `CN_Q011_ANIMAL`, `CN_Q012_TANGIBLE_THING`, `CN_Q013_AUSTRALIA`, `CN_Q014_GROUP`, `CN_Q015_PERSON`, `CN_Q016_SPORTS`, `CN_Q017_MONEY`, `CN_Q018_CHESS`, `CN_Q019_LINGUISTICS`, `CN_Q020_COUNTY_SEAT`, `CN_Q021_TIME`, `CN_Q022_BIOLOGY`, `CN_Q023_WORK`, `CN_Q024_CARDS`.
-* **`408–455` (Scientific & Structural Categories):** `CN_Q025_TRANSPORT`, `CN_Q026_STATE`, `CN_Q027_SUGAR`, `CN_Q028_MOVE`, `CN_Q029_ZOOLOGY`, `CN_Q030_ANATOMY`, `CN_Q031_DISEASE`, `CN_Q032_GOOD`, `CN_Q033_CANADA`, `CN_Q034_WATER_CRAFT`, `CN_Q035_GRAMMAR`, `CN_Q036_HAPPINESS`, `CN_Q037_INTERNET`, `CN_Q038_BOTANY`, `CN_Q039_FINANCE`, `CN_Q040_PERSON`, `CN_Q041_SCOTLAND`, `CN_Q042_DEVICE`, `CN_Q043_MIND`, `CN_Q044_FURNITURE`, `CN_Q045_SKIN`, `CN_Q046_ACTION`, `CN_Q047_CLOTHING`, `CN_Q048_PHYSICS`, `CN_Q049_WATER`, `CN_Q050_CLASS`, `CN_Q051_NEW_ZEALAND`, `CN_Q052_GEOLOGY`, `CN_Q053_GOD`, `CN_Q054_IRELAND`, `CN_Q055_BASEBALL`, `CN_Q056_COLOR`, `CN_Q057_PHILOSOPHY`, `CN_Q058_NORTH_AMERICA`, `CN_Q059_CHURCH`, `CN_Q060_BIRD`, `CN_Q061_LANGUAGE`, `CN_Q062_CHRISTIANITY`, `CN_Q063_POINT`, `CN_Q064_PATHOLOGY`, `CN_Q065_FISH`, `CN_Q066_BIOCHEMISTRY`, `CN_Q067_BAD`, `CN_Q068_WRONG`, `CN_Q069_FOOD`, `CN_Q070_VALUE`, `CN_Q071_CRICKET`, `CN_Q072_HUMAN_ACTIVITY`.
-* **`456–511` (Contextual & Structural Taxonomies):** `CN_Q073_PLACE` $\dots$ `CN_Q128_MANNER`.
+* **`384–407` (Core Technical & Formal Domains):** `CN_Q001_COMPUTING`, `CN_Q002_LEGAL`, `CN_Q003_PLANT`, `CN_Q004_NAUTICAL`, `CN_Q005_MEDICINE`, `CN_Q006_MUSIC`, `CN_Q007_PERSON`, `CN_Q008_MATHEMATICS`, `CN_Q009_TANGIBLE_THING`, `CN_Q010_MILITARY`, `CN_Q011_ANIMAL`, `CN_Q012_CHEMISTRY`, `CN_Q013_PLACE`, `CN_Q014_PHYSICS`, `CN_Q015_AUSTRALIA`, `CN_Q016_SPORTS`, `CN_Q017_ANATOMY`, `CN_Q018_GROUP`, `CN_Q019_MONEY`, `CN_Q020_ACTION`, `CN_Q021_COUNTY_SEAT`, `CN_Q022_ASTRONOMY`, `CN_Q023_FOOD`, `CN_Q024_LINE`.
+* **`408–455` (Scientific & Structural Categories):** `CN_Q025_LINGUISTICS`, `CN_Q026_BOTANY`, `CN_Q027_TIME`, `CN_Q028_PERSON`, `CN_Q029_DEVICE`, `CN_Q030_BUSINESS`, `CN_Q031_PATHOLOGY`, `CN_Q032_BIOLOGY`, `CN_Q033_CANADA`, `CN_Q034_BASEBALL`, `CN_Q035_WATER`, `CN_Q036_STATE`, `CN_Q037_HOUSE`, `CN_Q038_BODY`, `CN_Q039_PERFORMING`, `CN_Q040_GRAMMAR`, `CN_Q041_GENUS`, `CN_Q042_NORTH_AMERICA`, `CN_Q043_LAW`, `CN_Q044_POLITICS`, `CN_Q045_HORSE`, `CN_Q046_CHANGE`, `CN_Q047_FUN`, `CN_Q048_FINANCE`, `CN_Q049_POWER`, `CN_Q050_WORK`, `CN_Q051_MIND`, `CN_Q052_INTERNET`, `CN_Q053_AU`, `CN_Q054_SCOTLAND`, `CN_Q055_GOD`, `CN_Q056_SCOTLAND`, `CN_Q057_GAME`, `CN_Q058_GOD`, `CN_Q059_POINT`, `CN_Q060_GAME`, `CN_Q061_ORDER`, `CN_Q062_MOVE`, `CN_Q063_HAND`, `CN_Q064_COLOR`, `CN_Q065_FRUIT`, `CN_Q066_RELIGION`, `CN_Q067_TRANSPORT`, `CN_Q068_POINT`, `CN_Q069_ORDER`, `CN_Q070_MOVE`, `CN_Q071_ANATOMY`, `CN_Q072_ZOOLOGY`, `CN_Q073_SOUND`, `CN_Q074_CUT`.
+* **`456–511` (Contextual & Structural Taxonomies):** `CN_Q075_FAMILY` $\dots$ `CN_Q128_UNIT`.
 
 #### Band 4: ConceptNet Cyber-Physical Tool Affordances & Actions (512–639)
 128 data-driven affordance and action dimensions enabling anchor-free physical/functional reasoning and **vectorized 4-valued epistemic decoding**:
-* **`512–543` (Physical Dynamics & Action Affordances):** `CN_Q129_LEAVE`, `CN_Q130_STOP`, `CN_Q135_DANCE`, `CN_Q142_FORCE`, `CN_Q144_EVENT`, `CN_Q146_TAKE`, `CN_Q158_KILL`, `CN_Q166_OPEN`, `CN_Q174_ATTACK`, `CN_Q183_MAKE`, `CN_Q194_FIGHT`, `CN_Q244_HIT`, `CN_Q252_ACTIVITY`.
-* **`544–580` (Material, Spatial & Structural Affordances):** `CN_Q137_METAL`, `CN_Q139_SCHOOL`, `CN_Q148_APPEARANCE`, `CN_Q161_DESK`, `CN_Q165_RING`, `CN_Q180_HOT`, `CN_Q189_ISLAND`, `CN_Q195_MASS`, `CN_Q204_AREA`, `CN_Q207_VEHICLE`, `CN_Q229_BOX`, `CN_Q245_MATERIAL`.
-* **`581–639` (Cognitive, Sensory & Functional Capabilities):** `CN_Q140_TRUE`, `CN_Q150_LIFE`, `CN_Q153_DESIRE`, `CN_Q154_PROGRAMMING`, `CN_Q171_HAPPY`, `CN_Q186_SENSE`, `CN_Q188_LIE`, `CN_Q196_OPINION`, `CN_Q208_GENETICS`, `CN_Q213_DEATH`, `CN_Q215_DRUG`, `CN_Q234_CALM`, `CN_Q254_SPEAK`, `CN_Q255_ABILITY`, `CN_Q256_WORTHY`.
-* **Epistemic 4-Valued Grounding Scheme:**
-  - `1 (TRUE)`: Direct positive ($d_{\text{pos}} = 0$) and 1st-order positive inheritance ($d_{\text{pos}} = 1$).
-  - `2 (FALSE)`: Direct negations ($d_{\text{neg}} = 0$) and 1st-order negative inheritance ($d_{\text{neg}} = 1$) mapped to positive counterpart axes.
-  - `3 (MAYBE)`: 2nd-order positive deductions ($d_{\text{pos}} = 2$) acting as soft wildcards.
-  - `0 (IRRELEVANT)`: Unasserted dimensions and distant negative deductions ($d_{\text{neg}} \ge 2$).
+* **`512–543` (Physical Dynamics & Action Affordances):** `CN_Q129_LOGIC`, `CN_Q130_WOMAN`, `CN_Q131_KNOWLEDGE`, `CN_Q132_TELEVISION`, `CN_Q144_CLASS`, `CN_Q158_DESK`, `CN_Q160_SUGAR`, `CN_Q163_MIND`, `CN_Q172_HAPPY`, `CN_Q184_BONE`, `CN_Q185_VEHICLE`.
+* **`544–580` (Material, Spatial & Structural Affordances):** `CN_Q204_AIRPORT`, `CN_Q206_BLOOD`, `CN_Q207_BEAR`, `CN_Q216_GARAGE`, `CN_Q219_BLOW`, `CN_Q228_ATTACK`, `CN_Q230_HOTEL`, `CN_Q232_ABILITY`.
+* **`581–639` (Cognitive, Sensory & Functional Capabilities):** `CN_Q246_CHINA`, `CN_Q253_ORGANIC_COMPOUND`, `CN_Q256_IMAGE`.
+* **Clean 1st-Hop Epistemic 4-Valued Grounding Scheme:**
+  - `1 (TRUE)`: Direct positive ($d_{\text{pos}} = 0$) affirmed explicitly for the concept.
+  - `2 (FALSE)`: Direct negations ($d_{\text{neg}} = 0$) and 1st-order parent negative inheritance ($d_{\text{neg}} = 1$) mapped to positive counterpart axes.
+  - `3 (MAYBE)`: 1st-order taxonomic positive ($d_{\text{pos}} = 1$) inherited from immediate parent. Acts as soft wildcard.
+  - `0 (IRRELEVANT / INACTIVE)`: Unasserted dimensions and 2nd-order+ associative drift ($d \ge 2$).
 * **Vectorized Realization Decoding & Statistics:**
-  1. *Tier 1 (In-Memory SIMD)*: **25,292 unique singletons** (34.67% of core archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<5\text{ ms}$ via vectorized $4 \times 4$ cost matrix $\mathbf{C}$.
-  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query 403,503 pre-packed quaternary vectors across 54.42M active non-zero assertions in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
-* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_NATURAL_OBJECT`, `AFFORD_INCISED_CUTTING`) resolve dynamically into canonical `CN_Q*` indices via `src/core/slots.py`.
+  1. *Tier 1 (In-Memory SIMD)*: **22,470 unique singletons** (30.80% of core archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<5\text{ ms}$ via vectorized $4 \times 4$ cost matrix $\mathbf{C}$.
+  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query 403,503 pre-packed quaternary vectors across 13.33M active non-zero assertions in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE` $\to$ `CN_Q011_ANIMAL`, `TYPE_HUMAN` $\to$ `CN_Q007_PERSON`, `AFFORD_INCISED_CUTTING` $\to$ `CN_Q074_CUT`) resolve dynamically into canonical `CN_Q*` indices via `src/core/slots.py`.
 
 #### Band 5: Theory of Mind, Multi-Agent Beliefs, Goals & Pragmatics (640–767)
 Models recursive social cognition, intentions, affective drives, and pragmatic speech acts.

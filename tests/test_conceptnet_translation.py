@@ -11,9 +11,9 @@ from core.slots import (
     get_slot_by_name,
     get_slot_by_index,
     CN_Q001_COMPUTING,
-    CN_Q128_MANNER,
-    CN_Q129_LEAVE,
-    CN_Q256_WORTHY,
+    CN_Q128_UNIT,
+    CN_Q129_LOGIC,
+    CN_Q256_IMAGE,
     TYPE_ANIMATE,
     TYPE_HUMAN,
     AFFORD_INCISED_CUTTING,
@@ -39,24 +39,24 @@ def test_conceptnet_slot_registry_geometry():
     assert BAND_3_SLOTS[0].band == SlotBand.BAND_3_ONTOLOGY_STRUCTURES
 
     assert BAND_3_SLOTS[-1].index == 511
-    assert BAND_3_SLOTS[-1].name == "CN_Q128_MANNER"
+    assert BAND_3_SLOTS[-1].name == "CN_Q128_UNIT"
     assert BAND_3_SLOTS[-1].band == SlotBand.BAND_3_ONTOLOGY_STRUCTURES
 
     # Band 4 boundaries
     assert BAND_4_SLOTS[0].index == 512
-    assert BAND_4_SLOTS[0].name == "CN_Q129_LEAVE"
+    assert BAND_4_SLOTS[0].name == "CN_Q129_LOGIC"
     assert BAND_4_SLOTS[0].band == SlotBand.BAND_4_AFFORDANCES_OPERATIONS
 
     assert BAND_4_SLOTS[-1].index == 639
-    assert BAND_4_SLOTS[-1].name == "CN_Q256_WORTHY"
+    assert BAND_4_SLOTS[-1].name == "CN_Q256_IMAGE"
     assert BAND_4_SLOTS[-1].band == SlotBand.BAND_4_AFFORDANCES_OPERATIONS
 
 
 def test_legacy_ontology_aliases():
     """Verify that legacy symbolic ontology constants alias to corresponding ConceptNet slots."""
     assert TYPE_ANIMATE == get_slot_by_name("CN_Q011_ANIMAL").index
-    assert TYPE_HUMAN == get_slot_by_name("CN_Q015_PERSON").index
-    assert AFFORD_INCISED_CUTTING == get_slot_by_name("CN_Q108_CUT").index
+    assert TYPE_HUMAN == get_slot_by_name("CN_Q007_PERSON").index
+    assert AFFORD_INCISED_CUTTING == get_slot_by_name("CN_Q074_CUT").index
 
     slot_anim = get_slot_by_name("TYPE_ANIMATE")
     assert slot_anim is not None
@@ -181,13 +181,38 @@ def test_epistemic_4_valued_grounding():
     num_ones = int((cn_data == 1).sum())
     num_threes = int((cn_data == 3).sum())
 
-    # dog should have affirmed 1s (direct/1st-hop) and inherited 3s (2nd-hop taxonomy)
+    # dog should have affirmed 1s (direct d=0) and inherited 3s (1st-hop taxonomic d=1)
     assert num_ones > 0, "Expected non-zero TRUE (1) values in dog concept vector"
     assert num_threes > 0, "Expected non-zero MAYBE (3) values in dog concept vector"
 
     # Verify active_slots dictionary retains exact 4-valued integer assignments
     assert any(v == 1 for v in dog_concept.active_slots.values())
     assert any(v == 3 for v in dog_concept.active_slots.values())
+
+
+def test_person_has_clean_semantic_profile():
+    """Verify that 'person' has direct traits as TRUE (1), 1st-hop parents as MAYBE (3), and negations as FALSE (2)."""
+    grounder = ConceptNetLexicalGrounder.get_default()
+    person = grounder.resolve_concept("person", pos="n")
+    assert person is not None
+
+    # Inherited categories are 3 (MAYBE), never 1 (TRUE)
+    assert person.active_slots.get("CN_Q185_VEHICLE", 0) == 3
+    assert person.active_slots.get("CN_Q160_SUGAR", 0) == 3
+    assert person.active_slots.get("CN_Q204_AIRPORT", 0) == 3
+
+    # Direct negations (/r/DistinctFrom animal -> /r/IsA animal) are 2 (FALSE)
+    assert person.active_slots.get("CN_Q087_ANIMAL", 0) == 2
+
+    # Unasserted / distant slots are 0 (INACTIVE)
+    assert person.active_slots.get("CN_Q001_COMPUTING", 0) == 0
+    assert person.active_slots.get("CN_Q008_MATHEMATICS", 0) == 0
+    assert person.active_slots.get("CN_Q012_CHEMISTRY", 0) == 0
+
+    # Intrinsic human attributes are direct positive (1)
+    assert person.active_slots.get("CN_Q163_MIND", 0) == 1
+    assert person.active_slots.get("CN_Q038_BODY", 0) == 1
+    assert person.active_slots.get("CN_Q172_HAPPY", 0) == 1
 
 
 def test_epistemic_cost_matrix_decoding():

@@ -23,7 +23,7 @@ The vector space is partitioned into 8 isolated 128-slot bands:
 ├────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
 │ ConceptNet Tool Affordances│ Theory of Mind,            │ Epistemic Knowledge Base,  │ Spatio-Temporal Calculi (RCC-8, │
 │ Cyber-Physical Actions     │ Multi-Agent Beliefs (B_A), │ Deontic Normative Logic,   │ Allen Interval), Pearl Causal   │
-│ (CN_Q129_LEAVE..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
+│ (CN_Q129_LOGIC..CN_Q256)   │ Goals & Speech Act Intents │ s(CASP) Solver Invariants  │ DAGs & Temporal Logics (LTL/CTL)│
 └────────────────────────────┴────────────────────────────┴────────────────────────────┴─────────────────────────────────┘
 ```
 

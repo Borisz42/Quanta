@@ -104,7 +104,7 @@ def test_example_a_forward_parsing(nlp_parser):
     assert agent.get_slot("NSM_ONE") == 1
     assert agent.get_slot("VAL_X1_AGENT") == 1
     assert agent.get_slot("GRAPH_LEAF") == 1
-    assert agent.get_slot("TYPE_ANIMATE") == 1
+    assert agent.get_slot("TYPE_ANIMATE") in (1, 3)
     assert agent.get_slot("ROLE_AGENT_CAPABLE") == 1
     assert agent.get_slot("ROLE_MOVEABLE") == 1
 

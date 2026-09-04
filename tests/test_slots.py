@@ -84,7 +84,7 @@ def test_module_level_slot_constants():
     assert slots.QUANT_UNIVERSAL_FORALL == 256
     assert slots.VAR_SLOT_X0 == 280
     assert slots.CN_Q001_COMPUTING == 384
-    assert slots.CN_Q129_LEAVE == 512
+    assert slots.CN_Q129_LOGIC == 512
     assert slots.TOM_FIRST_ORDER_BELIEF == 640
     assert slots.EPIST_DIRECT_OBSERVATION == 768
     assert slots.SOLVER_CWA_CLOSED_WORLD == 832
@@ -93,8 +93,8 @@ def test_module_level_slot_constants():
 
     # Test legacy aliases
     assert slots.TYPE_ANIMATE == slots.CN_Q011_ANIMAL
-    assert slots.TYPE_HUMAN == slots.CN_Q015_PERSON
-    assert slots.AFFORD_INCISED_CUTTING == slots.CN_Q108_CUT
+    assert slots.TYPE_HUMAN == slots.CN_Q007_PERSON
+    assert slots.AFFORD_INCISED_CUTTING == slots.CN_Q074_CUT
     assert slots.WN_ANIMAL_FAUNA == slots.CN_Q011_ANIMAL
 
 
@@ -161,7 +161,7 @@ def test_band_first_and_last_slot_indices():
         (BAND_1_SLOTS,  128, 255,  "VAL_X1_AGENT",             "OS_IO_URING_RING_BUFFER"),
         (BAND_2_SLOTS,  256, 383,  "QUANT_UNIVERSAL_FORALL",   None),  # last name varies
         (BAND_3_SLOTS,  384, 511,  "CN_Q001_COMPUTING",        None),
-        (BAND_4_SLOTS,  512, 639,  "CN_Q129_LEAVE",            None),
+        (BAND_4_SLOTS,  512, 639,  "CN_Q129_LOGIC",            None),
         (BAND_5_SLOTS,  640, 767,  "TOM_FIRST_ORDER_BELIEF",   None),
         (BAND_6_SLOTS,  768, 895,  "EPIST_DIRECT_OBSERVATION", None),
         (BAND_7_SLOTS,  896, 1023, "TEMP_ALLEN_BEFORE",        "MODEL_CHECK_PROBABILISTIC_PRISM"),
@@ -206,16 +206,16 @@ def test_legacy_alias_bridge_integrity():
     assert "TYPE_ANIMATE" in LEGACY_ONTOLOGY_ALIASES
     assert LEGACY_ONTOLOGY_ALIASES["TYPE_ANIMATE"] == "CN_Q011_ANIMAL"
     assert "TYPE_HUMAN" in LEGACY_ONTOLOGY_ALIASES
-    assert LEGACY_ONTOLOGY_ALIASES["TYPE_HUMAN"] == "CN_Q015_PERSON"
+    assert LEGACY_ONTOLOGY_ALIASES["TYPE_HUMAN"] == "CN_Q007_PERSON"
     assert "TYPE_INANIMATE_PHYSICAL" in LEGACY_ONTOLOGY_ALIASES
     assert "ROLE_AGENT_CAPABLE" in LEGACY_ONTOLOGY_ALIASES
     assert "ROLE_SENTIENT" in LEGACY_ONTOLOGY_ALIASES
 
     # Module-level aliases should point to the same index as the canonical slot
     assert slots.TYPE_ANIMATE == slots.CN_Q011_ANIMAL
-    assert slots.TYPE_HUMAN == slots.CN_Q015_PERSON
+    assert slots.TYPE_HUMAN == slots.CN_Q007_PERSON
     assert slots.WN_ANIMAL_FAUNA == slots.CN_Q011_ANIMAL
-    assert slots.WN_PERSON_HUMAN == slots.CN_Q015_PERSON
+    assert slots.WN_PERSON_HUMAN == slots.CN_Q007_PERSON
 
 
 
