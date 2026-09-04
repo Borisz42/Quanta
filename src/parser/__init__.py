@@ -4,6 +4,7 @@ from parser.lexical_grounder import WordNetLexicalGrounder, GroundedLexicalConce
 from parser.nlp_forward import NLPForwardParser
 from parser.fol_parser import FOLParser
 from parser.ast_parser import ASTForwardParser
+from parser.chunker import DiscourseChunk, SentenceSpan, DiscourseChunker
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -11,4 +12,7 @@ __all__ = [
     "NLPForwardParser",
     "FOLParser",
     "ASTForwardParser",
+    "DiscourseChunk",
+    "SentenceSpan",
+    "DiscourseChunker",
 ]

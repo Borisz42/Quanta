@@ -95,10 +95,10 @@ Feeding an entire 100,000-word book or continuous chat history into any LLM caus
 - Maintain a running global token and character offset index so all chunks remain anchored to source provenance.
 
 ### Checklist
-- [ ] **1.1** Implement `DiscourseChunk` dataclass tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, and `global_offset`.
-- [ ] **1.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (min 100 words, max 400 words) and sentence-boundary preservation.
-- [ ] **1.3** Implement structural chapter/section delimiter detection for long-form books and documents.
-- [ ] **1.4** 🧪 Write unit tests in `tests/test_discourse_chunker.py` verifying clean chunking across multi-paragraph narratives, dialogues, and multi-chapter markdown books without splitting mid-sentence.
+- [x] **1.1** Implement `DiscourseChunk` dataclass tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, and `global_offset`.
+- [x] **1.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (min 100 words, max 400 words) and sentence-boundary preservation.
+- [x] **1.3** Implement structural chapter/section delimiter detection for long-form books and documents.
+- [x] **1.4** 🧪 Write unit tests in `tests/test_discourse_chunker.py` verifying clean chunking across multi-paragraph narratives, dialogues, and multi-chapter markdown books without splitting mid-sentence.
 
 ---
 
