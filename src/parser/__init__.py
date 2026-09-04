@@ -26,6 +26,7 @@ from parser.transducer import (
     MockTransducer,
     create_transducer,
 )
+from parser.asg_compiler import ASGCompiler, ASGCompilationError
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -51,5 +52,8 @@ __all__ = [
     "LocalGGUFTransducer",
     "MockTransducer",
     "create_transducer",
+    "ASGCompiler",
+    "ASGCompilationError",
 ]
+
 

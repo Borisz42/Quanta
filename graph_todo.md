@@ -175,12 +175,12 @@ The Neural Transducer outputs normalized JSON. The **Symbolic ASG Compiler** is 
   - Compute BLAKE3 hashes bottom-up: Entity CIDs first $\to$ Event CIDs incorporating entity CIDs $\to$ Proposition CIDs.
 
 ### Checklist
-- [ ] **4.1** Implement `ASGCompiler` class in `src/parser/asg_compiler.py`.
-- [ ] **4.2** Implement entity compilation: convert `ExtractedEntity` $\to$ canonical `QuantaNode` with ConceptNet grounding, Band 2 register assignment, and deterministic CID computation.
-- [ ] **4.3** Implement event compilation: convert `ExtractedEvent` $\to$ predicate `QuantaNode` with Band 0 NSM primes, Band 1 valency edges to entity CIDs, and Band 5/6 epistemic/deontic slots.
-- [ ] **4.4** Implement spatio-temporal & causal edge wiring: compile Allen interval relations and Pearl causal mechanisms into Band 7 graph edges.
-- [ ] **4.5** Integrate with `ValidatorGate`: automatically execute Clingo ASP integrity validation on the compiled graph and report any MUC conflicts.
-- [ ] **4.6** 🧪 Write comprehensive tests in `tests/test_asg_compiler.py`: Compile the Eleanor Vance JSON; assert resulting graph has exactly 5 entity nodes, 6 event nodes, 0 punctuation nodes, correct BLAKE3 CIDs, and 100% Clingo validation pass rate.
+- [x] **4.1** Implement `ASGCompiler` class in `src/parser/asg_compiler.py`.
+- [x] **4.2** Implement entity compilation: convert `ExtractedEntity` $\to$ canonical `QuantaNode` with ConceptNet grounding, Band 2 register assignment, and deterministic CID computation.
+- [x] **4.3** Implement event compilation: convert `ExtractedEvent` $\to$ predicate `QuantaNode` with Band 0 NSM primes, Band 1 valency edges to entity CIDs, and Band 5/6 epistemic/deontic slots.
+- [x] **4.4** Implement spatio-temporal & causal edge wiring: compile Allen interval relations and Pearl causal mechanisms into Band 7 graph edges.
+- [x] **4.5** Integrate with `ValidatorGate`: automatically execute Clingo ASP integrity validation on the compiled graph and report any MUC conflicts.
+- [x] **4.6** 🧪 Write comprehensive tests in `tests/test_asg_compiler.py`: Compile the Eleanor Vance JSON; assert resulting graph has exactly 5 entity nodes, 6 event nodes, 0 punctuation nodes, correct BLAKE3 CIDs, and 100% Clingo validation pass rate.
 
 ---
 
