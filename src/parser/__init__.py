@@ -45,6 +45,11 @@ from parser.unsloth_transducer import (
     MockUnslothTransducer,
     MockSExprTransducer,
 )
+from parser.graph_stitcher import (
+    GraphStitcher,
+    stitch,
+    stitch_to_graph,
+)
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -86,6 +91,10 @@ __all__ = [
     "UnslothTransducer",
     "MockUnslothTransducer",
     "MockSExprTransducer",
+    "GraphStitcher",
+    "stitch",
+    "stitch_to_graph",
 ]
+
 
 

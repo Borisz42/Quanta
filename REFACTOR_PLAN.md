@@ -194,10 +194,10 @@ A single discourse chunk (150–350 words) captures an isolated episode. Complex
 ```powershell
 pytest tests/test_graph_stitcher.py -v
 ```
-- [ ] Entities appearing across multiple chunks with different surface forms (e.g. "Dr. Vance" and "Eleanor") are unified into a single canonical entity with aggregated aliases.
-- [ ] All event arguments correctly reference the unified global entity IDs.
-- [ ] Inter-chunk Allen temporal relations are synthesized between adjacent chunks.
-- [ ] Stitched result compiles into a unified `QuantaGraph` with valid foreign keys and zero orphan nodes.
+- [x] Entities appearing across multiple chunks with different surface forms (e.g. "Dr. Vance" and "Eleanor") are unified into a single canonical entity with aggregated aliases.
+- [x] All event arguments correctly reference the unified global entity IDs.
+- [x] Inter-chunk Allen temporal relations are synthesized between adjacent chunks.
+- [x] Stitched result compiles into a unified `QuantaGraph` with valid foreign keys and zero orphan nodes.
 
 ---
 
