@@ -49,10 +49,11 @@
 % ----------------------------------------------------------------------
 
 % Rule 6: An entity acting as an Agent (VAL_X1_AGENT) in a literal event
-% must be agent-capable (animate, human, organization, variable binding, or explicitly agent-capable)
+% must be agent-capable (animate, human, organization, or ungrounded logic variable)
 :- edge(EventNode, "VAL_X1_AGENT", AgentNode),
    slot(EventNode, "MODALITY_LITERAL", 1),
    not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
    not slot(AgentNode, "TYPE_HUMAN", 1),
    not slot(AgentNode, "TYPE_HUMAN", 3),
    not slot(AgentNode, "TYPE_ANIMATE", 1),
@@ -60,7 +61,43 @@
    not slot(AgentNode, "TYPE_ORGANIZATION", 1),
    not slot(AgentNode, "WN_PERSON_HUMAN", 1),
    not slot(AgentNode, "WN_ANIMAL_FAUNA", 1),
-   not slot(AgentNode, "GRAPH_VARIABLE_BIND", 1).
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1),
+   not is_ungrounded_var(AgentNode).
+
+is_ungrounded_var(N) :-
+   slot(N, "GRAPH_VARIABLE_BIND", 1),
+   not slot(N, "TYPE_INANIMATE_PHYSICAL", 1),
+   not slot(N, "TYPE_ARTIFACT", 1),
+   not slot(N, "TYPE_NATURAL_OBJECT", 1),
+   not slot(N, "TYPE_ABSTRACT_CONCEPT", 1).
+
+% Rule 6A: Inanimate physical entities, artifacts, and natural objects cannot act as intentional agents in literal events
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_INANIMATE_PHYSICAL", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
+
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_ARTIFACT", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
+
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_NATURAL_OBJECT", 1),
+   not slot(AgentNode, "TYPE_HUMAN", 1),
+   not slot(AgentNode, "TYPE_ANIMATE", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
 
 % Rule 7: Experiencer role requires sentient entity
 :- edge(EventNode, "VAL_EXPERIENCER", ExpNode),

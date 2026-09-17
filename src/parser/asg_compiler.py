@@ -319,6 +319,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "LOCATION":
             node.set_slot("TYPE_SPATIAL_REGION", 1)
             node.set_slot("WN_LOCATION_PLACE", 1)
@@ -326,6 +327,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat in ("OBJECT", "ARTIFACT", "INSTRUMENT"):
             node.set_slot("TYPE_ARTIFACT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -333,8 +335,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
-            if node.vector["TYPE_ABSTRACT_CONCEPT"] == 1:
-                node.set_slot("GRAPH_VARIABLE_BIND", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "NATURAL_OBJECT":
             node.set_slot("TYPE_NATURAL_OBJECT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -342,6 +343,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "ORGANIZATION":
             node.set_slot("TYPE_ORGANIZATION", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)

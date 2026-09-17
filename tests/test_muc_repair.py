@@ -155,6 +155,29 @@ def test_ontological_conflict_via_compiled_sexpr(gate, ontological_invalid_sexpr
     assert "CONFLICT:" in prompt
 
 
+def test_inanimate_agent_volitional_violation_diagnostic(gate):
+    """Verify inanimate artifact/object acting as agent produces an ontological volitional diagnostic."""
+    sexpr = """(graph :chunk-id "chunk_inanimate_agent"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (entity :id E2 :type OBJECT :label "cylinder")
+  (event :id Ev1 :pred pressurize :agent E2 :patient E1 :tense PAST :polarity TRUE)
+)"""
+    compiler = ASGCompiler(validator_gate=gate.validator_gate)
+    extraction = parse_sexpr(sexpr)
+    graph = compiler.compile(extraction, validate=False)
+
+    diag_res = gate.validate_graph(graph, extraction_result=extraction)
+    assert not diag_res.is_valid
+    assert diag_res.diagnostic is not None
+    diag = diag_res.diagnostic
+    assert diag.category == "ontological"
+    assert "cylinder" in diag.summary
+    assert "inanimate" in diag.summary.lower() or "artifact" in diag.summary.lower()
+    prompt = diag.format_repair_request()
+    assert "[REPAIR REQUEST]" in prompt
+    assert "CONFLICT:" in prompt
+
+
 # ---------------------------------------------------------------------------
 # 2. Allen Temporal Contradiction Diagnostic Tests
 # ---------------------------------------------------------------------------

@@ -196,8 +196,7 @@ class ClingoVerificationGate:
                         target_node = node_map.get(target_cid)
                         if target_node and (
                             _get_node_slot(target_node, "TYPE_ABSTRACT_CONCEPT") == 1
-                            or target_cid in muc_nodes
-                            or "TYPE_ABSTRACT_CONCEPT" in slot_names
+                            or (target_cid in muc_nodes and "TYPE_ABSTRACT_CONCEPT" in slot_names)
                         ):
                             abstract_agent_found = True
                             conflict_ent_label = target_node.literal or target_node.anchor or target_cid
@@ -246,6 +245,77 @@ class ClingoVerificationGate:
                 details=[
                     "Physical and literal actions require an agent-capable physical entity (PERSON, ANIMAL, or ORGANIZATION).",
                     "Abstract concepts cannot exert physical agency unless figurative modality is explicitly declared.",
+                ],
+            )
+            diag.repair_prompt = diag.format_repair_request()
+            return diag
+
+        # Pattern A2: Inanimate entity / artifact acting as agent in literal event (Rule 6 / Rule 6A)
+        inanimate_agent_found = False
+        inanimate_kind = "inanimate entity"
+        if graph and not abstract_agent_found:
+            for cid, n in node_map.items():
+                if "VAL_X1_AGENT" in n.edges:
+                    for target_cid in n.edges["VAL_X1_AGENT"]:
+                        target_node = node_map.get(target_cid)
+                        if target_node:
+                            is_inanimate = (
+                                _get_node_slot(target_node, "TYPE_INANIMATE_PHYSICAL") == 1
+                                or _get_node_slot(target_node, "TYPE_ARTIFACT") == 1
+                                or _get_node_slot(target_node, "TYPE_NATURAL_OBJECT") == 1
+                            )
+                            is_agent_cap = (
+                                _get_node_slot(target_node, "ROLE_AGENT_CAPABLE") == 1
+                                or _get_node_slot(target_node, "ROLE_VOLITIONAL_SOURCE") == 1
+                                or _get_node_slot(target_node, "TYPE_HUMAN") == 1
+                                or _get_node_slot(target_node, "TYPE_ANIMATE") == 1
+                            )
+                            is_figurative = (
+                                _get_node_slot(n, "MODALITY_FIGURATIVE") == 1
+                                or _get_node_slot(target_node, "MODALITY_FIGURATIVE") == 1
+                            )
+                            if is_inanimate and not is_agent_cap and not is_figurative:
+                                inanimate_agent_found = True
+                                conflict_ent_label = target_node.literal or target_node.anchor or target_cid
+                                conflict_ev_label = n.literal or n.anchor or cid
+                                conflict_ev_id = cid
+                                if _get_node_slot(target_node, "TYPE_ARTIFACT") == 1:
+                                    inanimate_kind = "inanimate artifact"
+                                elif _get_node_slot(target_node, "TYPE_NATURAL_OBJECT") == 1:
+                                    inanimate_kind = "natural object"
+                                else:
+                                    inanimate_kind = "inanimate physical object"
+                                break
+                if inanimate_agent_found:
+                    break
+
+        if extraction_result and inanimate_agent_found:
+            for ent in extraction_result.entities:
+                if (
+                    ent.canonical_name.lower() in str(conflict_ent_label).lower()
+                    or ent.category.upper() in ("OBJECT", "ARTIFACT", "NATURAL_OBJECT", "INSTRUMENT")
+                ):
+                    conflict_ent_label = ent.canonical_name
+                    break
+            for ev in extraction_result.events:
+                if ev.predicate.lower() in str(conflict_ev_label).lower():
+                    conflict_ev_id = ev.id
+                    conflict_ev_label = ev.predicate
+                    break
+
+        if inanimate_agent_found:
+            summary = (
+                f"Entity '{conflict_ent_label}' ({inanimate_kind}) cannot act as agent "
+                f"in event '{conflict_ev_id}' ({conflict_ev_label})."
+            )
+            diag = MUCDiagnostic(
+                category="ontological",
+                summary=summary,
+                conflicting_nodes=muc_nodes,
+                conflicting_slots=muc_slots,
+                details=[
+                    "Physical and intentional actions require an agent-capable entity (PERSON, ANIMAL, or ORGANIZATION).",
+                    "Inanimate physical entities and artifacts cannot exert intentional agency unless figurative modality is explicitly declared.",
                 ],
             )
             diag.repair_prompt = diag.format_repair_request()

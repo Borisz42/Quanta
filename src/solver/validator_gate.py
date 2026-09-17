@@ -16,6 +16,8 @@ class ValidationResult:
     is_valid: bool
     errors: List[str] = field(default_factory=list)
     muc_slots: List[Tuple[str, str, int]] = field(default_factory=list)  # (node_cid, slot_name, val)
+    muc_edges: List[Tuple[str, str, str]] = field(default_factory=list)  # (src_cid, rel, dst_cid)
+    muc_intervals: List[Tuple[str, int, int]] = field(default_factory=list)  # (node_cid, start, end)
     models: List[List[str]] = field(default_factory=list)
 
     @property
@@ -24,6 +26,17 @@ class ValidationResult:
         seen: Set[str] = set()
         nodes: List[str] = []
         for cid, _, _ in self.muc_slots:
+            if cid not in seen:
+                seen.add(cid)
+                nodes.append(cid)
+        for src, _, dst in self.muc_edges:
+            if src not in seen:
+                seen.add(src)
+                nodes.append(src)
+            if dst not in seen:
+                seen.add(dst)
+                nodes.append(dst)
+        for cid, _, _ in self.muc_intervals:
             if cid not in seen:
                 seen.add(cid)
                 nodes.append(cid)
@@ -90,9 +103,12 @@ class ValidationGate:
         candidates: List[str] = [
             "{ slot(N, S, V) } :- candidate_slot(N, S, V).",
             "{ edge(Src, Rel, Dst) } :- candidate_edge(Src, Rel, Dst).",
+            "{ event_interval(Ev, Start, End) } :- candidate_interval(Ev, Start, End).",
         ]
         assumptions: List[Tuple[clingo.Symbol, bool]] = []
         slot_map: Dict[str, Tuple[str, str, int]] = {}
+        edge_map: Dict[str, Tuple[str, str, str]] = {}
+        interval_map: Dict[str, Tuple[str, int, int]] = {}
 
         from core.slots import LEGACY_ONTOLOGY_ALIASES
         inv_aliases: Dict[str, List[str]] = {}
@@ -129,6 +145,21 @@ class ValidationGate:
                         [clingo.String(cid), clingo.String(rel), clingo.String(canonical_t)],
                     )
                     assumptions.append((edge_sym, True))
+                    edge_map[str(edge_sym)] = (cid, rel, canonical_t)
+
+            # Temporal intervals
+            t_start = getattr(node, "time_start", None)
+            t_end = getattr(node, "time_end", None)
+            if t_start is not None or t_end is not None:
+                s_int = int(t_start) if t_start is not None else -999999
+                e_int = int(t_end) if t_end is not None else 999999
+                candidates.append(f'candidate_interval("{cid}", {s_int}, {e_int}).')
+                int_sym = clingo.Function(
+                    "event_interval",
+                    [clingo.String(cid), clingo.Number(s_int), clingo.Number(e_int)],
+                )
+                assumptions.append((int_sym, True))
+                interval_map[str(int_sym)] = (cid, s_int, e_int)
 
         # 3. Assemble and ground ASP program
         program = self.rules_content + "\n" + "\n".join(candidates)
@@ -150,6 +181,8 @@ class ValidationGate:
                     current_core = test_assumptions
 
             muc_slots: List[Tuple[str, str, int]] = []
+            muc_edges: List[Tuple[str, str, str]] = []
+            muc_intervals: List[Tuple[str, int, int]] = []
             muc_symbols: List[str] = []
 
             for sym, _ in current_core:
@@ -157,11 +190,19 @@ class ValidationGate:
                 muc_symbols.append(sym_str)
                 if sym_str in slot_map:
                     muc_slots.append(slot_map[sym_str])
+                elif sym_str in edge_map:
+                    muc_edges.append(edge_map[sym_str])
+                elif sym_str in interval_map:
+                    muc_intervals.append(interval_map[sym_str])
 
             errors = [
                 f"Ontological contradiction in node '{cid}' for slot '{slot}' (value={val})"
                 for cid, slot, val in muc_slots
             ]
+            for src, rel, dst in muc_edges:
+                errors.append(f"Relational contradiction on edge '{rel}' from '{src}' to '{dst}'")
+            for cid, s_val, e_val in muc_intervals:
+                errors.append(f"Temporal interval contradiction on node '{cid}' ({s_val}..{e_val})")
             if not errors and muc_symbols:
                 errors = [f"ASP constraint violation in core: {s}" for s in muc_symbols]
 
@@ -169,6 +210,8 @@ class ValidationGate:
                 is_valid=False,
                 errors=errors,
                 muc_slots=muc_slots,
+                muc_edges=muc_edges,
+                muc_intervals=muc_intervals,
             )
 
 
