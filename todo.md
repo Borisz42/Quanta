@@ -4,7 +4,7 @@
 > **QUANTA (Quaternary Universal Abstract Natural Topology Architecture)** is a neuro-symbolic cognitive architecture that replaces unconstrained continuous token streams with a discrete, strongly-typed semantic metalanguage (*Mentalese*).
 > 
 > **Active Master Roadmap Notice:**
-> The active, production engineering roadmap for the Neuro-Symbolic Cognitive Engine (Streaming Discourse Chunker, Qwen-4B Neural Transducer, Symbolic ASG Compiler, Hierarchical Merkle Folding, Virtual Page-Table Attention, and Honest Semantic NLG) is defined in [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md).
+> The active, production engineering roadmap for the Neuro-Symbolic Cognitive Engine (Discourse Chunker, GBNF S-Expressions, Unsloth Local Transducer, Symbolic ASG Compiler, PyClingo ASP Verification & MUC Repair, Merkle Folding, Virtual Page-Table Attention, and Honest Semantic Realizers) is defined in [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md).
 > 
 > This document serves as the comprehensive implementation roadmap, technical specification, and verification manual for foundational sub-systems. Every milestone item is scoped to fit a single atomic git commit. Items marked with 🧪 include an explicit testing or evaluation step.
 >
@@ -12,9 +12,9 @@
 > 1. **Discrete Quaternary Vector Space ($\Sigma^{1024} = \{0, 1, 2, 3\}^{1024}$):** Epistemic 4-valued logic ($\mathcal{B}_4$) preventing continuous floating-point noise drift and representation collapse across 8 isolated 128-slot bands.
 > 2. **Universal Semantic & Syntactic Grounding:** Natural Semantic Metalanguage (NSM) primes, ConceptNet 5.7.0 256-D data-driven ontological & affordance grounding, WordNet root categories, FrameNet valencies, and Lojban construct grammar.
 > 3. **Cryptographic Merkle ASG Topology:** BLAKE3 sub-graph Content Identifiers (CIDs) enabling recursive graph folding and $\mathcal{O}(1)$ VRAM context scaling.
-> 4. **Strict Neuro-Symbolic Verification:** Logic Tensor Networks (LTNs) and top-down coinductive $s(\text{CASP})$ / Answer Set Programming (ASP) with Minimal Unsatisfiable Core (MUC) extraction for closed-loop repair (zero structural hallucination).
-> 5. **Non-Autoregressive Discrete Diffusion Proposer (Fast-dLLM v2):** Parallel block denoising bypassing the autoregressive $\mathcal{O}(N)$ generation bottleneck.
-> 6. **Virtual Graph Page-Table Attention:** Decouples active GPU execution canvas ($M=64\text{ to }512$) from host RAM/NVMe storage, scaling context horizons to millions of nodes.
+> 4. **Strict Neuro-Symbolic Verification:** Clingo / $s(\text{CASP})$ Answer Set Programming (ASP) with Minimal Unsatisfiable Core (MUC) extraction for closed-loop repair (zero structural hallucination).
+> 5. **Decoupled Two-Pass SLM Transduction:** Next-generation Small Language Models (Qwen 3.5 4B/2B with hybrid linear attention, Gemma 4 with native MTP) served locally via Unsloth (`:8888/v1`) under strict GBNF grammar constraints producing compact S-expressions ($4\times$ token reduction).
+> 6. **Virtual Graph Page-Table Attention:** Decouples active GPU execution canvas ($M = 64\text{ to }512$) from host RAM/NVMe storage, scaling context horizons to millions of nodes.
 
 ---
 
@@ -281,13 +281,13 @@ To ensure $\mathcal{O}(1)$ deterministic lexical anchoring with rich real-world 
 The forward parser transforms heterogeneous surface expressions (natural language sentences, First-Order Logic formulas, and Python source code) into canonical Quanta Abstract Syntax Graphs ($\Sigma^{1024}$).
 - **Natural Language Parsing Evolution:**
   - *Baseline Scaffolding (Completed):* Single-sentence dependency parsing via spaCy + `ConceptNetLexicalGrounder` (with WordNet/FrameNet fallback) extracting baseline SVO predicates, determiners, tenses, and polarities.
-  - *Production Neuro-Symbolic Evolution (Master Roadmap: [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phases 1–4):* Natural English discourse evolves from handcrafted syntactic regexes and token-trees to the two-stage **Neural Discourse Transducer (local Qwen-4B via LM Studio / GGUF)** emitting typed intermediate JSON-ASG (`src/parser/schema.py`), followed by the **QUANTA Symbolic ASG Compiler (`src/parser/asg_compiler.py`)** compiling canonical **Entity-Event DAGs** (purging word-token/punctuation trees) with ConceptNet 5.7.0 grounding, Band 1 thematic valencies, Band 2 variable registers, Band 7 Allen interval/causal DAG links, and 256-bit BLAKE3 Merkle CIDs.
+  - *Production Neuro-Symbolic Evolution (Master Roadmap: [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) Phases 1–4):* Natural English discourse evolves from handcrafted syntactic regexes and token-trees to the **Decoupled Two-Pass SLM Transduction** pipeline: local Small Language Models (Qwen 3.5 4B/2B, Gemma 4) served via Unsloth (`:8888/v1`) under strict GBNF grammar emitting compact S-expressions (`data/grammar/quanta_asg.gbnf`, `src/parser/sexpr_parser.py`), stitched and compiled by the **QUANTA Symbolic ASG Compiler (`src/parser/asg_compiler.py`)** into canonical **Entity-Event DAGs** (purging word-token/punctuation trees) with ConceptNet 5.7.0 grounding, Band 1 thematic valencies, Band 2 variable registers, Band 7 Allen interval/causal DAG links, and 256-bit BLAKE3 Merkle CIDs.
 - **FOL Formula Parsing:** Converts quantified logic expressions ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$) into propositional AST graphs.
 - **Python AST Parsing:** Converts Python AST nodes (`FunctionDef`, `If`, `Return`, `For`/`While`, recursive calls) into graph topologies with cyclic self-CID links for recursive routines.
 
 ### Implementation Guidelines
 - `nlp_forward.py`: Convert spaCy dependency trees into Quanta ASG topologies using `ConceptNetLexicalGrounder`. Handle determiners ("a" $\to$ `NSM_ONE=1`, "the" $\to$ `NSM_THIS=1`, "every" $\to$ `NSM_ALL=1`). Negations set `LJB_NA_NEGATION=2` and flip action primes (`NSM_DO=2`). Interrogatives set `GRAPH_QUERY_TARGET=3` and modal primes (`NSM_MAYBE=3`).
-- For open-domain narrative and multi-chapter text, see [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) for `DiscourseChunker` (`src/parser/chunker.py`), `EntityManifest` (`src/parser/entity_manifest.py`), `transducer.py`, and `asg_compiler.py`.
+- For open-domain narrative and multi-chapter text, see [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md) for `DiscourseChunker` (`src/parser/chunker.py`), `EntityManifest` (`src/parser/entity_manifest.py`), `sexpr_parser.py`, `unsloth_transducer.py`, and `asg_compiler.py`.
 - `fol_parser.py`: Tokenize and recursively parse FOL strings into structured ASGs.
 - `ast_parser.py`: Walk Python `ast` nodes, mapping control flow, variable bindings, and self-referential recursive calls (`GRAPH_RECURSIVE_REF=1` pointing to root function CID).
 
@@ -689,134 +689,104 @@ This phase establishes an exhaustive validation battery for the Mentalese langua
 
 ---
 
-## Phase 15: Synthetic Data Generation (Training Pipeline Stage 1)
+## Phase 15: Synthetic S-Expression Corpus Generation (Stage 1)
 
 ### Context & Architectural Rationale
-Following neuro-symbolic dataset synthesis literature (e.g., FormalGeo, VERUS-LM), Stage 1 of the training roadmap converts the benchmark corpus (FOLIO, ProofWriter, bAbI, CLUTRR, Python ASTs) into normalized, paired training representations:
-$$(\text{Input Context} \longleftrightarrow \text{Target Mentalese ASG Canvas } \mathbf{X}_0 \in \{0, 1, 2, 3\}^{M \times 1024})$$
-Entities and numerical literals are normalized into symbolic placeholders (`ENT_1`, `ENT_2`, `NUM_1`) to force the neural model to learn invariant structural reasoning rather than memorizing surface tokens.
+Following neuro-symbolic dataset synthesis literature (e.g., FormalGeo, VERUS-LM), Stage 1 of the training roadmap converts the benchmark corpus (FOLIO, ProofWriter, bAbI, CLUTRR, Python ASTs) into paired training representations:
+$$(\text{Input Text / Logic Context} \longleftrightarrow \text{Target Compact GBNF S-Expression AST})$$
+Entities and numerical literals are normalized into symbolic placeholders (`ENT_1`, `ENT_2`, `NUM_1`) to train small language models on invariant structural transduction rather than memorizing surface names.
 
 ### Implementation Guidelines
 - Implement abstraction normalizers for named entities and numeric quantities.
-- Stream propositions through the forward parser to generate clean ground-truth ASG canvases.
-- Export balanced, shuffled datasets in JSON Lines or Parquet format for Stage 2/3 training.
+- Convert logic formulas and discourse propositions into canonical GBNF S-expressions.
+- Export balanced, shuffled datasets in JSON Lines or Parquet format (50,000–100,000 pairs).
 
 ### Verification & Acceptance Criteria
-- Dataset spot-check: 50 randomly sampled pairs verify 100% syntactic validity and correct placeholder substitution.
-- Exported dataset contains $>100,000$ validated training pairs.
+- Dataset spot-check: 50 randomly sampled pairs verify 100% GBNF grammar conformance and correct placeholder substitution.
+- Exported dataset contains $>50,000$ validated training pairs.
 
 ### Checklist
 - [ ] **15.1** Implement abstraction normalizer: replace entity names with normalized placeholders (`ENT_1`, `ENT_2`)
 - [ ] **15.2** Implement numeric value normalizer: replace specific numbers with symbolic placeholders
-- [ ] **15.3** Process FOLIO dataset through forward parser → generate `(NL_input, ASG_target)` pairs
-- [ ] **15.4** Process ProofWriter dataset → generate `(rule_chain, ASG_target)` pairs
-- [ ] **15.5** Process bAbI tasks → generate `(story_fragment, ASG_target)` pairs
-- [ ] **15.6** Process CLUTRR dataset → generate `(relation_chain, ASG_target)` pairs
-- [ ] **15.7** Process Python AST corpus → generate `(code_text, ASG_target)` pairs
+- [ ] **15.3** Process FOLIO dataset through S-expression converter → generate `(NL_input, SExpr_target)` pairs
+- [ ] **15.4** Process ProofWriter dataset → generate `(rule_chain, SExpr_target)` pairs
+- [ ] **15.5** Process bAbI tasks → generate `(story_fragment, SExpr_target)` pairs
+- [ ] **15.6** Process CLUTRR dataset → generate `(relation_chain, SExpr_target)` pairs
+- [ ] **15.7** Process Python AST corpus → generate `(code_text, SExpr_target)` pairs
 - [ ] **15.8** Balance and shuffle synthetic dataset; export to training-ready format (JSON lines or parquet)
-- [ ] **15.9** 🧪 Spot-check 50 random pairs for correctness (manual inspection or automated sanity checks)
+- [ ] **15.9** 🧪 Spot-check 50 random pairs for GBNF grammar validity using `sexpr_parser.py`
 
 ---
 
-## Phase 16: Discrete Diffusion Backbone (Fast-dLLM v2)
+## Phase 16: Local SLM Serving & GBNF Constrained Decoding (Stage 2)
 
 ### Context & Architectural Rationale
-QUANTA generates graph structures using non-autoregressive discrete diffusion over categorical state spaces (derived from SEDD, LLaDA, and Fast-dLLM):
-- **Forward Corruption Process:** Replaces quaternary slots in target canvas $\mathbf{X}_0 \in \{0, 1, 2, 3\}^{M \times 1024}$ with a special `MASK` token according to continuous-time noise schedule $t \in [0, 1]$.
-- **Bidirectional Transformer Backbone:** Employs full self-attention (non-causal) to predict clean slot distributions $p_\theta(\mathbf{X}_0 \mid \mathbf{X}_t, \mathbf{c})$ given prompt context $\mathbf{c}$.
-- **Parallel Iterative Sampling:** Starts at $t=1$ (fully masked) and iteratively unmasks high-confidence slots in parallel across $K$ denoising steps ($K \ll N$), bypassing the sequential $\mathcal{O}(N)$ bottleneck of autoregressive generation.
+Departing from experimental discrete diffusion trained from scratch, QUANTA utilizes frontier open-weights Small Language Models (SLMs) strictly as external syntactic transducers:
+- **Model Selection:** Qwen 3.5 4B Dense / 2B (hybrid linear attention / Gated DeltaNet for $O(1)$ KV cache scaling and sub-30ms TTFT) or Gemma 4 E2B/E4B (native Multi-Token Prediction for high generation throughput).
+- **Local Inference Server:** Served locally via Unsloth Desktop/Studio (`http://localhost:8888/v1`) or OpenAI-compatible local endpoints under 4-bit quantization (~2.6 GB VRAM on an RTX 3070 8GB).
+- **GBNF Constrained Decoding:** A formal context-free grammar (`data/grammar/quanta_asg.gbnf`) enforces compact S-expression syntax at the logits-processor level, achieving a **$4\times$ token reduction** over JSON-LD and guaranteeing zero syntax errors.
 
-```text
-Canvas (t=1.0): [ MASK MASK MASK ... MASK ]  (100% Masked)
-      │
-      ▼ Denoise Step 1 (Parallel confidence prediction)
-Canvas (t=0.5): [   1     0   MASK ...   2   ]  (High-confidence slots locked)
-      │
-      ▼ Denoise Step 2 (Contextual unmasking)
-Canvas (t=0.0): [   1     0     3  ...   2   ]  (Fully formed Quanta ASG)
+```lisp
+;; Canonical S-Expression Target Form (GBNF Grammar Constrained)
+(graph
+  (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+  (entity :id e2 :type TOPIC :label "quantum_mechanics" :surface "quantum mechanics")
+  (event :id ev1 :pred PROFESSOR_OF :agent e1 :theme e2 :val TRUE))
 ```
 
 ### Implementation Guidelines
-- `fast_dllm.py`: Implement PyTorch bidirectional transformer module with quaternary token embedding layer (states: $\{0, 1, 2, 3, \text{MASK}\}$).
-- Target-Side Masking (ddm-SFT): Prompts remain unmasked; noise schedule applies exclusively to target ASG blocks.
-- Iterative sampling loop with confidence-based remasking and configurable step count $K \in \{8, 16, 32, 64\}$.
-
-### Verification & Acceptance Criteria
-- Forward corruption sanity check: At $t=0$ canvas is clean; at $t=1$ canvas is $100\%$ masked.
-- Training loss on synthetic subset decreases monotonically across training epochs.
-- Parallel generation throughput targets $180\text{--}450$ text-equivalent tokens/second on an RTX 3070 GPU.
+- Author GBNF grammar in `data/grammar/quanta_asg.gbnf`.
+- Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py` with GBNF grammar injection.
+- Implement recursive-descent parser and AST converter in `src/parser/sexpr_parser.py`.
 
 ### Checklist
-#### 16A — Model architecture
-- [ ] **16A.1** Implement bidirectional transformer backbone: multi-head self-attention with full (non-causal) attention mask
-- [ ] **16A.2** Implement input embedding for quaternary tokens: embed each of `{0,1,2,3,MASK}` per slot position
-- [ ] **16A.3** Implement canvas representation: `M × 1024` grid input (M nodes, each 1024 quaternary dimensions)
-- [ ] **16A.4** Implement output head: predict probability distribution over `{0,1,2,3}` for each masked slot ($1024 \times 4 = 4096$ logits per node block)
-- [ ] **16A.5** Implement conditioning input pathway: encode prompt/context vectors as additional attention tokens
-
-#### 16B — Forward noise process
-- [ ] **16B.1** Implement forward corruption kernel: `q(X_t | X_0)` replacing slots with `MASK` token at rate controlled by noise schedule
-- [ ] **16B.2** Implement continuous-time noise schedule: `t ∈ [0,1]`, linear or cosine masking rate
-- [ ] **16B.3** 🧪 Test: at `t=0` canvas is clean, at `t=1` canvas is fully masked, intermediate `t` has partial masking
-
-#### 16C — Reverse denoising & training
-- [ ] **16C.1** Implement training loop: sample `t ~ U(0,1)`, corrupt canvas, predict clean state, compute cross-entropy loss
-- [ ] **16C.2** Implement training data loader for synthetic `(input, ASG_target)` pairs from Phase 15
-- [ ] **16C.3** Implement mixed-precision training (BF16/FP16)
-- [ ] **16C.4** 🧪 Train on small synthetic subset (1K examples); verify loss decreases
-
-#### 16D — Inference sampling
-- [ ] **16D.1** Implement iterative parallel decoding: at each step, predict all slots, unmask highest-confidence slots
-- [ ] **16D.2** Implement confidence-based remasking: low-confidence predictions stay masked for next iteration
-- [ ] **16D.3** Implement step-count scheduler: configurable number of denoising steps `K` (e.g., 8, 16, 32, 64)
-- [ ] **16D.4** 🧪 Test: given a partially corrupted canvas from training data, model recovers a valid ASG
-- [ ] **16D.5** 🧪 Measure generation throughput (nodes/second) for `M ∈ {16, 32, 64}`
+- [ ] **16.1** Author formal GBNF grammar in `data/grammar/quanta_asg.gbnf` constraining entities, events, valency roles, and temporal intervals
+- [ ] **16.2** Implement lightweight S-expression parser and AST converter in `src/parser/sexpr_parser.py`
+- [ ] **16.3** Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py` connecting to `http://localhost:8888/v1` with grammar injection (`extra_body={"grammar": ...}`)
+- [ ] **16.4** Add support for runtime model selection: Qwen 3.5 4B (default), Qwen 3.5 2B, Gemma 4
+- [ ] **16.5** Implement `MockSExprTransducer` returning pre-recorded S-expressions for offline test suites
+- [ ] **16.6** 🧪 Test: Dr. Eleanor Vance text chunk produces valid S-expression with 100% grammar compliance
 
 ---
 
-## Phase 17: Logic Tensor Network (LTN) Loss
+## Phase 17: Deterministic Graph Stitcher & ASG Quaternary Compiler (Stage 3)
 
 ### Context & Architectural Rationale
-While discrete diffusion generates candidate graph tokens, unguided neural sampling can propose syntactically illegal or ontologically contradictory vectors. Logic Tensor Networks (LTNs) provide differentiable neuro-symbolic guidance during Stage 3 training (ddm-SFT). First-Order Logic domain axioms are compiled into PyTorch computation graphs using real-logic t-norms (e.g., Łukasiewicz t-norm), computing an auxiliary rule satisfaction loss:
-$$\mathcal{L}_{\text{LTN}} = 1 - \text{SatAgg}(\phi_1, \dots, \phi_m)$$
-$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{CE}} + \lambda \mathcal{L}_{\text{LTN}}$$
-This loss directly penalizes type and valency violations during early denoising steps, shaping the diffusion trajectory toward valid structural regions.
+Chunked S-expression ASTs are compiled into a unified Entity-Event Directed Acyclic Graph (DAG) and mapped into canonical 1024-dimension quaternary vectors ($\Sigma^{1024}$, 256 bytes per node). The compiler grounds lexical concepts to offline ConceptNet 5.7.0 (403,503 concepts) and WordNet, assigns Band 2 variable registers, wires Band 1 thematic valency edges, and computes deterministic 256-bit BLAKE3 Merkle CIDs.
 
 ### Implementation Guidelines
-- `ltn_loss.py`: Define differentiable predicate grounding mapping quaternary slot probabilities to LTN truth values $[0, 1]$.
-- Formulate core ontological rules (e.g., $\forall x (\text{AGENT}(x) \rightarrow \text{ANIMATE}(x))$) as differentiable LTN formulas.
-- Integrate $\mathcal{L}_{\text{LTN}}$ into the Stage 3 diffusion training loop.
-
-### Verification & Acceptance Criteria
-- Denoising models trained with auxiliary LTN loss exhibit $>80\%$ fewer type and valency violations on unconstrained generation compared to pure cross-entropy baselines.
+- Implement `GraphStitcher` in `src/parser/graph_stitcher.py` to reconcile local chunk entity IDs (`e1`, `e2`) with global registry symbols.
+- Extend `ASGCompiler` in `src/parser/asg_compiler.py` to compile S-expression ASTs into canonical `QuantaNode` instances.
+- Wire Band 7 Allen interval relations and Pearl causal mechanisms.
 
 ### Checklist
-- [ ] **17.1** Install `ltn` Python package (Logic Tensor Networks)
-- [ ] **17.2** Define grounding: map quaternary vector slots to LTN variables
-- [ ] **17.3** Compile core domain axioms (type constraints, valency rules) into LTN formulas with Łukasiewicz t-norms
-- [ ] **17.4** Implement `SatAgg` aggregation: `L_LTN = 1 - SatAgg(φ_1, ..., φ_m)`
-- [ ] **17.5** Integrate `L_LTN` as auxiliary loss term during diffusion training (Phase 16C)
-- [ ] **17.6** 🧪 Test: training with LTN loss produces fewer type-violating graphs than without
+- [ ] **17.1** Implement `GraphStitcher` in `src/parser/graph_stitcher.py`: merge chunk ASTs into a unified `QuantaGraph`
+- [ ] **17.2** Implement global symbol cross-referencing and coreference resolution across chunk boundaries
+- [ ] **17.3** Connect S-expression AST to `ASGCompiler`: ConceptNet 5.7.0 grounding, Band 0 NSM primes, Band 1 valencies
+- [ ] **17.4** Wire Band 7 Allen interval relations and Pearl causal DAG edges
+- [ ] **17.5** Compute bottom-up BLAKE3 Merkle CIDs for entities, events, and sub-graph fold roots
+- [ ] **17.6** 🧪 Test: multi-chunk narrative stitches into single connected DAG with 0 duplicate entities and valid CIDs
 
 ---
 
-## Phase 18: Closed-Loop Repair Integration
+## Phase 18: PyClingo ASP Verification Gate & Closed-Loop MUC Repair Loop (Stage 4)
 
 ### Context & Architectural Rationale
-To fulfill the **zero structural and logical hallucination guarantee**, proposed candidate graphs must pass the $s(\text{CASP})$ symbolic verification gate. When a violation is detected:
-1. The solver extracts the **Minimal Unsatisfiable Core (MUC)**—the smallest set of conflicting graph nodes or axioms.
-2. The MUC is converted into a binary mask over the canvas.
-3. The diffusion backbone executes a **targeted re-denoising pass** exclusively over the corrupted slots while keeping valid nodes locked.
-4. Outputs are released to user-facing realizers only after achieving $100\%$ formal proof verification.
+To fulfill the **zero structural and logical hallucination guarantee**, proposed candidate graphs must pass the PyClingo / $s(\text{CASP})$ symbolic verification gate. When an ontological, spatial, or temporal violation is detected:
+1. The solver extracts the **Minimal Unsatisfiable Core (MUC)**—the minimal set of conflicting axioms or premises:
+   $$\text{MUC} = \arg\min_{\mathcal{S} \subseteq \mathcal{P}} \{ \mathcal{S} \models \bot \}$$
+2. The MUC is converted into an explicit diagnostic repair prompt.
+3. The offending chunk is **re-queued to the local Unsloth SLM** with the conflict constraint injected (capped at 2 repair attempts).
+4. Graphs are committed to long-term memory only after passing full formal verification.
 
 ```text
                ┌──────────────────────────────────────────────┐
-               │    Fast-dLLM Discrete Diffusion Proposer     │
+               │   Unsloth Local SLM Transducer (GBNF S-Expr) │
                └──────────────────────┬───────────────────────┘
-                                      │ Proposed ASG Canvas
+                                      │ Candidate S-Expr AST
                                       ▼
                ┌──────────────────────────────────────────────┐
-               │   s(CASP) / PyClingo ASP Verification Gate   │
+               │    PyClingo Formal ASP Verification Gate     │
                └──────────────┬───────────────────────────────┘
                               │
              ┌────────────────┴────────────────┐
@@ -825,81 +795,75 @@ To fulfill the **zero structural and logical hallucination guarantee**, proposed
              │                                 │
              ▼                                 ▼
 ┌───────────────────────────┐    ┌───────────────────────────┐
-│ Commit to Graph Memory /  │    │ Extract Minimal           │
+│ Commit to Graph Memory &  │    │ Extract Minimal           │
 │ Render Deterministic NLG  │    │ Unsatisfiable Core (MUC)  │
 └───────────────────────────┘    └─────────────┬─────────────┘
                                                │
                                                ▼
                                  ┌───────────────────────────┐
-                                 │ Re-mask Invalid Nodes &   │
-                                 │ Re-Denoise (Targeted Fix) │
+                                 │ Format Diagnostic Repair  │
+                                 │ Prompt & Re-queue to SLM  │
                                  └─────────────┬─────────────┘
                                                │
-                                               └─► (Feedback Loop)
+                                               └─► (Closed Loop: Max 2x)
 ```
 
 ### Implementation Guidelines
-- Implement closed-loop repair manager orchestrating: Propose $\to$ Validate $\to$ MUC Mask $\to$ Re-Denoise $\to$ Re-Validate.
-- Maintain a maximum retry limit (e.g., 5 iterations) with diagnostic telemetry.
-
-### Verification & Acceptance Criteria
-- Injected error test: Inject an invalid node (e.g., rock agent) into a valid 10-node graph; repair loop isolates the node via MUC and repairs it within 1–3 iterations without disturbing valid nodes.
-- Multiple conflict test: Resolves complex multi-node contradictions or reports a formal diagnostic proof trace upon unrecoverable failure.
+- `clingo_gate.py`: Execute Clingo ASP verification over candidate S-expression DAGs with assumption-based MUC extraction.
+- `repair_manager.py`: Format diagnostic repair hints and manage re-transduction retry budgets.
 
 ### Checklist
-- [ ] **18.1** Implement repair loop: diffusion proposer → validator gate → if MUC → re-mask invalid nodes → re-denoise
-- [ ] **18.2** Implement re-masking: convert MUC node list to binary mask over canvas slots
-- [ ] **18.3** Implement targeted re-denoising: run diffusion backbone only on re-masked slots (keep valid slots locked)
-- [ ] **18.4** Implement max-retry limit (e.g., 5 iterations) with fallback error report
-- [ ] **18.5** 🧪 Test: inject one invalid node into a valid canvas → repair loop fixes it within 1–3 iterations
-- [ ] **18.6** 🧪 Test: inject multiple conflicting nodes → repair loop resolves all conflicts or reports failure
+- [ ] **18.1** Enhance `ValidatorGate` in `src/verification/clingo_gate.py` with assumption-based MUC extraction for S-expression DAGs
+- [ ] **18.2** Implement ontological type constraint rules: detect volitional violations (e.g., inanimate entities acting as intentional agents)
+- [ ] **18.3** Implement temporal order consistency rules: detect cyclic or inverted Allen intervals ($\text{Start}(A) > \text{End}(A)$)
+- [ ] **18.4** Implement `RepairManager` in `src/verification/repair_manager.py`: format diagnostic hints and manage re-transduction retry budgets
+- [ ] **18.5** Enforce hard limit of 2 repair attempts per chunk; flag diagnostic trace on persistent failure
+- [ ] **18.6** 🧪 Test: inject an invalid temporal ordering into an S-expression chunk; assert MUC isolates conflict and repair succeeds on iteration 2
 
 ---
 
-## Phase 19: SEPO RL Fine-Tuning (Stage 4)
+## Phase 19: Unsloth QLoRA Fine-Tuning Pipeline
 
 ### Context & Architectural Rationale
-Because logic solvers produce discrete, non-differentiable rewards ($+1$ for valid proof, $-1$ for contradiction), standard policy gradients fail on discrete diffusion models. Following Score Entropy Policy Optimization (SEPO), reinforcement learning fine-tunes the discrete diffusion proposer over non-differentiable solver feedback, directly maximizing the likelihood of proposing structurally sound, proof-valid ASGs on the initial denoising pass.
+While off-the-shelf Qwen 3.5 4B and Gemma 4 follow instructions well under GBNF grammar constraints, fine-tuning them via Unsloth QLoRA on domain-specific (Text, S-expression) pairs improves single-pass extraction accuracy, reduces grammar-mask rejection latency, and aligns the model to resolve MUC diagnostic error prompts reliably.
 
 ### Implementation Guidelines
-- Implement binary and MUC-shaped reward functions.
-- Formulate SEPO policy gradient estimators tailored for discrete masked diffusion transitions.
-- Execute RL fine-tuning on consumer/cloud GPU setup.
-
-### Verification & Acceptance Criteria
-- Initial-pass verification pass rate on complex reasoning benchmarks improves significantly ($>25\%$ relative boost) after SEPO fine-tuning compared to pre-RL checkpoints.
+- Synthetic dataset generator script: `scripts/generate_sexpr_dataset.py`.
+- Training script: `scripts/train_unsloth_lora.py` utilizing Unsloth's `FastLanguageModel` with 4-bit quantization, $r = 16$, $\alpha = 32$, and target modules `["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]`.
+- Multi-task training mix: 70% forward transduction (NL $\to$ S-expr), 15% MUC repair conditioning, 15% reverse S-expr understanding.
 
 ### Checklist
-- [ ] **19.1** Implement reward function: `+1` for s(CASP)-validated graph, `-1` for MUC violation, shaped by MUC size
-- [ ] **19.2** Implement Score Entropy Policy Optimization (SEPO) gradient estimator for discrete diffusion backbone
-- [ ] **19.3** Implement training loop: sample → propose canvas → validate → compute SEPO gradient → update
-- [ ] **19.4** 🧪 Test: after RL fine-tuning, validation pass rate improves compared to pre-RL model
+- [ ] **19.1** Implement `scripts/generate_sexpr_dataset.py`: generate 50,000–100,000 paired training examples from FOLIO, ProofWriter, bAbI, CLUTRR, and OpenResearch text corpus
+- [ ] **19.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints
+- [ ] **19.3** Implement `scripts/train_unsloth_lora.py`:
+  - Load Qwen 3.5 4B or Gemma 4 in 4-bit precision via Unsloth
+  - Configure LoRA adapters ($r=16, \alpha=32$, dropout=0, target linear modules)
+  - Train on synthetic dataset with gradient checkpointing and cosine learning rate schedule
+  - Save adapter weights to `models/quanta-slm-lora/`
+- [ ] **19.4** Implement GGUF export script: `scripts/export_lora_gguf.py` fusing LoRA weights and exporting Q4_K_M / Q8_0 GGUF models for local Unsloth serving
+- [ ] **19.5** 🧪 Evaluation test: compare base SLM vs. fine-tuned SLM on 500 held-out test chunks; assert higher single-pass validation rate and lower MUC repair iterations
 
 ---
 
-## Phase 20: Inference Acceleration & Deployment (Stage 5)
+## Phase 20: Long-Context Virtual Page-Table Attention & Multi-Model Benchmark Suite
 
 ### Context & Architectural Rationale
-To make QUANTA deployable on standard consumer workstations (RTX 3070 8GB VRAM) and cloud edge instances:
-- **Step-Schedule Distillation:** Distills reverse diffusion sampling from $K=64$ steps down to $8\text{--}16$ steps without loss of proof accuracy.
-- **Block-Wise KV Caching:** Reuses bidirectional attention key-value states for unmasked context tokens across sampling steps.
-- **Virtual Page-Table Integration:** Seamlessly streams external graph nodes from host RAM into the active execution canvas during reverse sampling.
+To validate deployment on standard consumer workstations (NVIDIA RTX 3070 8GB VRAM / 16GB Host RAM) and long-horizon scalability:
+- **Bounded GPU VRAM Canvas:** Physical execution canvas is fixed ($M = 64\text{ to }512$ nodes $\approx 128\text{ KB}$).
+- **Virtual Page-Table Attention:** Sub-graphs folded into 256-bit BLAKE3 CIDs reside in Host RAM / SQLite. When an unresolved pointer is referenced, CPU threads execute AVX-512 bitwise Hamming distance scans over 256-byte quaternary keys at **$51.3\text{ M nodes/sec}$**, paging sub-graphs in $< 5\text{ ms}$.
+- **Multi-Model Benchmark Suite:** Evaluates throughput and accuracy across Qwen 3.5 4B, Qwen 3.5 2B, and Gemma 4.
 
 ### Implementation Guidelines
-- Train step-distilled student checkpoints.
-- Implement block KV caching for PyTorch attention modules.
+- Integrate `PageTable` with `GraphStitcher` for streaming multi-chapter document ingestion.
+- Implement multi-model benchmark runner in `scripts/benchmark_slm_transduction.py`.
 - Profile memory allocation across context horizons ($10^3 \to 10^6$ nodes).
 
-### Verification & Acceptance Criteria
-- Inference latency benchmarks confirm generation throughput of $180\text{--}450$ text-equivalent tokens/second.
-- Physical GPU VRAM usage remains flat ($\le 5.0\text{ GB}$) while context scales to $1,000,000$ nodes in host RAM (256 MB).
-
 ### Checklist
-- [ ] **20.1** Implement step-schedule distillation: train student model to match teacher in fewer steps (64 → 16 → 8)
-- [ ] **20.2** Implement block-wise KV caching for the bidirectional transformer
-- [ ] **20.3** Implement Virtual Page-Table integration with diffusion inference (page-in external context during denoising)
-- [ ] **20.4** 🧪 Benchmark: throughput (tok/s equivalent) at step counts 8, 16, 32, 64
-- [ ] **20.5** 🧪 Benchmark: VRAM usage stays constant as context grows from 1K to 100K to 1M nodes (256 MB in host RAM)
+- [ ] **20.1** Integrate `PageTable` with `GraphStitcher` for streaming long-form document ingestion
+- [ ] **20.2** Optimize AVX-512 / AVX2 bitwise Hamming distance kernel for 256-byte quaternary keys
+- [ ] **20.3** Implement `scripts/benchmark_slm_transduction.py` comparing Qwen 3.5 4B, 2B, and Gemma 4 on generation speed and grammar conformance
+- [ ] **20.4** 🧪 Benchmark: generation throughput (text-equiv tok/s) across chunk sizes 150–350 words (target: 360–640 text-equiv tok/s)
+- [ ] **20.5** 🧪 Benchmark: VRAM usage stays strictly flat ($\le 3.5\text{ GB}$) while scaling context to 1,000,000 nodes in Host RAM (256 MB)
 
 ---
 
@@ -933,7 +897,7 @@ Rigorous empirical benchmarking across formal deduction, multi-hop reasoning, ef
 - [ ] **21A.5** 🧪 Run AR-LSAT: measure solver pass rate (target: >92%)
 
 #### 21B — Efficiency & scaling benchmarks
-- [ ] **21B.1** 🧪 Measure generation throughput across block sizes `M ∈ {16, 32, 64}` — target: 180–450 text-equiv tok/s
+- [ ] **21B.1** 🧪 Measure generation throughput across chunk sizes 150–350 words — target: 360–640 text-equiv tok/s via GBNF S-expression $4\times$ compression
 - [ ] **21B.2** 🧪 Measure physical VRAM usage across context horizons: 10³, 10⁴, 10⁵, 10⁶ nodes — target: O(1) VRAM
 - [ ] **21B.3** 🧪 Run round-trip reversibility benchmark: Hamming distance comparison on 1000 round-tripped propositions — target: distance = 0
 
@@ -977,9 +941,9 @@ Vision-Language Models (VLMs) suffer from severe visual hallucinations, spatial 
 ### Context & Architectural Rationale
 Strategic dissemination across two high-impact conference targets:
 1. **Primary Submission (NeSy / ACL):** *The Mentalese Paradigm: Epistemic 4-Valued Metalanguage for Verifiable Neuro-Symbolic Reasoning*
-   - Focus: Theoretical grounding, 1024-dimension layout (8 bands of 128 slots), ConceptNet 5.7.0 256-D data-driven grounding, Belnap logic, top-down coinductive $s(\text{CASP})$ verification with alias bridging, MUC repair, 2-tier polyglot surface realization, and 100% accuracy on FOLIO/ProofWriter.
-2. **Secondary Submission (NeurIPS / EMNLP):** *Non-Autoregressive Discrete Graph Diffusion over Strongly-Typed Quaternary Abstract Syntax Graphs*
-   - Focus: Fast-dLLM v2 discrete diffusion engine, Finite Scalar Quantization (FSQ) link, parallel block decoding throughput, and Virtual Page-Table Attention ($\mathcal{O}(1)$ VRAM context scaling).
+   - Focus: Theoretical grounding, 1024-dimension layout (8 bands of 128 slots), ConceptNet 5.7.0 256-D data-driven grounding, Belnap logic, top-down coinductive $s(\text{CASP})$ / Clingo verification with alias bridging, MUC repair, 2-tier polyglot surface realization, and 100% accuracy on FOLIO/ProofWriter.
+2. **Secondary Submission (NeurIPS / EMNLP):** *Decoupled Two-Pass SLM Transduction and Formal ASP Verification over 1024-Dimensional Quaternary Abstract Syntax Graphs*
+   - Focus: Local SLM serving (Unsloth `:8888`), GBNF-constrained S-expressions ($4\times$ token reduction), PyClingo ASP verification with MUC repair loop, and Virtual Page-Table Attention ($\mathcal{O}(1)$ VRAM context scaling).
 
 ### Implementation Guidelines
 - Structure LaTeX manuscripts with clear narrative flow, formal definitions, empirical benchmark tables, and supplementary proof traces.
@@ -991,9 +955,9 @@ Strategic dissemination across two high-impact conference targets:
 ### Checklist
 - [ ] **23.1** Draft primary paper abstract and introduction (NeSy / ACL target)
 - [ ] **23.2** Write representational grounding section (1024-dim layout, 8-band taxonomy, ConceptNet 5.7.0 256-D U-ODS derivation, Belnap 4-valued logic, FSQ connection, empirical Pareto dimension sweep proof)
-- [ ] **23.3** Write neuro-symbolic gate section (LTN + s(CASP) + alias bridging + MUC repair)
+- [ ] **23.3** Write neuro-symbolic gate section (Clingo + s(CASP) + alias bridging + MUC repair)
 - [ ] **23.4** Write bidirectional surface realization section (English NLG with 2-tier SIMD decoding, FOL, Code)
 - [ ] **23.5** Compile benchmark results tables (FOLIO, ProofWriter, bAbI, CLUTRR, AR-LSAT)
 - [ ] **23.6** Write conclusion and AGI alignment discussion
-- [ ] **23.7** Draft secondary paper (NeurIPS / EMNLP target): Fast-dLLM engine + FSQ + Page-Table Attention
+- [ ] **23.7** Draft secondary paper (NeurIPS / EMNLP target): Decoupled SLM Transduction + GBNF S-Expressions + PyClingo MUC Repair + Page-Table Attention
 - [ ] **23.8** Prepare supplementary materials: slot layout tables, ConceptNet 256-D solver derivations, proof trace examples, code listings

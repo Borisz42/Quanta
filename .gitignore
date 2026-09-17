@@ -187,6 +187,8 @@ output/*
 /data/*
 !/data/.gitkeep
 !/data/conceptnet_slots.json
+!/data/grammar/
+!/data/grammar/*
 !/data/raw/
 /data/raw/*
 !/data/raw/.gitkeep
@@ -208,4 +210,13 @@ output/*
 conceptnet-assertions-5.7.0.csv.gz
 concept_codebook.csv.gz
 
+# OpenResearch CLI & runtime files
+openresearch-cli/
+orx.db
+orx.db-shm
+orx.db-wal
+.orx/
+.openresearch/
+worktrees/
+.worktrees/
 

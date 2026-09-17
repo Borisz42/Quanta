@@ -27,6 +27,19 @@ from parser.transducer import (
     create_transducer,
 )
 from parser.asg_compiler import ASGCompiler, ASGCompilationError
+from parser.sexpr_parser import (
+    SExprTokenType,
+    SExprToken,
+    SExprLexer,
+    SExprAtom,
+    SExprList,
+    SExprParser,
+    SExprSyntaxError,
+    SExprASTConverter,
+    parse_sexpr,
+    to_sexpr,
+    parse_to_asg,
+)
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -54,6 +67,17 @@ __all__ = [
     "create_transducer",
     "ASGCompiler",
     "ASGCompilationError",
+    "SExprTokenType",
+    "SExprToken",
+    "SExprLexer",
+    "SExprAtom",
+    "SExprList",
+    "SExprParser",
+    "SExprSyntaxError",
+    "SExprASTConverter",
+    "parse_sexpr",
+    "to_sexpr",
+    "parse_to_asg",
 ]
 
 

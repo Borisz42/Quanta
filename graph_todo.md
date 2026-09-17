@@ -2,323 +2,335 @@
 
 > [!IMPORTANT]
 > **Mission Statement:**
-> Transform QUANTA from an overfitted syntactic word-tree builder into a production-grade, verifiable **Neuro-Symbolic Cognitive Engine**.
-> By combining a local **Neural Discourse Transducer** (e.g. 4-bit Qwen-4B via LM Studio) for open-domain English extraction with QUANTA's **Symbolic ASG Compiler** (ConceptNet 5.7.0, 1024-dim quaternary vectors, BLAKE3 Merkle CIDs, and Clingo/s(CASP) gates), QUANTA achieves:
-> 1. **100% General Extraction on ANY English Text** (zero hardcoded keywords, regexes, or manual verb lists).
-> 2. **Effectively Unlimited Context Scaling via Streaming Discourse Chunking & Working Memory Manifests**.
-> 3. **Strict $O(1)$ Physical VRAM Execution ($M=512$) via Virtual Page-Table Attention & Hierarchical Merkle Sub-Graph Folding**.
+> Transform QUANTA into an enterprise-grade, verifiable **Neuro-Symbolic Cognitive Engine** running entirely on local consumer hardware (NVIDIA RTX 3070 8GB VRAM / 16GB Host RAM).
+> By combining a local **Small Language Model (SLM) Transducer** (Qwen 3.5 4B/2B with hybrid linear attention, or Gemma 4 with native MTP, served via Unsloth Desktop/Studio at `http://localhost:8888/v1`) with QUANTA's **Symbolic ASG Compiler** (ConceptNet 5.7.0, 1024-dim quaternary vectors, BLAKE3 Merkle CIDs, and PyClingo ASP verification gates), QUANTA achieves:
+> 1. **100% General Extraction on ANY English Text** via GBNF-constrained S-expressions ($4\times$ token reduction over JSON-LD).
+> 2. **Effectively Unlimited Context Scaling** via CPU Discourse Chunking (150–350 words) and Working Memory Entity Manifests.
+> 3. **Strict $\mathcal{O}(1)$ Physical VRAM Execution ($M = 64\text{ to }512$)** via Virtual Page-Table Attention and Hierarchical Merkle Sub-Graph Folding.
+> 4. **Zero Structural & Logical Hallucinations** through Answer Set Programming (ASP) with Minimal Unsatisfiable Core (MUC) closed-loop prompt repair.
 
 ---
 
-## Architectural Architecture: The Neuro-Symbolic Pipeline
+## Architectural Blueprint: The 3-Pass Cognitive Cycle
 
 ```text
-                                [ ANY English Input: Single Sentence, Narrative, or Entire Book ]
-                                                              │
+                                 [ ANY English Input: Single Sentence, Narrative, or Entire Book ]
+                                                               │
+                                                               ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ PASS 1: CPU DISCOURSE CHUNKER & GLOBAL CATALOGUER                                                                      │
+│ • Segments prose into 150–350 word semantic blocks along paragraph/dialogue boundaries                                │
+│ • Resolves global entity mentions & aliases ("Dr. Eleanor Vance", "Vance", "she" → E1)                                 │
+│ • Maintains Active Entity Manifest (~100 tokens) with SQLite LRU paging from Host RAM                                  │
+└─────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────┘
+                                                              │ Chunks + Active Entity Manifest
                                                               ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 1: STREAMING DISCOURSE CHUNKER (150–400 words per chunk: Paragraph / Scene Boundaries)                           │
+│ PASS 2: BATCHED UNSLOTH SLM INFERENCE (GBNF-CONSTRAINED S-EXPRESSIONS)                                                 │
+│ • Local Endpoint: Unsloth Desktop / Studio (:8888/v1) or OpenAI-compatible local server                                │
+│ • Target Model: Qwen 3.5 4B Dense / 2B (Gated DeltaNet / linear attention) or Gemma 4 E2B/E4B (native MTP)             │
+│ • Constrained Decoding: Formal GBNF Grammar (`data/grammar/quanta_asg.gbnf`) emitting compact S-expressions            │
+│ • 4x Token Reduction over JSON-LD; guarantees zero syntax errors at grammar mask level                                 │
 └─────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────┘
-                                                              │
-                              Dynamic Entity Manifest (~150 tok)│ (Active working memory: E1..Ek)
-                              Paging dormant entities from Host RAM▼
-┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 3: NEURAL DISCOURSE TRANSDUCER (Local Qwen-4B @ Q4 via LM Studio / GGUF)                                         │
-│ • Input: Current Chunk + Active Entity Manifest                                                                        │
-│ • Output: Normalized Intermediate JSON (Entities with mentions, Events with E-IDs, Allen Intervals, Causal Links)     │
-└─────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────┘
-                                                              │ Normalized JSON-ASG
+                                                              │ S-Expression AST Chunks
                                                               ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 4: QUANTA SYMBOLIC ASG COMPILER (Deterministic Grounding & Merkle Topology)                                      │
+│ PASS 3: DETERMINISTIC GRAPH STITCHER & ASG QUATERNARY COMPILER                                                         │
+│ • Resolves cross-chunk foreign key entity references and merges local chunk ASTs into unified DAG                      │
 │ • ConceptNet 5.7.0 (403,503 concepts) & WordNet lexical grounding                                                      │
-│ • 1024-Dimension Quaternary Vector Synthesis (Bands 0–7, 256 bytes per node)                                            │
+│ • 1024-Dimension Quaternary Vector Synthesis (Bands 0–7, 256 bytes per node aligned to AVX-512)                        │
 │ • Band 1 Thematic Valencies (VAL_X1_AGENT, VAL_X2_PATIENT...) & Band 2 Variable Registers (X0..X7)                     │
 │ • Band 7 Spatio-Temporal Calculi (Allen Intervals) & Pearl Causal DAG Links                                            │
 │ • 256-bit BLAKE3 Cryptographic CID Hashing for all Nodes                                                               │
 └─────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────┘
-                                                              │
-                    ┌─────────────────────────────────────────┴─────────────────────────────────────────┐
-                    ▼                                                                                   ▼
-┌───────────────────────────────────────┐                                   ┌───────────────────────────────────────────┐
-│ Clingo / s(CASP) Verification Gate    │                                   │ PHASE 5 & 6: VIRTUAL PAGE-TABLE ATTENTION │
-│ • Ontological type constraint checks  │                                   │ • Bounded GPU VRAM Canvas (M = 512 nodes) │
-│ • Temporal consistency (no A < B & B < A)                                 │ • Hierarchical Merkle Sub-Graph Folding   │
-│ • Minimal Unsatisfiable Core (MUC)    │                                   │ • Host RAM / SQLite 1M+ Node Storage      │
-└───────────────────────────────────────┘                                   │ • Sub-10ms Bitwise SIMD Hamming Retrieval │
-                                                                            │ • PHASE 9: WIKIPEDIA / WIKIDATA KB MOUNT  │
-                                                                            └─────────────────────┬─────────────────────┘
-                                                                                                  │
-                                                                                                  ▼
-                                                                            ┌───────────────────────────────────────────┐
-                                                                            │ PHASE 7: HONEST SEMANTIC REALIZER (NLG)   │
-                                                                            │ • Compositional English unrolling from DAG│
-                                                                            │ • O(1) VRAM Question Answering over Graph │
-                                                                            └───────────────────────────────────────────┘
-```
+                                                              │ Proposed Candidate ASG
+                                                              ▼
+                                ┌─────────────────────────────────────────────────────────────┐
+                                │ PyClingo / s(CASP) Formal ASP Verification Gate             │
+                                │ • Ontological type constraint checks across 8 bands         │
+                                │ • Spatio-temporal consistency (RCC-8 disjointness, Allen)   │
+                                │ • Belnap 4-valued epistemic logic bounds (B4)               │
+                                └──────────────────────────────┬──────────────────────────────┘
+                                                               │
+                                  ┌────────────────────────────┴────────────────────────────┐
+                           [Pass / Valid]                                            [Conflict / Violation]
+                                  │                                                         │
+                                  ▼                                                         ▼
+┌───────────────────────────────────────────────────────────────────┐     ┌───────────────────────────────────┐
+│ COMMIT TO MEMORY & STORAGE                                        │     │ EXTRACT MINIMAL UNSATISFIABLE     │
+│ • Virtual Page-Table Attention (M = 64–512 canvas in GPU VRAM)    │     │ CORE (MUC) DIAGNOSTIC             │
+│ • Hierarchical Merkle Sub-Graph Folding (Chunk → Chapter → Book)  │     └─────────────────┬─────────────────┘
+│ • Host RAM / SQLite 1M+ Node Storage (256 MB per 1M nodes)        │                       │
+│ • Sub-10ms Bitwise SIMD Hamming Distance Retrieval                │                       ▼
+├───────────────────────────────────────────────────────────────────┤     ┌───────────────────────────────────┐
+│ DETERMINISTIC REVERSE REALIZATION                                 │     │ CLOSED-LOOP RE-QUEUE PROMPT       │
+│ • EnglishRealizer: Compositional SVO unrolling from DAG           │     │ Re-transduce chunk with injected  │
+│ • FOLEmitter: Standard First-Order Logic formula reconstruction   │     │ MUC conflict constraint (max 2x)  │
+│ • CodeEmitter: Executable Python AST code generation              │     └───────────────────────────────────┘
+└───────────────────────────────────────────────────────────────────┘
 
 ---
 
-## Phase 0: Documentation Audit, Clean-Up & Architectural Alignment
+## Phase 0: Documentation Audit, Clean-Up & Architectural Alignment [Completed]
 
 ### Context & Architectural Rationale
-The repository contains outdated scratchpads, superseded design drafts (e.g. references to early 256-dimension experiments prior to the 1024-dimension 8-band layout), and duplicate benchmark walk-throughs. Before building the new pipeline, the documentation must be audited, sanitized, and updated so contributors and AI agents have an unambiguous source of truth.
-
-### Implementation Guidelines
-- Remove redundant, scratch, and misspelled markdown files (`plan.md`, `empriricalsweepresults.md`).
-- Update `README.md` to reflect the Neuro-Symbolic Transducer + Symbolic Compiler architecture.
-- Update `todo.md` to align Phase 6 and Phase 8 with the entity-event DAG model.
-- Retain high-value architectural defense docs in `docs/`: `dim1024.md`, `conceptnetDimensions.md`, `QUANTA_NeuroSymbolic_Architecture_Defense.md`, `DimensionEval.md`.
+The repository previously contained outdated scratchpads, superseded design drafts (e.g. references to early 256-dimension experiments prior to the 1024-dimension 8-band layout), and duplicate benchmark walk-throughs. All documentation has been audited, sanitized, and updated so contributors and AI agents have an unambiguous source of truth.
 
 ### Checklist
 - [x] **0.1** Audit all repository markdown files and identify outdated/redundant artifacts.
-- [x] **0.2** Remove redundant scratch files: `plan.md` (superseded by `graph_todo.md`) and `empriricalsweepresults.md` (redundant with `output/dimension_sweep_report.md` and contains filename typo).
-- [x] **0.3** Update `README.md`:
-  - Replace the description of the forward parser to reflect the two-stage **Neural Discourse Transducer (Qwen-4B)** + **Symbolic ASG Compiler**.
-  - Document the **Entity-Event DAG schema** (purging word-token/punctuation trees).
-  - Detail the **Streaming Discourse Chunker & Active Entity Manifest** for unlimited context horizons.
-- [x] **0.4** Update `todo.md` to mark completed scaffolding and align Phase 6/8 with the generalized entity-event paradigm.
-- [x] **0.5** 🧪 Run verification check to ensure all links across `README.md`, `docs/`, and `graph_todo.md` resolve cleanly without broken file references.
+- [x] **0.2** Remove redundant scratch files (`plan.md`, `empriricalsweepresults.md`).
+- [x] **0.3** Rewrite `README.md`:
+  - Detail the **Failure of Continuous Autoregressive Latents** and the **External Neuro-Symbolic Coprocessor Paradigm**.
+  - Document the comparative table (Standard AR vs. QUANTA + SLM Coprocessor).
+  - Add formal **GBNF/EBNF Grammar Specification** and S-expression representation examples.
+  - Detail Next-Gen SLM model selection (Qwen 3.5 4B/2B, Gemma 4 E2B/E4B) and local Unsloth serving (`:8888`).
+  - Document PyClingo ASP verification gate with Minimal Unsatisfiable Core (MUC) repair loop.
+  - Update hardware sizing table for NVIDIA RTX 3070 (8GB VRAM) and 16GB Host RAM.
+- [x] **0.4** Rewrite `docs/QUANTA_NeuroSymbolic_Architecture_Defense.md`:
+  - Align Section 1.4 failure modes (SLM linear attention & S-expression transduction vs. diffusion).
+  - Replace Section 2 with Decoupled Two-Pass SLM Transduction, GBNF S-expressions, and PyClingo MUC repair.
+  - Update Sections 3.2, 4, 5, and 6 to reflect Pathway B (Decoupled SLM Transduction via Unsloth).
+- [x] **0.5** Update `docs/dim1024.md` to reflect deterministic S-expression compiler mapping.
+- [x] **0.6** 🧪 Run verification check ensuring all links resolve cleanly without broken file references.
 
 ---
 
-## Phase 1: Streaming Discourse Chunker & Segmentation Engine
+## Phase 1: Core Grammar & S-Expression Specification
 
 ### Context & Architectural Rationale
-Feeding an entire 100,000-word book or continuous chat history into any LLM causes attention degradation and memory exhaustion. Natural human discourse is structured into paragraphs—self-contained thematic episodes (150–400 words, ~200–500 tokens). Chunking text along paragraph/scene boundaries ensures the neural model operates in its optimal attention sweet spot with near-instant inference latency (~2–3s per chunk).
+JSON-LD and raw property graphs waste 60%–75% of generation tokens on repetitive syntax boilerplate (`{"@type": "Entity", ...}`). To maximize inference throughput on consumer hardware and eliminate syntax errors at the grammar mask level, QUANTA defines a formal **GBNF (GGML BNF)** and **EBNF** grammar for compact S-expressions. S-expressions enforce strict typing, explicit entity/event IDs, Lojban-aligned thematic valency roles, and Allen temporal intervals.
 
-### Implementation Guidelines
-- Implement `DiscourseChunker` in `src/parser/chunker.py`.
-- Support multiple boundary granularities:
-  - Paragraph boundaries (double newlines, indentation).
-  - Dialogue speaker turns.
-  - Markdown headings / section breaks / scene breaks (`***`, `---`).
-- Maintain a running global token and character offset index so all chunks remain anchored to source provenance.
-
-### Checklist
-- [x] **1.1** Implement `DiscourseChunk` dataclass tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, and `global_offset`.
-- [x] **1.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (min 100 words, max 400 words) and sentence-boundary preservation.
-- [x] **1.3** Implement structural chapter/section delimiter detection for long-form books and documents.
-- [x] **1.4** 🧪 Write unit tests in `tests/test_discourse_chunker.py` verifying clean chunking across multi-paragraph narratives, dialogues, and multi-chapter markdown books without splitting mid-sentence.
-
----
-
-## Phase 2: Working Memory Entity Manifest & Paging Engine
-
-### Context & Architectural Rationale
-To maintain global coreference across 100 chapters without passing past text tokens:
-1. An **Active Entity Manifest** is maintained in working memory (Host RAM).
-2. For each incoming chunk, the manifest (the ~10 currently active characters, places, and objects) is injected into the prompt.
-3. The neural model reuses existing IDs (`E1`, `E2`...) rather than minting duplicate entities.
-4. If an entity hasn't appeared for 50 chapters, it is safely evicted to the Host-RAM Page Table (SQLite). When its name reappears, the Page Table **pages it back into the active manifest** via fast sub-2ms lookup.
-
-### Implementation Guidelines
-- Implement `EntityManifest` and `EntityPagingEngine` in `src/parser/entity_manifest.py`.
-- Entity records track: `canonical_id` (`E1`), `canonical_name`, `category`, `surface_aliases` (`["Eleanor Vance", "Dr. Vance", "Eleanor", "she"]`), `last_seen_chunk`, and `salience_score`.
-- Pre-chunk surface scan: Use fast regex / spaCy token match against the entity registry to page in dormant entities prior to calling the neural transducer.
-
-### Checklist
-- [x] **2.1** Implement `EntityRecord` dataclass in `src/parser/entity_manifest.py` with alias list, category, register binding, and recency tracking.
-- [x] **2.2** Implement `ActiveEntityManifest` managing the in-memory working set (target size: 5–15 entities) with LRU eviction to persistent storage.
-- [x] **2.3** Implement fast pre-scan entity matcher: scans chunk text in $< 1\text{ ms}$ to resurrect dormant entities from the Host-RAM SQLite Page Table.
-- [x] **2.4** Implement prompt formatter that renders the active manifest into a compact ~100-token prompt block:
-  ```text
-  ACTIVE ENTITIES:
-  - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
-  - E2: synthetic compound (aliases: polymer, specimen)
-  ```
-- [x] **2.5** 🧪 Write unit tests in `tests/test_entity_manifest.py`: Simulate a 5-chunk story; verify entity `E1` introduced in Chunk 1 is correctly paged into the manifest and reused in Chunk 5.
-
----
-
-## Phase 3: Local Neural Discourse Transducer (`src/parser/transducer.py`)
-
-### Context & Architectural Rationale
-Handwritten regexes cannot generalize to open-domain English. We employ a quantized local model (Qwen-4B via LM Studio on `http://localhost:1234/v1` or direct in-repo GGUF) strictly as an open-domain **Semantic Transducer**. By supplying a strict JSON schema and a 1-shot in-context demonstration, Qwen-4B extracts entities, coreference backreferences, event predicates, Allen temporal relations, and causal links with high fidelity in 2–4 seconds per chunk.
-
-### Implementation Guidelines
-- Create `src/parser/transducer.py` supporting:
-  - `LMStudioTransducer`: REST client connecting to local OpenAI-compatible endpoint (`http://localhost:1234/v1/chat/completions`) with temperature 0.0 and JSON response mode.
-  - `LocalGGUFTransducer`: Fallback runner via `llama-cpp-python` loading `.gguf` directly.
-  - `MockTransducer`: Deterministic mock for fast offline unit tests in CI.
-- System prompt enforces the canonical intermediate schema:
-  - Physical entities only (no abstract propositions as entities).
-  - Explicit entity ID pointers in event arguments (`agent_id: "E1"`, `patient_id: "E2"`).
-  - Exact Allen interval relations and causal mechanism strings.
-
-### Checklist
-- [x] **3.1** Define typed intermediate schema in `src/parser/schema.py`: `DiscourseExtractionResult`, `ExtractedEntity`, `ExtractedEvent`, `ExtractedRelation`, `ExtractedProposition`.
-- [x] **3.2** Implement `LMStudioTransducer` in `src/parser/transducer.py` with connection health-check, retry logic, and strict JSON parsing.
-- [x] **3.3** Implement `LocalGGUFTransducer` using `llama-cpp-python` as a direct in-process alternative.
-- [x] **3.4** Implement `MockTransducer` returning pre-recorded fixture outputs for offline regression testing.
-- [x] **3.5** Optimize system prompt with a 1-shot demonstration enforcing entity ID foreign keys (`agent_id: "E1"`) and synonym consolidation.
-- [x] **3.6** 🧪 Write integration tests in `tests/test_transducer.py` verifying that parsing the Eleanor Vance paragraph produces the validated 5-entity, 6-event schema.
-
----
-
-## Phase 4: QUANTA Symbolic ASG Compiler (`src/parser/asg_compiler.py`)
-
-### Context & Architectural Rationale
-The Neural Transducer outputs normalized JSON. The **Symbolic ASG Compiler** is the mathematical core of QUANTA: it turns those JSON tuples into 1024-dimension quaternary vectors ($\Sigma^{1024}$), grounds lemmas to offline ConceptNet 5.7.0 and WordNet, assigns Band 2 registers, wires Band 1 thematic valency edges, and computes deterministic 256-bit BLAKE3 Merkle CIDs.
-
-### Implementation Guidelines
-- Implement `ASGCompiler` in `src/parser/asg_compiler.py`.
-- Concept Grounding:
-  - Query `data/conceptnet_offline.db` (403,503 concepts) for canonical concept anchors and 256-D taxonomy vectors (Bands 3 & 4).
-  - Apply WordNet synset fallback.
-- Vector Compilation:
-  - Band 0: Map event verb lemmas to universal NSM primes (`NSM_DO`, `NSM_MOVE`, `NSM_THINK`, `NSM_TRUE`).
-  - Band 1: Attach thematic valency edges (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT`, `VAL_X5_INSTRUMENT`) pointing to child entity CIDs. Set tense slots (`LJB_PU_PAST_TENSE`).
-  - Band 2: Allocate Variable Binding Registers (`VAR_SLOT_X0` to `VAR_SLOT_X7`) with `01_2` (`BOUND_LOCAL`).
-  - Band 5 & 6: Set Theory of Mind belief states, epistemic observation markers, and deontic prohibition slots.
-  - Band 7: Wire directed Allen interval edges (`TEMP_ALLEN_MEETS`, `TEMP_ALLEN_AFTER`) and Pearl causal DAG edges (`CAUSAL_MECHANISM_LINK`).
-- Cryptographic CID calculation:
-  - Compute BLAKE3 hashes bottom-up: Entity CIDs first $\to$ Event CIDs incorporating entity CIDs $\to$ Proposition CIDs.
-
-### Checklist
-- [x] **4.1** Implement `ASGCompiler` class in `src/parser/asg_compiler.py`.
-- [x] **4.2** Implement entity compilation: convert `ExtractedEntity` $\to$ canonical `QuantaNode` with ConceptNet grounding, Band 2 register assignment, and deterministic CID computation.
-- [x] **4.3** Implement event compilation: convert `ExtractedEvent` $\to$ predicate `QuantaNode` with Band 0 NSM primes, Band 1 valency edges to entity CIDs, and Band 5/6 epistemic/deontic slots.
-- [x] **4.4** Implement spatio-temporal & causal edge wiring: compile Allen interval relations and Pearl causal mechanisms into Band 7 graph edges.
-- [x] **4.5** Integrate with `ValidatorGate`: automatically execute Clingo ASP integrity validation on the compiled graph and report any MUC conflicts.
-- [x] **4.6** 🧪 Write comprehensive tests in `tests/test_asg_compiler.py`: Compile the Eleanor Vance JSON; assert resulting graph has exactly 5 entity nodes, 6 event nodes, 0 punctuation nodes, correct BLAKE3 CIDs, and 100% Clingo validation pass rate.
-
----
-
-## Phase 5: Hierarchical Merkle Sub-Graph Folding (Book-Scale Memory)
-
-### Context & Architectural Rationale
-In long-form documents (500 pages), maintaining every individual event node in active memory is unnecessary. Once a paragraph/chunk is compiled and validated, its event DAG is sealed into a **Sub-Graph Merkle CID** (`GRAPH_MERKLE_FOLD_POINT`). At chapter boundaries, chunk CIDs fold into Chapter CIDs, and chapters fold into the Book Merkle Root.
-
-```text
-                                Book Root CID (32 Bytes)
-                                           │
-                    ┌──────────────────────┴──────────────────────┐
-                    ▼                                             ▼
-          Chapter 1 Merkle CID                          Chapter 2 Merkle CID
-                    │                                             │
-           ┌────────┴────────┐                           ┌────────┴────────┐
-           ▼                 ▼                           ▼                 ▼
-     Paragraph 1 CID   Paragraph 2 CID             Paragraph 1 CID   Paragraph 2 CID
-           │
-    [Folded Event Sub-Graph: Ev1..Ev6]
+```lisp
+;; Canonical S-Expression Target Form (GBNF Grammar Constrained)
+(graph
+  (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+  (entity :id e2 :type TOPIC :label "quantum_mechanics" :surface "quantum mechanics")
+  (entity :id e3 :type UNIVERSITY :label "Columbia" :surface "Columbia University")
+  (event :id ev1 :pred PROFESSOR_OF :agent e1 :theme e2 :location e3
+         :time (interval :start 2018 :end nil) :val TRUE))
 ```
 
 ### Implementation Guidelines
-- Extend `src/core/asg.py` and `src/core/page_table.py` with hierarchical sub-graph folding operations.
-- Folding replaces the internal nodes of an episode with a single 32-byte Merkle CID node while keeping external entity references intact.
-- Unfolding dynamically restores the full sub-graph from disk/database when needed.
+- Define formal grammar in `data/grammar/quanta_asg.gbnf` compatible with llama.cpp, Ollama, and Unsloth constrained generation.
+- Implement lightweight S-Expression lexer and recursive-descent parser in `src/parser/sexpr_parser.py`.
+- Implement AST validator mapping parsed S-expression nodes to typed dataclasses (`DiscourseExtractionResult`, `ExtractedEntity`, `ExtractedEvent`).
 
 ### Checklist
-- [x] **5.1** Implement `fold_discourse_episode(graph, chunk_id) -> QuantaNode` producing a 32-byte Merkle fold node with aggregate quaternary vector.
-- [x] **5.2** Implement hierarchical folding: combine chunk fold nodes into Chapter Merkle roots and Book Merkle roots.
-- [x] **5.3** Implement dynamic unfolding: `unfold_subgraph(cid, storage) -> QuantaGraph` verifying exact cryptographic SHA-256/BLAKE3 hash integrity.
-- [x] **5.4** 🧪 Write unit tests in `tests/test_merkle_folding.py`: Fold a 10-chunk narrative into a single Book CID; verify any tamper in Chunk 3 invalidates the Book Merkle root.
+- [ ] **1.1** Author formal GBNF grammar in `data/grammar/quanta_asg.gbnf` constraining entities, events, valency roles, Allen temporal intervals, and Belnap truth values.
+- [ ] **1.2** Implement lightweight recursive-descent S-expression lexer and parser in `src/parser/sexpr_parser.py` (converting raw S-expr strings to Python AST structures).
+- [ ] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records.
+- [ ] **1.4** Implement S-expression serializer: `serialize_to_sexpr(graph_or_result) -> str` emitting compact, canonical S-expression strings.
+- [ ] **1.5** 🧪 Write comprehensive unit tests in `tests/test_sexpr_parser.py`:
+  - Parse the canonical Dr. Eleanor Vance S-expression; assert 3 entities, 1 event, correct attribute and time interval mappings.
+  - Test syntax error handling on malformed S-expressions (unbalanced parentheses, unknown keywords).
+  - Test bidirectional round-trip: `serialize_to_sexpr(parse_sexpr(text)) == text`.
 
 ---
 
-## Phase 6: Virtual Page-Table Attention & $O(1)$ VRAM Memory Offloading
+## Phase 2: CPU Discourse Chunker & Active Entity Cataloguer [Completed, Enhanced]
 
 ### Context & Architectural Rationale
-Decouples physical GPU execution memory from context length. The GPU operates on a fixed-size canvas buffer ($M = 512$ nodes $\approx 128\text{ KB}$ of vectors). The rest of the document resides in Host RAM / SQLite. When an active node requires past context, host CPU threads perform **AVX-512 / SIMD bitwise Hamming scans** over 1024-dim quaternary keys at **$51.3\text{ M nodes/sec}$**, paging only the relevant sub-graph into the GPU canvas in $< 5\text{ ms}$.
+Feeding raw long-form prose directly to SLMs causes attention dilution and quadratic memory overhead. Natural discourse naturally breaks into semantic episodes (150–350 words). Phase 2 segments text into coherent chunks and maintains a running **Active Entity Manifest** in Host RAM, allowing global coreference resolution across arbitrary document lengths without passing past text tokens.
 
 ### Implementation Guidelines
-- Implement `PageTable` in `src/memory/page_table.py` backed by SQLite / memory-mapped files.
-- Implement vectorized SWAR / SIMD Hamming search over 256-byte quaternary vectors.
-- Implement `ActiveCanvas` with LRU eviction and automatic page-fault handling.
+- `DiscourseChunker` in `src/parser/chunker.py` preserves sentence boundaries and chapter/section headers.
+- `ActiveEntityManifest` and `EntityPagingEngine` in `src/parser/entity_manifest.py` manage active entity IDs (`E1`, `E2`...) and page dormant entities from SQLite.
+- Manifest formatter renders compact ~100-token prompt context for the SLM transducer.
 
 ### Checklist
-- [x] **6.1** Implement disk-backed `PageTable` in `src/memory/page_table.py` storing `QuantaNode` instances and string interning tables.
-- [x] **6.2** Implement SIMD-accelerated bitwise Hamming distance top-$K$ search over stored 1024-dim quaternary keys.
-- [x] **6.3** Implement `ActiveCanvas` fixed-buffer manager ($M=64$ to $512$ nodes) with LRU eviction policy.
-- [x] **6.4** Implement semantic page-fault handler: when an entity or past event is queried, page it from `PageTable` into `ActiveCanvas`.
-- [x] **6.5** 🧪 Benchmark in `tests/test_page_table_scaling.py`: Ingest a 100,000-node graph into `PageTable`; verify active memory stays strictly $\le 512$ nodes and top-$K$ retrieval completes in $< 5\text{ ms}$.
+- [x] **2.1** Implement `DiscourseChunk` dataclass tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, and `global_offset`.
+- [x] **2.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (150–350 words) and sentence-boundary preservation.
+- [x] **2.3** Implement `EntityRecord` dataclass and `ActiveEntityManifest` in `src/parser/entity_manifest.py` with recency tracking and LRU eviction.
+- [x] **2.4** Implement fast pre-scan entity matcher: scans chunk text in $< 1\text{ ms}$ to resurrect dormant entities from Host RAM.
+- [x] **2.5** Implement prompt formatter rendering active manifest context block:
+  ```text
+  ACTIVE ENTITIES:
+  - e1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
+  - e2: synthetic compound (aliases: specimen, polymer)
+  ```
+- [x] **2.6** 🧪 Write unit tests in `tests/test_discourse_chunker.py` and `tests/test_entity_manifest.py`: verify multi-chunk narrative preserves entity IDs across chapters.
 
 ---
 
-## Phase 7: Honest Semantic Reverse Realizer (NLG) Overhaul
+## Phase 3: Unsloth Local Serving Backend & Constrained Transducer
 
 ### Context & Architectural Rationale
-The previous realizer cheated round-trip evaluation by collecting raw literal strings from all token nodes and rejoining them. In this phase:
-1. The token-bypass function `_format_token_sequence` is **completely removed**.
-2. Generation is performed strictly from the semantic graph: traversing event predicates, realizing thematic arguments (`VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT`), utilizing ConceptNet lemmas, and generating discourse-coherent pronouns/anaphora based on the entity registry.
+Next-generation open SLMs (Qwen 3.5 4B Dense / 2B and Gemma 4 E2B/E4B) run with high throughput on consumer hardware (NVIDIA RTX 3070 8GB). Unsloth Desktop / Studio provides a low-latency, OpenAI-compatible local API server (`http://localhost:8888/v1`) with native support for GBNF grammar-constrained decoding.
 
 ### Implementation Guidelines
-- Refactor `EnglishRealizer` in `src/realizer/english_nlg.py`.
-- Event traversal: follow Band 7 temporal sequence edges (`TEMP_ALLEN_MEETS`, `TEMP_ALLEN_AFTER`).
-- Referring Expression Generation:
-  - First mention of $E_i$ in discourse $\to$ Full canonical noun phrase ("Dr. Eleanor Vance", "a volatile synthetic compound").
-  - Subsequent mentions in same scope $\to$ Pronoun ("she", "it") or definite descriptor ("the specimen").
-- Graph-Native Question Answering:
-  - Support query prompts (e.g. *"What did Eleanor Vance verify?"*): traverse the graph directly to the target event and emit the concise factual answer.
+- Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py`:
+  - Connects to local endpoint `http://localhost:8888/v1` (with configurable fallback to `http://localhost:1234/v1`).
+  - Injects GBNF grammar specification into request payload (`extra_body={"grammar": ...}`).
+  - Extracts raw S-expression string and parses via `sexpr_parser.py`.
+- Implement `MockSExprTransducer` returning pre-recorded S-expressions for fast, offline CI test execution.
 
 ### Checklist
-- [x] **7.1** Permanently delete `_collect_descendant_tokens` and `_format_token_sequence` from `src/realizer/english_nlg.py`.
+- [ ] **3.1** Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py` with health check, timeout handling, and connection retry logic.
+- [ ] **3.2** Integrate GBNF grammar injection: automatically pass `data/grammar/quanta_asg.gbnf` to the Unsloth/vLLM/LMStudio completion API.
+- [ ] **3.3** Implement system prompt optimized for S-expression transduction with 1-shot in-context demonstration.
+- [ ] **3.4** Add support for runtime model selection: Qwen 3.5 4B (default), Qwen 3.5 2B (ultra-low VRAM), Gemma 4 (MTP high-throughput).
+- [ ] **3.5** Implement `MockSExprTransducer` returning fixture S-expressions for offline test suites.
+- [ ] **3.6** 🧪 Write integration tests in `tests/test_unsloth_transducer.py`: Transduce Dr. Eleanor Vance chunk; verify valid S-expression output and correct extraction of all 5 entities and 6 events.
+
+---
+
+## Phase 4: Graph Stitcher & ASG Quaternary Compiler
+
+### Context & Architectural Rationale
+S-expression AST chunks must be stitched into a globally coherent Entity-Event Directed Acyclic Graph (DAG) and compiled into 1024-dimension quaternary vectors ($\Sigma^{1024}$, 256 bytes per node). The compiler grounds lexical concepts to ConceptNet 5.7.0 (403,503 concepts) and WordNet, assigns Band 2 variable registers, wires Band 1 thematic valencies, encodes Band 7 Allen temporal intervals and Pearl causal links, and computes deterministic 256-bit BLAKE3 Merkle CIDs.
+
+### Implementation Guidelines
+- Implement `GraphStitcher` in `src/parser/graph_stitcher.py`:
+  - Merges chunk S-expression ASTs into a continuous `QuantaGraph`.
+  - Reconciles local entity IDs (`e1`, `e2`) with global registry symbols.
+  - Resolves cross-chunk coreference links.
+- Extend `ASGCompiler` in `src/parser/asg_compiler.py` to compile S-expression ASTs directly into canonical `QuantaNode` instances.
+
+### Checklist
+- [ ] **4.1** Implement `GraphStitcher` in `src/parser/graph_stitcher.py`: stitch multiple chunk ASTs into a single unified `QuantaGraph`.
+- [ ] **4.2** Implement entity deduplication and cross-chunk coreference resolution in `GraphStitcher`.
+- [ ] **4.3** Connect S-expression AST compiler to `ASGCompiler`:
+  - Entity compilation $\to$ ConceptNet grounding, Band 3/4 taxonomy slots, Band 2 register assignment.
+  - Event compilation $\to$ Band 0 NSM primes, Band 1 thematic valencies (`VAL_X1_AGENT`, etc.), Band 5/6 epistemic slots.
+  - Spatio-temporal & causal edge wiring $\to$ Band 7 Allen intervals and Pearl causal DAG links.
+- [ ] **4.4** Deterministic BLAKE3 Merkle CID hashing for all nodes bottom-up (Entities $\to$ Events $\to$ Sub-graphs).
+- [ ] **4.5** 🧪 Write comprehensive tests in `tests/test_graph_stitcher.py`:
+  - Stitch a 3-chunk narrative; assert unified DAG has continuous entity CIDs, zero orphan events, and correct temporal sequence edges.
+
+---
+
+## Phase 5: PyClingo Formal ASP Verification & Closed-Loop MUC Repair
+
+### Context & Architectural Rationale
+To guarantee zero structural and logical hallucinations, proposed ASG graphs must pass formal verification before being committed to memory or rendered to natural language. PyClingo audits the graph against First-Order Logic domain axioms, ontological type constraints, RCC-8 spatial mereotopology, and Allen temporal orderings. When a violation occurs, the solver computes the **Minimal Unsatisfiable Core (MUC)** and triggers a targeted repair re-prompt to the local SLM.
+
+```text
+Candidate S-Expression DAG
+            │
+            ▼
+ ┌──────────────────────────────────────┐
+ │ PyClingo Formal ASP Verification Gate │
+ └──────────────────┬───────────────────┘
+                    │
+       ┌────────────┴────────────┐
+[Pass / Valid]            [Conflict / Violation]
+       │                         │
+       ▼                         ▼
+ Commit to Memory         Extract Minimal Unsatisfiable Core (MUC)
+                                 │
+                                 ▼
+                          Format Error Injection Repair Prompt
+                          (Inject specific conflict diagnostic)
+                                 │
+                                 ▼
+                          Re-queue Chunk to Local Unsloth SLM
+                          (Capped at 2 repair attempts)
+```
+
+### Implementation Guidelines
+- `ValidatorGate` in `src/verification/clingo_gate.py` compiles graph facts and runs Clingo solving.
+- MUC extractor identifies conflicting node CIDs and violating axioms.
+- `RepairManager` in `src/verification/repair_manager.py` builds the error injection prompt and re-queues the chunk to `UnslothTransducer`.
+
+### Checklist
+- [ ] **5.1** Enhance `ValidatorGate` in `src/verification/clingo_gate.py` with assumption-based MUC extraction for S-expression DAGs.
+- [ ] **5.2** Implement ontological type constraint rules: detect volitional violations (e.g., inanimate entities acting as intentional agents without figurative modality).
+- [ ] **5.3** Implement temporal order consistency rules: detect cyclic or inverted Allen intervals ($\text{Start}(A) > \text{End}(A)$ or mutually exclusive interval relations).
+- [ ] **5.4** Implement `RepairManager` in `src/verification/repair_manager.py`:
+  - Formats diagnostic error hint from MUC: `"CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2."`
+  - Re-prompts `UnslothTransducer` with the conflict constraint injected.
+  - Enforces hard limit of 2 repair attempts per chunk; escalates to user/log upon persistent failure.
+- [ ] **5.5** 🧪 Write unit tests in `tests/test_muc_repair.py`:
+  - Inject an invalid temporal ordering into an S-expression chunk; assert MUC isolates the conflict.
+  - Simulate repair re-prompt; assert corrected S-expression passes validation on iteration 2.
+
+---
+
+## Phase 6: Unsloth LoRA Fine-Tuning Pipeline
+
+### Context & Architectural Rationale
+While off-the-shelf Qwen 3.5 4B and Gemma 4 follow instructions well under GBNF grammar constraints, fine-tuning them via Unsloth QLoRA on domain-specific (Text, S-expression) pairs improves single-pass extraction accuracy, reduces grammar-mask rejection latency, and aligns the model to resolve MUC diagnostic error prompts reliably.
+
+### Implementation Guidelines
+- Synthetic dataset generator script: `scripts/generate_sexpr_dataset.py`.
+- Training script: `scripts/train_unsloth_lora.py` utilizing Unsloth's `FastLanguageModel` with 4-bit quantization, $r = 16$, $\alpha = 32$, and target modules `["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]`.
+- Multi-task training mix: 70% forward transduction (NL $\to$ S-expr), 15% MUC repair conditioning, 15% reverse S-expr understanding.
+
+### Checklist
+- [ ] **6.1** Implement `scripts/generate_sexpr_dataset.py`: generate 50,000–100,000 paired training examples from FOLIO, ProofWriter, bAbI, CLUTRR, and OpenResearch text corpus.
+- [ ] **6.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints.
+- [ ] **6.3** Implement `scripts/train_unsloth_lora.py`:
+  - Load Qwen 3.5 4B or Gemma 4 in 4-bit precision via Unsloth.
+  - Configure LoRA adapters ($r=16, \alpha=32$, dropout=0, target linear modules).
+  - Train on synthetic dataset with gradient checkpointing and cosine learning rate schedule.
+  - Save adapter weights to `models/quanta-slm-lora/`.
+- [ ] **6.4** Implement GGUF export script: `scripts/export_lora_gguf.py` fusing LoRA weights and exporting Q4_K_M / Q8_0 GGUF models for local Unsloth serving.
+- [ ] **6.5** 🧪 Evaluation test: compare base SLM vs. fine-tuned SLM on 500 held-out test chunks; assert higher single-pass validation rate and lower MUC repair iterations.
+
+---
+
+## Phase 7: Deterministic Reverse Realizers & Multi-Target Emitters [Completed]
+
+### Context & Architectural Rationale
+To prove that Mentalese is a complete, lossless semantic pivot, verified Quanta ASGs are deterministically unrolled into diverse human and computational target languages:
+- **English Realizer (`EnglishRealizer`):** Unrolls thematic roles into natural SVO syntax with tense inflection, determiner selection, preposition routing, and 2-tier vector decoding (`ConceptVectorDecoder`).
+- **First-Order Logic Emitter (`FOLEmitter`):** Reconstructs standard quantified formulas ($\forall x, \exists x, \land, \lor, \rightarrow, \neg$).
+- **Code Emitter (`CodeEmitter`):** Emits executable Python source code from AST topologies.
+
+### Checklist
+- [x] **7.1** Permanently delete token-collecting shortcuts (`_collect_descendant_tokens`, `_format_token_sequence`) from `src/realizer/english_nlg.py`.
 - [x] **7.2** Implement compositional clause realization: unroll `VAL_X1_AGENT + Predicate + VAL_X2_PATIENT + Modifiers` directly from ConceptNet anchors and Band 1 tense slots.
-- [x] **7.3** Implement discourse-aware anaphoric referring expression generator (first mention full name, subsequent mention pronoun/definite NP).
-- [x] **7.4** Implement discourse narrative sequencing: traverse events along Band 7 temporal edges and insert fluent transition phrases ("immediately", "three hours later").
-- [x] **7.5** Implement graph-query answer generator for zero-attention-cost question answering over Host-RAM graphs.
-- [x] **7.6** 🧪 Write unit tests in `tests/test_honest_realizer.py`: Realize the Eleanor Vance ASG; verify generated text is grammatically fluent, preserves all facts, and uses proper pronouns without inspecting verbatim token lists.
+- [x] **7.3** Implement discourse-aware anaphoric referring expression generator (first mention full name, subsequent mentions pronoun/definite NP).
+- [x] **7.4** Implement narrative sequencing: traverse events along Band 7 temporal edges and insert fluent transition phrases.
+- [x] **7.5** Implement `FOLEmitter` in `src/realizer/fol_emitter.py` reconstructing First-Order Logic formulas.
+- [x] **7.6** Implement `CodeEmitter` in `src/realizer/code_emitter.py` generating Python AST code.
+- [x] **7.7** 🧪 Write unit tests in `tests/test_honest_realizer.py`: verify realized prose preserves all facts without inspecting verbatim tokens.
 
 ---
 
-## Phase 8: End-to-End Multi-Chapter & Book Benchmark Suite
+## Phase 8: Hierarchical Merkle Folding & Virtual Page-Table Attention [Completed]
 
 ### Context & Architectural Rationale
-Demonstrate the end-to-end cognitive cycle on both complex single paragraphs and multi-chapter documents, proving that the architecture achieves zero hallucination, 100% coreference integrity, constant $O(1)$ VRAM usage, and sub-10ms query execution.
+Decouples working context from physical GPU VRAM. The GPU operates over a constant execution canvas ($M = 64\text{ to }512$ nodes $\approx 128\text{ KB}$). Historical discourse is recursively folded into 32-byte Merkle CIDs (Chunk CID $\to$ Chapter CID $\to$ Book Merkle Root) and stored in Host RAM / SQLite. When an active node requires past context, host CPU threads perform AVX-512 bitwise Hamming scans at $51.3\text{ M nodes/sec}$, paging matching sub-graphs into the active canvas in $< 5\text{ ms}$.
 
 ### Checklist
-- [x] **8.1** Re-run the Dr. Eleanor Vance narrative through the complete pipeline:
-  - Input text $\to$ Qwen-4B Transducer $\to$ ASG Compiler $\to$ Clingo Verification $\to$ Honest English Realizer.
-  - Verify graph contains exactly 5 entities, 6 events, 0 token nodes.
-- [x] **8.2** Multi-Chunk Continuity Test: Run a 3-chunk continuous story through the pipeline; verify entities introduced in Chunk 1 are correctly reused in Chunk 3 without passing Chunk 1 text tokens.
-- [x] **8.3** Long-Context Book Benchmark: Ingest a multi-chapter text ($>10,000$ words) into `PageTable`; verify:
-  - VRAM usage remains flat ($\le 512$ nodes).
-  - Merkle root is deterministically computed.
-  - Questions about Chapter 1 asked after Chapter 10 are answered in $< 10\text{ ms}$ with zero hallucination.
-- [x] **8.4** Regenerate `output/complex_translation_graphs_eng_eng.md` and `output/all_complex_translation_graphs.md` with authentic, deduplicated ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
+- [x] **8.1** Implement `fold_discourse_episode(graph, chunk_id)` producing a 32-byte Merkle fold node with aggregate quaternary vector.
+- [x] **8.2** Implement hierarchical folding: combine chunk fold nodes into Chapter Merkle roots and Book Merkle roots.
+- [x] **8.3** Implement dynamic unfolding: `unfold_subgraph(cid, storage)` with cryptographic BLAKE3 hash integrity verification.
+- [x] **8.4** Implement disk-backed `PageTable` in `src/memory/page_table.py` backed by SQLite.
+- [x] **8.5** Implement SIMD-accelerated bitwise Hamming distance top-$K$ search over stored 1024-dim quaternary keys.
+- [x] **8.6** Implement `ActiveCanvas` fixed-buffer manager ($M = 64\text{ to }512$) with LRU eviction and page-fault handling.
+- [x] **8.7** 🧪 Benchmark in `tests/test_page_table_scaling.py`: ingest a 100,000-node graph; verify VRAM stays strictly flat and top-$K$ retrieval completes in $< 5\text{ ms}$.
 
 ---
 
-## Phase 9: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation)
+## Phase 9: End-to-End Multi-Chapter & Book Benchmark Suite [Completed]
+
+### Context & Architectural Rationale
+Demonstrates the full cognitive cycle on both complex single paragraphs and multi-chapter documents, proving zero hallucination, 100% coreference integrity, constant $\mathcal{O}(1)$ VRAM usage, and sub-10ms query execution.
+
+### Checklist
+- [x] **9.1** Run the Dr. Eleanor Vance narrative through the end-to-end pipeline: Input text $\to$ Transducer $\to$ ASG Compiler $\to$ Clingo Verification $\to$ Honest English Realizer.
+- [x] **9.2** Multi-Chunk Continuity Test: run a 3-chunk continuous narrative; verify entity IDs introduced in Chunk 1 are reused in Chunk 3 without passing text tokens.
+- [x] **9.3** Long-Context Book Benchmark: ingest $>10,000$ words into `PageTable`; verify VRAM remains flat ($\le 512$ nodes) and past facts are retrieved in $< 10\text{ ms}$ with zero hallucination.
+- [x] **9.4** Regenerate `output/complex_translation_graphs_eng_eng.md` with authentic ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
+
+---
+
+## Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / In-Progress]
 
 ### Context & Architectural Rationale
 To scale from document context to universal human knowledge (~6.8M English Wikipedia articles, ~100M Wikidata entities and relational triples):
-- In continuous transformers, holding 6 billion tokens requires **~3.1 Petabytes of GPU VRAM**—physically impossible.
-- In QUANTA, the entire encyclopedic knowledge base is pre-compiled into a memory-mapped database (`data/wikipedia_quanta.db`, ~25–40 GB on NVMe SSD or Host RAM).
-- Any conversation or trivia query mounts this global knowledge base in read-only mode.
-- **Physical GPU VRAM remains strictly $O(1)$ ($M=512$ nodes $\approx 128\text{ KB}$)**, while multi-hop trivia queries traverse the graph in **$< 10\text{ ms}$** with **$0.000000\%$ hallucination**.
-
-```text
-[ User Trivia Query ] ──> [ Query Signature: (?X, ?Y) ]
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Sub-Millisecond Host Page-Table Traversal (< 5 ms):                         │
-│ • "Gustave Eiffel" (Q208) ──> Death: 1923                                   │
-│ • "Titanic Sinking" (Q25252) ──> Event: 1912                                │
-│ • Constraint: 1923 > 1912 ──> TEMP_ALLEN_AFTER ──> Proof Validated (YES)    │
-└──────────────────────────────────┬──────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Page into Active GPU Canvas: ONLY 3 nodes (768 bytes!)                      │
-│ Instant, Verifiable Answer: "Yes, Gustave Eiffel passed away in 1923..."    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Implementation Guidelines
-- Implement streaming Wikidata JSON/RDF ingester in `src/data/wikidata_ingester.py`.
-- Map Wikidata Q-IDs to canonical ConceptNet 5.7.0 anchors, WordNet synsets, and 1024-dimension QuantaVectors.
-- Map properties (P19 place of birth, P569 date of birth, etc.) to Band 1 valencies and Band 7 temporal anchors.
-- Implement `GlobalKnowledgeBase` in `src/memory/global_kb.py` providing background read-only mounting into `PageTable`.
-- Implement `WikipediaQueryResolver` for sub-10ms multi-hop factual and relational trivia resolution.
+- Pre-compile encyclopedic knowledge into a memory-mapped database (`data/wikipedia_quanta.db`, ~25–40 GB on NVMe SSD or Host RAM).
+- Any query mounts this global knowledge base in read-only mode.
+- Physical GPU VRAM remains strictly $\mathcal{O}(1)$ ($M = 512$ nodes $\approx 128\text{ KB}$), while multi-hop trivia queries traverse the graph in $< 10\text{ ms}$ with $0.000000\%$ hallucination.
 
 ### Checklist
-- [ ] **9.1** Implement streaming Wikidata/Wikipedia dump ingester in `src/data/wikidata_ingester.py` supporting filtered entity categories (people, places, scientific concepts, events).
-- [ ] **9.2** Implement entity and property mapper converting Wikidata Q-IDs and P-ID triples into ConceptNet 5.7.0 anchors, 1024-d QuantaVectors, and 256-bit BLAKE3 CIDs.
-- [ ] **9.3** Implement persistent storage compiler creating memory-mapped `data/wikipedia_quanta.db` (SQLite/LMDB) with fast inverted B-Tree index on canonical names and aliases.
-- [ ] **9.4** Implement `GlobalKnowledgeBase` mount interface in `src/memory/global_kb.py` allowing runtime background mounting of the encyclopedic database into `PageTable`.
-- [ ] **9.5** Implement multi-hop graph trivia resolver (`WikipediaQueryResolver`): resolves complex relational questions via graph edge traversal in $< 5\text{ ms}$.
-- [ ] **9.6** 🧪 Write benchmark test in `tests/test_wikipedia_kb.py`: Mount a 100,000-entity slice of Wikidata; verify multi-hop queries execute in $< 10\text{ ms}$ with $O(1)$ VRAM usage ($128\text{ KB}$) and zero hallucination.
+- [ ] **10.1** Implement streaming Wikidata/Wikipedia dump ingester in `src/data/wikidata_ingester.py` supporting filtered entity categories.
+- [ ] **10.2** Implement entity and property mapper converting Wikidata Q-IDs and P-ID triples into ConceptNet 5.7.0 anchors, 1024-d QuantaVectors, and 256-bit BLAKE3 CIDs.
+- [ ] **10.3** Implement persistent storage compiler creating memory-mapped `data/wikipedia_quanta.db` with fast inverted B-Tree index on canonical names and aliases.
+- [ ] **10.4** Implement `GlobalKnowledgeBase` mount interface in `src/memory/global_kb.py` allowing runtime background mounting into `PageTable`.
+- [ ] **10.5** Implement multi-hop graph trivia resolver (`WikipediaQueryResolver`): resolves complex relational questions via graph edge traversal in $< 5\text{ ms}$.
+- [ ] **10.6** 🧪 Write benchmark test in `tests/test_wikipedia_kb.py`: Mount a 100,000-entity slice of Wikidata; verify multi-hop queries execute in $< 10\text{ ms}$ with $\mathcal{O}(1)$ VRAM usage ($128\text{ KB}$) and zero hallucination.
+
 
