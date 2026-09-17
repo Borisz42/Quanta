@@ -245,10 +245,10 @@ Neuro-symbolic architectures must guarantee zero structural hallucinations. Whil
 ```powershell
 pytest tests/test_muc_repair.py -v
 ```
-- [ ] Intentional ontological conflict (e.g. abstract concept as agent) produces an explicit, readable `[REPAIR REQUEST]` diagnostic.
-- [ ] Intentional Allen temporal contradiction produces an ordering conflict diagnostic.
-- [ ] Mock repair simulation succeeds when the transducer fixes the violation on attempt 1.
-- [ ] Repair cap halts execution after exactly 2 failed attempts and returns informative error status.
+- [x] Intentional ontological conflict (e.g. abstract concept as agent) produces an explicit, readable `[REPAIR REQUEST]` diagnostic.
+- [x] Intentional Allen temporal contradiction produces an ordering conflict diagnostic.
+- [x] Mock repair simulation succeeds when the transducer fixes the violation on attempt 1.
+- [x] Repair cap halts execution after exactly 2 failed attempts and returns informative error status.
 
 ---
 

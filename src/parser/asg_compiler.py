@@ -294,7 +294,18 @@ class ASGCompiler:
 
         # 3. Categorical Ontological Enforcement
         cat = entity.category.upper()
-        if cat == "PERSON":
+        if cat in ("ABSTRACT", "ABSTRACT_CONCEPT") or (entity.properties and entity.properties.get("abstract")):
+            node.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
+            node.set_slot("TYPE_INANIMATE_PHYSICAL", 0)
+            node.set_slot("TYPE_NATURAL_OBJECT", 0)
+            node.set_slot("TYPE_ARTIFACT", 0)
+            node.set_slot("ROLE_SENTIENT", 0)
+            node.set_slot("TYPE_ANIMATE", 0)
+            node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
+            if entity.properties and entity.properties.get("agent_capable"):
+                node.set_slot("ROLE_AGENT_CAPABLE", 1)
+        elif cat == "PERSON":
             node.set_slot("TYPE_HUMAN", 1)
             node.set_slot("TYPE_ANIMATE", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
@@ -322,6 +333,8 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            if node.vector["TYPE_ABSTRACT_CONCEPT"] == 1:
+                node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "NATURAL_OBJECT":
             node.set_slot("TYPE_NATURAL_OBJECT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -399,11 +412,17 @@ class ASGCompiler:
             # Default active action prime
             node.set_slot("NSM_DO", 1)
 
-        # 3. Polarity
+        # 3. Polarity & Modality
         if event.polarity:
             node.set_slot("NSM_TRUE", 1)
         else:
             node.set_slot("LJB_NA_NEGATION", 2)
+
+        mod = (event.modality or "LITERAL").upper()
+        if mod == "FIGURATIVE":
+            node.set_slot("MODALITY_FIGURATIVE", 1)
+        else:
+            node.set_slot("MODALITY_LITERAL", 1)
 
         # 4. Band 1: Grammatical Tense & Aspect
         tense = (event.tense or "PAST").upper()

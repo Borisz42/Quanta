@@ -193,6 +193,9 @@ class MockUnslothTransducer:
         self.register_fixture("stress_4", CANONICAL_STRESS_4_FIXTURE)
         self.register_fixture(CANONICAL_STRESS_4_TEXT, CANONICAL_STRESS_4_FIXTURE)
 
+        self.repair_fixtures: Dict[str, DiscourseExtractionResult] = {}
+        self.repair_callback: Optional[Callable[..., Optional[Union[str, DiscourseExtractionResult]]]] = None
+
         if fixtures:
             for k, v in fixtures.items():
                 self.register_fixture(k, v)
@@ -204,6 +207,14 @@ class MockUnslothTransducer:
             self.fixtures[key] = parsed
         else:
             self.fixtures[key] = fixture
+
+    def register_repair_fixture(self, key: str, fixture: Union[str, DiscourseExtractionResult]):
+        """Register a fixture to be returned when a repair request is received."""
+        if isinstance(fixture, str):
+            parsed = parse_sexpr(fixture)
+            self.repair_fixtures[key] = parsed
+        else:
+            self.repair_fixtures[key] = fixture
 
     def transduce_raw(
         self,
@@ -236,12 +247,34 @@ class MockUnslothTransducer:
         norm_text = " ".join(text.split()).strip()
 
         matched: Optional[DiscourseExtractionResult] = None
+        repair_req = kwargs.get("repair_request")
+
+        # 0. Check repair callback or repair fixtures if repair_request is present
+        if repair_req:
+            if self.repair_callback:
+                cb_res = self.repair_callback(text, **kwargs)
+                if cb_res is not None:
+                    if isinstance(cb_res, str):
+                        matched = parse_sexpr(cb_res)
+                    else:
+                        matched = cb_res
+            if matched is None:
+                if text in self.repair_fixtures:
+                    matched = self.repair_fixtures[text]
+                elif norm_text in self.repair_fixtures:
+                    matched = self.repair_fixtures[norm_text]
+                else:
+                    for k, fix in self.repair_fixtures.items():
+                        if k.lower() in text.lower():
+                            matched = fix
+                            break
 
         # 1. Exact match in fixtures
-        if text in self.fixtures:
-            matched = self.fixtures[text]
-        elif norm_text in self.fixtures:
-            matched = self.fixtures[norm_text]
+        if matched is None:
+            if text in self.fixtures:
+                matched = self.fixtures[text]
+            elif norm_text in self.fixtures:
+                matched = self.fixtures[norm_text]
 
         # 2. Substring heuristics for canonical benchmarks
         if matched is None:
@@ -539,13 +572,16 @@ class UnslothTransducer:
         chunk_text: str,
         active_entities: Optional[List[EntityRecord]] = None,
         active_manifest_prompt: Optional[str] = None,
+        repair_request: Optional[str] = None,
     ) -> str:
-        """Compose user prompt containing discourse text and active entity manifest."""
+        """Compose user prompt containing discourse text, active entity manifest, and optional repair request."""
         parts: List[str] = []
         manifest_text = _format_entity_manifest(active_entities, active_manifest_prompt)
         if manifest_text:
             parts.append(manifest_text)
         parts.append(f"CHUNK TEXT:\n{chunk_text.strip()}")
+        if repair_request and repair_request.strip():
+            parts.append(repair_request.strip())
         return "\n\n".join(parts)
 
     def _build_payload(
@@ -557,8 +593,11 @@ class UnslothTransducer:
         **kwargs,
     ) -> Dict[str, Any]:
         """Construct OpenAI-compatible request payload with GBNF grammar injection."""
+        repair_req = kwargs.get("repair_request")
         system_content = self._build_system_prompt(active_entities, active_manifest_prompt)
-        user_content = self._build_user_prompt(text, active_entities, active_manifest_prompt)
+        user_content = self._build_user_prompt(
+            text, active_entities, active_manifest_prompt, repair_request=repair_req
+        )
         target_model = kwargs.get("model") or self.model or self._detect_model()
 
         messages = [
