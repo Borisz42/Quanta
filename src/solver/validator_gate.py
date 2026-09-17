@@ -89,12 +89,19 @@ class ValidationGate:
 
     def validate_graph(self, graph: QuantaGraph) -> ValidationResult:
         """Validates an entire QuantaGraph against ontological and relational constraints."""
-        # 1. Structural graph integrity check first
-        struct_valid, struct_errors = graph.validate_integrity()
-        if not struct_valid:
+        # 1. Structural check for dangling missing edges
+        dangling_errors: List[str] = []
+        for cid, node in graph.nodes.items():
+            for rel, targets in node.edges.items():
+                for t_cid in targets:
+                    if graph.get_node(t_cid) is None:
+                        dangling_errors.append(
+                            f"Dangling edge in {cid}: relation '{rel}' points to missing CID {t_cid}"
+                        )
+        if dangling_errors:
             return ValidationResult(
                 is_valid=False,
-                errors=[f"Structural graph integrity error: {e}" for e in struct_errors],
+                errors=dangling_errors,
             )
 
         # 2. Build Clingo Control instance
@@ -170,6 +177,12 @@ class ValidationGate:
         solve_res = ctl.solve(assumptions=assumptions)
 
         if solve_res.satisfiable:
+            struct_valid, struct_errors = graph.validate_integrity()
+            if not struct_valid:
+                return ValidationResult(
+                    is_valid=False,
+                    errors=[f"Structural graph integrity error: {e}" for e in struct_errors],
+                )
             return ValidationResult(is_valid=True)
         else:
             # Extract Minimal Unsatisfiable Core (MUC) using deletion filter

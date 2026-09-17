@@ -220,11 +220,12 @@ class ASGCompiler:
             graph.root_cid = event_nodes[root_ev_id].cid
 
         # 8. Structural integrity validation
-        struct_valid, struct_errors = graph.validate_integrity()
-        if not struct_valid:
-            raise ASGCompilationError(
-                f"Graph structural integrity verification failed: {struct_errors}"
-            )
+        if validate:
+            struct_valid, struct_errors = graph.validate_integrity()
+            if not struct_valid:
+                raise ASGCompilationError(
+                    f"Graph structural integrity verification failed: {struct_errors}"
+                )
 
         # 9. Symbolic ValidatorGate Integration (Phase 4.5)
         if validate:
@@ -319,7 +320,6 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
-            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "LOCATION":
             node.set_slot("TYPE_SPATIAL_REGION", 1)
             node.set_slot("WN_LOCATION_PLACE", 1)
