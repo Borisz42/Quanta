@@ -1118,24 +1118,35 @@ def create_transducer(backend: str = "mock", **kwargs) -> BaseDiscourseTransduce
     """Create a discourse transducer instance for the specified backend.
 
     Args:
-        backend: Backend name in {'mock', 'lmstudio', 'gguf', 'auto'}.
+        backend: Backend name in {'mock', 'unsloth', 'mock_unsloth', 'sexpr', 'lmstudio', 'gguf', 'auto'}.
         **kwargs: Backend-specific configuration parameters.
 
     Returns:
         Configured BaseDiscourseTransducer instance.
     """
     normalized = backend.lower().strip()
-    if normalized == "mock":
+    if normalized in {"unsloth", "qwen", "gemma", "sexpr"}:
+        from parser.unsloth_transducer import UnslothTransducer
+        return UnslothTransducer(**kwargs)
+    elif normalized in {"mock_unsloth", "mock_sexpr", "sexpr_mock"}:
+        from parser.unsloth_transducer import MockUnslothTransducer
+        return MockUnslothTransducer(**kwargs)
+    elif normalized == "mock":
         return MockTransducer(**kwargs)
     elif normalized in {"lmstudio", "lm_studio", "rest"}:
         return LMStudioTransducer(**kwargs)
     elif normalized in {"gguf", "llama_cpp", "local"}:
         return LocalGGUFTransducer(**kwargs)
     elif normalized == "auto":
-        # Check if LM Studio is reachable; otherwise use MockTransducer
-        candidate = LMStudioTransducer(**kwargs)
-        if candidate.check_health():
-            return candidate
+        from parser.unsloth_transducer import UnslothTransducer
+        candidate_unsloth = UnslothTransducer(fallback_to_mock=False, **kwargs)
+        if candidate_unsloth.check_health():
+            return candidate_unsloth
+        candidate_lm = LMStudioTransducer(**kwargs)
+        if candidate_lm.check_health():
+            return candidate_lm
         return MockTransducer()
     else:
-        raise ValueError(f"Unknown transducer backend: {backend}. Expected 'mock', 'lmstudio', 'gguf', or 'auto'.")
+        raise ValueError(
+            f"Unknown transducer backend: {backend}. Expected 'unsloth', 'mock_unsloth', 'mock', 'lmstudio', 'gguf', or 'auto'."
+        )
