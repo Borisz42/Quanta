@@ -538,3 +538,87 @@ def test_gbnf_grammar_file_exists_and_contains_rules():
     assert "time_bound ::=" in content
     assert "belnap_value ::=" in content
     assert "string ::=" in content
+
+
+# ---------------------------------------------------------------------------
+# 6. Master Roadmap Phase 1 Canonical Vance & Round-Trip Tests
+# ---------------------------------------------------------------------------
+
+def test_canonical_three_entity_one_event_vance_sexpr():
+    """Verify parsing of the canonical 3-entity, 1-event Dr. Eleanor Vance S-expression (Phase 1.5)."""
+    source = """
+    (graph
+      (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+      (entity :id e2 :type TOPIC :label "quantum_mechanics" :surface "quantum mechanics")
+      (entity :id e3 :type UNIVERSITY :label "Columbia" :surface "Columbia University")
+      (event :id ev1 :pred PROFESSOR_OF :agent e1 :theme e2 :location e3
+             :time (interval :start 2018 :end nil) :val TRUE))
+    """
+    res = parse_sexpr(source)
+
+    # Assert 3 entities
+    assert len(res.entities) == 3
+    e1, e2, e3 = res.entities
+
+    assert e1.id == "e1"
+    assert e1.category == "HUMAN"
+    assert e1.canonical_name == "Eleanor Vance"
+    assert e1.surface_aliases == ["Dr. Eleanor Vance"]
+
+    assert e2.id == "e2"
+    assert e2.category == "TOPIC"
+    assert e2.canonical_name == "quantum_mechanics"
+    assert e2.surface_aliases == ["quantum mechanics"]
+
+    assert e3.id == "e3"
+    assert e3.category == "UNIVERSITY"
+    assert e3.canonical_name == "Columbia"
+    assert e3.surface_aliases == ["Columbia University"]
+
+    # Assert 1 event
+    assert len(res.events) == 1
+    ev = res.events[0]
+    assert ev.id == "ev1"
+    assert ev.predicate == "PROFESSOR_OF"
+    assert ev.agent_id == "e1"
+    assert ev.theme_id == "e2"
+    assert ev.location_id == "e3"
+    assert ev.val == "TRUE"
+    assert ev.polarity is True
+
+    # Assert structured time interval
+    assert ev.time_interval is not None
+    assert ev.time_interval.start == 2018
+    assert ev.time_interval.end is None
+
+
+def test_syntax_error_handling_malformed_sexpr():
+    """Verify syntax error handling on unbalanced parens and unknown keywords (Phase 1.5)."""
+    # 1. Unbalanced / unclosed parenthesis
+    with pytest.raises(SExprSyntaxError) as exc_info:
+        parse_sexpr("(graph (entity :id e1 (event :id ev1)")
+    assert "Unclosed parenthesis" in str(exc_info.value)
+
+    # 2. Stray unexpected closing parenthesis
+    with pytest.raises(SExprSyntaxError) as exc_info:
+        parse_sexpr("(graph (entity :id e1)))")
+    assert "Unexpected token ')'" in str(exc_info.value) or "closing parenthesis" in str(exc_info.value)
+
+    # 3. Unknown keywords in strict mode
+    with pytest.raises(SExprSyntaxError) as exc_info:
+        parse_sexpr('(graph (event :id ev1 :pred act :invalid_keyword 42))', strict=True)
+    assert "Unknown keyword ':invalid_keyword' in event clause" in str(exc_info.value)
+
+
+def test_bidirectional_text_roundtrip():
+    """Verify bidirectional text round-trip: serialize_to_sexpr(parse_sexpr(text)) == text (Phase 1.5)."""
+    canonical_text = """(graph
+  (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+  (entity :id e2 :type TOPIC :label "quantum_mechanics" :surface "quantum mechanics")
+  (entity :id e3 :type UNIVERSITY :label "Columbia" :surface "Columbia University")
+  (event :id ev1 :pred PROFESSOR_OF :agent e1 :theme e2 :location e3 :time (interval :start 2018 :end nil) :tense PAST :val TRUE)
+)"""
+    res = parse_sexpr(canonical_text)
+    serialized = serialize_to_sexpr(res)
+    assert serialized == canonical_text
+    assert serialize_to_sexpr(parse_sexpr(serialized)) == canonical_text

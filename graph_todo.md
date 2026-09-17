@@ -120,7 +120,7 @@ JSON-LD and raw property graphs waste 60%–75% of generation tokens on repetiti
 - [x] **1.2** Implement lightweight recursive-descent S-expression lexer and parser in `src/parser/sexpr_parser.py` (converting raw S-expr strings to Python AST structures).
 - [x] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records (including structured `:time (interval ...)` lists).
 - [x] **1.4** Implement polymorphic S-expression serializer: `serialize_to_sexpr(graph_or_result) -> str` supporting both `QuantaGraph` and `DiscourseExtractionResult`.
-- [ ] **1.5** 🧪 Write comprehensive unit tests in `tests/test_sexpr_parser.py`:
+- [x] **1.5** 🧪 Write comprehensive unit tests in `tests/test_sexpr_parser.py`:
   - Parse the canonical 3-entity, 1-event Dr. Eleanor Vance S-expression; assert 3 entities, 1 event, correct attribute and time interval mappings.
   - Test syntax error handling on malformed S-expressions (unbalanced parentheses, unknown keywords).
   - Test bidirectional text round-trip: `serialize_to_sexpr(parse_sexpr(text)) == text`.
