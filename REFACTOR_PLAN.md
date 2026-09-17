@@ -109,10 +109,10 @@ JSON-LD and raw property graphs waste 60%–75% of generation tokens on syntax b
 ```powershell
 pytest tests/test_sexpr_parser.py -v
 ```
-- [ ] Lexer correctly parses symbols, strings with escapes, and ignores comments (`;; ...`).
-- [ ] Parser throws informative syntax errors with line/column coordinates on unclosed parens or unexpected tokens.
-- [ ] Full round-trip fidelity: `parse_sexpr(to_sexpr(res)) == res` for arbitrary extraction results.
-- [ ] `parse_to_asg()` emits valid 1024-D `QuantaGraph` with correct BLAKE3 Merkle CIDs and thematic valencies.
+- [x] Lexer correctly parses symbols, strings with escapes, and ignores comments (`;; ...`).
+- [x] Parser throws informative syntax errors with line/column coordinates on unclosed parens or unexpected tokens.
+- [x] Full round-trip fidelity: `parse_sexpr(to_sexpr(res)) == res` for arbitrary extraction results.
+- [x] `parse_to_asg()` emits valid 1024-D `QuantaGraph` with correct BLAKE3 Merkle CIDs and thematic valencies.
 
 ---
 
@@ -150,10 +150,10 @@ Ingestion requires fast, low-latency translation from raw English into S-express
 ```powershell
 pytest tests/test_unsloth_transducer.py -v
 ```
-- [ ] Transducer correctly loads GBNF grammar and structures API request payloads.
-- [ ] Active entity manifest is rendered into system prompt and correctly influences entity IDs.
-- [ ] Mock transducer executes offline in $< 5\text{ ms}$ and produces valid, parseable S-expressions.
-- [ ] Graceful fallback occurs when Unsloth server is offline without unhandled socket exceptions.
+- [x] Transducer correctly loads GBNF grammar and structures API request payloads.
+- [x] Active entity manifest is rendered into system prompt and correctly influences entity IDs.
+- [x] Mock transducer executes offline in $< 5\text{ ms}$ and produces valid, parseable S-expressions.
+- [x] Graceful fallback occurs when Unsloth server is offline without unhandled socket exceptions.
 
 ---
 

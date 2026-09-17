@@ -40,6 +40,11 @@ from parser.sexpr_parser import (
     to_sexpr,
     parse_to_asg,
 )
+from parser.unsloth_transducer import (
+    UnslothTransducer,
+    MockUnslothTransducer,
+    MockSExprTransducer,
+)
 
 __all__ = [
     "WordNetLexicalGrounder",
@@ -78,6 +83,9 @@ __all__ = [
     "parse_sexpr",
     "to_sexpr",
     "parse_to_asg",
+    "UnslothTransducer",
+    "MockUnslothTransducer",
+    "MockSExprTransducer",
 ]
 
 
