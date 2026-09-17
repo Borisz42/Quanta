@@ -116,14 +116,14 @@ JSON-LD and raw property graphs waste 60%–75% of generation tokens on repetiti
 - Implement AST validator mapping parsed S-expression nodes to typed dataclasses (`DiscourseExtractionResult`, `ExtractedEntity`, `ExtractedEvent`).
 
 ### Checklist
-- [ ] **1.1** Author formal GBNF grammar in `data/grammar/quanta_asg.gbnf` constraining entities, events, valency roles, Allen temporal intervals, and Belnap truth values.
-- [ ] **1.2** Implement lightweight recursive-descent S-expression lexer and parser in `src/parser/sexpr_parser.py` (converting raw S-expr strings to Python AST structures).
-- [ ] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records.
-- [ ] **1.4** Implement S-expression serializer: `serialize_to_sexpr(graph_or_result) -> str` emitting compact, canonical S-expression strings.
+- [ ] **1.1** Author formal GBNF grammar in `data/grammar/quanta_asg.gbnf`: extend to explicitly constrain Belnap 4-valued logic states (`IRRELEVANT`, `TRUE`, `FALSE`, `UNKNOWN`) and structured temporal interval expressions `(interval :start ... :end ...)`.
+- [x] **1.2** Implement lightweight recursive-descent S-expression lexer and parser in `src/parser/sexpr_parser.py` (converting raw S-expr strings to Python AST structures).
+- [ ] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records (including structured `:time (interval ...)` lists).
+- [ ] **1.4** Implement polymorphic S-expression serializer: `serialize_to_sexpr(graph_or_result) -> str` supporting both `QuantaGraph` and `DiscourseExtractionResult`.
 - [ ] **1.5** 🧪 Write comprehensive unit tests in `tests/test_sexpr_parser.py`:
-  - Parse the canonical Dr. Eleanor Vance S-expression; assert 3 entities, 1 event, correct attribute and time interval mappings.
+  - Parse the canonical 3-entity, 1-event Dr. Eleanor Vance S-expression; assert 3 entities, 1 event, correct attribute and time interval mappings.
   - Test syntax error handling on malformed S-expressions (unbalanced parentheses, unknown keywords).
-  - Test bidirectional round-trip: `serialize_to_sexpr(parse_sexpr(text)) == text`.
+  - Test bidirectional text round-trip: `serialize_to_sexpr(parse_sexpr(text)) == text`.
 
 ---
 
@@ -145,14 +145,14 @@ Feeding raw long-form prose directly to SLMs causes attention dilution and quadr
 - [x] **2.5** Implement prompt formatter rendering active manifest context block:
   ```text
   ACTIVE ENTITIES:
-  - e1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
-  - e2: synthetic compound (aliases: specimen, polymer)
+  - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
+  - E2: synthetic compound (aliases: specimen, polymer)
   ```
 - [x] **2.6** 🧪 Write unit tests in `tests/test_discourse_chunker.py` and `tests/test_entity_manifest.py`: verify multi-chunk narrative preserves entity IDs across chapters.
 
 ---
 
-## Phase 3: Unsloth Local Serving Backend & Constrained Transducer
+## Phase 3: Unsloth Local Serving Backend & Constrained Transducer [Completed]
 
 ### Context & Architectural Rationale
 Next-generation open SLMs (Qwen 3.5 4B Dense / 2B and Gemma 4 E2B/E4B) run with high throughput on consumer hardware (NVIDIA RTX 3070 8GB). Unsloth Desktop / Studio provides a low-latency, OpenAI-compatible local API server (`http://localhost:8888/v1`) with native support for GBNF grammar-constrained decoding.
@@ -165,16 +165,16 @@ Next-generation open SLMs (Qwen 3.5 4B Dense / 2B and Gemma 4 E2B/E4B) run with 
 - Implement `MockSExprTransducer` returning pre-recorded S-expressions for fast, offline CI test execution.
 
 ### Checklist
-- [ ] **3.1** Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py` with health check, timeout handling, and connection retry logic.
-- [ ] **3.2** Integrate GBNF grammar injection: automatically pass `data/grammar/quanta_asg.gbnf` to the Unsloth/vLLM/LMStudio completion API.
-- [ ] **3.3** Implement system prompt optimized for S-expression transduction with 1-shot in-context demonstration.
-- [ ] **3.4** Add support for runtime model selection: Qwen 3.5 4B (default), Qwen 3.5 2B (ultra-low VRAM), Gemma 4 (MTP high-throughput).
-- [ ] **3.5** Implement `MockSExprTransducer` returning fixture S-expressions for offline test suites.
-- [ ] **3.6** 🧪 Write integration tests in `tests/test_unsloth_transducer.py`: Transduce Dr. Eleanor Vance chunk; verify valid S-expression output and correct extraction of all 5 entities and 6 events.
+- [x] **3.1** Implement `UnslothTransducer` in `src/parser/unsloth_transducer.py` with health check, timeout handling, and connection retry logic.
+- [x] **3.2** Integrate GBNF grammar injection: automatically pass `data/grammar/quanta_asg.gbnf` to the Unsloth/vLLM/LMStudio completion API.
+- [x] **3.3** Implement system prompt optimized for S-expression transduction with 1-shot in-context demonstration.
+- [x] **3.4** Add support for runtime model selection: Qwen 3.5 4B (default), Qwen 3.5 2B (ultra-low VRAM), Gemma 4 (MTP high-throughput).
+- [x] **3.5** Implement `MockSExprTransducer` returning fixture S-expressions for offline test suites.
+- [x] **3.6** 🧪 Write integration tests in `tests/test_unsloth_transducer.py`: Transduce Dr. Eleanor Vance chunk; verify valid S-expression output and correct extraction of all 5 entities and 6 events.
 
 ---
 
-## Phase 4: Graph Stitcher & ASG Quaternary Compiler
+## Phase 4: Graph Stitcher & ASG Quaternary Compiler [Completed]
 
 ### Context & Architectural Rationale
 S-expression AST chunks must be stitched into a globally coherent Entity-Event Directed Acyclic Graph (DAG) and compiled into 1024-dimension quaternary vectors ($\Sigma^{1024}$, 256 bytes per node). The compiler grounds lexical concepts to ConceptNet 5.7.0 (403,503 concepts) and WordNet, assigns Band 2 variable registers, wires Band 1 thematic valencies, encodes Band 7 Allen temporal intervals and Pearl causal links, and computes deterministic 256-bit BLAKE3 Merkle CIDs.
@@ -187,19 +187,19 @@ S-expression AST chunks must be stitched into a globally coherent Entity-Event D
 - Extend `ASGCompiler` in `src/parser/asg_compiler.py` to compile S-expression ASTs directly into canonical `QuantaNode` instances.
 
 ### Checklist
-- [ ] **4.1** Implement `GraphStitcher` in `src/parser/graph_stitcher.py`: stitch multiple chunk ASTs into a single unified `QuantaGraph`.
-- [ ] **4.2** Implement entity deduplication and cross-chunk coreference resolution in `GraphStitcher`.
-- [ ] **4.3** Connect S-expression AST compiler to `ASGCompiler`:
+- [x] **4.1** Implement `GraphStitcher` in `src/parser/graph_stitcher.py`: stitch multiple chunk ASTs into a single unified `QuantaGraph`.
+- [x] **4.2** Implement entity deduplication and cross-chunk coreference resolution in `GraphStitcher`.
+- [x] **4.3** Connect S-expression AST compiler to `ASGCompiler`:
   - Entity compilation $\to$ ConceptNet grounding, Band 3/4 taxonomy slots, Band 2 register assignment.
   - Event compilation $\to$ Band 0 NSM primes, Band 1 thematic valencies (`VAL_X1_AGENT`, etc.), Band 5/6 epistemic slots.
   - Spatio-temporal & causal edge wiring $\to$ Band 7 Allen intervals and Pearl causal DAG links.
-- [ ] **4.4** Deterministic BLAKE3 Merkle CID hashing for all nodes bottom-up (Entities $\to$ Events $\to$ Sub-graphs).
-- [ ] **4.5** 🧪 Write comprehensive tests in `tests/test_graph_stitcher.py`:
+- [x] **4.4** Deterministic BLAKE3 Merkle CID hashing for all nodes bottom-up (Entities $\to$ Events $\to$ Sub-graphs).
+- [x] **4.5** 🧪 Write comprehensive tests in `tests/test_graph_stitcher.py` and `tests/test_asg_compiler.py`:
   - Stitch a 3-chunk narrative; assert unified DAG has continuous entity CIDs, zero orphan events, and correct temporal sequence edges.
 
 ---
 
-## Phase 5: PyClingo Formal ASP Verification & Closed-Loop MUC Repair
+## Phase 5: PyClingo Formal ASP Verification & Closed-Loop MUC Repair [Completed]
 
 ### Context & Architectural Rationale
 To guarantee zero structural and logical hallucinations, proposed ASG graphs must pass formal verification before being committed to memory or rendered to natural language. PyClingo audits the graph against First-Order Logic domain axioms, ontological type constraints, RCC-8 spatial mereotopology, and Allen temporal orderings. When a violation occurs, the solver computes the **Minimal Unsatisfiable Core (MUC)** and triggers a targeted repair re-prompt to the local SLM.
@@ -228,41 +228,46 @@ Candidate S-Expression DAG
 ```
 
 ### Implementation Guidelines
-- `ValidatorGate` in `src/verification/clingo_gate.py` compiles graph facts and runs Clingo solving.
-- MUC extractor identifies conflicting node CIDs and violating axioms.
-- `RepairManager` in `src/verification/repair_manager.py` builds the error injection prompt and re-queues the chunk to `UnslothTransducer`.
+- `ClingoVerificationGate` in `src/verification/clingo_gate.py` wraps PyClingo solving and extracts structured `MUCDiagnostic` objects.
+- `MUCRepairManager` in `src/verification/clingo_gate.py` builds the error injection prompt and re-queues the chunk to `UnslothTransducer`.
 
 ### Checklist
-- [ ] **5.1** Enhance `ValidatorGate` in `src/verification/clingo_gate.py` with assumption-based MUC extraction for S-expression DAGs.
-- [ ] **5.2** Implement ontological type constraint rules: detect volitional violations (e.g., inanimate entities acting as intentional agents without figurative modality).
-- [ ] **5.3** Implement temporal order consistency rules: detect cyclic or inverted Allen intervals ($\text{Start}(A) > \text{End}(A)$ or mutually exclusive interval relations).
-- [ ] **5.4** Implement `RepairManager` in `src/verification/repair_manager.py`:
+- [x] **5.1** Enhance `ValidatorGate` via `ClingoVerificationGate` in `src/verification/clingo_gate.py` with assumption-based MUC extraction for S-expression DAGs.
+- [x] **5.2** Implement ontological type constraint rules: detect volitional violations (e.g., inanimate entities acting as intentional agents without figurative modality).
+- [x] **5.3** Implement temporal order consistency rules: detect cyclic or inverted Allen intervals ($\text{Start}(A) > \text{End}(A)$ or mutually exclusive interval relations).
+- [x] **5.4** Implement `MUCRepairManager` in `src/verification/clingo_gate.py`:
   - Formats diagnostic error hint from MUC: `"CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2."`
   - Re-prompts `UnslothTransducer` with the conflict constraint injected.
   - Enforces hard limit of 2 repair attempts per chunk; escalates to user/log upon persistent failure.
-- [ ] **5.5** 🧪 Write unit tests in `tests/test_muc_repair.py`:
+- [x] **5.5** 🧪 Write unit tests in `tests/test_muc_repair.py`:
   - Inject an invalid temporal ordering into an S-expression chunk; assert MUC isolates the conflict.
   - Simulate repair re-prompt; assert corrected S-expression passes validation on iteration 2.
 
 ---
 
-## Phase 6: Unsloth LoRA Fine-Tuning Pipeline
+## Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Open / Ready for Implementation]
 
 ### Context & Architectural Rationale
 While off-the-shelf Qwen 3.5 4B and Gemma 4 follow instructions well under GBNF grammar constraints, fine-tuning them via Unsloth QLoRA on domain-specific (Text, S-expression) pairs improves single-pass extraction accuracy, reduces grammar-mask rejection latency, and aligns the model to resolve MUC diagnostic error prompts reliably.
+- Training data sources: Raw benchmark datasets are already downloaded and cached locally in `data/raw/` via `RealDatasetLoader` (`src/data/real_loader.py`), containing `folio_train.jsonl`, `proofwriter_train.jsonl`, `babi_train.jsonl`, and `clutrr_train.jsonl`.
+- Memory Envelope: RTX 3070 (8GB VRAM) requires 4-bit base weights (`load_in_4bit=True`), batch size 2–4 with gradient accumulation 4–8, gradient checkpointing, and LoRA rank $r=16, \alpha=32$.
 
 ### Implementation Guidelines
 - Synthetic dataset generator script: `scripts/generate_sexpr_dataset.py`.
+  - Converts raw premises and narrative tasks from `data/raw/` into standard instruction-tuning JSONL format:
+    `{"instruction": "Transduce the following text into a canonical GBNF S-expression graph.", "input": "<discourse text>", "output": "(graph ...)"}`
+- MUC repair training mix:
+  - Synthesizes 15% of examples as error recovery: input includes `[REPAIR REQUEST]` with diagnosed MUC conflicts (e.g. inverted Allen intervals or abstract agents) conditioned on the corrected S-expression target.
 - Training script: `scripts/train_unsloth_lora.py` utilizing Unsloth's `FastLanguageModel` with 4-bit quantization, $r = 16$, $\alpha = 32$, and target modules `["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]`.
-- Multi-task training mix: 70% forward transduction (NL $\to$ S-expr), 15% MUC repair conditioning, 15% reverse S-expr understanding.
+- Export script: `scripts/export_lora_gguf.py` fusing LoRA adapters into Q4_K_M and Q8_0 GGUF binaries for local Unsloth / llama.cpp execution at `:8888`.
 
 ### Checklist
-- [ ] **6.1** Implement `scripts/generate_sexpr_dataset.py`: generate 50,000–100,000 paired training examples from FOLIO, ProofWriter, bAbI, CLUTRR, and OpenResearch text corpus.
-- [ ] **6.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints.
+- [ ] **6.1** Implement `scripts/generate_sexpr_dataset.py`: ingest from `data/raw/` (`folio_train.jsonl`, `proofwriter_train.jsonl`, `babi_train.jsonl`, `clutrr_train.jsonl`) to generate 50,000–100,000 paired `(Text, S-Expr)` training examples.
+- [ ] **6.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints (`[REPAIR REQUEST]`).
 - [ ] **6.3** Implement `scripts/train_unsloth_lora.py`:
   - Load Qwen 3.5 4B or Gemma 4 in 4-bit precision via Unsloth.
   - Configure LoRA adapters ($r=16, \alpha=32$, dropout=0, target linear modules).
-  - Train on synthetic dataset with gradient checkpointing and cosine learning rate schedule.
+  - Train on synthetic dataset with gradient checkpointing and cosine learning rate schedule within 8GB VRAM.
   - Save adapter weights to `models/quanta-slm-lora/`.
 - [ ] **6.4** Implement GGUF export script: `scripts/export_lora_gguf.py` fusing LoRA weights and exporting Q4_K_M / Q8_0 GGUF models for local Unsloth serving.
 - [ ] **6.5** 🧪 Evaluation test: compare base SLM vs. fine-tuned SLM on 500 held-out test chunks; assert higher single-pass validation rate and lower MUC repair iterations.
@@ -317,16 +322,34 @@ Demonstrates the full cognitive cycle on both complex single paragraphs and mult
 
 ---
 
-## Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / In-Progress]
+## Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Ready for Implementation]
 
 ### Context & Architectural Rationale
 To scale from document context to universal human knowledge (~6.8M English Wikipedia articles, ~100M Wikidata entities and relational triples):
 - Pre-compile encyclopedic knowledge into a memory-mapped database (`data/wikipedia_quanta.db`, ~25–40 GB on NVMe SSD or Host RAM).
-- Any query mounts this global knowledge base in read-only mode.
+- Any query mounts this global knowledge base in read-only mode (`mode=ro`).
 - Physical GPU VRAM remains strictly $\mathcal{O}(1)$ ($M = 512$ nodes $\approx 128\text{ KB}$), while multi-hop trivia queries traverse the graph in $< 10\text{ ms}$ with $0.000000\%$ hallucination.
+- **Architectural Primitives Already Verified:** Phase 10 directly builds upon the existing `PageTable`, `ActiveCanvas`, and `SimdHammingIndex` in `src/memory/page_table.py` (which already demonstrated sub-5ms top-K retrieval over 100,000 nodes in `tests/test_page_table_scaling.py`) and `ConceptNetLexicalGrounder` in `src/parser/lexical_grounder.py`.
+
+### Implementation Guidelines
+- Streaming Dump Ingester (`src/data/wikidata_ingester.py`):
+  - Streams Wikidata JSON/JSONL dumps line-by-line without high RAM overhead.
+  - Whitelists salient entity categories: Humans (`Q5`), Locations (`Q2221906`), Organizations (`Q43229`), and Creative Works (`Q386724`).
+  - Filters high-value relations: `P31` (instance of), `P279` (subclass of), `P17` (country), `P36` (capital), `P50` (author), `P569`/`P570` (birth/death dates).
+  - Includes a synthetic 100,000-entity slice generator for fast local testing and continuous integration without needing the full 100GB+ dump.
+- Entity & Property Mapper (`src/data/wikidata_ingester.py`):
+  - Maps Wikidata entities to `QuantaNode` instances with 1024-dimension quaternary vectors (`QuantaVector`) and 256-bit BLAKE3 Merkle CIDs.
+  - Links taxonomy to ConceptNet 5.7.0 anchors (via `ConceptNetLexicalGrounder`).
+- Persistent SQLite Compiler:
+  - Generates `data/wikipedia_quanta.db` with `nodes`, `aliases`, and `triples` tables, indexed with B-Trees on lowercase names and `(subject_qid, property_pid)`.
+- Global Knowledge Base Mount Interface (`src/memory/global_kb.py`):
+  - Provides thread-safe `GlobalKnowledgeBase` class mounting `data/wikipedia_quanta.db` in read-only mode.
+  - Integrates with `PageTable` and pages queried nodes into `ActiveCanvas` ($M \le 512$) on demand via `SemanticPageFaultHandler`.
+- Deterministic Multi-Hop Trivia Resolver (`WikipediaQueryResolver`):
+  - Traverses directed graph edges to answer multi-hop relation chains in $< 5\text{ ms}$ with zero hallucination.
 
 ### Checklist
-- [ ] **10.1** Implement streaming Wikidata/Wikipedia dump ingester in `src/data/wikidata_ingester.py` supporting filtered entity categories.
+- [ ] **10.1** Implement streaming Wikidata/Wikipedia dump ingester in `src/data/wikidata_ingester.py` supporting filtered entity categories and an offline 100k synthetic slice generator.
 - [ ] **10.2** Implement entity and property mapper converting Wikidata Q-IDs and P-ID triples into ConceptNet 5.7.0 anchors, 1024-d QuantaVectors, and 256-bit BLAKE3 CIDs.
 - [ ] **10.3** Implement persistent storage compiler creating memory-mapped `data/wikipedia_quanta.db` with fast inverted B-Tree index on canonical names and aliases.
 - [ ] **10.4** Implement `GlobalKnowledgeBase` mount interface in `src/memory/global_kb.py` allowing runtime background mounting into `PageTable`.

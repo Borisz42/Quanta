@@ -956,7 +956,10 @@ quanta/
 │   ├── concept_codebook.csv.gz   # Dense 403k x 256 codebook matrix (25k singletons)
 │   ├── wordnet_offline.db        # O(1) WordNet synset lookup (SQLite cache)
 │   ├── framenet_valency.json     # Role template matrices & FrameNet frames
-│   ├── validation_corpus/        # Benchmark validation datasets (FOLIO, bAbI, CLUTRR)
+│   ├── grammar/
+│   │   └── quanta_asg.gbnf       # Formal GBNF grammar for constrained S-expression decoding
+│   ├── raw/                      # Raw benchmark datasets (FOLIO, ProofWriter, bAbI, CLUTRR)
+│   ├── validation_corpus/        # Benchmark validation datasets
 │   └── virtual_page_table/       # Merkle-folded library schemas
 ├── docs/
 │   ├── dim1024.md                # 1024-dimension 8-band architecture & hardware feasibility
@@ -970,60 +973,70 @@ quanta/
 │   ├── optimal_1024_dimensions.json     # Full dimension metadata
 │   ├── dimension_sweep_report.md        # Comprehensive empirical dimension sweep report
 │   ├── dimension_sweep_results.csv      # Tabular sweep benchmark metrics
-│   └── information_profiler_report.txt  # Entropy & mutual information metrics
+│   ├── information_profiler_report.txt  # Entropy & mutual information metrics
+│   └── complex_translation_graphs_eng_eng.md # Multi-chapter end-to-end benchmark trace
 ├── src/
 │   ├── core/
-│   │   ├── asg.py            # QuantaNode & QuantaGraph with BLAKE3 Merkle hashing
+│   │   ├── asg.py            # QuantaNode & QuantaGraph with BLAKE3 Merkle sub-graph folding
 │   │   ├── slots.py          # 1024 canonical slots across 8 isolated bands
-│   │   └── types.py          # QuantaVector & QuaternaryValue {0,1,2,3} lattice algebra
+│   │   ├── types.py          # QuantaVector & QuaternaryValue {0,1,2,3} lattice algebra
+│   │   └── valency.py        # Case valency roles & slot binding algebra
 │   ├── parser/
-│   │   ├── gbnf_grammar.py   # [Blueprint Phase 1] Dynamic GBNF compiler for S-Expressions
-│   │   ├── s_expr_parser.py  # [Blueprint Phase 1] High-performance S-Expression parser
-│   │   ├── lexical_grounder.py # ConceptNet 5.7.0 & WordNet offline resolver
+│   │   ├── asg_compiler.py   # [Phase 4] 1024-D ASG Compiler (ConceptNet & WordNet grounding)
+│   │   ├── ast_parser.py     # Python AST recursive forward parser
+│   │   ├── chunker.py        # [Phase 2] Discourse Chunker (150-350 words, sentence preservation)
+│   │   ├── entity_manifest.py# [Phase 2] Active Entity Manifest, LRU paging & sub-ms matcher
 │   │   ├── fol_parser.py     # First-Order Logic formula parser
-│   │   └── ast_parser.py     # Python AST recursive forward parser
+│   │   ├── graph_stitcher.py # [Phase 4] Multi-chunk DAG Stitcher & cross-chunk coreference
+│   │   ├── lexical_grounder.py # ConceptNet 5.7.0 & WordNet offline resolver
+│   │   ├── nlp_forward.py    # Forward sentence parsing to ASG
+│   │   ├── schema.py         # Typed extraction dataclasses (DiscourseExtractionResult, etc.)
+│   │   ├── sexpr_parser.py   # [Phase 1] Recursive-descent S-Expression lexer, parser & serializer
+│   │   └── unsloth_transducer.py # [Phase 3] Unsloth local SLM transducer with GBNF injection & mock
 │   ├── pipeline/
-│   │   ├── chunker.py        # [Blueprint Phase 2] Discourse Chunker (150-350 words)
-│   │   ├── surface_indexer.py# [Blueprint Phase 2] CPU Heuristic Surface Cataloguer
-│   │   ├── unsloth_backend.py# [Blueprint Phase 3] Async client for Unsloth @ :8888
-│   │   └── cognitive_pipeline.py # End-to-end multi-pass orchestrator
-│   ├── compiler/
-│   │   ├── stitcher.py       # [Blueprint Phase 4] Graph Stitcher (?ref resolution)
-│   │   └── quanta_compiler.py# [Blueprint Phase 4] 1024-D ASG Compiler (ConceptNet & WordNet)
+│   │   ├── cognitive_pipeline.py # Unified end-to-end neuro-symbolic pipeline orchestrator
+│   │   └── translator_pipeline.py# Multilingual and multi-modal pipeline bridge
+│   ├── verification/
+│   │   └── clingo_gate.py    # [Phase 5] ClingoVerificationGate & MUCRepairManager (capped at 2x)
 │   ├── solver/
-│   │   ├── rules.lp          # [Blueprint Phase 5] Formal Clingo ASP invariants
-│   │   ├── scasp_rules.lp    # Extended s(CASP) / Clingo axioms
-│   │   └── validator_gate.py # [Blueprint Phase 5] Validator gate with MUC re-queue loop
+│   │   ├── validator_gate.py # Core Answer Set Programming validation gate
+│   │   ├── scasp_bridge.py   # s(CASP) / Clingo execution bridge
+│   │   └── scasp_rules.lp    # Formal Clingo ASP invariants & axioms
 │   ├── realizer/
-│   │   ├── deterministic_nlg.py # [Blueprint Phase 7] Honest semantic English NLG from ASG
-│   │   ├── fol_emitter.py    # [Blueprint Phase 7] Quanta ASG -> First-Order Logic formula emitter
-│   │   └── code_emitter.py   # Quanta ASG -> Executable Python code emitter
+│   │   ├── english_nlg.py    # [Phase 7] Honest semantic English NLG from ASG (2-tier vector decode)
+│   │   ├── fol_emitter.py    # [Phase 7] Quanta ASG -> First-Order Logic formula emitter
+│   │   ├── code_emitter.py   # [Phase 7] Quanta ASG -> Executable Python code emitter
+│   │   └── multilingual.py   # Cross-lingual realizer engine
 │   ├── data/
-│   │   ├── synthetic_generator.py # [Blueprint Phase 6] 20k verified (Text, S-Expr) generator
 │   │   ├── corpus_generator.py # Synthetic validation corpus generator
-│   │   └── real_loader.py    # Benchmark dataset ingestion stream
-│   ├── benchmark/
-│   │   └── runner.py         # [Blueprint Phase 6] Multi-model benchmark suite (Qwen 3.5 / Gemma 4)
+│   │   ├── gold_corpus.py    # Gold-standard benchmark narratives
+│   │   └── real_loader.py    # Benchmark dataset ingestion stream (FOLIO, ProofWriter, bAbI, CLUTRR)
 │   ├── memory/
-│   │   └── page_table.py     # Virtual Page-Table Attention & SIMD Hamming matcher
+│   │   └── page_table.py     # [Phase 8] Disk-backed PageTable, ActiveCanvas & SIMD Hamming matcher
 │   ├── profiler/
 │   │   ├── candidate_pool.py # 2048 candidate dimension pool builder
 │   │   ├── info_profiler.py  # Slot entropy H(D_i) & redundancy TC(D) profiler
 │   │   └── mrmr_selector.py  # Minimal Redundancy Maximal Relevance selector
 │   └── scripts/
 │       ├── run_dimension_sweep.py # Automated 64..2048 dimension sweep benchmark
-│       └── generate_slots_registry.py # 1024-dimension slot schema exporter
+│       ├── generate_slots_registry.py # 1024-dimension slot schema exporter
+│       └── generate_complex_translation_examples.py # End-to-end benchmark tracer
 ├── tests/
+│   ├── test_asg_compiler.py      # ASG compilation & ConceptNet slot mapping
+│   ├── test_cognitive_pipeline.py # End-to-end cognitive pipeline integration
 │   ├── test_dimension_entropy.py # Information bottleneck & redundancy validation
 │   ├── test_dimension_sweep.py   # Empirical dimension sweep tests
-│   ├── test_lexical_grounder.py  # ConceptNet & WordNet slot grounding
-│   ├── test_merkle_hashes.py     # BLAKE3 topological mismatch testing
-│   ├── test_nlp_forward.py       # Forward sentence parsing to ASG
-│   ├── test_quaternary_tensors.py # Quaternary lattice algebra tests
-│   ├── test_type_constraints.py  # ASP contradiction catching & MUC extraction
-│   ├── test_realizers.py         # Reverse realizers (English, FOL, Code)
-│   ├── test_round_trip.py        # English/FOL/Code -> QUANTA -> Target round-trip
-│   └── test_validation_pipeline.py # End-to-end translation & validation pipeline
+│   ├── test_discourse_chunker.py # Discourse chunking & boundary preservation
+│   ├── test_end_to_end_suite.py  # Multi-chapter narrative & book scaling benchmarks
+│   ├── test_entity_manifest.py   # Active entity manifest, LRU paging & sub-ms matcher
+│   ├── test_graph_stitcher.py    # Multi-chunk DAG stitching & coreference resolution
+│   ├── test_honest_realizer.py   # Honest reverse English realization without verbatim shortcuts
+│   ├── test_merkle_folding.py    # Hierarchical Merkle folding (Chunk -> Chapter -> Book)
+│   ├── test_muc_repair.py        # Clingo verification gate & closed-loop MUC repair
+│   ├── test_page_table_scaling.py# 100k-node PageTable scaling & flat VRAM benchmark
+│   ├── test_realizers.py         # Multi-target reverse realizers (English, FOL, Code)
+│   ├── test_sexpr_parser.py      # S-expression lexer, parser & AST converter
+│   └── test_unsloth_transducer.py# Unsloth transducer with GBNF grammar injection
 ├── graph_todo.md                 # Active Master Roadmap: Neuro-Symbolic Blueprint & Pipeline
 ├── todo.md                       # Comprehensive Implementation Roadmap & Engineering Manual
 └── README.md
@@ -1035,24 +1048,36 @@ quanta/
 
 The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md):
 
-* **Phase 1: Core Grammar & In-Memory AST Engine**
-  * Dynamic GBNF compiler (`src/parser/gbnf_grammar.py`) and high-performance S-expression parser (`src/parser/s_expr_parser.py`) converting clauses into typed AST records.
-* **Phase 2: Pass 1 Chunker & Heuristic Surface Cataloguer**
-  * Multithreaded CPU scanner (`src/pipeline/surface_indexer.py`) minting candidate IDs (`E1`, `E2`) and alias registries across 150–350 word discourse segments (`src/pipeline/chunker.py`).
-* **Phase 3: Pluggable Unsloth Transducer Backend**
-  * Asynchronous client (`src/pipeline/unsloth_backend.py`) connecting to Unsloth Desktop/Studio (`http://localhost:8888/v1`) with GBNF grammar constraints and model switching (Qwen 3.5 4B/2B, Gemma 4).
-* **Phase 4: Pass 3 Graph Stitcher & 1024-D ASG Compiler**
-  * Unifies chunk graphs, resolves `?ref`, grounds entities to ConceptNet 5.7.0 and WordNet, and computes 256-bit BLAKE3 Merkle CIDs (`src/compiler/stitcher.py`, `src/compiler/quanta_compiler.py`).
-* **Phase 5: PyClingo Symbolic Validation & MUC Repair Loop**
-  * Formal ASP verification gate (`src/solver/rules.lp`, `src/solver/validator_gate.py`) isolating Minimal Unsatisfiable Cores (MUC) and re-queueing conflicted chunks.
-* **Phase 6: Unsloth LoRA Fine-Tuning & Multi-Model Benchmark Suite**
-  * 20,000 Clingo-verified synthetic dataset generator (`src/data/synthetic_generator.py`), 16-bit LoRA recipe ($<20\text{ min}$ on RTX 3070), and automated multi-model benchmark runner (`src/benchmark/runner.py`).
-* **Phase 7: Deterministic Reverse Realizer (NLG Engine)**
-  * Compositional English unrolling from ASG paths (`src/realizer/deterministic_nlg.py`) and standard FOL formula emitter (`src/realizer/fol_emitter.py`).
-* **Phase 8: Virtual Page-Table Attention & Host-RAM Memory Scaling**
-  * Constant $O(1)$ VRAM execution canvas ($M=512$) with Host-RAM storage and AVX-512 SIMD bitwise Hamming lookup.
-* **Phase 9: Global Knowledge Base Mount (Wikipedia & Wikidata)**
-  * Memory-mapped encyclopedic database mounting into `PageTable` for sub-10ms factual trivia resolution.
+* **Phase 0: Documentation Audit, Clean-Up & Architectural Alignment [Completed]**
+  * Repository documentation sanitized, outdated scratchpads removed, and theoretical defense aligned with the decoupled local SLM coprocessor paradigm.
+* **Phase 1: Core Grammar & S-Expression Specification [In Progress]**
+  * Formal GBNF grammar (`data/grammar/quanta_asg.gbnf`) and recursive-descent S-expression parser (`src/parser/sexpr_parser.py`) converting clauses into typed AST records.
+* **Phase 2: CPU Discourse Chunker & Active Entity Cataloguer [Completed, Enhanced]**
+  * Natural boundary segmentation (`src/parser/chunker.py`) and Active Entity Manifest (`src/parser/entity_manifest.py`) minting canonical IDs (`E1`, `E2`), sub-millisecond entity matching, and SQLite LRU paging.
+* **Phase 3: Pluggable Unsloth Transducer Backend [Completed]**
+  * Asynchronous client (`src/parser/unsloth_transducer.py`) connecting to Unsloth Desktop/Studio (`http://localhost:8888/v1`) with GBNF grammar constraints, model switching (Qwen 3.5 4B/2B, Gemma 4), and mock fallback.
+* **Phase 4: Graph Stitcher & ASG Quaternary Compiler [Completed]**
+  * Unifies chunk graphs, resolves cross-chunk coreference, grounds entities to ConceptNet 5.7.0 and WordNet, wires Allen temporal and Pearl causal edges, and computes 256-bit BLAKE3 Merkle CIDs (`src/parser/graph_stitcher.py`, `src/parser/asg_compiler.py`).
+* **Phase 5: PyClingo Symbolic Validation & MUC Repair Loop [Completed]**
+  * Formal ASP verification gate (`src/verification/clingo_gate.py`) isolating Minimal Unsatisfiable Cores (MUC) and orchestrating closed-loop prompt re-queueing (capped at 2 repair attempts).
+* **Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Open / Ready for Implementation]**
+  * Synthetic dataset generation from cached benchmarks (`data/raw/`), error-recovery training mix, and 4-bit Unsloth QLoRA recipe on RTX 3070 (`scripts/generate_sexpr_dataset.py`, `scripts/train_unsloth_lora.py`).
+* **Phase 7: Deterministic Reverse Realizers & Multi-Target Emitters [Completed]**
+  * Compositional English unrolling with 2-tier vector decoding (`src/realizer/english_nlg.py`), First-Order Logic emitter (`src/realizer/fol_emitter.py`), and Python code emitter (`src/realizer/code_emitter.py`).
+* **Phase 8: Hierarchical Merkle Folding & Virtual Page-Table Attention [Completed]**
+  * Constant $\mathcal{O}(1)$ VRAM execution canvas ($M=512$, $\le 128\text{ KB}$) with Host-RAM storage (`src/memory/page_table.py`) and AVX-512 SIMD bitwise Hamming search at $>25\text{ M nodes/sec}$.
+* **Phase 9: End-to-End Multi-Chapter & Book Benchmark Suite [Completed]**
+  * Unified cognitive pipeline (`src/pipeline/cognitive_pipeline.py`) validating the Dr. Eleanor Vance narrative, 3-chunk working memory continuity, and $>10,000$-word book benchmark in `tests/test_end_to_end_suite.py`.
+* **Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Ready for Implementation]**
+  * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution.
+
+---
+
+## 12. Conclusion
+
+The QUANTA Mentalese Architecture moves beyond unconstrained continuous token generation. By coupling next-generation Small Language Models (Qwen 3.5, Gemma 4) served locally via Unsloth with discrete 1024-dimension quaternary vector spaces, compact GBNF S-expressions, universal semantic primes, and formal PyClingo / $s(\text{CASP})$ symbolic compilers, QUANTA eliminates structural hallucinations, achieves parallel generation throughput, and scales working context memory to host-memory limits.
+
+Execution remains practical on consumer workstations (RTX 3070 8GB VRAM + 16GB Host RAM), delivering a verifiable, high-throughput, neuro-symbolic cognitive architecture.
 
 ---
 
