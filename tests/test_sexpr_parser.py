@@ -406,4 +406,7 @@ def test_gbnf_grammar_file_exists_and_contains_rules():
     assert "prop_clause ::=" in content
     assert "entity_type ::=" in content
     assert "rel_type ::=" in content
+    assert "time_interval ::=" in content
+    assert "time_bound ::=" in content
+    assert "belnap_value ::=" in content
     assert "string ::=" in content

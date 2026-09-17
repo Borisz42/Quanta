@@ -7,7 +7,7 @@ clause ::= entity_clause | event_clause | relation_clause | prop_clause
 
 entity_clause ::= "(" ws "entity" ws ":id" ws id ws ":type" ws entity_type ws ":label" ws string ws ":surface" ws surface_expr (ws ":props" ws prop_list)? ws ")"
 
-event_clause ::= "(" ws "event" ws ":id" ws id ws ":pred" ws id (ws ":agent" ws id)? (ws ":patient" ws id)? (ws ":theme" ws id)? (ws ":location" ws id)? (ws ":instrument" ws id)? (ws ":time" ws string)? (ws ":tense" ws tense)? (ws ":aspect" ws aspect)? (ws ":polarity" ws boolean)? (ws ":val" ws boolean)? (ws ":modality" ws string)? (ws ":raw-text" ws string)? ws ")"
+event_clause ::= "(" ws "event" ws ":id" ws id ws ":pred" ws id (ws ":agent" ws id)? (ws ":patient" ws id)? (ws ":theme" ws id)? (ws ":location" ws id)? (ws ":instrument" ws id)? (ws ":time" ws time_expr)? (ws ":tense" ws tense)? (ws ":aspect" ws aspect)? (ws ":polarity" ws (belnap_value | boolean))? (ws ":val" ws (belnap_value | boolean))? (ws ":modality" ws string)? (ws ":raw-text" ws string)? ws ")"
 
 relation_clause ::= "(" ws "relation" ws ":type" ws rel_type ws ":source" ws id ws ":target" ws id (ws ":mechanism" ws string)? (ws ":confidence" ws number)? ws ")"
 
@@ -23,14 +23,19 @@ epistemic_status ::= "FACT" | "HYPOTHESIS" | "OBSERVATION" | "DOUBTED" | "PROHIB
 
 rel_type ::= "TEMP_ALLEN_BEFORE" | "TEMP_ALLEN_MEETS" | "TEMP_ALLEN_OVERLAPS" | "TEMP_ALLEN_STARTS" | "TEMP_ALLEN_DURING" | "TEMP_ALLEN_FINISHES" | "TEMP_ALLEN_EQUALS" | "TEMP_ALLEN_AFTER" | "CAUSAL_MECHANISM_LINK" | "CAUSAL_PREVENTIVE_BLOCK" | id
 
+time_expr ::= string | time_interval
+time_interval ::= "(" ws "interval" ws ":start" ws time_bound ws ":end" ws time_bound (ws ":duration" ws time_bound)? ws ")"
+time_bound ::= id | number | string | "nil"
+
 surface_expr ::= string | "(" ws (string ws)* ")"
 
 prop_list ::= "(" ws (prop_pair ws)* ")"
 prop_pair ::= keyword ws prop_value
-prop_value ::= string | number | boolean | id
+prop_value ::= string | number | belnap_value | boolean | id
 
 keyword ::= ":" [a-zA-Z0-9_-]+
 id ::= [a-zA-Z0-9_.-]+
+belnap_value ::= "TRUE" | "FALSE" | "UNKNOWN" | "IRRELEVANT" | "true" | "false" | "unknown" | "irrelevant"
 boolean ::= "TRUE" | "FALSE" | "true" | "false"
 number ::= ("-"? [0-9]+ ("." [0-9]+)?)
 
