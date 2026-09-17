@@ -51,6 +51,27 @@ class ASGCompilationError(Exception):
         self.validation_result = validation_result
 
 
+def _normalize_extraction(extraction: Any) -> DiscourseExtractionResult:
+    """Normalize diverse extraction formats (DiscourseExtractionResult, SExprList, str, dict) into DiscourseExtractionResult."""
+    if isinstance(extraction, DiscourseExtractionResult):
+        return extraction
+    if isinstance(extraction, dict):
+        return DiscourseExtractionResult.from_dict(extraction)
+    if isinstance(extraction, str):
+        stripped = extraction.strip()
+        if stripped.startswith("("):
+            from parser.sexpr_parser import parse_sexpr
+            return parse_sexpr(stripped)
+        return DiscourseExtractionResult.from_json(extraction)
+    try:
+        from parser.sexpr_parser import SExprASTConverter, SExprList
+        if isinstance(extraction, SExprList):
+            return SExprASTConverter.from_ast(extraction)
+    except ImportError:
+        pass
+    raise TypeError(f"Unsupported extraction input type: {type(extraction)}")
+
+
 class ASGCompiler:
     """Compiles normalized extraction schemas into cryptographic, type-checked Quanta ASGs."""
 
@@ -102,13 +123,13 @@ class ASGCompiler:
 
     def compile(
         self,
-        extraction: Union[DiscourseExtractionResult, str, Dict[str, Any]],
+        extraction: Union[DiscourseExtractionResult, str, Dict[str, Any], Any],
         validate: bool = True,
     ) -> QuantaGraph:
         """Compiles an extraction result into a validated QuantaGraph.
 
         Args:
-            extraction: DiscourseExtractionResult instance, JSON string, or dict.
+            extraction: DiscourseExtractionResult instance, SExprList AST, S-expression/JSON string, or dict.
             validate: Whether to run Clingo ASP validation on the resulting graph.
 
         Returns:
@@ -118,14 +139,7 @@ class ASGCompiler:
             ASGCompilationError: If foreign keys are missing or Clingo validation fails.
         """
         # 1. Normalize input to DiscourseExtractionResult
-        if isinstance(extraction, str):
-            extraction_result = DiscourseExtractionResult.from_json(extraction)
-        elif isinstance(extraction, dict):
-            extraction_result = DiscourseExtractionResult.from_dict(extraction)
-        elif isinstance(extraction, DiscourseExtractionResult):
-            extraction_result = extraction
-        else:
-            raise TypeError(f"Unsupported extraction input type: {type(extraction)}")
+        extraction_result = _normalize_extraction(extraction)
 
         # 2. Foreign-key cross-reference validation
         fk_errors = extraction_result.validate_foreign_keys()
@@ -237,20 +251,45 @@ class ASGCompiler:
                     validation_result=val_res,
                 )
 
-        # 10. Attach extraction result & entity/event maps to graph for honest NLG realization
+        # 10. Compute and record top-level Merkle root
+        setattr(graph, "merkle_root", graph.compute_merkle_root())
+
+        # 11. Attach extraction result & entity/event maps to graph for honest NLG realization
         setattr(graph, "extraction_result", extraction_result)
         setattr(graph, "entity_nodes", entity_nodes)
         setattr(graph, "event_nodes", event_nodes)
 
         return graph
 
-    def compile_entity(self, entity: ExtractedEntity, register_index: int = 0) -> QuantaNode:
-        """Compiles an ExtractedEntity into a canonical QuantaNode with ConceptNet grounding.
+    def compile_entity(
+        self,
+        entity: Union[ExtractedEntity, Dict[str, Any], Any],
+        register_index: int = 0,
+    ) -> QuantaNode:
+        """Compiles an ExtractedEntity, SExprList AST, or dict into a canonical QuantaNode with ConceptNet grounding.
 
         - Band 2: Assigns bound local variable registers (VAR_SLOT_X0..X7)
         - Band 3 & 4: ConceptNet taxonomy and affordance vectors
         - Band 1: Marks GRAPH_VARIABLE_BIND and GRAPH_LEAF
         """
+        if not isinstance(entity, ExtractedEntity):
+            if isinstance(entity, dict):
+                entity = ExtractedEntity.from_dict(entity)
+            else:
+                try:
+                    from parser.sexpr_parser import SExprASTConverter, SExprList
+                    if isinstance(entity, SExprList):
+                        entity = SExprASTConverter._convert_entity(entity)
+                    elif isinstance(entity, str):
+                        from parser.sexpr_parser import SExprLexer, SExprParser
+                        tokens = SExprLexer(entity).tokenize()
+                        ast = SExprParser(tokens).parse()
+                        entity = SExprASTConverter._convert_entity(ast)
+                    else:
+                        raise TypeError(f"Unsupported entity input type: {type(entity)}")
+                except ImportError:
+                    raise TypeError(f"Unsupported entity input type: {type(entity)}")
+
         node = QuantaNode(literal=entity.canonical_name)
 
         # 1. Band 2: Variable Register Scoping
@@ -294,7 +333,7 @@ class ASGCompiler:
 
         # 3. Categorical Ontological Enforcement
         cat = entity.category.upper()
-        if cat in ("ABSTRACT", "ABSTRACT_CONCEPT") or (entity.properties and entity.properties.get("abstract")):
+        if cat in ("ABSTRACT", "ABSTRACT_CONCEPT", "TOPIC") or (entity.properties and entity.properties.get("abstract")):
             node.set_slot("TYPE_ABSTRACT_CONCEPT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 0)
             node.set_slot("TYPE_NATURAL_OBJECT", 0)
@@ -305,7 +344,7 @@ class ASGCompiler:
             node.set_slot("GRAPH_VARIABLE_BIND", 0)
             if entity.properties and entity.properties.get("agent_capable"):
                 node.set_slot("ROLE_AGENT_CAPABLE", 1)
-        elif cat == "PERSON":
+        elif cat in ("PERSON", "HUMAN"):
             node.set_slot("TYPE_HUMAN", 1)
             node.set_slot("TYPE_ANIMATE", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
@@ -342,7 +381,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
-        elif cat == "ORGANIZATION":
+        elif cat in ("ORGANIZATION", "UNIVERSITY", "INSTITUTION"):
             node.set_slot("TYPE_ORGANIZATION", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
         elif cat == "ANIMAL":
@@ -355,16 +394,36 @@ class ASGCompiler:
 
     def compile_event(
         self,
-        event: ExtractedEvent,
-        entity_cids: Dict[str, str],
-        propositions: List[ExtractedProposition],
+        event: Union[ExtractedEvent, Dict[str, Any], Any],
+        entity_cids: Optional[Dict[str, str]] = None,
+        propositions: Optional[List[ExtractedProposition]] = None,
     ) -> QuantaNode:
-        """Compiles an ExtractedEvent into a predicate QuantaNode.
+        """Compiles an ExtractedEvent, SExprList AST, or dict into a predicate QuantaNode.
 
         - Band 0: Synthesizes NSM primes (NSM_DO, NSM_MOVE, NSM_THINK, NSM_TRUE)
         - Band 1: Sets Tense & Aspect slots
         - Band 5 & 6: Epistemic & Deontic slots derived from linked ExtractedProposition
         """
+        if not isinstance(event, ExtractedEvent):
+            if isinstance(event, dict):
+                event = ExtractedEvent.from_dict(event)
+            else:
+                try:
+                    from parser.sexpr_parser import SExprASTConverter, SExprList
+                    if isinstance(event, SExprList):
+                        event = SExprASTConverter._convert_event(event)
+                    elif isinstance(event, str):
+                        from parser.sexpr_parser import SExprLexer, SExprParser
+                        tokens = SExprLexer(event).tokenize()
+                        ast = SExprParser(tokens).parse()
+                        event = SExprASTConverter._convert_event(ast)
+                    else:
+                        raise TypeError(f"Unsupported event input type: {type(event)}")
+                except ImportError:
+                    raise TypeError(f"Unsupported event input type: {type(event)}")
+
+        entity_cids = entity_cids or {}
+        propositions = propositions or []
         node = QuantaNode(literal=event.raw_text or event.predicate)
         node.set_slot("TYPE_EVENT", 1)
         node.set_slot("WN_ACT_ACTION", 1)
