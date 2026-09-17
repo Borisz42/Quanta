@@ -138,17 +138,18 @@ Feeding raw long-form prose directly to SLMs causes attention dilution and quadr
 - Manifest formatter renders compact ~100-token prompt context for the SLM transducer.
 
 ### Checklist
-- [x] **2.1** Implement `DiscourseChunk` dataclass tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, and `global_offset`.
-- [x] **2.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (150–350 words) and sentence-boundary preservation.
-- [x] **2.3** Implement `EntityRecord` dataclass and `ActiveEntityManifest` in `src/parser/entity_manifest.py` with recency tracking and LRU eviction.
-- [x] **2.4** Implement fast pre-scan entity matcher: scans chunk text in $< 1\text{ ms}$ to resurrect dormant entities from Host RAM.
-- [x] **2.5** Implement prompt formatter rendering active manifest context block:
+- [x] **2.1** Implement `DiscourseChunk` and `SentenceSpan` dataclasses in `src/parser/chunker.py` tracking `chunk_id`, `text`, `sentence_spans`, `paragraph_index`, `chapter_id`, `global_offset`, with full JSON-roundtrip `to_dict()` / `from_dict()` serialization.
+- [x] **2.2** Implement `DiscourseChunker` in `src/parser/chunker.py` with configurable window limits (default 150–350 words), multi-delimiter chapter/section recognition (`:`, `-`, `.`, `—`, `section`), and scientific abbreviation preservation (`et al.`, `Fig.`, `Eq.`).
+- [x] **2.3** Implement `EntityRecord` dataclass and `ActiveEntityManifest` in `src/parser/entity_manifest.py` with recency tracking, true recency-ordered LRU eviction, deterministic 256-bit BLAKE3 Merkle CID generation (`compute_cid()`), collision-free ID minting, and Band 2 formal logic register allocation (`VAR_SLOT_X0`..`X7`).
+- [x] **2.4** Implement fast pre-scan entity matcher: scans chunk text in $< 0.05\text{ ms}$ using lookaround word boundaries `(?<!\w)...(?!\w)` (supporting punctuation-bearing aliases like `U.S.`, `Ph.D.`) to resurrect dormant entities from Host RAM/SQLite.
+- [x] **2.5** Implement prompt formatter rendering active manifest context block matching exact specification:
   ```text
   ACTIVE ENTITIES:
   - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
   - E2: synthetic compound (aliases: specimen, polymer)
   ```
-- [x] **2.6** 🧪 Write unit tests in `tests/test_discourse_chunker.py` and `tests/test_entity_manifest.py`: verify multi-chunk narrative preserves entity IDs across chapters.
+  Includes optional register/category tags and token budget estimation (`estimate_manifest_tokens()`).
+- [x] **2.6** 🧪 Write comprehensive unit & integration tests in `tests/test_discourse_chunker.py` (11 tests) and `tests/test_entity_manifest.py` (19 tests): verify multi-chunk narrative preserves entity IDs across chapters, survives LRU eviction, and resurrects dormant entities with original canonical IDs.
 
 ---
 

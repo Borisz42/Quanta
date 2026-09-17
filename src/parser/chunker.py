@@ -37,6 +37,29 @@ class SentenceSpan:
     global_start_char: int
     global_end_char: int
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize SentenceSpan to a JSON-compatible dictionary."""
+        return {
+            "sentence_idx": self.sentence_idx,
+            "text": self.text,
+            "start_char": self.start_char,
+            "end_char": self.end_char,
+            "global_start_char": self.global_start_char,
+            "global_end_char": self.global_end_char,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> SentenceSpan:
+        """Construct SentenceSpan from a dictionary."""
+        return cls(
+            sentence_idx=int(data["sentence_idx"]),
+            text=str(data["text"]),
+            start_char=int(data["start_char"]),
+            end_char=int(data["end_char"]),
+            global_start_char=int(data["global_start_char"]),
+            global_end_char=int(data["global_end_char"]),
+        )
+
 
 @dataclass
 class DiscourseChunk:
@@ -67,6 +90,47 @@ class DiscourseChunk:
     word_count: int = 0
     token_count_estimate: int = 0
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize DiscourseChunk to a JSON-compatible dictionary."""
+        return {
+            "chunk_id": self.chunk_id,
+            "text": self.text,
+            "sentence_spans": [s.to_dict() for s in self.sentence_spans],
+            "paragraph_index": self.paragraph_index,
+            "paragraph_indices": list(self.paragraph_indices),
+            "chapter_id": self.chapter_id,
+            "chapter_title": self.chapter_title,
+            "global_offset": self.global_offset,
+            "global_end_offset": self.global_end_offset,
+            "word_count": self.word_count,
+            "token_count_estimate": self.token_count_estimate,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> DiscourseChunk:
+        """Construct DiscourseChunk from a dictionary."""
+        spans = [
+            SentenceSpan.from_dict(s)
+            for s in data.get("sentence_spans", [])
+        ]
+        return cls(
+            chunk_id=str(data["chunk_id"]),
+            text=str(data["text"]),
+            sentence_spans=spans,
+            paragraph_index=int(data.get("paragraph_index", 0)),
+            paragraph_indices=list(data.get("paragraph_indices", [])),
+            chapter_id=data.get("chapter_id"),
+            chapter_title=data.get("chapter_title"),
+            global_offset=int(data.get("global_offset", 0)),
+            global_end_offset=int(data.get("global_end_offset", 0)),
+            word_count=int(data.get("word_count", 0)),
+            token_count_estimate=int(data.get("token_count_estimate", 0)),
+        )
+
+    def __len__(self) -> int:
+        """Return length of verbatim chunk text in characters."""
+        return len(self.text)
+
 
 @dataclass
 class _SentenceUnit:
@@ -87,24 +151,18 @@ class _SentenceUnit:
 class DiscourseChunker:
     """Streaming Discourse Chunker and Boundary Segmentation Engine.
     
-    Partitions long-form English documents into coherent episodes (150-400 words)
+    Partitions long-form English documents into coherent episodes (150-350 words)
     suitable for attention-optimal neural transducer ingestion ($O(1)$ physical canvas).
     """
 
     # Chapter / structural section delimiters
     CHAPTER_PATTERNS = [
-        # Markdown headers: # Chapter 1, ## Part II, # Prologue
-        re.compile(r"^(#{1,3})\s+(chapter\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(#{1,3})\s+(book\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(#{1,3})\s+(act\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(#{1,3})\s+(part\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(#{1,3})\s+(prologue|epilogue|interlude|introduction|conclusion|preface)$", re.IGNORECASE),
-        # Plain text headings: CHAPTER 1, Chapter I: The Awakening, etc.
-        re.compile(r"^(chapter\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(book\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(act\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(part\s+[\dIVXLCDM]+(?::\s*.*)?)$", re.IGNORECASE),
-        re.compile(r"^(prologue|epilogue|interlude|introduction|conclusion|preface)$", re.IGNORECASE),
+        # Markdown headers: # Chapter 1: ..., ## Section II - ..., # Prologue
+        re.compile(r"^(#{1,3})\s+((?:chapter|book|act|part|section)\s+[\dIVXLCDM]+(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),
+        re.compile(r"^(#{1,3})\s+((?:prologue|epilogue|interlude|introduction|conclusion|preface)(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),
+        # Plain text headings: CHAPTER 1, Chapter I: The Awakening, Section 2 - Methods, etc.
+        re.compile(r"^((?:chapter|book|act|part|section)\s+[\dIVXLCDM]+(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),
+        re.compile(r"^((?:prologue|epilogue|interlude|introduction|conclusion|preface)(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),
     ]
 
     # Scene break delimiters: ***, ---, ___, * * *, etc.
@@ -115,12 +173,13 @@ class DiscourseChunker:
         "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "vs", "etc", "i.e", "e.g",
         "ph.d", "m.d", "b.a", "m.a", "st", "ave", "rd", "blvd", "dept", "vol",
         "no", "gen", "gov", "rep", "sen", "lt", "col", "capt", "u.s", "u.k",
+        "al", "fig", "eq", "univ", "corp", "inc", "ltd", "co",
     }
 
     def __init__(
         self,
-        min_words: int = 100,
-        max_words: int = 400,
+        min_words: int = 150,
+        max_words: int = 350,
         spacy_model: Optional[str] = "en_core_web_sm",
         use_spacy: bool = True,
     ):

@@ -3,6 +3,8 @@
 import time
 import pytest
 
+from parser.chunker import DiscourseChunker
+from parser.schema import ExtractedEntity
 from parser.entity_manifest import (
     ActiveEntityManifest,
     EntityMatcher,
@@ -432,3 +434,246 @@ def test_five_chunk_story_paging_simulation():
     assert "E1: Dr. Eleanor Vance" in prompt_block
 
     engine.close()
+
+
+# ---------------------------------------------------------------------------
+# 2.6: Multi-Chapter Coreference & Paging Integration Tests
+# ---------------------------------------------------------------------------
+
+MULTI_CHAPTER_BOOK_TEXT = """# Chapter 1: The Discovery
+Dr. Eleanor Vance isolated a volatile synthetic compound inside the cryogenic containment cell at dawn.
+She immediately noted that this polymer was stable and exhibited anomalous crystalline expansion.
+
+# Chapter 2: The Parallel Inquiry
+In the secondary facility across the campus, Dr. Marcus Wright calibrated the high-resolution spectrometer.
+Director Harrison convened the regulatory oversight panel to evaluate the instrumentation safety standards.
+The audit committee reviewed protocol documentation all afternoon while the technicians monitored temperatures.
+
+# Chapter 3: The Validation
+At nine o'clock the following morning, Eleanor presented her verified findings to the entire department.
+She confirmed that the synthetic compound retained its anomalous density across all measurement cycles.
+"""
+
+
+def test_multi_chapter_coreference_across_chapters():
+    """Verify that a multi-chapter narrative segmented by DiscourseChunker preserves entity IDs
+    and resurrects dormant entities across chapters via EntityPagingEngine.
+    """
+    chunker = DiscourseChunker(min_words=10, max_words=60, use_spacy=False)
+    chunks = chunker.chunk_document(MULTI_CHAPTER_BOOK_TEXT)
+    assert len(chunks) >= 3
+
+    # Verify chapters are recognized on chunks
+    ch_ids = [c.chapter_id for c in chunks if c.chapter_id]
+    assert any("chapter_1" in cid for cid in ch_ids)
+    assert any("chapter_2" in cid for cid in ch_ids)
+    assert any("chapter_3" in cid for cid in ch_ids)
+
+    # Tight capacity: target=2, max=3 so Chapter 2 forces Chapter 1 entities out of active RAM
+    engine = EntityPagingEngine(target_size=2, min_size=2, max_size=3)
+
+    # Process Chapter 1 chunk(s)
+    ch1_chunks = [c for c in chunks if c.chapter_id and "chapter_1" in c.chapter_id]
+    assert len(ch1_chunks) >= 1
+    for c in ch1_chunks:
+        engine.pre_scan_and_page(c.text, chunk_idx=1)
+        engine.update_from_extraction([
+            {"canonical_name": "Dr. Eleanor Vance", "category": "PERSON", "surface_aliases": ["Eleanor", "Vance"]},
+            {"canonical_name": "synthetic compound", "category": "OBJECT", "surface_aliases": ["polymer"]},
+        ], chunk_idx=1)
+
+    assert engine.manifest.is_active("E1")
+    assert engine.manifest.is_active("E2")
+    assert engine.manifest.get("E1").canonical_name == "Dr. Eleanor Vance"
+
+    # Process Chapter 2 chunk(s) - floods working memory with new entities
+    ch2_chunks = [c for c in chunks if c.chapter_id and "chapter_2" in c.chapter_id]
+    assert len(ch2_chunks) >= 1
+    for idx, c in enumerate(ch2_chunks, start=2):
+        engine.pre_scan_and_page(c.text, chunk_idx=idx)
+        engine.update_from_extraction([
+            {"canonical_name": "Dr. Marcus Wright", "category": "PERSON", "surface_aliases": ["Marcus"]},
+            {"canonical_name": "high-resolution spectrometer", "category": "OBJECT", "surface_aliases": ["spectrometer"]},
+            {"canonical_name": "Director Harrison", "category": "PERSON", "surface_aliases": ["Harrison"]},
+            {"canonical_name": "audit committee", "category": "ORGANIZATION", "surface_aliases": ["panel"]},
+        ], chunk_idx=idx)
+
+    # In Chapter 2, Eleanor (E1) was NOT mentioned, so LRU eviction pushed E1 to SQLite
+    assert not engine.manifest.is_active("E1"), "E1 should be evicted during Chapter 2"
+    stored_e1 = engine.storage.get_entity("E1")
+    assert stored_e1 is not None
+    assert stored_e1.canonical_name == "Dr. Eleanor Vance"
+
+    # Process Chapter 3 chunk(s) - Eleanor and the synthetic compound return!
+    ch3_chunks = [c for c in chunks if c.chapter_id and "chapter_3" in c.chapter_id]
+    assert len(ch3_chunks) >= 1
+    for idx, c in enumerate(ch3_chunks, start=10):
+        paged, scan_time = engine.pre_scan_and_page(c.text, chunk_idx=idx)
+        assert scan_time < 1.0, f"Pre-scan took {scan_time:.4f} ms, expected < 1.0 ms"
+        # Pre-scan MUST detect alias 'Eleanor' and resurrect E1!
+        assert any(e.canonical_id == "E1" for e in paged)
+        assert engine.manifest.is_active("E1")
+
+        # Entity properties preserved across chapters
+        e1_rec = engine.manifest.get("E1")
+        assert e1_rec.canonical_id == "E1"
+        assert e1_rec.canonical_name == "Dr. Eleanor Vance"
+        assert e1_rec.last_seen_chunk == idx
+        assert "Eleanor" in e1_rec.surface_aliases
+
+    # Render prompt block for Chapter 3: must show E1 restored
+    prompt_block = engine.format_prompt_block()
+    assert "E1: Dr. Eleanor Vance" in prompt_block
+
+    engine.close()
+
+
+def test_entity_matcher_punctuation_aliases():
+    """Verify that EntityMatcher accurately recognizes aliases with trailing/embedded punctuation."""
+    matcher = EntityMatcher()
+    matcher.build_index({
+        "U.S.": ["E1"],
+        "Ph.D.": ["E2"],
+        "St. Jude": ["E3"],
+        "Dr. Vance": ["E4"],
+    })
+
+    text = "She earned her Ph.D. in the U.S. before joining St. Jude to work alongside Dr. Vance on research."
+    matches = matcher.match_chunk(text)
+
+    assert "E1" in matches, "Should match 'U.S.'"
+    assert "E2" in matches, "Should match 'Ph.D.'"
+    assert "E3" in matches, "Should match 'St. Jude'"
+    assert "E4" in matches, "Should match 'Dr. Vance'"
+
+
+def test_entity_record_blake3_cid_computation():
+    """Verify deterministic BLAKE3 256-bit Merkle CID computation on EntityRecord."""
+    rec1 = EntityRecord(canonical_id="E1", canonical_name="Eleanor Vance", category="PERSON")
+    cid1 = rec1.compute_cid()
+    assert isinstance(cid1, str)
+    assert len(cid1) == 64  # 256-bit hex digest
+
+    # Calling compute_cid again returns cached CID
+    assert rec1.compute_cid() == cid1
+
+    # Identical name & category produce identical CID
+    rec2 = EntityRecord(canonical_id="E99", canonical_name="Eleanor Vance", category="PERSON")
+    assert rec2.compute_cid() == cid1
+
+    # Different category produces different CID
+    rec3 = EntityRecord(canonical_id="E1", canonical_name="Eleanor Vance", category="ORGANIZATION")
+    assert rec3.compute_cid() != cid1
+
+    # to_dict includes cid
+    d = rec1.to_dict()
+    assert d["cid"] == cid1
+
+
+def test_storage_batch_persistence_and_wal(tmp_path):
+    """Verify save_entities batch insertion and automatic parent directory creation with WAL mode."""
+    nested_db = tmp_path / "deep" / "nested" / "dir" / "entities.db"
+    assert not nested_db.parent.exists()
+
+    storage = EntityStorage(nested_db)
+    assert nested_db.exists()
+
+    # Batch save entities
+    records = [
+        EntityRecord(canonical_id=f"E{i}", canonical_name=f"Entity {i}", surface_aliases=[f"Alias {i}"])
+        for i in range(10)
+    ]
+    storage.save_entities(records)
+    assert storage.count() == 10
+
+    # Retrieve an entity and check alias lookup
+    e5 = storage.get_entity("E5")
+    assert e5 is not None
+    assert e5.canonical_name == "Entity 5"
+
+    found = storage.find_by_alias("Alias 5")
+    assert len(found) == 1
+    assert found[0].canonical_id == "E5"
+
+    storage.close()
+
+
+def test_polymorphic_extraction_update():
+    """Verify update_from_extraction seamlessly accepts ExtractedEntity dataclasses as well as dicts."""
+    engine = EntityPagingEngine()
+
+    # Pass ExtractedEntity dataclass instances
+    dataclass_entities = [
+        ExtractedEntity(
+            id="E1",
+            canonical_name="Dr. Eleanor Vance",
+            category="PERSON",
+            surface_aliases=["Eleanor"],
+        ),
+        ExtractedEntity(
+            id="E2",
+            canonical_name="synthetic compound",
+            category="OBJECT",
+            surface_aliases=["polymer"],
+        ),
+    ]
+    records = engine.update_from_extraction(dataclass_entities, chunk_idx=1)
+    assert len(records) == 2
+    assert engine.manifest.is_active("E1")
+    assert engine.manifest.is_active("E2")
+    assert engine.manifest.get("E1").canonical_name == "Dr. Eleanor Vance"
+
+    # Pass plain dictionaries
+    dict_entities = [
+        {"canonical_id": "E1", "canonical_name": "Dr. Eleanor Vance", "surface_aliases": ["Vance"]},
+    ]
+    records2 = engine.update_from_extraction(dict_entities, chunk_idx=2)
+    assert len(records2) == 1
+    assert "Vance" in engine.manifest.get("E1").surface_aliases
+    assert engine.manifest.get("E1").last_seen_chunk == 2
+
+    engine.close()
+
+
+def test_active_manifest_collision_prevention():
+    """Verify that registering an external entity with explicit ID advances next_id_num to prevent collisions."""
+    storage = EntityStorage(":memory:")
+    manifest = ActiveEntityManifest(storage=storage)
+
+    # Default mint starts at E1
+    assert manifest.mint_entity_id() == "E1"
+
+    # Add entity with explicit E10
+    e10 = EntityRecord(canonical_id="E10", canonical_name="High ID Entity")
+    manifest.add_or_update(e10)
+
+    # Next minted ID must be E11 to avoid colliding with E10!
+    next_id = manifest.mint_entity_id()
+    assert next_id == "E11"
+
+    storage.close()
+
+
+def test_manifest_prompt_formatting_options_and_token_estimate():
+    """Verify prompt block rendering flags and token estimation."""
+    engine = EntityPagingEngine()
+    engine.register_new_entity("Dr. Eleanor Vance", category="PERSON", aliases=["Eleanor"])
+    engine.register_new_entity("synthetic compound", category="OBJECT", aliases=["polymer"])
+
+    # Standard block
+    standard = engine.format_prompt_block()
+    assert "- E1: Dr. Eleanor Vance (aliases: Eleanor)" in standard
+    assert "VAR_SLOT" not in standard
+
+    # With registers and categories
+    detailed = engine.format_prompt_block(include_registers=True, include_categories=True)
+    assert "[VAR_SLOT_X0]" in detailed
+    assert "[PERSON]" in detailed
+    assert "[OBJECT]" in detailed
+
+    # Token estimation
+    tokens = engine.estimate_manifest_tokens()
+    assert 5 < tokens < 100
+
+    engine.close()
+
