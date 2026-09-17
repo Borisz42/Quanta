@@ -211,6 +211,80 @@ def test_temporal_contradiction_diagnostic(gate):
     assert "CONFLICT:" in prompt
 
 
+def test_inverted_interval_endpoints_diagnostic(gate):
+    """Verify inverted interval endpoints (Start > End) produce a temporal diagnostic."""
+    sexpr = """(graph :chunk-id "chunk_inverted_interval"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id Ev1 :pred inspect :agent E1 :time (interval :start 2020 :end 2015) :tense PAST :polarity TRUE)
+)"""
+    compiler = ASGCompiler(validator_gate=gate.validator_gate)
+    extraction = parse_sexpr(sexpr)
+    graph = compiler.compile(extraction, validate=False)
+
+    diag_res = gate.validate_graph(graph, extraction_result=extraction)
+    assert not diag_res.is_valid
+    assert diag_res.diagnostic is not None
+    diag = diag_res.diagnostic
+    assert diag.category == "temporal"
+    assert "start: 2020" in diag.summary
+    assert "end: 2015" in diag.summary
+    prompt = diag.format_repair_request()
+    assert "[REPAIR REQUEST]" in prompt
+    assert "CONFLICT:" in prompt
+    assert "start: 2020 > end: 2015" in prompt or "start: 2020" in prompt
+
+
+def test_cross_event_temporal_ordering_diagnostic(gate):
+    """Verify cross-event precedence ordering contradiction matches exact specified format:
+    'CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2.'
+    """
+    sexpr = """(graph :chunk-id "chunk_temporal_precedence_inversion"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id ev1 :pred pressurize :agent E1 :time (interval :start 2018 :end 2020) :tense PAST :polarity TRUE)
+  (event :id ev2 :pred inspect :agent E1 :time (interval :start 2010 :end 2015) :tense PAST :polarity TRUE)
+  (relation :type PRECEDES :source ev1 :target ev2)
+)"""
+    compiler = ASGCompiler(validator_gate=gate.validator_gate)
+    extraction = parse_sexpr(sexpr)
+    graph = compiler.compile(extraction, validate=False)
+
+    diag_res = gate.validate_graph(graph, extraction_result=extraction)
+    assert not diag_res.is_valid
+    assert diag_res.diagnostic is not None
+    diag = diag_res.diagnostic
+    assert diag.category == "temporal"
+    # Verify exact required format
+    assert diag.summary == "CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2."
+    prompt = diag.format_repair_request()
+    assert "[REPAIR REQUEST]" in prompt
+    assert "  CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2." in prompt
+
+
+def test_cyclic_temporal_relation_diagnostic(gate):
+    """Verify cyclical temporal ordering produces a temporal cycle diagnostic."""
+    sexpr = """(graph :chunk-id "chunk_temporal_cycle"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id ev1 :pred pressurize :agent E1 :tense PAST :polarity TRUE)
+  (event :id ev2 :pred inspect :agent E1 :tense PAST :polarity TRUE)
+  (relation :type PRECEDES :source ev1 :target ev2)
+  (relation :type PRECEDES :source ev2 :target ev1)
+)"""
+    compiler = ASGCompiler(validator_gate=gate.validator_gate)
+    extraction = parse_sexpr(sexpr)
+    graph = compiler.compile(extraction, validate=False)
+
+    diag_res = gate.validate_graph(graph, extraction_result=extraction)
+    assert not diag_res.is_valid
+    assert diag_res.diagnostic is not None
+    diag = diag_res.diagnostic
+    assert diag.category == "temporal"
+    assert "cycle" in diag.summary.lower()
+    prompt = diag.format_repair_request()
+    assert "[REPAIR REQUEST]" in prompt
+    assert "CONFLICT:" in prompt
+    assert "cycle" in prompt.lower()
+
+
 # ---------------------------------------------------------------------------
 # 3. Causal Contradiction Diagnostic Tests
 # ---------------------------------------------------------------------------
@@ -272,6 +346,50 @@ def test_mock_repair_simulation_success_on_attempt_1(repair_manager, ontological
     assert result.error_message is None
 
     # Verify resulting graph is valid and has expected structure
+    valid, errors = result.graph.validate_integrity()
+    assert valid is True
+    assert errors == []
+
+
+def test_temporal_repair_simulation_success_on_iteration_2(repair_manager):
+    """Phase 5 Item 5.5: Inject an invalid temporal ordering into an S-expression chunk;
+    assert MUC isolates the conflict. Simulate repair re-prompt;
+    assert corrected S-expression passes validation on iteration 2.
+    """
+    invalid_temporal_sexpr = """(graph :chunk-id "chunk_temporal_repair"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id ev1 :pred pressurize :agent E1 :time (interval :start 2018 :end 2020) :tense PAST :polarity TRUE)
+  (event :id ev2 :pred inspect :agent E1 :time (interval :start 2010 :end 2015) :tense PAST :polarity TRUE)
+  (relation :type PRECEDES :source ev1 :target ev2)
+)"""
+    corrected_temporal_sexpr = """(graph :chunk-id "chunk_temporal_repair"
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id ev1 :pred pressurize :agent E1 :time (interval :start 2010 :end 2015) :tense PAST :polarity TRUE)
+  (event :id ev2 :pred inspect :agent E1 :time (interval :start 2018 :end 2020) :tense PAST :polarity TRUE)
+  (relation :type PRECEDES :source ev1 :target ev2)
+)"""
+
+    mock_transducer = MockUnslothTransducer()
+    test_text = "Marcus pressurized the cylinder before inspecting it."
+
+    mock_transducer.register_fixture(test_text, invalid_temporal_sexpr)
+    mock_transducer.register_repair_fixture(test_text, corrected_temporal_sexpr)
+
+    result = repair_manager.repair_chunk(
+        text=test_text,
+        transducer=mock_transducer,
+        initial_sexpr=invalid_temporal_sexpr,
+    )
+
+    assert result.success is True
+    # Initial invalid attempt + 1 repair attempt = iteration 2 succeeds
+    assert result.attempts == 1
+    assert result.graph is not None
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].category == "temporal"
+    assert "CONFLICT: ev1 (start: 2018) occurs after ev2 (end: 2015), yet ev1 PRECEDES ev2." in result.diagnostics[0].summary
+    assert result.error_message is None
+
     valid, errors = result.graph.validate_integrity()
     assert valid is True
     assert errors == []
