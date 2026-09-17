@@ -835,8 +835,7 @@ class SExprASTConverter:
 
             if ent.properties:
                 parts.append(f":props {cls._format_plist(ent.properties)}")
-            parts.append(")")
-            lines.append(f"{indent}{' '.join(parts)}")
+            lines.append(f"{indent}{' '.join(parts)})")
 
         # 2. Events
         for ev in result.events:
@@ -855,20 +854,27 @@ class SExprASTConverter:
                 parts.append(f":location {ev.location_id}")
             if ev.instrument_id:
                 parts.append(f":instrument {ev.instrument_id}")
-            if ev.temporal_anchor:
+            if ev.time_interval:
+                start_str = "nil" if ev.time_interval.start is None else str(ev.time_interval.start)
+                end_str = "nil" if ev.time_interval.end is None else str(ev.time_interval.end)
+                dur_str = f" :duration {ev.time_interval.duration}" if ev.time_interval.duration is not None else ""
+                parts.append(f":time (interval :start {start_str} :end {end_str}{dur_str})")
+            elif ev.temporal_anchor:
                 parts.append(f":time {json.dumps(ev.temporal_anchor)}")
             parts.append(f":tense {ev.tense}")
             if ev.aspect and ev.aspect != "SIMPLE":
                 parts.append(f":aspect {ev.aspect}")
-            parts.append(f":polarity {'TRUE' if ev.polarity else 'FALSE'}")
+            if ev.val is not None:
+                parts.append(f":val {ev.val}")
+            else:
+                parts.append(f":polarity {'TRUE' if ev.polarity else 'FALSE'}")
             if ev.modality:
                 parts.append(f":modality {json.dumps(ev.modality)}")
             if ev.raw_text:
                 parts.append(f":raw-text {json.dumps(ev.raw_text)}")
             if ev.arguments:
                 parts.append(f":args {cls._format_plist(ev.arguments)}")
-            parts.append(")")
-            lines.append(f"{indent}{' '.join(parts)}")
+            lines.append(f"{indent}{' '.join(parts)})")
 
         # 3. Relations
         for rel in result.relations:
@@ -882,8 +888,7 @@ class SExprASTConverter:
                 parts.append(f":mechanism {json.dumps(rel.mechanism)}")
             if rel.confidence != 1.0:
                 parts.append(f":confidence {rel.confidence:.4f}".rstrip("0").rstrip("."))
-            parts.append(")")
-            lines.append(f"{indent}{' '.join(parts)}")
+            lines.append(f"{indent}{' '.join(parts)})")
 
         # 4. Propositions
         for p in result.propositions:
@@ -903,8 +908,7 @@ class SExprASTConverter:
                 parts.append(f":pred {p.predicate}")
             if p.properties:
                 parts.append(f":props {cls._format_plist(p.properties)}")
-            parts.append(")")
-            lines.append(f"{indent}{' '.join(parts)}")
+            lines.append(f"{indent}{' '.join(parts)})")
 
         lines.append(")")
         return nl.join(lines)
@@ -937,9 +941,189 @@ def parse_sexpr(sexpr_str: str, strict: bool = False) -> DiscourseExtractionResu
     return SExprASTConverter.from_ast(ast, strict=strict)
 
 
+def serialize_graph_to_sexpr(graph: QuantaGraph, pretty: bool = True) -> str:
+    """Serialize a QuantaGraph directly into a canonical S-expression string."""
+    if hasattr(graph, "extraction_result") and graph.extraction_result is not None:
+        return SExprASTConverter.to_sexpr(graph.extraction_result, pretty=pretty)
+
+    # Direct reconstruction from QuantaGraph nodes and edges
+    cid_to_ent_id: Dict[str, str] = {}
+    cid_to_ev_id: Dict[str, str] = {}
+
+    entity_nodes: List[Tuple[str, Any]] = []
+    event_nodes: List[Tuple[str, Any]] = []
+
+    for cid, node in graph.nodes.items():
+        is_event = False
+        try:
+            if node.get_slot("TYPE_EVENT") == 1:
+                is_event = True
+        except (KeyError, IndexError):
+            pass
+
+        if not is_event:
+            for edge_rel in node.edges:
+                if edge_rel.startswith("VAL_") or edge_rel.startswith("TEMP_") or edge_rel.startswith("CAUSAL_"):
+                    is_event = True
+                    break
+
+        if is_event:
+            event_nodes.append((cid, node))
+        else:
+            entity_nodes.append((cid, node))
+
+    extracted_entities: List[ExtractedEntity] = []
+    for i, (cid, node) in enumerate(entity_nodes):
+        ent_id = f"e{i + 1}"
+        label = ""
+        aliases: List[str] = []
+
+        if isinstance(node.literal, dict):
+            ent_id = str(node.literal.get("id") or ent_id)
+            label = str(node.literal.get("canonical_name") or node.literal.get("label") or "")
+            raw_aliases = node.literal.get("surface_aliases")
+            if raw_aliases:
+                aliases = [str(a) for a in raw_aliases]
+            elif label:
+                aliases = [label]
+        elif node.literal:
+            label = str(node.literal)
+            aliases = [label]
+        elif node.anchor:
+            label = str(node.anchor)
+            aliases = [label]
+        else:
+            label = ent_id
+            aliases = [ent_id]
+
+        cid_to_ent_id[cid] = ent_id
+
+        cat = "OBJECT"
+        try:
+            if node.get_slot("TYPE_HUMAN") == 1:
+                cat = "HUMAN"
+            elif node.get_slot("TYPE_ORGANIZATION") == 1:
+                cat = "ORGANIZATION"
+            elif node.get_slot("TYPE_SPATIAL_REGION") == 1 or node.get_slot("WN_LOCATION_PLACE") == 1:
+                cat = "LOCATION"
+            elif node.get_slot("CN_Q072_SUBSTANCE") == 1:
+                cat = "SUBSTANCE"
+            elif node.get_slot("TYPE_ANIMATE") == 1:
+                cat = "ANIMAL"
+            elif node.get_slot("TYPE_ARTIFACT") == 1:
+                cat = "ARTIFACT"
+            elif node.get_slot("TYPE_NATURAL_OBJECT") == 1:
+                cat = "NATURAL_OBJECT"
+        except (KeyError, IndexError):
+            pass
+
+        extracted_entities.append(
+            ExtractedEntity(
+                id=ent_id,
+                canonical_name=label,
+                category=cat,
+                surface_aliases=aliases,
+            )
+        )
+
+    for j, (cid, node) in enumerate(event_nodes):
+        cid_to_ev_id[cid] = f"ev{j + 1}"
+
+    extracted_events: List[ExtractedEvent] = []
+    extracted_relations: List[ExtractedRelation] = []
+
+    for cid, node in event_nodes:
+        ev_id = cid_to_ev_id[cid]
+
+        pred = node.anchor or ""
+        if pred.endswith(" (v)") or pred.endswith(" (n)"):
+            pred = pred[:-4].strip()
+        if pred.startswith("cn:en:"):
+            pred = pred[6:].strip()
+        if not pred and node.literal and isinstance(node.literal, str):
+            pred = node.literal.strip()
+        if not pred:
+            pred = "event"
+
+        agent_id = None
+        patient_id = None
+        theme_id = None
+        location_id = None
+        instrument_id = None
+
+        if "VAL_X1_AGENT" in node.edges and node.edges["VAL_X1_AGENT"]:
+            agent_id = cid_to_ent_id.get(node.edges["VAL_X1_AGENT"][0])
+        if "VAL_X2_PATIENT" in node.edges and node.edges["VAL_X2_PATIENT"]:
+            patient_id = cid_to_ent_id.get(node.edges["VAL_X2_PATIENT"][0])
+        if "VAL_LOCATION_SLOT" in node.edges and node.edges["VAL_LOCATION_SLOT"]:
+            location_id = cid_to_ent_id.get(node.edges["VAL_LOCATION_SLOT"][0])
+        if "VAL_X5_INSTRUMENT" in node.edges and node.edges["VAL_X5_INSTRUMENT"]:
+            instrument_id = cid_to_ent_id.get(node.edges["VAL_X5_INSTRUMENT"][0])
+
+        for rel_name, targets in node.edges.items():
+            if rel_name.startswith("TEMP_ALLEN_") or rel_name.startswith("CAUSAL_"):
+                for tgt_cid in targets:
+                    tgt_id = cid_to_ev_id.get(tgt_cid) or cid_to_ent_id.get(tgt_cid)
+                    if tgt_id:
+                        extracted_relations.append(
+                            ExtractedRelation(
+                                relation_type=rel_name,
+                                source_id=ev_id,
+                                target_id=tgt_id,
+                            )
+                        )
+
+        extracted_events.append(
+            ExtractedEvent(
+                id=ev_id,
+                predicate=pred,
+                agent_id=agent_id,
+                patient_id=patient_id,
+                theme_id=theme_id,
+                location_id=location_id,
+                instrument_id=instrument_id,
+                tense="PAST",
+                polarity=True,
+            )
+        )
+
+    res = DiscourseExtractionResult(
+        entities=extracted_entities,
+        events=extracted_events,
+        relations=extracted_relations,
+    )
+    return SExprASTConverter.to_sexpr(res, pretty=pretty)
+
+
+def serialize_to_sexpr(
+    graph_or_result: Union[QuantaGraph, DiscourseExtractionResult],
+    pretty: bool = True,
+) -> str:
+    """Polymorphic serializer converting a QuantaGraph or DiscourseExtractionResult to canonical S-expression.
+
+    Args:
+        graph_or_result: Either a 1024-D QuantaGraph or a DiscourseExtractionResult.
+        pretty: Whether to pretty-print with indentation and newlines.
+
+    Returns:
+        Canonical S-expression string adhering to data/grammar/quanta_asg.gbnf.
+
+    Raises:
+        TypeError: If input is neither a QuantaGraph nor a DiscourseExtractionResult.
+    """
+    if isinstance(graph_or_result, DiscourseExtractionResult):
+        return SExprASTConverter.to_sexpr(graph_or_result, pretty=pretty)
+    elif isinstance(graph_or_result, QuantaGraph):
+        return serialize_graph_to_sexpr(graph_or_result, pretty=pretty)
+    else:
+        raise TypeError(
+            f"serialize_to_sexpr expects QuantaGraph or DiscourseExtractionResult, got {type(graph_or_result).__name__}"
+        )
+
+
 def to_sexpr(result: DiscourseExtractionResult, pretty: bool = True) -> str:
     """Serialize a DiscourseExtractionResult into a canonical S-expression string."""
-    return SExprASTConverter.to_sexpr(result, pretty=pretty)
+    return serialize_to_sexpr(result, pretty=pretty)
 
 
 def parse_to_asg(

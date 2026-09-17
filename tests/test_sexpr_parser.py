@@ -34,6 +34,7 @@ from parser.sexpr_parser import (
     parse_sexpr,
     parse_to_asg,
     to_sexpr,
+    serialize_to_sexpr,
 )
 from parser.transducer import CANONICAL_ELEANOR_VANCE_FIXTURE
 
@@ -448,6 +449,72 @@ def test_parse_to_asg_foreign_key_error():
         parse_to_asg(sexpr, validate=False)
     assert "Foreign-key validation failed" in str(exc_info.value)
     assert "E999" in str(exc_info.value)
+
+
+def test_serialize_to_sexpr_extraction_result():
+    """Verify serialize_to_sexpr polymorphic serialization on DiscourseExtractionResult."""
+    source = """(graph
+  (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+  (event :id ev1 :pred PROFESSOR_OF :agent e1 :time (interval :start 2018 :end nil) :tense PAST :val TRUE)
+)"""
+    res = parse_sexpr(source)
+    serialized = serialize_to_sexpr(res)
+    assert "(entity :id e1 :type HUMAN :label \"Eleanor Vance\" :surface \"Dr. Eleanor Vance\")" in serialized
+    assert ':time (interval :start 2018 :end nil)' in serialized
+    assert ':val TRUE' in serialized
+
+
+def test_serialize_to_sexpr_quanta_graph():
+    """Verify serialize_to_sexpr on QuantaGraph with attached extraction_result."""
+    source = """(graph
+  (entity :id E1 :type PERSON :label "Dr. Eleanor Vance" :surface "Dr. Eleanor Vance")
+  (entity :id E2 :type OBJECT :label "synthetic compound" :surface "specimen")
+  (event :id Ev1 :pred isolate :agent E1 :patient E2 :tense PAST :polarity TRUE)
+)"""
+    graph = parse_to_asg(source, validate=False)
+    assert isinstance(graph, QuantaGraph)
+    serialized = serialize_to_sexpr(graph)
+    assert "(graph" in serialized
+    assert ':id E1' in serialized
+    assert ':id Ev1' in serialized
+    # Re-parse to verify syntactic validity
+    roundtrip = parse_sexpr(serialized)
+    assert len(roundtrip.entities) == 2
+    assert len(roundtrip.events) == 1
+
+
+def test_serialize_to_sexpr_direct_quanta_graph_reconstruction():
+    """Verify serialize_to_sexpr directly reconstructs S-expr from raw QuantaNodes without extraction_result."""
+    from core.asg import QuantaNode
+    graph = QuantaGraph()
+    # Create raw entity node
+    ent_node = QuantaNode(literal="Alice")
+    ent_node.set_slot("TYPE_HUMAN", 1)
+    ent_cid = graph.add_node(ent_node)
+
+    # Create raw event node
+    ev_node = QuantaNode(anchor="observe")
+    ev_node.set_slot("TYPE_EVENT", 1)
+    ev_node.edges["VAL_X1_AGENT"] = [ent_cid]
+    graph.add_node(ev_node)
+
+    # Ensure no attached extraction_result
+    assert not hasattr(graph, "extraction_result")
+
+    sexpr = serialize_to_sexpr(graph)
+    assert "(graph" in sexpr
+    assert "(entity" in sexpr
+    assert "HUMAN" in sexpr
+    assert "Alice" in sexpr
+    assert "(event" in sexpr
+    assert "observe" in sexpr
+
+
+def test_serialize_to_sexpr_type_error():
+    """Verify serialize_to_sexpr raises TypeError on invalid types."""
+    with pytest.raises(TypeError) as exc_info:
+        serialize_to_sexpr(12345)  # type: ignore
+    assert "serialize_to_sexpr expects QuantaGraph or DiscourseExtractionResult" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

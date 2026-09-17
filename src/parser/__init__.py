@@ -39,6 +39,7 @@ from parser.sexpr_parser import (
     SExprASTConverter,
     parse_sexpr,
     to_sexpr,
+    serialize_to_sexpr,
     parse_to_asg,
 )
 from parser.unsloth_transducer import (
@@ -89,6 +90,7 @@ __all__ = [
     "SExprASTConverter",
     "parse_sexpr",
     "to_sexpr",
+    "serialize_to_sexpr",
     "parse_to_asg",
     "UnslothTransducer",
     "MockUnslothTransducer",
