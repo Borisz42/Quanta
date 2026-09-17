@@ -11,13 +11,22 @@ without token-window scaling penalties:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 import json
 from pathlib import Path
 import re
 import sqlite3
 import time
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+
+try:
+    import blake3
+    def _blake3_hash(data: bytes) -> str:
+        return blake3.blake3(data).hexdigest()
+except ImportError:
+    import hashlib
+    def _blake3_hash(data: bytes) -> str:
+        return hashlib.blake3(data).hexdigest() if hasattr(hashlib, "blake3") else hashlib.sha256(data).hexdigest()
 
 # Band 2 Formal Variable Registers in QUANTA (slots 280-287)
 BAND_2_REGISTERS: List[str] = [f"VAR_SLOT_X{i}" for i in range(8)]
@@ -118,6 +127,14 @@ class EntityRecord:
                 distinct.append(stripped)
         return distinct
 
+    def compute_cid(self) -> str:
+        """Compute deterministic 256-bit BLAKE3 Merkle CID for this entity."""
+        if self.cid:
+            return self.cid
+        payload = f"entity:{self.canonical_name.strip().lower()}:{self.category.strip().upper()}".encode("utf-8")
+        self.cid = _blake3_hash(payload)
+        return self.cid
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize entity record to dictionary."""
         return {
@@ -129,7 +146,7 @@ class EntityRecord:
             "last_seen_chunk": self.last_seen_chunk,
             "salience_score": self.salience_score,
             "mention_count": self.mention_count,
-            "cid": self.cid,
+            "cid": self.cid or self.compute_cid(),
             "properties": dict(self.properties),
         }
 
@@ -165,10 +182,15 @@ class EntityStorage:
         if db_path is None or db_path == ":memory:":
             self.db_path = ":memory:"
         else:
-            self.db_path = str(Path(db_path).resolve())
+            resolved = Path(db_path).resolve()
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            self.db_path = str(resolved)
 
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        if self.db_path != ":memory:":
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+            self._conn.execute("PRAGMA synchronous=NORMAL;")
         self._create_schema()
 
     def _create_schema(self):
@@ -227,7 +249,7 @@ class EntityStorage:
                     record.last_seen_chunk,
                     record.salience_score,
                     record.mention_count,
-                    record.cid,
+                    record.cid or record.compute_cid(),
                     json.dumps(record.properties),
                 ),
             )
@@ -248,6 +270,48 @@ class EntityStorage:
                         """,
                         (clean, record.canonical_id),
                     )
+
+    def save_entities(self, records: Iterable[EntityRecord]):
+        """Batch insert or update multiple entity records within a single atomic transaction."""
+        with self._conn:
+            for record in records:
+                self._conn.execute(
+                    """
+                    INSERT OR REPLACE INTO entities (
+                        canonical_id, canonical_name, category, surface_aliases,
+                        register_binding, last_seen_chunk, salience_score,
+                        mention_count, cid, properties
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.canonical_id,
+                        record.canonical_name,
+                        record.category,
+                        json.dumps(record.surface_aliases),
+                        record.register_binding,
+                        record.last_seen_chunk,
+                        record.salience_score,
+                        record.mention_count,
+                        record.cid or record.compute_cid(),
+                        json.dumps(record.properties),
+                    ),
+                )
+                self._conn.execute(
+                    "DELETE FROM entity_aliases WHERE canonical_id = ?",
+                    (record.canonical_id,),
+                )
+                all_aliases = set(record.surface_aliases)
+                all_aliases.add(record.canonical_name)
+                for alias in all_aliases:
+                    clean = alias.strip()
+                    if clean:
+                        self._conn.execute(
+                            """
+                            INSERT OR IGNORE INTO entity_aliases (alias, canonical_id)
+                            VALUES (?, ?)
+                            """,
+                            (clean, record.canonical_id),
+                        )
 
     def get_entity(self, canonical_id: str) -> Optional[EntityRecord]:
         """Retrieve entity by canonical ID."""
@@ -387,10 +451,14 @@ class ActiveEntityManifest:
         self._next_id_num = self._compute_next_id_num()
 
     def _compute_next_id_num(self) -> int:
-        """Scan stored entities to initialize ID generator beyond highest existing E-id."""
+        """Scan stored and active entities to initialize ID generator beyond highest existing E-id."""
         max_id = 0
         for entity in self.storage.list_all_entities():
             m = re.match(r"^E(\d+)$", entity.canonical_id)
+            if m:
+                max_id = max(max_id, int(m.group(1)))
+        for cid in self._active.keys():
+            m = re.match(r"^E(\d+)$", cid)
             if m:
                 max_id = max(max_id, int(m.group(1)))
         return max_id + 1
@@ -405,7 +473,7 @@ class ActiveEntityManifest:
         """Reset active in-memory manifest state and register bindings."""
         self._active.clear()
         self._register_bindings.clear()
-        self._next_id_num = 1
+        self._next_id_num = self._compute_next_id_num()
 
     def _allocate_register(self, record: EntityRecord):
         """Assign an available Band 2 register slot to an active entity."""
@@ -413,21 +481,23 @@ class ActiveEntityManifest:
             self._register_bindings[record.register_binding] = record.canonical_id
             return
 
-        # Look for first unoccupied register
+        # Look for first unoccupied register or stale binding
         for reg in self.available_registers:
-            if reg not in self._register_bindings:
+            bound_id = self._register_bindings.get(reg)
+            if bound_id is None or bound_id not in self._active:
                 self._register_bindings[reg] = record.canonical_id
                 record.register_binding = reg
                 return
 
-        # If all 8 registers are occupied, assign only if this entity has higher salience
+        # If all registers are actively occupied, assign only if this entity has higher salience
         # than the lowest-salience currently bound entity
         lowest_reg = None
         lowest_salience = float("inf")
         for reg, bound_id in self._register_bindings.items():
             bound_rec = self._active.get(bound_id)
-            if bound_rec and bound_rec.salience_score < lowest_salience:
-                lowest_salience = bound_rec.salience_score
+            score = bound_rec.salience_score if bound_rec else -1.0
+            if score < lowest_salience:
+                lowest_salience = score
                 lowest_reg = reg
 
         if lowest_reg and record.salience_score > lowest_salience:
@@ -457,6 +527,13 @@ class ActiveEntityManifest:
         Evicts the least-recently-used entity to storage if max_size is exceeded.
         """
         cid = record.canonical_id
+
+        # Collision prevention: advance next_id_num if external E-id was supplied
+        m = re.match(r"^E(\d+)$", cid)
+        if m:
+            num = int(m.group(1))
+            if num >= self._next_id_num:
+                self._next_id_num = num + 1
 
         if cid in self._active:
             existing = self._active[cid]
@@ -571,6 +648,41 @@ class ActiveEntityManifest:
     def __len__(self) -> int:
         return len(self._active)
 
+    def format_prompt_block(
+        self,
+        max_entities: Optional[int] = None,
+        include_registers: bool = False,
+        include_categories: bool = False,
+    ) -> str:
+        """Render active manifest into a compact ~100-token prompt block for the Transducer.
+        
+        Format:
+        ACTIVE ENTITIES:
+        - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
+        - E2: synthetic compound (aliases: polymer, specimen)
+        """
+        active = self.all_active(sort_by_salience=True)
+        if max_entities is not None:
+            active = active[:max_entities]
+
+        if not active:
+            return "ACTIVE ENTITIES:\n(None)"
+
+        lines = ["ACTIVE ENTITIES:"]
+        for ent in active:
+            extra_tags = []
+            if include_registers and ent.register_binding:
+                extra_tags.append(f"[{ent.register_binding}]")
+            if include_categories and ent.category:
+                extra_tags.append(f"[{ent.category}]")
+            tags_str = f" {' '.join(extra_tags)}" if extra_tags else ""
+
+            aliases = ent.get_display_aliases()
+            aliases_str = f" (aliases: {', '.join(aliases)})" if aliases else ""
+            lines.append(f"- {ent.canonical_id}:{tags_str} {ent.canonical_name}{aliases_str}")
+
+        return "\n".join(lines)
+
 
 
 class EntityMatcher:
@@ -601,7 +713,7 @@ class EntityMatcher:
         self._dirty = True
 
     def _compile_pattern(self):
-        """Compile regex with word boundaries, ordering longer aliases first."""
+        """Compile regex with lookaround word boundaries, ordering longer aliases first."""
         if not self._alias_to_ids:
             self._compiled_regex = None
             self._dirty = False
@@ -610,7 +722,7 @@ class EntityMatcher:
         # Sort aliases by length descending so longer compound names match before substrings
         sorted_aliases = sorted(self._alias_to_ids.keys(), key=len, reverse=True)
         escaped = [re.escape(a) for a in sorted_aliases]
-        pattern_str = r"\b(?:" + "|".join(escaped) + r")\b"
+        pattern_str = r"(?<!\w)(?:" + "|".join(escaped) + r")(?!\w)"
         self._compiled_regex = re.compile(pattern_str, re.IGNORECASE)
         self._dirty = False
 
@@ -659,6 +771,7 @@ class EntityPagingEngine:
             max_size=max_size,
         )
         self.matcher = EntityMatcher()
+        self.last_paged_in: List[EntityRecord] = []
         self._sync_matcher()
 
     def _sync_matcher(self):
@@ -719,21 +832,32 @@ class EntityPagingEngine:
                     paged_records.append(rec)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        self.last_paged_in = list(paged_records)
         return paged_records, elapsed_ms
 
     def update_from_extraction(
         self,
-        extracted_entities: List[Dict[str, Any]],
+        extracted_entities: List[Union[Dict[str, Any], Any]],
         chunk_idx: int = 0,
     ) -> List[EntityRecord]:
         """Sync entity extractions from Neural Discourse Transducer output (Phase 3).
         
         Merges new aliases into existing entities and mints new records for new entities.
+        Accepts either raw dictionaries or ExtractedEntity dataclass instances.
         """
         results: List[EntityRecord] = []
         aliases_modified = False
 
-        for ent in extracted_entities:
+        for raw_ent in extracted_entities:
+            if hasattr(raw_ent, "to_dict"):
+                ent = raw_ent.to_dict()
+            elif hasattr(raw_ent, "__dict__") and not isinstance(raw_ent, dict):
+                ent = asdict(raw_ent) if is_dataclass(raw_ent) else raw_ent.__dict__
+            elif isinstance(raw_ent, dict):
+                ent = raw_ent
+            else:
+                continue
+
             cid = ent.get("canonical_id") or ent.get("id")
             name = ent.get("canonical_name") or ent.get("name", "")
             category = ent.get("category", "OBJECT")
@@ -768,7 +892,12 @@ class EntityPagingEngine:
 
         return results
 
-    def format_prompt_block(self, max_entities: Optional[int] = None) -> str:
+    def format_prompt_block(
+        self,
+        max_entities: Optional[int] = None,
+        include_registers: bool = False,
+        include_categories: bool = False,
+    ) -> str:
         """Render active manifest into a compact ~100-token prompt block for the Transducer.
         
         Format:
@@ -776,23 +905,17 @@ class EntityPagingEngine:
         - E1: Dr. Eleanor Vance (aliases: Eleanor, Vance)
         - E2: synthetic compound (aliases: polymer, specimen)
         """
-        active = self.manifest.all_active(sort_by_salience=True)
-        if max_entities is not None:
-            active = active[:max_entities]
+        return self.manifest.format_prompt_block(
+            max_entities=max_entities,
+            include_registers=include_registers,
+            include_categories=include_categories,
+        )
 
-        if not active:
-            return "ACTIVE ENTITIES:\n(None)"
-
-        lines = ["ACTIVE ENTITIES:"]
-        for ent in active:
-            aliases = ent.get_display_aliases()
-            if aliases:
-                aliases_str = f" (aliases: {', '.join(aliases)})"
-            else:
-                aliases_str = ""
-            lines.append(f"- {ent.canonical_id}: {ent.canonical_name}{aliases_str}")
-
-        return "\n".join(lines)
+    def estimate_manifest_tokens(self, prompt_str: Optional[str] = None) -> int:
+        """Estimate token consumption of the formatted active manifest block (~1.33x words)."""
+        prompt = prompt_str or self.format_prompt_block()
+        words = len(prompt.split())
+        return int(words * 1.33) + 1
 
     def reset(self):
         """Reset working memory storage, manifest, and matcher for a fresh document."""
