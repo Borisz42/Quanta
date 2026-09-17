@@ -51,6 +51,43 @@ from parser.transducer import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Supported SLM Model Architectures & Presets (Phase 3.4)
+# ---------------------------------------------------------------------------
+
+MODEL_QWEN_4B = "qwen3.5-4b"          # Default: Qwen 3.5 4B Dense (Hybrid Linear Attention)
+MODEL_QWEN_2B = "qwen3.5-2b"          # Ultra-low VRAM profile (<4GB physical VRAM)
+MODEL_GEMMA_4 = "gemma-4-mtp"         # High-throughput profile (Gemma 4 with Multi-Token Prediction)
+DEFAULT_MODEL = MODEL_QWEN_4B
+
+MODEL_PRESETS: Dict[str, str] = {
+    "qwen3.5-4b": MODEL_QWEN_4B,
+    "qwen-4b": MODEL_QWEN_4B,
+    "qwen_4b": MODEL_QWEN_4B,
+    "qwen": MODEL_QWEN_4B,
+    "default": MODEL_QWEN_4B,
+    "qwen3.5-2b": MODEL_QWEN_2B,
+    "qwen-2b": MODEL_QWEN_2B,
+    "qwen_2b": MODEL_QWEN_2B,
+    "ultra-low-vram": MODEL_QWEN_2B,
+    "low-vram": MODEL_QWEN_2B,
+    "gemma-4": MODEL_GEMMA_4,
+    "gemma-4-mtp": MODEL_GEMMA_4,
+    "gemma_4": MODEL_GEMMA_4,
+    "gemma": MODEL_GEMMA_4,
+    "high-throughput": MODEL_GEMMA_4,
+    "mtp": MODEL_GEMMA_4,
+}
+
+
+def resolve_model_name(model_name_or_alias: Optional[str]) -> str:
+    """Resolve user-friendly model aliases and presets to canonical model names."""
+    if not model_name_or_alias or not str(model_name_or_alias).strip():
+        return DEFAULT_MODEL
+    cleaned = str(model_name_or_alias).strip().lower()
+    return MODEL_PRESETS.get(cleaned, str(model_name_or_alias).strip())
+
+
+# ---------------------------------------------------------------------------
 # Mentalese S-Expression System Prompt with 1-Shot In-Context Demonstration
 # ---------------------------------------------------------------------------
 
@@ -539,7 +576,12 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.grammar_content = self.grammar_path.read_text(encoding="utf-8")
 
         # 2. Model resolution (lazy default to prevent eager network calls during init)
-        self.model = model or "qwen3.5-4b"
+        self.model = resolve_model_name(model)
+
+    def set_model(self, model: str) -> str:
+        """Set active model profile at runtime, resolving aliases and presets."""
+        self.model = resolve_model_name(model)
+        return self.model
 
     def _detect_model(self, base_url: Optional[str] = None) -> str:
         """Query /models to detect active model or default to Qwen 3.5 4B."""
@@ -561,7 +603,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
                     return models[0]
         except Exception:
             pass
-        return "qwen3.5-4b"
+        return DEFAULT_MODEL
 
     def check_health(self, url: Optional[str] = None) -> bool:
         """Check if Unsloth endpoint is reachable and responsive."""
@@ -624,22 +666,31 @@ class UnslothTransducer(BaseDiscourseTransducer):
         user_content = self._build_user_prompt(
             text, active_entities, active_manifest_prompt, repair_request=repair_req
         )
-        target_model = kwargs.get("model") or self.model
+        target_model = resolve_model_name(kwargs.get("model") or self.model)
 
         messages = [
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_content},
         ]
 
+        extra_body = {
+            "grammar": self.grammar_content,
+            **kwargs.get("extra_body", {}),
+        }
+
         payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.0),
             "max_tokens": kwargs.get("max_tokens", 2048),
-            "extra_body": {
-                "grammar": self.grammar_content,
-            },
+            "grammar": self.grammar_content,
+            "extra_body": extra_body,
         }
+
+        for opt_key in ("top_p", "seed", "stop", "presence_penalty", "frequency_penalty"):
+            if opt_key in kwargs:
+                payload[opt_key] = kwargs[opt_key]
+
         return payload
 
     def transduce_raw(
@@ -762,7 +813,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
                 result.metadata["model"] = "mock-unsloth-slm"
             else:
                 result.metadata["backend"] = "unsloth"
-                result.metadata["model"] = kwargs.get("model") or self.model
+                result.metadata["model"] = resolve_model_name(kwargs.get("model") or self.model)
             return result
         except Exception as e:
             if self.fallback_to_mock:
