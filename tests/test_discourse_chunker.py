@@ -174,3 +174,79 @@ def test_custom_window_boundaries():
         assert len(chunk.sentence_spans) >= 1
         for span in chunk.sentence_spans:
             assert span.text in chunk.text
+
+
+def test_chunker_default_window_limits():
+    """Verify default window limits strictly conform to 150-350 words specification."""
+    chunker = DiscourseChunker()
+    assert chunker.min_words == 150
+    assert chunker.max_words == 350
+
+
+def test_chunk_and_span_serialization(spacy_chunker):
+    """Verify serialization and deserialization roundtrip for SentenceSpan and DiscourseChunk."""
+    chunks = spacy_chunker.chunk_document(ELEANOR_VANCE_NARRATIVE)
+    assert len(chunks) >= 1
+    chk = chunks[0]
+
+    # Test SentenceSpan serialization
+    span = chk.sentence_spans[0]
+    span_dict = span.to_dict()
+    restored_span = SentenceSpan.from_dict(span_dict)
+    assert restored_span == span
+
+    # Test DiscourseChunk serialization
+    chk_dict = chk.to_dict()
+    restored_chk = DiscourseChunk.from_dict(chk_dict)
+    assert restored_chk.chunk_id == chk.chunk_id
+    assert restored_chk.text == chk.text
+    assert len(restored_chk) == len(chk.text)
+    assert restored_chk.paragraph_index == chk.paragraph_index
+    assert restored_chk.paragraph_indices == chk.paragraph_indices
+    assert restored_chk.chapter_id == chk.chapter_id
+    assert restored_chk.global_offset == chk.global_offset
+    assert restored_chk.global_end_offset == chk.global_end_offset
+    assert restored_chk.word_count == chk.word_count
+    assert restored_chk.token_count_estimate == chk.token_count_estimate
+    assert len(restored_chk.sentence_spans) == len(chk.sentence_spans)
+    for orig_s, rest_s in zip(chk.sentence_spans, restored_chk.sentence_spans):
+        assert orig_s == rest_s
+
+
+def test_extended_chapter_and_section_patterns():
+    """Test extended delimiter patterns (dashes, dots, sections, prologues)."""
+    chunker = DiscourseChunker(min_words=10, max_words=50, use_spacy=False)
+
+    text = """# Chapter 1 - The Awakening
+Dr. Eleanor Vance arrived at the laboratory early.
+
+# Chapter 2. The Verification
+Marcus joined her to inspect the containment vessel.
+
+## Section 3: Data Analysis
+The diffraction patterns revealed unexpected phase transitions.
+
+Prologue - Ancient Origins
+Long before the synthesis experiments began, early theories predicted these crystal lattices."""
+
+    chunks = chunker.chunk_document(text)
+    assert len(chunks) >= 3
+
+    chapter_ids = [c.chapter_id for c in chunks if c.chapter_id]
+    assert any("chapter_1" in cid for cid in chapter_ids)
+    assert any("chapter_2" in cid for cid in chapter_ids)
+    assert any("section_3" in cid for cid in chapter_ids)
+
+
+def test_scientific_abbreviations_preservation(rule_based_chunker):
+    """Test that scientific abbreviations like 'et al.', 'Fig. 1', and 'Eq. 2' do not split sentences."""
+    scientific_text = (
+        "According to Vance et al., the anomalous expansion rate was documented in Fig. 1 at dawn. "
+        "Furthermore, Eq. 2 accurately models the phase transition dynamics under cryogenic conditions."
+    )
+    sents = rule_based_chunker.split_into_sentences(scientific_text)
+    assert len(sents) == 2
+    assert "et al." in sents[0][0]
+    assert "Fig. 1" in sents[0][0]
+    assert "Eq. 2" in sents[1][0]
+
