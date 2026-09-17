@@ -576,10 +576,10 @@ class ActiveEntityManifest:
         if not self._active or count <= 0:
             return []
 
-        # Sort active candidates by salience then last_seen_chunk ascending
+        # Sort active candidates by last_seen_chunk ascending, then salience_score ascending
         candidates = sorted(
             self._active.values(),
-            key=lambda r: (r.salience_score, r.last_seen_chunk),
+            key=lambda r: (r.last_seen_chunk, r.salience_score),
         )
 
         evicted = []
