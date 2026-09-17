@@ -626,3 +626,112 @@ def test_stitcher_with_external_active_manifest(sample_chunk_1, sample_chunk_2):
     vance_record = manifest.get("E1")
     assert "Eleanor" in vance_record.canonical_name
     assert "Dr. Vance" in vance_record.surface_aliases
+
+
+# ---------------------------------------------------------------------------
+# 10. Multi-Chunk S-Expression String and AST Stitching Tests (Phase 4.5)
+# ---------------------------------------------------------------------------
+
+SEXPR_CHUNK_1 = """
+(graph :chunk-id "chunk_0001"
+  (entity :id e1 :type PERSON :label "Dr. Eleanor Vance" :surface ("Dr. Vance" "Vance") :props (:role "researcher"))
+  (entity :id e2 :type SUBSTANCE :label "synthetic compound" :surface "specimen" :props (:state "volatile"))
+  (entity :id e3 :type LOCATION :label "cryogenic containment cell" :surface "cell" :props (:type "containment"))
+  (event :id ev1 :pred isolate :agent e1 :patient e2 :location e3 :time "at dawn" :tense PAST :polarity TRUE :raw-text "Dr. Eleanor Vance isolated a volatile synthetic compound inside the cryogenic containment cell at dawn.")
+)
+"""
+
+SEXPR_CHUNK_2 = """
+(graph :chunk-id "chunk_0002"
+  (entity :id e1 :type PERSON :label "Eleanor" :surface "she" :props (:title "Dr."))
+  (entity :id e2 :type SUBSTANCE :label "specimen" :surface "compound" :props (:expansion "anomalous"))
+  (entity :id e3 :type PERSON :label "supervisor" :surface "her supervisor" :props (:role "supervisor"))
+  (event :id ev1 :pred note :agent e1 :patient e2 :time "immediately" :tense PAST :polarity TRUE :raw-text "She immediately noted that this specimen exhibited anomalous lattice expansion.")
+  (event :id ev2 :pred doubt :agent e3 :theme e2 :time "initially" :tense PAST :polarity TRUE :raw-text "Her supervisor initially doubted the discovery.")
+  (relation :type TEMP_ALLEN_BEFORE :source ev1 :target ev2)
+  (proposition :id p1 :claim "specimen exhibited anomalous lattice expansion" :pred exhibit :subject e2 :status OBSERVATION :source e1 :event ev1)
+)
+"""
+
+SEXPR_CHUNK_3 = """
+(graph :chunk-id "chunk_0003"
+  (entity :id e1 :type PERSON :label "Dr. Vance" :surface "Eleanor")
+  (entity :id e2 :type SUBSTANCE :label "polymer" :surface "synthetic compound" :props (:integrity "retained"))
+  (entity :id e3 :type LOCATION :label "containment cell" :surface "vessel")
+  (entity :id e4 :type PERSON :label "laboratory director" :surface "director" :props (:role "director"))
+  (event :id ev1 :pred verify :agent e1 :location e3 :time "three hours later" :tense PAST :polarity TRUE :raw-text "Eleanor verified the hypothesis three hours later within the same vessel.")
+  (event :id ev2 :pred retain :agent e2 :time "throughout the afternoon" :tense PAST :polarity TRUE :raw-text "The resulting polymer retained its structural integrity.")
+  (event :id ev3 :pred prohibit :agent e4 :tense PAST :polarity TRUE :raw-text "The laboratory director prohibited competing tests.")
+  (relation :type CAUSAL_MECHANISM_LINK :source ev2 :target ev3 :mechanism "prompted by structural retention")
+  (proposition :id p1 :claim "competing tests are prohibited" :pred prohibit :status PROHIBITED :source e4 :event ev3)
+)
+"""
+
+
+def test_stitch_raw_sexpr_strings_3_chunk_narrative():
+    """Verify GraphStitcher stitches 3 raw S-expression chunks directly into a valid QuantaGraph."""
+    graph = stitch_to_graph([SEXPR_CHUNK_1, SEXPR_CHUNK_2, SEXPR_CHUNK_3], validate=True)
+
+    assert isinstance(graph, QuantaGraph)
+    assert graph.root_cid is not None
+
+    # Continuous entity resolution: exactly 5 global entities
+    assert len(graph.nodes) >= 11
+
+    # Graph integrity (valid Merkle CIDs, zero dangling edges)
+    valid, errors = graph.validate_integrity()
+    assert valid is True
+    assert errors == []
+
+    # Clingo validation passes with 0 errors
+    assert hasattr(graph, "validation")
+    assert graph.validation.is_valid is True
+    assert len(graph.validation.errors) == 0
+
+    # Verify Merkle root exists
+    assert hasattr(graph, "merkle_root")
+    assert graph.merkle_root is not None
+    assert len(graph.merkle_root) == 64
+
+
+def test_stitch_parsed_sexpr_ast_chunks():
+    """Verify GraphStitcher stitches parsed SExprList AST objects."""
+    from parser.sexpr_parser import SExprLexer, SExprParser
+
+    ast1 = SExprParser(SExprLexer(SEXPR_CHUNK_1).tokenize()).parse()
+    ast2 = SExprParser(SExprLexer(SEXPR_CHUNK_2).tokenize()).parse()
+    ast3 = SExprParser(SExprLexer(SEXPR_CHUNK_3).tokenize()).parse()
+
+    result = stitch([ast1, ast2, ast3])
+    assert len(result.entities) == 5
+    assert len(result.events) == 6
+    assert len(result.propositions) == 2
+
+    # Verify foreign keys are valid
+    fk_errors = result.validate_foreign_keys()
+    assert fk_errors == []
+
+
+def test_case_resilient_foreign_key_remapping():
+    """Verify foreign key resolution is resilient to case variations between entities and event arguments."""
+    chunk = DiscourseExtractionResult(
+        chunk_id="chunk_case",
+        entities=[
+            ExtractedEntity(id="e1", canonical_name="Alice", category="PERSON"),
+            ExtractedEntity(id="E2", canonical_name="Lab", category="LOCATION"),
+        ],
+        events=[
+            ExtractedEvent(id="ev1", predicate="work", agent_id="E1", location_id="e2", tense="PAST"),
+        ],
+        relations=[],
+        propositions=[],
+    )
+
+    result = stitch([chunk])
+    assert len(result.entities) == 2
+    assert len(result.events) == 1
+
+    ev = result.events[0]
+    assert ev.agent_id == "E1"
+    assert ev.location_id == "E2"
+    assert result.validate_foreign_keys() == []
