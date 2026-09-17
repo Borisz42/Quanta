@@ -248,7 +248,7 @@ class SExprLexer:
                 return int(val)
             except ValueError:
                 return None
-        if re.match(r"^-?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)?$", val):
+        if re.match(r"^-?[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)$", val) or re.match(r"^-?[0-9]+\.[0-9]+$", val):
             try:
                 return float(val)
             except ValueError:

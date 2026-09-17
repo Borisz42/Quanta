@@ -74,6 +74,16 @@ def test_lexer_basic_tokens():
     assert tokens[12].value == "sym"
 
 
+def test_lexer_scientific_notation():
+    """Verify lexer parses numbers in scientific notation with or without decimals."""
+    source = "(vals 1e5 -2E-3 3.14e+2 -4.5E-6 0)"
+    tokens = SExprLexer(source).tokenize()
+    numbers = [t.value for t in tokens if t.type == SExprTokenType.NUMBER]
+    assert numbers == [100000.0, -0.002, 314.0, -4.5e-6, 0]
+    assert isinstance(numbers[0], float)
+    assert isinstance(numbers[4], int)
+
+
 def test_lexer_string_escapes():
     """Verify string literals correctly handle escapes including unicode."""
     source = r'("hello\nworld" "tab\tseparated" "quote\"inner\"" "escaped\\slash" "unicode \u0041")'
