@@ -127,6 +127,8 @@ class ExtractedEvent:
     location_id: Optional[str] = None
     instrument_id: Optional[str] = None
     temporal_anchor: Optional[str] = None
+    time_start: Optional[Union[int, float]] = None
+    time_end: Optional[Union[int, float]] = None
     tense: str = "PAST"
     aspect: str = "SIMPLE"
     polarity: bool = True
@@ -145,6 +147,8 @@ class ExtractedEvent:
             "location_id": self.location_id,
             "instrument_id": self.instrument_id,
             "temporal_anchor": self.temporal_anchor,
+            "time_start": self.time_start,
+            "time_end": self.time_end,
             "tense": self.tense,
             "aspect": self.aspect,
             "polarity": self.polarity,
@@ -167,6 +171,8 @@ class ExtractedEvent:
             location_id=data.get("location_id") or data.get("location"),
             instrument_id=data.get("instrument_id") or data.get("instrument"),
             temporal_anchor=data.get("temporal_anchor") or data.get("time"),
+            time_start=data.get("time_start"),
+            time_end=data.get("time_end"),
             tense=str(data.get("tense", "PAST")).upper(),
             aspect=str(data.get("aspect", "SIMPLE")).upper(),
             polarity=bool(data.get("polarity", True)),

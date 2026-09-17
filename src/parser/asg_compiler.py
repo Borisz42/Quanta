@@ -463,6 +463,11 @@ class ASGCompiler:
                 elif st == "BELIEF":
                     node.set_slot("TOM_FIRST_ORDER_BELIEF", 1)
 
+        if event.time_start is not None:
+            setattr(node, "time_start", event.time_start)
+        if event.time_end is not None:
+            setattr(node, "time_end", event.time_end)
+
         node.compute_cid()
         return node
 
