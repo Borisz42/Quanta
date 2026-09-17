@@ -100,6 +100,34 @@ class ExtractedEntity:
 
 
 @dataclass
+class ExtractedTimeInterval:
+    """Structured temporal interval representation (Band 7 interval calculus).
+
+    Attributes:
+        start: Start boundary or timestamp (e.g. 2018, '2018', 't0').
+        end: Termination boundary or timestamp (e.g. 2024, None / 'nil').
+        duration: Optional elapsed duration metric.
+    """
+    start: Optional[Union[str, int, float]] = None
+    end: Optional[Union[str, int, float]] = None
+    duration: Optional[Union[str, int, float]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"start": self.start, "end": self.end}
+        if self.duration is not None:
+            d["duration"] = self.duration
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ExtractedTimeInterval:
+        return cls(
+            start=data.get("start"),
+            end=data.get("end"),
+            duration=data.get("duration"),
+        )
+
+
+@dataclass
 class ExtractedEvent:
     """Discrete physical, cognitive, communicative, or relational event predicate.
 
@@ -112,9 +140,11 @@ class ExtractedEvent:
         location_id: Foreign key to ExtractedEntity (Band 1 VAL_LOCATION_SLOT).
         instrument_id: Foreign key to ExtractedEntity (Band 1 VAL_X5_INSTRUMENT).
         temporal_anchor: Surface temporal descriptor (e.g. 'at dawn', 'three hours later').
+        time_interval: Structured temporal interval (e.g. interval :start 2018 :end nil).
         tense: Grammatical tense (e.g. 'PAST', 'PRESENT', 'FUTURE').
         aspect: Grammatical aspect (e.g. 'SIMPLE', 'PERFECT', 'PROGRESSIVE').
         polarity: Boolean polarity (True for affirmative, False for negated).
+        val: Belnap 4-valued logic state (e.g. 'TRUE', 'FALSE', 'UNKNOWN', 'IRRELEVANT').
         modality: Optional modal flavor (e.g. 'CERTAIN', 'POSSIBLE', 'OBLIGATION').
         raw_text: Source sentence or clause string for provenance tracking.
         arguments: Extensible argument map for adverbs, manner, or custom slots.
@@ -127,16 +157,18 @@ class ExtractedEvent:
     location_id: Optional[str] = None
     instrument_id: Optional[str] = None
     temporal_anchor: Optional[str] = None
+    time_interval: Optional[ExtractedTimeInterval] = None
     tense: str = "PAST"
     aspect: str = "SIMPLE"
     polarity: bool = True
+    val: Optional[str] = None
     modality: Optional[str] = None
     raw_text: Optional[str] = None
     arguments: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to a plain serializable dictionary."""
-        return {
+        d = {
             "id": self.id,
             "predicate": self.predicate,
             "agent_id": self.agent_id,
@@ -152,12 +184,33 @@ class ExtractedEvent:
             "raw_text": self.raw_text,
             "arguments": dict(self.arguments),
         }
+        if self.time_interval is not None:
+            d["time_interval"] = self.time_interval.to_dict()
+        if self.val is not None:
+            d["val"] = self.val
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ExtractedEvent:
         """Construct an ExtractedEvent from a dictionary with key normalization."""
         ev_id = data.get("id") or data.get("event_id") or ""
         pred = data.get("predicate") or data.get("verb") or data.get("action") or ""
+        time_int: Optional[ExtractedTimeInterval] = None
+        if "time_interval" in data and data["time_interval"] is not None:
+            if isinstance(data["time_interval"], dict):
+                time_int = ExtractedTimeInterval.from_dict(data["time_interval"])
+            elif isinstance(data["time_interval"], ExtractedTimeInterval):
+                time_int = data["time_interval"]
+
+        val_str = data.get("val")
+        pol = data.get("polarity")
+        if pol is None and val_str is not None:
+            pol = str(val_str).upper() not in ("FALSE", "0")
+        elif pol is None:
+            pol = True
+        else:
+            pol = bool(pol)
+
         return cls(
             id=str(ev_id),
             predicate=str(pred).lower(),
@@ -167,9 +220,11 @@ class ExtractedEvent:
             location_id=data.get("location_id") or data.get("location"),
             instrument_id=data.get("instrument_id") or data.get("instrument"),
             temporal_anchor=data.get("temporal_anchor") or data.get("time"),
+            time_interval=time_int,
             tense=str(data.get("tense", "PAST")).upper(),
             aspect=str(data.get("aspect", "SIMPLE")).upper(),
-            polarity=bool(data.get("polarity", True)),
+            polarity=pol,
+            val=str(val_str).upper() if val_str is not None else None,
             modality=data.get("modality"),
             raw_text=data.get("raw_text") or data.get("text"),
             arguments=dict(data.get("arguments") or {}),

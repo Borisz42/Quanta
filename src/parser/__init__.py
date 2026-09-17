@@ -18,6 +18,7 @@ from parser.schema import (
     ExtractedEvent,
     ExtractedRelation,
     ExtractedProposition,
+    ExtractedTimeInterval,
 )
 from parser.transducer import (
     BaseDiscourseTransducer,
@@ -68,6 +69,7 @@ __all__ = [
     "DiscourseExtractionResult",
     "ExtractedEntity",
     "ExtractedEvent",
+    "ExtractedTimeInterval",
     "ExtractedRelation",
     "ExtractedProposition",
     "BaseDiscourseTransducer",

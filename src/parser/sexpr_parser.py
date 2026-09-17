@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import Enum, auto
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.asg import QuantaGraph
 from parser.asg_compiler import ASGCompiler
@@ -25,6 +25,7 @@ from parser.schema import (
     ExtractedEvent,
     ExtractedProposition,
     ExtractedRelation,
+    ExtractedTimeInterval,
 )
 
 
@@ -456,8 +457,47 @@ class SExprParser:
 class SExprASTConverter:
     """Bidirectional converter between SExpr AST and DiscourseExtractionResult."""
 
+    ROOT_ALLOWED_KEYWORDS: Set[str] = {":chunk-id", ":chunk_id", ":id", ":metadata", ":meta"}
+    ENTITY_ALLOWED_KEYWORDS: Set[str] = {
+        ":id", ":type", ":category", ":label", ":name", ":canonical_name",
+        ":canonical-name", ":surface", ":aliases", ":alias", ":props", ":properties",
+    }
+    EVENT_ALLOWED_KEYWORDS: Set[str] = {
+        ":id", ":event_id", ":event-id", ":pred", ":predicate", ":action", ":verb",
+        ":agent", ":agent_id", ":agent-id", ":patient", ":patient_id", ":patient-id",
+        ":theme", ":theme_id", ":theme-id", ":location", ":location_id", ":location-id",
+        ":instrument", ":instrument_id", ":instrument-id", ":time", ":temporal_anchor",
+        ":temporal-anchor", ":tense", ":aspect", ":polarity", ":val", ":modality",
+        ":raw-text", ":raw_text", ":raw", ":text", ":args", ":arguments",
+    }
+    RELATION_ALLOWED_KEYWORDS: Set[str] = {
+        ":type", ":relation_type", ":relation-type", ":source", ":source_id", ":source-id",
+        ":target", ":target_id", ":target-id", ":mechanism", ":description", ":confidence",
+    }
+    PROPOSITION_ALLOWED_KEYWORDS: Set[str] = {
+        ":id", ":prop_id", ":prop-id", ":claim", ":claim_text", ":claim-text", ":text",
+        ":status", ":epistemic_status", ":epistemic-status", ":source", ":source_agent_id",
+        ":source-agent-id", ":source_agent", ":subject", ":subject_id", ":subject-id",
+        ":event", ":event_id", ":event-id", ":pred", ":predicate", ":props", ":properties",
+    }
+    INTERVAL_ALLOWED_KEYWORDS: Set[str] = {":start", ":end", ":duration", ":dur"}
+
     @classmethod
-    def from_ast(cls, root: SExprList) -> DiscourseExtractionResult:
+    def _validate_clause_keywords(cls, node: SExprList, clause_name: str, allowed: Set[str]):
+        """Validate that all keywords in a clause belong to the allowed set."""
+        norm_allowed = {k.lower().replace("_", "-") for k in allowed}
+        for elem in node.elements:
+            if isinstance(elem, SExprAtom) and elem.is_keyword():
+                kw_norm = elem.as_str().lower().replace("_", "-")
+                if kw_norm not in norm_allowed:
+                    raise SExprSyntaxError(
+                        f"Unknown keyword '{elem.as_str()}' in {clause_name} clause",
+                        line=elem.line,
+                        column=elem.column,
+                    )
+
+    @classmethod
+    def from_ast(cls, root: SExprList, strict: bool = False) -> DiscourseExtractionResult:
         """Convert an AST SExprList (graph ...) into a typed DiscourseExtractionResult."""
         head = root.head_symbol()
         if head != "graph":
@@ -490,22 +530,43 @@ class SExprASTConverter:
 
             # If it is a root keyword argument pair, skip both
             if isinstance(elem, SExprAtom) and elem.is_keyword():
+                if strict:
+                    kw_norm = elem.as_str().lower().replace("_", "-")
+                    norm_root_allowed = {k.lower().replace("_", "-") for k in cls.ROOT_ALLOWED_KEYWORDS}
+                    if kw_norm not in norm_root_allowed:
+                        raise SExprSyntaxError(
+                            f"Unknown root keyword '{elem.as_str()}' in graph",
+                            line=elem.line,
+                            column=elem.column,
+                        )
                 i += 2
                 continue
 
             if isinstance(elem, SExprList):
                 clause_head = elem.head_symbol()
                 if clause_head == "entity":
+                    if strict:
+                        cls._validate_clause_keywords(elem, "entity", cls.ENTITY_ALLOWED_KEYWORDS)
                     entities.append(cls._convert_entity(elem))
                 elif clause_head == "event":
-                    events.append(cls._convert_event(elem))
+                    if strict:
+                        cls._validate_clause_keywords(elem, "event", cls.EVENT_ALLOWED_KEYWORDS)
+                    events.append(cls._convert_event(elem, strict=strict))
                 elif clause_head == "relation":
+                    if strict:
+                        cls._validate_clause_keywords(elem, "relation", cls.RELATION_ALLOWED_KEYWORDS)
                     relations.append(cls._convert_relation(elem))
                 elif clause_head in ("proposition", "prop"):
+                    if strict:
+                        cls._validate_clause_keywords(elem, "proposition", cls.PROPOSITION_ALLOWED_KEYWORDS)
                     propositions.append(cls._convert_proposition(elem))
                 else:
-                    # Ignore unrecognized clause heads gracefully
-                    pass
+                    if strict:
+                        raise SExprSyntaxError(
+                            f"Unknown clause head '{clause_head}' in graph",
+                            line=elem.line,
+                            column=elem.column,
+                        )
             i += 1
 
         return DiscourseExtractionResult(
@@ -558,14 +619,14 @@ class SExprASTConverter:
         )
 
     @classmethod
-    def _convert_event(cls, node: SExprList) -> ExtractedEvent:
+    def _convert_event(cls, node: SExprList, strict: bool = False) -> ExtractedEvent:
         # :id
         id_node = node.get_keyword([":id", ":event_id", ":event-id"])
         ev_id = id_node.as_str() if isinstance(id_node, SExprAtom) else ""
 
         # :pred / :predicate
         pred_node = node.get_keyword([":pred", ":predicate", ":action", ":verb"])
-        predicate = pred_node.as_str().lower() if isinstance(pred_node, SExprAtom) else ""
+        predicate = pred_node.as_str() if isinstance(pred_node, SExprAtom) else ""
 
         def extract_fk(keys: List[str]) -> Optional[str]:
             v = node.get_keyword(keys)
@@ -583,9 +644,35 @@ class SExprASTConverter:
         instrument_id = extract_fk([":instrument", ":instrument_id", ":instrument-id"])
 
         time_node = node.get_keyword([":time", ":temporal_anchor", ":temporal-anchor"])
-        temporal_anchor = time_node.as_str() if isinstance(time_node, SExprAtom) else None
-        if temporal_anchor and temporal_anchor.lower() in ("nil", "none", "null"):
-            temporal_anchor = None
+        temporal_anchor: Optional[str] = None
+        time_interval: Optional[ExtractedTimeInterval] = None
+
+        if isinstance(time_node, SExprAtom):
+            temporal_anchor = time_node.as_str()
+            if temporal_anchor and temporal_anchor.lower() in ("nil", "none", "null"):
+                temporal_anchor = None
+        elif isinstance(time_node, SExprList):
+            head = time_node.head_symbol()
+            if head == "interval":
+                if strict:
+                    cls._validate_clause_keywords(time_node, "interval", cls.INTERVAL_ALLOWED_KEYWORDS)
+                start_elem = time_node.get_keyword([":start"])
+                end_elem = time_node.get_keyword([":end"])
+                dur_elem = time_node.get_keyword([":duration", ":dur"])
+
+                def _clean_time_val(v_elem: Any) -> Optional[Union[str, int, float]]:
+                    if isinstance(v_elem, SExprAtom):
+                        v = v_elem.value
+                        if str(v).lower() in ("nil", "none", "null"):
+                            return None
+                        return v
+                    return None
+
+                time_interval = ExtractedTimeInterval(
+                    start=_clean_time_val(start_elem),
+                    end=_clean_time_val(end_elem),
+                    duration=_clean_time_val(dur_elem),
+                )
 
         tense_node = node.get_keyword([":tense"])
         tense = tense_node.as_str().upper() if isinstance(tense_node, SExprAtom) else "PAST"
@@ -593,9 +680,17 @@ class SExprASTConverter:
         aspect_node = node.get_keyword([":aspect"])
         aspect = aspect_node.as_str().upper() if isinstance(aspect_node, SExprAtom) else "SIMPLE"
 
-        pol_node = node.get_keyword([":polarity", ":val"])
+        pol_node = node.get_keyword([":polarity"])
+        val_node = node.get_keyword([":val"])
+
+        val: Optional[str] = None
+        if isinstance(val_node, SExprAtom):
+            val = val_node.as_str().upper()
+
         if isinstance(pol_node, SExprAtom):
             polarity = pol_node.as_bool()
+        elif val is not None:
+            polarity = val not in ("FALSE", "0", "F")
         else:
             polarity = True
 
@@ -623,9 +718,11 @@ class SExprASTConverter:
             location_id=location_id,
             instrument_id=instrument_id,
             temporal_anchor=temporal_anchor,
+            time_interval=time_interval,
             tense=tense,
             aspect=aspect,
             polarity=polarity,
+            val=val,
             modality=modality,
             raw_text=raw_text,
             arguments=arguments,
@@ -831,13 +928,13 @@ class SExprASTConverter:
         return f"({' '.join(pairs)})"
 
 
-def parse_sexpr(sexpr_str: str) -> DiscourseExtractionResult:
+def parse_sexpr(sexpr_str: str, strict: bool = False) -> DiscourseExtractionResult:
     """Parse an S-expression string into a typed DiscourseExtractionResult."""
     lexer = SExprLexer(sexpr_str)
     tokens = lexer.tokenize()
     parser = SExprParser(tokens)
     ast = parser.parse()
-    return SExprASTConverter.from_ast(ast)
+    return SExprASTConverter.from_ast(ast, strict=strict)
 
 
 def to_sexpr(result: DiscourseExtractionResult, pretty: bool = True) -> str:
@@ -849,6 +946,7 @@ def parse_to_asg(
     sexpr_str: str,
     compiler: Optional[ASGCompiler] = None,
     validate: bool = True,
+    strict: bool = False,
 ) -> QuantaGraph:
     """Parse an S-expression string and compile it directly into a QuantaGraph.
 
@@ -856,6 +954,7 @@ def parse_to_asg(
         sexpr_str: The S-expression string to parse.
         compiler: Optional ASGCompiler instance. Defaults to a new ASGCompiler().
         validate: Whether to execute Clingo ASP validation on the compiled graph.
+        strict: Whether to enforce strict keyword and clause validation.
 
     Returns:
         Compiled, content-addressed 1024-D QuantaGraph.
@@ -864,7 +963,7 @@ def parse_to_asg(
         SExprSyntaxError: If the S-expression has syntax or structural errors.
         ASGCompilationError: If foreign keys or Clingo validation constraints fail.
     """
-    extraction_result = parse_sexpr(sexpr_str)
+    extraction_result = parse_sexpr(sexpr_str, strict=strict)
     if compiler is None:
         compiler = ASGCompiler()
     return compiler.compile(extraction_result, validate=validate)

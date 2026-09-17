@@ -118,7 +118,7 @@ JSON-LD and raw property graphs waste 60%–75% of generation tokens on repetiti
 ### Checklist
 - [x] **1.1** Author formal GBNF grammar in `data/grammar/quanta_asg.gbnf`: extend to explicitly constrain Belnap 4-valued logic states (`IRRELEVANT`, `TRUE`, `FALSE`, `UNKNOWN`) and structured temporal interval expressions `(interval :start ... :end ...)`.
 - [x] **1.2** Implement lightweight recursive-descent S-expression lexer and parser in `src/parser/sexpr_parser.py` (converting raw S-expr strings to Python AST structures).
-- [ ] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records (including structured `:time (interval ...)` lists).
+- [x] **1.3** Implement AST converter in `src/parser/sexpr_parser.py` mapping S-expressions into typed `DiscourseExtractionResult`, `ExtractedEntity`, and `ExtractedEvent` records (including structured `:time (interval ...)` lists).
 - [ ] **1.4** Implement polymorphic S-expression serializer: `serialize_to_sexpr(graph_or_result) -> str` supporting both `QuantaGraph` and `DiscourseExtractionResult`.
 - [ ] **1.5** 🧪 Write comprehensive unit tests in `tests/test_sexpr_parser.py`:
   - Parse the canonical 3-entity, 1-event Dr. Eleanor Vance S-expression; assert 3 entities, 1 event, correct attribute and time interval mappings.

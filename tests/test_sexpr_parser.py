@@ -20,6 +20,7 @@ from parser.schema import (
     ExtractedEvent,
     ExtractedProposition,
     ExtractedRelation,
+    ExtractedTimeInterval,
 )
 from parser.sexpr_parser import (
     SExprASTConverter,
@@ -207,6 +208,66 @@ def test_event_val_polarity_alias():
     res = parse_sexpr(source)
     assert len(res.events) == 1
     assert res.events[0].polarity is False
+    assert res.events[0].val == "FALSE"
+
+
+def test_structured_temporal_interval_parsing():
+    """Verify structured :time (interval :start ... :end ... :duration ...) parses into ExtractedTimeInterval."""
+    source = """
+    (graph
+      (entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")
+      (event :id ev1 :pred PROFESSOR_OF :agent e1
+             :time (interval :start 2018 :end nil :duration 6) :val TRUE)
+    )
+    """
+    res = parse_sexpr(source)
+    assert len(res.events) == 1
+    ev = res.events[0]
+    assert ev.time_interval is not None
+    assert isinstance(ev.time_interval, ExtractedTimeInterval)
+    assert ev.time_interval.start == 2018
+    assert ev.time_interval.end is None
+    assert ev.time_interval.duration == 6
+    assert ev.val == "TRUE"
+    assert ev.polarity is True
+
+
+def test_belnap_logic_states_parsing():
+    """Verify Belnap 4-valued logic states (TRUE, FALSE, UNKNOWN, IRRELEVANT) in :val."""
+    source = """
+    (graph
+      (entity :id e1 :type HUMAN :label "Alice" :surface "Alice")
+      (event :id ev1 :pred hypothesize :agent e1 :val UNKNOWN)
+      (event :id ev2 :pred ignore :agent e1 :val IRRELEVANT)
+    )
+    """
+    res = parse_sexpr(source)
+    assert len(res.events) == 2
+    assert res.events[0].val == "UNKNOWN"
+    assert res.events[0].polarity is True
+    assert res.events[1].val == "IRRELEVANT"
+    assert res.events[1].polarity is True
+
+
+def test_strict_keyword_validation_error():
+    """Verify strict=True raises SExprSyntaxError on unrecognized keywords with line/col info."""
+    source = '(graph (entity :id e1 :type PERSON :label "Alice" :surface "Alice" :bogus_prop 123))'
+    with pytest.raises(SExprSyntaxError) as exc_info:
+        parse_sexpr(source, strict=True)
+    assert "Unknown keyword ':bogus_prop' in entity clause" in str(exc_info.value)
+    assert exc_info.value.line == 1
+
+    # In non-strict mode, it ignores unrecognized keywords without error
+    res = parse_sexpr(source, strict=False)
+    assert len(res.entities) == 1
+
+
+def test_strict_clause_head_validation_error():
+    """Verify strict=True raises SExprSyntaxError on unrecognized clause heads."""
+    source = '(graph (invalid_head :id e1))'
+    with pytest.raises(SExprSyntaxError) as exc_info:
+        parse_sexpr(source, strict=True)
+    assert "Unknown clause head 'invalid_head' in graph" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
