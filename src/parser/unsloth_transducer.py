@@ -35,6 +35,7 @@ from parser.schema import (
 )
 from parser.sexpr_parser import parse_sexpr, to_sexpr
 from parser.transducer import (
+    BaseDiscourseTransducer,
     CANONICAL_ELEANOR_VANCE_FIXTURE,
     CANONICAL_ELEANOR_VANCE_TEXT,
     CANONICAL_STRESS_1_FIXTURE,
@@ -48,6 +49,43 @@ from parser.transducer import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Supported SLM Model Architectures & Presets (Phase 3.4)
+# ---------------------------------------------------------------------------
+
+MODEL_QWEN_4B = "qwen3.5-4b"          # Default: Qwen 3.5 4B Dense (Hybrid Linear Attention)
+MODEL_QWEN_2B = "qwen3.5-2b"          # Ultra-low VRAM profile (<4GB physical VRAM)
+MODEL_GEMMA_4 = "gemma-4-mtp"         # High-throughput profile (Gemma 4 with Multi-Token Prediction)
+DEFAULT_MODEL = MODEL_QWEN_4B
+
+MODEL_PRESETS: Dict[str, str] = {
+    "qwen3.5-4b": MODEL_QWEN_4B,
+    "qwen-4b": MODEL_QWEN_4B,
+    "qwen_4b": MODEL_QWEN_4B,
+    "qwen": MODEL_QWEN_4B,
+    "default": MODEL_QWEN_4B,
+    "qwen3.5-2b": MODEL_QWEN_2B,
+    "qwen-2b": MODEL_QWEN_2B,
+    "qwen_2b": MODEL_QWEN_2B,
+    "ultra-low-vram": MODEL_QWEN_2B,
+    "low-vram": MODEL_QWEN_2B,
+    "gemma-4": MODEL_GEMMA_4,
+    "gemma-4-mtp": MODEL_GEMMA_4,
+    "gemma_4": MODEL_GEMMA_4,
+    "gemma": MODEL_GEMMA_4,
+    "high-throughput": MODEL_GEMMA_4,
+    "mtp": MODEL_GEMMA_4,
+}
+
+
+def resolve_model_name(model_name_or_alias: Optional[str]) -> str:
+    """Resolve user-friendly model aliases and presets to canonical model names."""
+    if not model_name_or_alias or not str(model_name_or_alias).strip():
+        return DEFAULT_MODEL
+    cleaned = str(model_name_or_alias).strip().lower()
+    return MODEL_PRESETS.get(cleaned, str(model_name_or_alias).strip())
+
 
 # ---------------------------------------------------------------------------
 # Mentalese S-Expression System Prompt with 1-Shot In-Context Demonstration
@@ -165,7 +203,7 @@ def _clean_sexpr_output(text: str) -> str:
 # Deterministic Offline Mock Transducer
 # ---------------------------------------------------------------------------
 
-class MockUnslothTransducer:
+class MockUnslothTransducer(BaseDiscourseTransducer):
     """Deterministic, high-performance offline S-expression transducer.
 
     Guarantees sub-5ms execution time for CI and offline environments without
@@ -178,7 +216,7 @@ class MockUnslothTransducer:
         fixtures: Optional[Dict[str, Union[str, DiscourseExtractionResult]]] = None,
         system_prompt: str = DEFAULT_UNSLOTH_SYSTEM_PROMPT,
     ):
-        self.system_prompt = system_prompt
+        super().__init__(system_prompt=system_prompt)
         self.fixtures: Dict[str, DiscourseExtractionResult] = {}
 
         # Register canonical gold-standard fixtures
@@ -218,15 +256,19 @@ class MockUnslothTransducer:
 
     def transduce_raw(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
         """Return raw S-expression string conforming to GBNF grammar."""
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
         res = self.transduce(
-            text=text,
+            text=content,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
@@ -236,15 +278,19 @@ class MockUnslothTransducer:
 
     def transduce(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> DiscourseExtractionResult:
         """Transduce discourse text into typed DiscourseExtractionResult."""
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
         t0 = time.perf_counter()
-        norm_text = " ".join(text.split()).strip()
+        norm_text = " ".join(content.split()).strip()
 
         matched: Optional[DiscourseExtractionResult] = None
         repair_req = kwargs.get("repair_request")
@@ -252,33 +298,33 @@ class MockUnslothTransducer:
         # 0. Check repair callback or repair fixtures if repair_request is present
         if repair_req:
             if self.repair_callback:
-                cb_res = self.repair_callback(text, **kwargs)
+                cb_res = self.repair_callback(content, **kwargs)
                 if cb_res is not None:
                     if isinstance(cb_res, str):
                         matched = parse_sexpr(cb_res)
                     else:
                         matched = cb_res
             if matched is None:
-                if text in self.repair_fixtures:
-                    matched = self.repair_fixtures[text]
+                if content in self.repair_fixtures:
+                    matched = self.repair_fixtures[content]
                 elif norm_text in self.repair_fixtures:
                     matched = self.repair_fixtures[norm_text]
                 else:
                     for k, fix in self.repair_fixtures.items():
-                        if k.lower() in text.lower():
+                        if k.lower() in content.lower():
                             matched = fix
                             break
 
         # 1. Exact match in fixtures
         if matched is None:
-            if text in self.fixtures:
-                matched = self.fixtures[text]
+            if content in self.fixtures:
+                matched = self.fixtures[content]
             elif norm_text in self.fixtures:
                 matched = self.fixtures[norm_text]
 
         # 2. Substring heuristics for canonical benchmarks
         if matched is None:
-            lower = text.lower()
+            lower = content.lower()
             if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
                 matched = CANONICAL_ELEANOR_VANCE_FIXTURE
             elif "alice" in lower and "auditor" in lower:
@@ -297,11 +343,10 @@ class MockUnslothTransducer:
 
         # Clone and customize result if matched
         if matched is not None:
-            result = self._clone_and_adapt(matched, text, chunk_id, active_entities)
+            result = self._clone_and_adapt(matched, content, chunk_id, active_entities)
         else:
             # 3. Dynamic synthesis for novel text
-            result = self._synthesize_dynamic(text, chunk_id, active_entities)
-
+            result = self._synthesize_dynamic(content, chunk_id, active_entities)
         latency = time.perf_counter() - t0
         result.metadata["latency_sec"] = latency
         result.metadata["backend"] = "mock_unsloth"
@@ -310,37 +355,41 @@ class MockUnslothTransducer:
 
     async def transduce_async(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> DiscourseExtractionResult:
         """Asynchronous execution wrapper for transduce."""
         return await asyncio.to_thread(
             self.transduce,
-            text,
+            text=text,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
+            chunk_text=chunk_text,
             **kwargs,
         )
 
     async def transduce_raw_async(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
         """Asynchronous execution wrapper for transduce_raw."""
         return await asyncio.to_thread(
             self.transduce_raw,
-            text,
+            text=text,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
+            chunk_text=chunk_text,
             **kwargs,
         )
 
@@ -477,12 +526,13 @@ MockSExprTransducer = MockUnslothTransducer
 # Production Unsloth Transducer Client
 # ---------------------------------------------------------------------------
 
-class UnslothTransducer:
+class UnslothTransducer(BaseDiscourseTransducer):
     """Production client for local Small Language Models (Qwen 3.5 / Gemma 4) via Unsloth.
 
     Connects to http://localhost:8888/v1 (OpenAI-compatible chat completions)
-    with native GBNF grammar injection (extra_body={"grammar": ...}), active entity
-    manifest injection, retry backoff, health checking, and automatic mock fallback.
+    with fallback to http://localhost:1234/v1, native GBNF grammar injection
+    (extra_body={"grammar": ...}), active entity manifest injection, retry backoff,
+    health checking, and automatic mock fallback.
     """
 
     def __init__(
@@ -498,18 +548,25 @@ class UnslothTransducer:
         system_prompt: Optional[str] = None,
         fallback_to_mock: bool = True,
         mock_transducer: Optional[MockUnslothTransducer] = None,
+        fallback_base_url: Optional[str] = None,
     ):
+        super().__init__(system_prompt=system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT)
         self.base_url = (
             base_url
             or os.environ.get("UNSLOTH_BASE_URL")
             or "http://localhost:8888/v1"
         ).rstrip("/")
+        fallback_candidate = (
+            fallback_base_url
+            if fallback_base_url is not None
+            else os.environ.get("UNSLOTH_FALLBACK_URL", "http://localhost:1234/v1")
+        )
+        self.fallback_base_url = fallback_candidate.rstrip("/") if fallback_candidate else None
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
         self.api_key = api_key
         self.session = session or requests.Session()
-        self.system_prompt = system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT
         self.fallback_to_mock = fallback_to_mock
         self._mock = mock_transducer or MockUnslothTransducer(system_prompt=self.system_prompt)
         self._last_fallback_used = False
@@ -518,12 +575,18 @@ class UnslothTransducer:
         self.grammar_path = _locate_gbnf_grammar(grammar_path)
         self.grammar_content = self.grammar_path.read_text(encoding="utf-8")
 
-        # 2. Model resolution
-        self.model = model or self._detect_model()
+        # 2. Model resolution (lazy default to prevent eager network calls during init)
+        self.model = resolve_model_name(model)
 
-    def _detect_model(self) -> str:
+    def set_model(self, model: str) -> str:
+        """Set active model profile at runtime, resolving aliases and presets."""
+        self.model = resolve_model_name(model)
+        return self.model
+
+    def _detect_model(self, base_url: Optional[str] = None) -> str:
         """Query /models to detect active model or default to Qwen 3.5 4B."""
-        url = f"{self.base_url}/models"
+        target = (base_url or self.base_url).rstrip("/")
+        url = f"{target}/models"
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
             resp = self.session.get(url, headers=headers, timeout=1.5)
@@ -540,21 +603,26 @@ class UnslothTransducer:
                     return models[0]
         except Exception:
             pass
-        return "qwen3.5-4b"
+        return DEFAULT_MODEL
 
-    def check_health(self) -> bool:
+    def check_health(self, url: Optional[str] = None) -> bool:
         """Check if Unsloth endpoint is reachable and responsive."""
-        url = f"{self.base_url}/models"
+        target = (url or self.base_url).rstrip("/")
+        endpoint = f"{target}/models"
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
-            resp = self.session.get(url, headers=headers, timeout=1.5)
+            resp = self.session.get(endpoint, headers=headers, timeout=1.5)
             return resp.status_code == 200
         except Exception:
             return False
 
     def is_available(self) -> bool:
-        """Alias for check_health()."""
-        return self.check_health()
+        """Alias for check_health(). Checks primary and secondary endpoints."""
+        if self.check_health(self.base_url):
+            return True
+        if self.fallback_base_url and self.check_health(self.fallback_base_url):
+            return True
+        return False
 
     def _build_system_prompt(
         self,
@@ -598,85 +666,108 @@ class UnslothTransducer:
         user_content = self._build_user_prompt(
             text, active_entities, active_manifest_prompt, repair_request=repair_req
         )
-        target_model = kwargs.get("model") or self.model or self._detect_model()
+        target_model = resolve_model_name(kwargs.get("model") or self.model)
 
         messages = [
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_content},
         ]
 
+        extra_body = {
+            "grammar": self.grammar_content,
+            **kwargs.get("extra_body", {}),
+        }
+
         payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.0),
             "max_tokens": kwargs.get("max_tokens", 2048),
-            "extra_body": {
-                "grammar": self.grammar_content,
-            },
+            "grammar": self.grammar_content,
+            "extra_body": extra_body,
         }
+
+        for opt_key in ("top_p", "seed", "stop", "presence_penalty", "frequency_penalty"):
+            if opt_key in kwargs:
+                payload[opt_key] = kwargs[opt_key]
+
         return payload
 
     def transduce_raw(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
         """Send inference request to Unsloth server and return raw S-expression string."""
-        url = f"{self.base_url}/chat/completions"
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
         payload = self._build_payload(
-            text=text,
+            text=content,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
             **kwargs,
         )
 
+        candidate_urls: List[str] = [self.base_url]
+        if self.fallback_base_url and self.fallback_base_url != self.base_url:
+            candidate_urls.append(self.fallback_base_url)
+
         last_err: Optional[Exception] = None
         raw_sexpr: Optional[str] = None
 
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                resp = self.session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    content = data["choices"][0]["message"]["content"]
-                    raw_sexpr = _clean_sexpr_output(content)
-                    break
-                elif resp.status_code in {500, 502, 503, 504}:
-                    last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
-                else:
-                    resp.raise_for_status()
-            except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
-                last_err = e
+        for base_url in candidate_urls:
+            url = f"{base_url}/chat/completions"
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    resp = self.session.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        timeout=self.timeout,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content_str = data["choices"][0]["message"]["content"]
+                        raw_sexpr = _clean_sexpr_output(content_str)
+                        break
+                    elif resp.status_code in {500, 502, 503, 504}:
+                        last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
+                    else:
+                        resp.raise_for_status()
+                except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
+                    last_err = e
 
-            if attempt < self.max_retries:
-                time.sleep(self.retry_backoff * (2 ** (attempt - 1)))
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_backoff * (2 ** (attempt - 1)))
+
+            if raw_sexpr is not None:
+                break
 
         if raw_sexpr is None:
             if self.fallback_to_mock:
                 self._last_fallback_used = True
                 logger.warning(
-                    "Unsloth server at %s unreachable (%s); falling back to MockUnslothTransducer",
-                    self.base_url,
+                    "Unsloth servers at %s unreachable (%s); falling back to MockUnslothTransducer",
+                    candidate_urls,
                     last_err,
                 )
                 return self._mock.transduce_raw(
-                    text=text,
+                    text=content,
                     active_entities=active_entities,
                     chunk_id=chunk_id,
                     active_manifest_prompt=active_manifest_prompt,
+                    chunk_text=chunk_text,
                     **kwargs,
                 )
             raise RuntimeError(
@@ -688,21 +779,27 @@ class UnslothTransducer:
 
     def transduce(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> DiscourseExtractionResult:
         """Transduce discourse text into typed DiscourseExtractionResult."""
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
+
         t0 = time.perf_counter()
         try:
             self._last_fallback_used = False
             raw_sexpr = self.transduce_raw(
-                text=text,
+                text=content,
                 active_entities=active_entities,
                 chunk_id=chunk_id,
                 active_manifest_prompt=active_manifest_prompt,
+                chunk_text=chunk_text,
                 **kwargs,
             )
             result = parse_sexpr(raw_sexpr)
@@ -716,7 +813,7 @@ class UnslothTransducer:
                 result.metadata["model"] = "mock-unsloth-slm"
             else:
                 result.metadata["backend"] = "unsloth"
-                result.metadata["model"] = kwargs.get("model") or self.model
+                result.metadata["model"] = resolve_model_name(kwargs.get("model") or self.model)
             return result
         except Exception as e:
             if self.fallback_to_mock:
@@ -726,10 +823,11 @@ class UnslothTransducer:
                     e,
                 )
                 res = self._mock.transduce(
-                    text=text,
+                    text=content,
                     active_entities=active_entities,
                     chunk_id=chunk_id,
                     active_manifest_prompt=active_manifest_prompt,
+                    chunk_text=chunk_text,
                     **kwargs,
                 )
                 res.metadata["fallback_from_unsloth"] = True
@@ -738,36 +836,40 @@ class UnslothTransducer:
 
     async def transduce_async(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> DiscourseExtractionResult:
         """Asynchronous execution wrapper for transduce."""
         return await asyncio.to_thread(
             self.transduce,
-            text,
+            text=text,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
+            chunk_text=chunk_text,
             **kwargs,
         )
 
     async def transduce_raw_async(
         self,
-        text: str,
+        text: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
+        chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
         """Asynchronous execution wrapper for transduce_raw."""
         return await asyncio.to_thread(
             self.transduce_raw,
-            text,
+            text=text,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
+            chunk_text=chunk_text,
             **kwargs,
         )

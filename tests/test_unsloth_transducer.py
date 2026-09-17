@@ -27,16 +27,24 @@ from parser.entity_manifest import EntityRecord
 from parser.schema import DiscourseExtractionResult
 from parser.sexpr_parser import parse_sexpr, parse_to_asg
 from parser.transducer import (
+    BaseDiscourseTransducer,
     CANONICAL_ELEANOR_VANCE_FIXTURE,
     CANONICAL_ELEANOR_VANCE_TEXT,
     CANONICAL_STRESS_1_TEXT,
+    create_transducer,
 )
 from parser.unsloth_transducer import (
+    DEFAULT_MODEL,
     DEFAULT_UNSLOTH_SYSTEM_PROMPT,
+    MODEL_GEMMA_4,
+    MODEL_PRESETS,
+    MODEL_QWEN_2B,
+    MODEL_QWEN_4B,
     MockUnslothTransducer,
     UnslothTransducer,
     _format_entity_manifest,
     _locate_gbnf_grammar,
+    resolve_model_name,
 )
 
 
@@ -379,3 +387,190 @@ def test_async_transduction():
     assert isinstance(result, DiscourseExtractionResult)
     assert result.chunk_id == "async_01"
     assert raw_sexpr.startswith("(graph")
+
+
+# ---------------------------------------------------------------------------
+# 7. Runtime Model Selection Tests (Phase 3.4)
+# ---------------------------------------------------------------------------
+
+def test_runtime_model_selection_and_presets():
+    """Verify runtime model selection across Qwen 3.5 4B, 2B, and Gemma 4 with alias normalization."""
+    # 1. Default model
+    transducer = UnslothTransducer(fallback_to_mock=True)
+    assert transducer.model == MODEL_QWEN_4B
+    assert transducer.model == "qwen3.5-4b"
+
+    # 2. Preset alias resolution
+    assert resolve_model_name(None) == DEFAULT_MODEL
+    assert resolve_model_name("") == DEFAULT_MODEL
+    assert resolve_model_name("qwen-4b") == MODEL_QWEN_4B
+    assert resolve_model_name("qwen3.5-2b") == MODEL_QWEN_2B
+    assert resolve_model_name("ultra-low-vram") == MODEL_QWEN_2B
+    assert resolve_model_name("gemma-4") == MODEL_GEMMA_4
+    assert resolve_model_name("high-throughput") == MODEL_GEMMA_4
+    assert resolve_model_name("mtp") == MODEL_GEMMA_4
+
+    # 3. Setting model via constructor
+    t_2b = UnslothTransducer(model="ultra-low-vram", fallback_to_mock=True)
+    assert t_2b.model == MODEL_QWEN_2B
+
+    t_gemma = UnslothTransducer(model="gemma-4", fallback_to_mock=True)
+    assert t_gemma.model == MODEL_GEMMA_4
+
+    # 4. Changing model at runtime via set_model
+    transducer.set_model("ultra-low-vram")
+    assert transducer.model == MODEL_QWEN_2B
+
+    transducer.set_model("high-throughput")
+    assert transducer.model == MODEL_GEMMA_4
+
+    # 5. Per-call payload override
+    payload_4b = transducer._build_payload(text="Hello", model="qwen-4b")
+    assert payload_4b["model"] == MODEL_QWEN_4B
+
+    payload_2b = transducer._build_payload(text="Hello", model="qwen-2b")
+    assert payload_2b["model"] == MODEL_QWEN_2B
+
+    payload_gemma = transducer._build_payload(text="Hello", model="gemma-4")
+    assert payload_gemma["model"] == MODEL_GEMMA_4
+
+
+# ---------------------------------------------------------------------------
+# 8. Endpoint Fallback Cascade Tests (Phase 3.1)
+# ---------------------------------------------------------------------------
+
+def test_endpoint_fallback_cascade():
+    """Verify transducer cascades from unreachable primary to reachable secondary endpoint."""
+    mock_session = MagicMock(spec=requests.Session)
+
+    # Primary :8888 fails with ConnectionError, secondary :1234 succeeds with HTTP 200
+    def mock_post(url, *args, **kwargs):
+        if "8888" in url:
+            raise requests.ConnectionError("Connection refused on 8888")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '(graph (entity :id E1 :type PERSON :label "Fallback Agent" :surface "Agent"))'
+                    }
+                }
+            ]
+        }
+        return resp
+
+    mock_session.post.side_effect = mock_post
+
+    transducer = UnslothTransducer(
+        base_url="http://localhost:8888/v1",
+        fallback_base_url="http://localhost:1234/v1",
+        session=mock_session,
+        fallback_to_mock=False,
+    )
+
+    result = transducer.transduce("Agent tested fallback.")
+    assert len(result.entities) == 1
+    assert result.entities[0].canonical_name == "Fallback Agent"
+    assert result.metadata["backend"] == "unsloth"
+
+
+# ---------------------------------------------------------------------------
+# 9. Eleanor Vance Full Gold-Standard Verification (Phase 3.6)
+# ---------------------------------------------------------------------------
+
+def test_unsloth_transducer_eleanor_vance_full_verification():
+    """Verify Dr. Eleanor Vance chunk produces valid S-expression with all 5 entities and 6 events."""
+    transducer = UnslothTransducer(fallback_to_mock=True, timeout=0.1, max_retries=1, retry_backoff=0.01)
+
+    # Test raw S-expression output
+    raw_sexpr = transducer.transduce_raw(CANONICAL_ELEANOR_VANCE_TEXT)
+    assert raw_sexpr.startswith("(graph")
+    assert "Eleanor Vance" in raw_sexpr
+    assert "synthetic compound" in raw_sexpr
+
+    # Test full typed extraction
+    result = transducer.transduce(CANONICAL_ELEANOR_VANCE_TEXT, chunk_id="chunk_ev_gold")
+    assert isinstance(result, DiscourseExtractionResult)
+    assert result.chunk_id == "chunk_ev_gold"
+
+    # Assert all 5 entities
+    assert len(result.entities) == 5
+    entity_names = [e.canonical_name for e in result.entities]
+    assert "Dr. Eleanor Vance" in entity_names
+    assert "synthetic compound" in entity_names
+    assert "cryogenic containment cell" in entity_names
+    assert "supervisor" in entity_names
+    assert "laboratory director" in entity_names
+
+    # Assert all 6 events with exact predicates
+    assert len(result.events) == 6
+    predicates = [ev.predicate for ev in result.events]
+    assert "isolate" in predicates
+    assert "note" in predicates
+    assert "doubt" in predicates
+    assert "verify" in predicates
+    assert "retain" in predicates
+    assert "prohibit" in predicates
+
+    # Assert relations & propositions
+    assert len(result.relations) == 5
+    assert len(result.propositions) == 5
+
+    # Direct compilation into 1024-D QuantaGraph
+    graph = parse_to_asg(raw_sexpr, validate=True)
+    assert isinstance(graph, QuantaGraph)
+    assert len(graph.nodes) == 11  # 5 entities + 6 events = 11 nodes
+    assert graph.validation.is_valid is True
+
+
+# ---------------------------------------------------------------------------
+# 10. Polymorphism & Factory Integration Tests (Phase 3.5)
+# ---------------------------------------------------------------------------
+
+def test_transducer_polymorphic_interface():
+    """Verify UnslothTransducer and MockUnslothTransducer inherit BaseDiscourseTransducer and support factory."""
+    assert issubclass(UnslothTransducer, BaseDiscourseTransducer)
+    assert issubclass(MockUnslothTransducer, BaseDiscourseTransducer)
+
+    t_unsloth = UnslothTransducer(fallback_to_mock=True, timeout=0.1, max_retries=1, retry_backoff=0.01)
+    assert isinstance(t_unsloth, BaseDiscourseTransducer)
+
+    t_mock = MockUnslothTransducer()
+    assert isinstance(t_mock, BaseDiscourseTransducer)
+
+    # Test chunk_text keyword argument compatibility across both
+    res_kw = t_unsloth.transduce(chunk_text="Alice observed the experiment.")
+    assert len(res_kw.entities) >= 1
+
+    res_mock_kw = t_mock.transduce(chunk_text="Alice observed the experiment.")
+    assert len(res_mock_kw.entities) >= 1
+
+    # Test factory instantiation
+    factory_unsloth = create_transducer("unsloth", fallback_to_mock=True, timeout=0.1, max_retries=1, retry_backoff=0.01)
+    assert isinstance(factory_unsloth, UnslothTransducer)
+
+    factory_mock_unsloth = create_transducer("mock_unsloth")
+    assert isinstance(factory_mock_unsloth, MockUnslothTransducer)
+
+
+# ---------------------------------------------------------------------------
+# 11. Instant Instantiation Latency Tests (Phase 3.1)
+# ---------------------------------------------------------------------------
+
+def test_instant_instantiation_latency():
+    """Verify UnslothTransducer instantiates instantly without blocking network timeouts."""
+    t0 = time.perf_counter()
+    instances = [
+        UnslothTransducer(
+            base_url="http://127.0.0.1:59999/v1",
+            fallback_to_mock=True,
+        )
+        for _ in range(10)
+    ]
+    elapsed = (time.perf_counter() - t0) * 1000.0  # ms
+    avg_ms = elapsed / 10.0
+
+    assert len(instances) == 10
+    # Instantiating 10 instances must be < 50ms total (<5ms each)
+    assert avg_ms < 10.0, f"Average instantiation time {avg_ms:.2f}ms exceeded 10ms (blocking network call present!)"
