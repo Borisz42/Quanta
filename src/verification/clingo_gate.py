@@ -580,13 +580,21 @@ class MUCRepairManager:
                 **kwargs,
             )
         elif hasattr(transducer, "transduce"):
-            res = transducer.transduce(
-                text=text,
-                active_entities=active_entities,
-                chunk_id=chunk_id,
-                repair_request=repair_request,
-                **kwargs,
-            )
+            try:
+                res = transducer.transduce(
+                    text=text,
+                    active_entities=active_entities,
+                    chunk_id=chunk_id,
+                    repair_request=repair_request,
+                    **kwargs,
+                )
+            except TypeError:
+                res = transducer.transduce(
+                    chunk_text=text,
+                    chunk_id=chunk_id,
+                    active_manifest_prompt=kwargs.get("active_manifest_prompt"),
+                    **kwargs,
+                )
             if isinstance(res, DiscourseExtractionResult):
                 return to_sexpr(res)
             return str(res)

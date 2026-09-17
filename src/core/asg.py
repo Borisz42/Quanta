@@ -301,6 +301,24 @@ class QuantaGraph:
                 return n
         return None
 
+    def copy(self) -> QuantaGraph:
+        """Create a deep copy of the QuantaGraph and its QuantaNodes."""
+        cloned = QuantaGraph(root_cid=self.root_cid)
+        for node in self._node_list:
+            new_node = QuantaNode(
+                vector=node.vector.copy(),
+                anchor=node.anchor,
+                literal=node.literal,
+                parent_cid=node.parent_cid,
+            )
+            new_node.edges = {k: list(v) for k, v in node.edges.items()}
+            cloned.add_node(new_node)
+        cloned.root_cid = self.root_cid
+        for attr in ("extraction_result", "validation", "chunk_id", "entity_nodes", "event_nodes"):
+            if hasattr(self, attr):
+                setattr(cloned, attr, getattr(self, attr))
+        return cloned
+
     def _propagate_cid_updates(self, initial_replacements: Dict[str, str]):
         """Propagates CID updates bottom-up through the graph.
         

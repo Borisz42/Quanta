@@ -286,9 +286,9 @@ This phase completes the operational bridge, connecting the 3-pass ingestion pip
 ```powershell
 pytest tests/ -v
 ```
-- [ ] End-to-end execution of a multi-sentence narrative: text $\to$ S-expr $\to$ QuantaGraph $\to$ English NLG.
-- [ ] All 268 baseline tests pass without regression.
-- [ ] All new test files pass cleanly:
+- [x] End-to-end execution of a multi-sentence narrative: text $\to$ S-expr $\to$ QuantaGraph $\to$ English NLG.
+- [x] All 268 baseline tests pass without regression.
+- [x] All new test files pass cleanly:
   - `tests/test_sexpr_parser.py`
   - `tests/test_unsloth_transducer.py`
   - `tests/test_graph_stitcher.py`
