@@ -18,6 +18,12 @@ import tempfile
 from typing import Any, Dict, List
 import pytest
 
+import sys
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
 from core.asg import QuantaGraph
 from data.sexpr_dataset_generator import (
     DEFAULT_INSTRUCTION,
@@ -27,8 +33,8 @@ from data.sexpr_dataset_generator import (
 from parser.schema import DiscourseExtractionResult
 from parser.sexpr_parser import parse_sexpr, parse_to_asg, serialize_to_sexpr
 from parser.unsloth_transducer import BaseDiscourseTransducer
-from scripts.export_lora_gguf import export_gguf, SUPPORTED_QUANT_METHODS
-from scripts.train_unsloth_lora import (
+from export_lora_gguf import export_gguf, SUPPORTED_QUANT_METHODS
+from train_unsloth_lora import (
     format_dataset_sample,
     resolve_training_model_name,
     train_lora,
