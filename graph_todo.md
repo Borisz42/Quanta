@@ -246,7 +246,7 @@ Candidate S-Expression DAG
 
 ---
 
-## Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Open / Ready for Implementation]
+## Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Completed]
 
 ### Context & Architectural Rationale
 While off-the-shelf Qwen 3.5 4B and Gemma 4 follow instructions well under GBNF grammar constraints, fine-tuning them via Unsloth QLoRA on domain-specific (Text, S-expression) pairs improves single-pass extraction accuracy, reduces grammar-mask rejection latency, and aligns the model to resolve MUC diagnostic error prompts reliably.
@@ -263,15 +263,15 @@ While off-the-shelf Qwen 3.5 4B and Gemma 4 follow instructions well under GBNF 
 - Export script: `scripts/export_lora_gguf.py` fusing LoRA adapters into Q4_K_M and Q8_0 GGUF binaries for local Unsloth / llama.cpp execution at `:8888`.
 
 ### Checklist
-- [ ] **6.1** Implement `scripts/generate_sexpr_dataset.py`: ingest from `data/raw/` (`folio_train.jsonl`, `proofwriter_train.jsonl`, `babi_train.jsonl`, `clutrr_train.jsonl`) to generate 50,000–100,000 paired `(Text, S-Expr)` training examples.
-- [ ] **6.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints (`[REPAIR REQUEST]`).
-- [ ] **6.3** Implement `scripts/train_unsloth_lora.py`:
+- [x] **6.1** Implement `scripts/generate_sexpr_dataset.py`: ingest from `data/raw/` (`folio_train.jsonl`, `proofwriter_train.jsonl`, `babi_train.jsonl`, `clutrr_train.jsonl`) to generate 50,000–100,000 paired `(Text, S-Expr)` training examples.
+- [x] **6.2** Implement synthetic MUC repair dataset generator: synthesize error-injected S-expressions paired with corrected target S-expressions conditioned on diagnostic hints (`[REPAIR REQUEST]`).
+- [x] **6.3** Implement `scripts/train_unsloth_lora.py`:
   - Load Qwen 3.5 4B or Gemma 4 in 4-bit precision via Unsloth.
   - Configure LoRA adapters ($r=16, \alpha=32$, dropout=0, target linear modules).
   - Train on synthetic dataset with gradient checkpointing and cosine learning rate schedule within 8GB VRAM.
   - Save adapter weights to `models/quanta-slm-lora/`.
-- [ ] **6.4** Implement GGUF export script: `scripts/export_lora_gguf.py` fusing LoRA weights and exporting Q4_K_M / Q8_0 GGUF models for local Unsloth serving.
-- [ ] **6.5** 🧪 Evaluation test: compare base SLM vs. fine-tuned SLM on 500 held-out test chunks; assert higher single-pass validation rate and lower MUC repair iterations.
+- [x] **6.4** Implement GGUF export script: `scripts/export_lora_gguf.py` fusing LoRA weights and exporting Q4_K_M / Q8_0 GGUF models for local Unsloth serving.
+- [x] **6.5** 🧪 Evaluation test: compare base SLM vs. fine-tuned SLM on 500 held-out test chunks; assert higher single-pass validation rate and lower MUC repair iterations.
 
 ---
 
