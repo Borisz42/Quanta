@@ -156,6 +156,7 @@ class ExtractedEvent:
     theme_id: Optional[str] = None
     location_id: Optional[str] = None
     instrument_id: Optional[str] = None
+    temporal_anchor: Optional[str] = None
     time_interval: Optional[ExtractedTimeInterval] = None
     time_start: Optional[Union[int, float]] = None
     time_end: Optional[Union[int, float]] = None
