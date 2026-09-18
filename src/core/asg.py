@@ -37,6 +37,8 @@ class QuantaNode:
         "literal",
         "parent_cid",
         "_cid_cache",
+        "time_start",
+        "time_end",
     )
 
     def __init__(
@@ -79,6 +81,8 @@ class QuantaNode:
         self.literal: Optional[Any] = literal
         self.parent_cid: Optional[str] = parent_cid
         self._cid_cache: Optional[str] = None
+        self.time_start: Optional[Union[int, float]] = None
+        self.time_end: Optional[Union[int, float]] = None
 
     def invalidate_cache(self):
         """Invalidates cached CID."""

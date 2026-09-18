@@ -351,10 +351,12 @@ class SExprList:
         """Convert a list of alternating :key value items into a dictionary."""
         result: Dict[str, Any] = {}
         i = 0
+        if self.elements and isinstance(self.elements[0], SExprAtom) and not self.elements[0].is_keyword():
+            i = 1
         while i < len(self.elements) - 1:
             k_elem = self.elements[i]
             v_elem = self.elements[i + 1]
-            if isinstance(k_elem, SExprAtom):
+            if isinstance(k_elem, SExprAtom) and k_elem.is_keyword():
                 k = k_elem.as_str()
                 if k.startswith(":"):
                     k = k[1:]
@@ -362,7 +364,9 @@ class SExprList:
                     result[k] = v_elem.value
                 elif isinstance(v_elem, SExprList):
                     result[k] = v_elem.to_plist_dict()
-            i += 2
+                i += 2
+            else:
+                i += 1
         return result
 
     def __repr__(self) -> str:
@@ -646,11 +650,19 @@ class SExprASTConverter:
         time_node = node.get_keyword([":time", ":temporal_anchor", ":temporal-anchor"])
         temporal_anchor: Optional[str] = None
         time_interval: Optional[ExtractedTimeInterval] = None
+        time_start: Optional[Union[int, float]] = None
+        time_end: Optional[Union[int, float]] = None
 
         if isinstance(time_node, SExprAtom):
             temporal_anchor = time_node.as_str()
             if temporal_anchor and temporal_anchor.lower() in ("nil", "none", "null"):
                 temporal_anchor = None
+            elif temporal_anchor:
+                try:
+                    f_val = float(temporal_anchor)
+                    time_start = int(f_val) if f_val.is_integer() else f_val
+                except (ValueError, TypeError):
+                    pass
         elif isinstance(time_node, SExprList):
             head = time_node.head_symbol()
             if head == "interval":
@@ -668,11 +680,28 @@ class SExprASTConverter:
                         return v
                     return None
 
+                s_cleaned = _clean_time_val(start_elem)
+                e_cleaned = _clean_time_val(end_elem)
+                d_cleaned = _clean_time_val(dur_elem)
+
                 time_interval = ExtractedTimeInterval(
-                    start=_clean_time_val(start_elem),
-                    end=_clean_time_val(end_elem),
-                    duration=_clean_time_val(dur_elem),
+                    start=s_cleaned,
+                    end=e_cleaned,
+                    duration=d_cleaned,
                 )
+                if s_cleaned is not None:
+                    try:
+                        f_val = float(s_cleaned)
+                        time_start = int(f_val) if f_val.is_integer() else f_val
+                    except (ValueError, TypeError):
+                        time_start = None
+                if e_cleaned is not None:
+                    try:
+                        f_val = float(e_cleaned)
+                        time_end = int(f_val) if f_val.is_integer() else f_val
+                    except (ValueError, TypeError):
+                        time_end = None
+                temporal_anchor = f"interval:{time_start}-{time_end}"
 
         tense_node = node.get_keyword([":tense"])
         tense = tense_node.as_str().upper() if isinstance(tense_node, SExprAtom) else "PAST"
@@ -719,6 +748,8 @@ class SExprASTConverter:
             instrument_id=instrument_id,
             temporal_anchor=temporal_anchor,
             time_interval=time_interval,
+            time_start=time_start,
+            time_end=time_end,
             tense=tense,
             aspect=aspect,
             polarity=polarity,
@@ -859,6 +890,10 @@ class SExprASTConverter:
                 end_str = "nil" if ev.time_interval.end is None else str(ev.time_interval.end)
                 dur_str = f" :duration {ev.time_interval.duration}" if ev.time_interval.duration is not None else ""
                 parts.append(f":time (interval :start {start_str} :end {end_str}{dur_str})")
+            elif ev.time_start is not None or ev.time_end is not None:
+                s_str = str(ev.time_start) if ev.time_start is not None else "nil"
+                e_str = str(ev.time_end) if ev.time_end is not None else "nil"
+                parts.append(f":time (interval :start {s_str} :end {e_str})")
             elif ev.temporal_anchor:
                 parts.append(f":time {json.dumps(ev.temporal_anchor)}")
             parts.append(f":tense {ev.tense}")

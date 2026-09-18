@@ -234,11 +234,12 @@ class ASGCompiler:
             graph.root_cid = event_nodes[root_ev_id].cid
 
         # 8. Structural integrity validation
-        struct_valid, struct_errors = graph.validate_integrity()
-        if not struct_valid:
-            raise ASGCompilationError(
-                f"Graph structural integrity verification failed: {struct_errors}"
-            )
+        if validate:
+            struct_valid, struct_errors = graph.validate_integrity()
+            if not struct_valid:
+                raise ASGCompilationError(
+                    f"Graph structural integrity verification failed: {struct_errors}"
+                )
 
         # 9. Symbolic ValidatorGate Integration (Phase 4.5)
         if validate:
@@ -365,6 +366,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat in ("OBJECT", "ARTIFACT", "INSTRUMENT"):
             node.set_slot("TYPE_ARTIFACT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -372,8 +374,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
-            if node.vector["TYPE_ABSTRACT_CONCEPT"] == 1:
-                node.set_slot("GRAPH_VARIABLE_BIND", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat == "NATURAL_OBJECT":
             node.set_slot("TYPE_NATURAL_OBJECT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -381,6 +382,7 @@ class ASGCompiler:
             node.set_slot("ROLE_SENTIENT", 0)
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
+            node.set_slot("GRAPH_VARIABLE_BIND", 0)
         elif cat in ("ORGANIZATION", "UNIVERSITY", "INSTITUTION"):
             node.set_slot("TYPE_ORGANIZATION", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
@@ -521,6 +523,18 @@ class ASGCompiler:
                     node.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
                 elif st == "BELIEF":
                     node.set_slot("TOM_FIRST_ORDER_BELIEF", 1)
+
+        t_start = event.time_start
+        t_end = event.time_end
+        if t_start is None and getattr(event, "time_interval", None) and isinstance(event.time_interval.start, (int, float)):
+            t_start = event.time_interval.start
+        if t_end is None and getattr(event, "time_interval", None) and isinstance(event.time_interval.end, (int, float)):
+            t_end = event.time_interval.end
+
+        if t_start is not None:
+            setattr(node, "time_start", t_start)
+        if t_end is not None:
+            setattr(node, "time_end", t_end)
 
         node.compute_cid()
         return node

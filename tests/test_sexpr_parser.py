@@ -622,3 +622,24 @@ def test_bidirectional_text_roundtrip():
     serialized = serialize_to_sexpr(res)
     assert serialized == canonical_text
     assert serialize_to_sexpr(parse_sexpr(serialized)) == canonical_text
+
+
+def test_structured_interval_parsing_and_roundtrip():
+    """Verify :time (interval :start 2018 :end 2020) parses into time_start/time_end and serializes back."""
+    sexpr = """(graph
+  (entity :id E1 :type PERSON :label "Marcus")
+  (event :id Ev1 :pred pressurize :agent E1 :time (interval :start 2018 :end 2020) :tense PAST :polarity TRUE)
+)"""
+    res = parse_sexpr(sexpr)
+    assert len(res.events) == 1
+    ev = res.events[0]
+    assert ev.time_start == 2018
+    assert ev.time_end == 2020
+    assert "interval:2018-2020" in ev.temporal_anchor
+
+    # Test roundtrip
+    serialized = to_sexpr(res)
+    assert ":time (interval :start 2018 :end 2020)" in serialized
+    res2 = parse_sexpr(serialized)
+    assert res2.events[0].time_start == 2018
+    assert res2.events[0].time_end == 2020

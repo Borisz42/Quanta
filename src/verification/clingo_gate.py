@@ -58,10 +58,14 @@ class MUCDiagnostic:
             "unknown": "semantic validity constraint",
         }.get(self.category, f"{self.category} axiom")
 
+        summary_text = self.summary
+        if summary_text.startswith("CONFLICT: "):
+            summary_text = summary_text[len("CONFLICT: "):]
+
         lines = [
             "[REPAIR REQUEST]",
             f"Candidate sub-graph violated {cat_desc}:",
-            f"  CONFLICT: {self.summary}",
+            f"  CONFLICT: {summary_text}",
         ]
         if self.details:
             for d in self.details:
@@ -196,8 +200,7 @@ class ClingoVerificationGate:
                         target_node = node_map.get(target_cid)
                         if target_node and (
                             _get_node_slot(target_node, "TYPE_ABSTRACT_CONCEPT") == 1
-                            or target_cid in muc_nodes
-                            or "TYPE_ABSTRACT_CONCEPT" in slot_names
+                            or (target_cid in muc_nodes and "TYPE_ABSTRACT_CONCEPT" in slot_names)
                         ):
                             abstract_agent_found = True
                             conflict_ent_label = target_node.literal or target_node.anchor or target_cid
@@ -251,6 +254,76 @@ class ClingoVerificationGate:
             diag.repair_prompt = diag.format_repair_request()
             return diag
 
+        # Pattern A2: Inanimate entity / artifact acting as agent in literal event (Rule 6 / Rule 6A)
+        inanimate_agent_found = False
+        inanimate_kind = "inanimate entity"
+        if graph and not abstract_agent_found:
+            for cid, n in node_map.items():
+                if "VAL_X1_AGENT" in n.edges:
+                    for target_cid in n.edges["VAL_X1_AGENT"]:
+                        target_node = node_map.get(target_cid)
+                        if target_node:
+                            is_inanimate = (
+                                _get_node_slot(target_node, "TYPE_ARTIFACT") == 1
+                                or _get_node_slot(target_node, "TYPE_NATURAL_OBJECT") == 1
+                            )
+                            is_agent_cap = (
+                                _get_node_slot(target_node, "ROLE_AGENT_CAPABLE") == 1
+                                or _get_node_slot(target_node, "ROLE_VOLITIONAL_SOURCE") == 1
+                                or _get_node_slot(target_node, "TYPE_HUMAN") == 1
+                                or _get_node_slot(target_node, "TYPE_ANIMATE") == 1
+                            )
+                            is_figurative = (
+                                _get_node_slot(n, "MODALITY_FIGURATIVE") == 1
+                                or _get_node_slot(target_node, "MODALITY_FIGURATIVE") == 1
+                            )
+                            if is_inanimate and not is_agent_cap and not is_figurative:
+                                inanimate_agent_found = True
+                                conflict_ent_label = target_node.literal or target_node.anchor or target_cid
+                                conflict_ev_label = n.literal or n.anchor or cid
+                                conflict_ev_id = cid
+                                if _get_node_slot(target_node, "TYPE_ARTIFACT") == 1:
+                                    inanimate_kind = "inanimate artifact"
+                                elif _get_node_slot(target_node, "TYPE_NATURAL_OBJECT") == 1:
+                                    inanimate_kind = "natural object"
+                                else:
+                                    inanimate_kind = "inanimate physical object"
+                                break
+                if inanimate_agent_found:
+                    break
+
+        if extraction_result and inanimate_agent_found:
+            for ent in extraction_result.entities:
+                if (
+                    ent.canonical_name.lower() in str(conflict_ent_label).lower()
+                    or ent.category.upper() in ("OBJECT", "ARTIFACT", "NATURAL_OBJECT", "INSTRUMENT")
+                ):
+                    conflict_ent_label = ent.canonical_name
+                    break
+            for ev in extraction_result.events:
+                if ev.predicate.lower() in str(conflict_ev_label).lower():
+                    conflict_ev_id = ev.id
+                    conflict_ev_label = ev.predicate
+                    break
+
+        if inanimate_agent_found:
+            summary = (
+                f"Entity '{conflict_ent_label}' ({inanimate_kind}) cannot act as agent "
+                f"in event '{conflict_ev_id}' ({conflict_ev_label})."
+            )
+            diag = MUCDiagnostic(
+                category="ontological",
+                summary=summary,
+                conflicting_nodes=muc_nodes,
+                conflicting_slots=muc_slots,
+                details=[
+                    "Physical and intentional actions require an agent-capable entity (PERSON, ANIMAL, or ORGANIZATION).",
+                    "Inanimate physical entities and artifacts cannot exert intentional agency unless figurative modality is explicitly declared.",
+                ],
+            )
+            diag.repair_prompt = diag.format_repair_request()
+            return diag
+
         # Pattern B: Inanimate entity as sentient experiencer (Rule 2 / Rule 7)
         if "ROLE_SENTIENT" in slot_names and (
             "TYPE_INANIMATE_PHYSICAL" in slot_names or "TYPE_ARTIFACT" in slot_names
@@ -280,8 +353,133 @@ class ClingoVerificationGate:
             return diag
 
         # -------------------------------------------------------------------
-        # 2. Allen Temporal Contradictions (Rule 9)
+        # 2. Allen Temporal Contradictions & Ordering Invariants (Rule 9)
         # -------------------------------------------------------------------
+        def _resolve_event_label(cid_or_id: str) -> str:
+            if extraction_result:
+                for ev in extraction_result.events:
+                    if ev.id == cid_or_id:
+                        return ev.id
+                    node = node_map.get(cid_or_id)
+                    if node and (node.literal == ev.raw_text or node.literal == ev.predicate):
+                        return ev.id
+            node = node_map.get(cid_or_id)
+            if node and node.literal:
+                return node.literal
+            return cid_or_id[:8]
+
+        # Case 2A: Inverted interval endpoints (Start > End)
+        for int_cid, s_val, e_val in val_res.muc_intervals:
+            if s_val > e_val and s_val != -999999 and e_val != 999999:
+                ev_name = _resolve_event_label(int_cid)
+                summary = f"CONFLICT: {ev_name} has invalid temporal interval (start: {s_val} > end: {e_val})."
+                diag = MUCDiagnostic(
+                    category="temporal",
+                    summary=summary,
+                    conflicting_nodes=muc_nodes,
+                    conflicting_slots=muc_slots,
+                    details=[
+                        "An event interval cannot have a start timestamp that exceeds its end timestamp.",
+                        "Ensure start <= end for all temporal intervals.",
+                    ],
+                )
+                diag.repair_prompt = diag.format_repair_request()
+                return diag
+
+        # Case 2B: Temporal interval bounds vs Precedence ordering
+        intervals_by_cid = {cid: (s, e) for cid, s, e in val_res.muc_intervals}
+        for cid, n in node_map.items():
+            s = getattr(n, "time_start", None)
+            e = getattr(n, "time_end", None)
+            if s is not None or e is not None:
+                if cid not in intervals_by_cid:
+                    intervals_by_cid[cid] = (s if s is not None else -999999, e if e is not None else 999999)
+
+        temp_edges = [
+            (src, rel, dst)
+            for src, rel, dst in val_res.muc_edges
+            if rel.startswith("TEMP_ALLEN_") or rel in ("PRECEDES", "MEETS")
+        ]
+
+        for src, rel, dst in temp_edges:
+            src_lbl = _resolve_event_label(src)
+            dst_lbl = _resolve_event_label(dst)
+            if src in intervals_by_cid and dst in intervals_by_cid:
+                s1, e1 = intervals_by_cid[src]
+                s2, e2 = intervals_by_cid[dst]
+                if (e1 > s2 and e1 != 999999 and s2 != -999999) or (s1 > e2 and s1 != -999999 and e2 != 999999):
+                    summary = f"CONFLICT: {src_lbl} (start: {s1}) occurs after {dst_lbl} (end: {e2}), yet {src_lbl} PRECEDES {dst_lbl}."
+                    diag = MUCDiagnostic(
+                        category="temporal",
+                        summary=summary,
+                        conflicting_nodes=muc_nodes,
+                        conflicting_slots=muc_slots,
+                        details=[
+                            f"Event '{src_lbl}' is configured to precede '{dst_lbl}', but its interval bounds ({s1}..{e1}) occur after '{dst_lbl}' ({s2}..{e2}).",
+                            "Adjust interval timestamps or temporal ordering relation to maintain chronological consistency.",
+                        ],
+                    )
+                    diag.repair_prompt = diag.format_repair_request()
+                    return diag
+
+        # Case 2C: Temporal cycles (e.g. A precedes B, B precedes A)
+        has_temporal_cycle = False
+        cycle_nodes_desc = ""
+        for i, (src1, rel1, dst1) in enumerate(temp_edges):
+            for src2, rel2, dst2 in temp_edges[i + 1 :]:
+                if src1 == dst2 and dst1 == src2:
+                    has_temporal_cycle = True
+                    lbl1 = _resolve_event_label(src1)
+                    lbl2 = _resolve_event_label(dst1)
+                    cycle_nodes_desc = f"{lbl1} precedes {lbl2}, yet {lbl2} precedes {lbl1}"
+                    break
+            if has_temporal_cycle:
+                break
+
+        if not has_temporal_cycle and any("temporal_precedes" in err or "cycle" in err.lower() for err in errors):
+            has_temporal_cycle = True
+            if len(temp_edges) >= 2:
+                lbl1 = _resolve_event_label(temp_edges[0][0])
+                lbl2 = _resolve_event_label(temp_edges[0][2])
+                cycle_nodes_desc = f"{lbl1} precedes {lbl2}, yet {lbl2} precedes {lbl1}"
+            else:
+                cycle_nodes_desc = "directed cycle in temporal relations"
+
+        if has_temporal_cycle:
+            summary = f"CONFLICT: Temporal cycle detected: {cycle_nodes_desc}."
+            diag = MUCDiagnostic(
+                category="temporal",
+                summary=summary,
+                conflicting_nodes=muc_nodes,
+                conflicting_slots=muc_slots,
+                details=[
+                    "Temporal precedence must form a strict Directed Acyclic Graph (DAG).",
+                    "Eliminate reciprocal or circular temporal ordering relations.",
+                ],
+            )
+            diag.repair_prompt = diag.format_repair_request()
+            return diag
+
+        # Case 2D: Mutually exclusive temporal edge relations between same pair
+        if len(temp_edges) >= 2:
+            rel_names = ", ".join({rel for _, rel, _ in temp_edges})
+            lbl1 = _resolve_event_label(temp_edges[0][0])
+            lbl2 = _resolve_event_label(temp_edges[0][2])
+            summary = f"CONFLICT: Conflicting temporal relations between {lbl1} and {lbl2} ({rel_names})."
+            diag = MUCDiagnostic(
+                category="temporal",
+                summary=summary,
+                conflicting_nodes=muc_nodes,
+                conflicting_slots=muc_slots,
+                details=[
+                    "Allen interval calculus dictates mutual exclusivity among temporal ordering primitives.",
+                    "Ensure only a single temporal relation exists between any ordered pair of events.",
+                ],
+            )
+            diag.repair_prompt = diag.format_repair_request()
+            return diag
+
+        # Case 2E: Node slot temporal contradictions (legacy)
         temp_slots = [s for s in slot_names if s.startswith("TEMP_ALLEN_")]
         if len(temp_slots) >= 2 or any("TEMP_ALLEN_" in err for err in errors):
             conflicting_names = ", ".join(temp_slots) if temp_slots else "temporal intervals"

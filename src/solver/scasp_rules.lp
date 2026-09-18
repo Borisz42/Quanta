@@ -49,10 +49,11 @@
 % ----------------------------------------------------------------------
 
 % Rule 6: An entity acting as an Agent (VAL_X1_AGENT) in a literal event
-% must be agent-capable (animate, human, organization, variable binding, or explicitly agent-capable)
+% must be agent-capable (animate, human, organization, or ungrounded logic variable)
 :- edge(EventNode, "VAL_X1_AGENT", AgentNode),
    slot(EventNode, "MODALITY_LITERAL", 1),
    not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
    not slot(AgentNode, "TYPE_HUMAN", 1),
    not slot(AgentNode, "TYPE_HUMAN", 3),
    not slot(AgentNode, "TYPE_ANIMATE", 1),
@@ -60,7 +61,42 @@
    not slot(AgentNode, "TYPE_ORGANIZATION", 1),
    not slot(AgentNode, "WN_PERSON_HUMAN", 1),
    not slot(AgentNode, "WN_ANIMAL_FAUNA", 1),
-   not slot(AgentNode, "GRAPH_VARIABLE_BIND", 1).
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1),
+   not is_ungrounded_var(AgentNode).
+
+is_ungrounded_var(N) :-
+   slot(N, "GRAPH_VARIABLE_BIND", 1),
+   not slot(N, "TYPE_ARTIFACT", 1),
+   not slot(N, "TYPE_NATURAL_OBJECT", 1),
+   not slot(N, "TYPE_ABSTRACT_CONCEPT", 1).
+
+% Rule 6A: Inanimate artifacts and natural objects cannot act as intentional agents in literal events
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_ARTIFACT", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
+
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_ARTIFACT", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
+
+:- edge(EventNode, "VAL_X1_AGENT", AgentNode),
+   slot(EventNode, "MODALITY_LITERAL", 1),
+   slot(AgentNode, "TYPE_NATURAL_OBJECT", 1),
+   not slot(AgentNode, "TYPE_HUMAN", 1),
+   not slot(AgentNode, "TYPE_ANIMATE", 1),
+   not slot(AgentNode, "ROLE_AGENT_CAPABLE", 1),
+   not slot(AgentNode, "ROLE_VOLITIONAL_SOURCE", 1),
+   not slot(AgentNode, "MODALITY_FIGURATIVE", 1),
+   not slot(EventNode, "MODALITY_FIGURATIVE", 1).
 
 % Rule 7: Experiencer role requires sentient entity
 :- edge(EventNode, "VAL_EXPERIENCER", ExpNode),
@@ -114,6 +150,43 @@
 
 :- slot(N, "TEMP_ALLEN_STARTS", 1),
    slot(N, "TEMP_ALLEN_FINISHES", 1).
+
+% Rule 9A: Inverted interval endpoints (Start > End)
+:- event_interval(Ev, Start, End), Start > End.
+
+% Rule 9B: Mutual exclusivity of temporal edges between same pairs
+:- edge(X, "TEMP_ALLEN_BEFORE", Y), edge(X, "TEMP_ALLEN_DURING", Y).
+:- edge(X, "TEMP_ALLEN_BEFORE", Y), edge(X, "TEMP_ALLEN_EQUALS", Y).
+:- edge(X, "TEMP_ALLEN_BEFORE", Y), edge(X, "TEMP_ALLEN_OVERLAPS", Y).
+:- edge(X, "TEMP_ALLEN_BEFORE", Y), edge(X, "TEMP_ALLEN_AFTER", Y).
+:- edge(X, "TEMP_ALLEN_BEFORE", Y), edge(Y, "TEMP_ALLEN_BEFORE", X).
+:- edge(X, "PRECEDES", Y), edge(Y, "PRECEDES", X).
+:- edge(X, "PRECEDES", Y), edge(X, "TEMP_ALLEN_DURING", Y).
+:- edge(X, "PRECEDES", Y), edge(X, "TEMP_ALLEN_AFTER", Y).
+
+% Rule 9C: Temporal precedence reachability & cycle prevention
+temporal_precedes(X, Y) :- edge(X, "TEMP_ALLEN_BEFORE", Y).
+temporal_precedes(X, Y) :- edge(X, "PRECEDES", Y).
+temporal_precedes(X, Y) :- edge(X, "TEMP_ALLEN_MEETS", Y).
+temporal_precedes(X, Y) :- edge(Y, "TEMP_ALLEN_AFTER", X).
+temporal_precedes(X, Y) :- temporal_precedes(X, Z), temporal_precedes(Z, Y).
+
+:- temporal_precedes(X, X).
+
+% Rule 9D: Temporal interval timestamp consistency with precedence
+:- temporal_precedes(X, Y),
+   event_interval(X, S1, E1),
+   event_interval(Y, S2, E2),
+   E1 > S2,
+   E1 != 999999,
+   S2 != -999999.
+
+:- temporal_precedes(X, Y),
+   event_interval(X, S1, E1),
+   event_interval(Y, S2, E2),
+   S1 > E2,
+   S1 != -999999,
+   E2 != 999999.
 
 % ----------------------------------------------------------------------
 % 4. Spatial Mereotopology (RCC-8) Consistency (7B.1)
