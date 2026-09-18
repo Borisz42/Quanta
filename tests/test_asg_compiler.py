@@ -331,3 +331,73 @@ def test_compiled_graph_serialization_roundtrip(compiler: ASGCompiler):
     struct_valid, struct_errors = restored.validate_integrity()
     assert struct_valid
     assert len(struct_errors) == 0
+
+
+# ---------------------------------------------------------------------------
+# S-Expression AST and String Direct Compilation Tests
+# ---------------------------------------------------------------------------
+
+def test_compile_from_sexpr_ast_and_string(compiler: ASGCompiler):
+    """Verify compiler directly compiles S-expression strings and SExprList ASTs."""
+    from parser.sexpr_parser import SExprLexer, SExprParser, to_sexpr
+
+    sexpr_str = to_sexpr(CANONICAL_ELEANOR_VANCE_FIXTURE)
+
+    # 1. Compile directly from S-expression string
+    g_str = compiler.compile(sexpr_str, validate=True)
+    assert isinstance(g_str, QuantaGraph)
+    assert len(g_str.nodes) == 11
+    assert g_str.validation.is_valid is True
+    assert g_str.merkle_root is not None
+    assert len(g_str.merkle_root) == 64
+
+    # 2. Compile directly from parsed SExprList AST
+    tokens = SExprLexer(sexpr_str).tokenize()
+    ast = SExprParser(tokens).parse()
+    g_ast = compiler.compile(ast, validate=True)
+    assert isinstance(g_ast, QuantaGraph)
+    assert len(g_ast.nodes) == 11
+    assert g_ast.validation.is_valid is True
+    assert g_ast.merkle_root == g_str.merkle_root
+
+
+def test_direct_ast_clause_compilation(compiler: ASGCompiler):
+    """Verify compile_entity and compile_event compile S-expression AST clauses directly."""
+    from parser.sexpr_parser import SExprLexer, SExprParser
+
+    # Entity: HUMAN
+    tokens1 = SExprLexer('(entity :id e1 :type HUMAN :label "Eleanor Vance" :surface "Dr. Eleanor Vance")').tokenize()
+    ast_ent1 = SExprParser(tokens1).parse()
+    node1 = compiler.compile_entity(ast_ent1, register_index=0)
+    assert node1.get_slot("TYPE_HUMAN") == 1
+    assert node1.get_slot("ROLE_AGENT_CAPABLE") == 1
+    assert node1.get_register_slot("VAR_SLOT_X0") == RegisterValue.BOUND_LOCAL
+
+    # Entity: TOPIC
+    tokens2 = SExprLexer('(entity :id e2 :type TOPIC :label "quantum_mechanics" :surface "quantum mechanics")').tokenize()
+    ast_ent2 = SExprParser(tokens2).parse()
+    node2 = compiler.compile_entity(ast_ent2, register_index=1)
+    assert node2.get_slot("TYPE_ABSTRACT_CONCEPT") == 1
+
+    # Entity: UNIVERSITY
+    tokens3 = SExprLexer('(entity :id e3 :type UNIVERSITY :label "Columbia" :surface "Columbia University")').tokenize()
+    ast_ent3 = SExprParser(tokens3).parse()
+    node3 = compiler.compile_entity(ast_ent3, register_index=2)
+    assert node3.get_slot("TYPE_ORGANIZATION") == 1
+    assert node3.get_slot("ROLE_AGENT_CAPABLE") == 1
+
+    # Event: PROFESSOR_OF
+    tokens4 = SExprLexer('(event :id ev1 :pred PROFESSOR_OF :agent e1 :theme e2 :location e3 :polarity TRUE :tense PRESENT)').tokenize()
+    ast_ev = SExprParser(tokens4).parse()
+    node_ev = compiler.compile_event(ast_ev)
+    assert node_ev.get_slot("TYPE_EVENT") == 1
+    assert node_ev.get_slot("LJB_CA_PRESENT_TENSE") == 1
+    assert len(node_ev.cid) == 64
+
+
+def test_merkle_root_persistence(compiler: ASGCompiler):
+    """Verify compiler stores valid merkle_root on graph."""
+    graph = compiler.compile(CANONICAL_ELEANOR_VANCE_FIXTURE, validate=True)
+    assert hasattr(graph, "merkle_root")
+    assert graph.merkle_root == graph.compute_merkle_root()
+    assert len(graph.merkle_root) == 64

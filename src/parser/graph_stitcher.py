@@ -30,7 +30,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 import re
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from core.asg import QuantaGraph
 from parser.asg_compiler import ASGCompiler
@@ -119,10 +119,22 @@ def _extract_name_tokens(name: str) -> Set[str]:
     return informative
 
 
+def _canonicalize_category(cat: Optional[str]) -> str:
+    """Canonicalize ontological category aliases."""
+    c = (cat or "OBJECT").upper().strip()
+    if c in ("HUMAN", "PERSON"):
+        return "PERSON"
+    if c in ("UNIVERSITY", "INSTITUTION", "ORGANIZATION"):
+        return "ORGANIZATION"
+    if c in ("TOPIC", "ABSTRACT", "ABSTRACT_CONCEPT"):
+        return "ABSTRACT"
+    return c
+
+
 def _categories_compatible(cat1: str, cat2: str) -> bool:
     """Check whether two ontological categories are compatible for entity merging."""
-    c1 = (cat1 or "OBJECT").upper()
-    c2 = (cat2 or "OBJECT").upper()
+    c1 = _canonicalize_category(cat1)
+    c2 = _canonicalize_category(cat2)
 
     if c1 == c2:
         return True
@@ -143,6 +155,27 @@ def _categories_compatible(cat1: str, cat2: str) -> bool:
 
     # Cross-domain clashes (e.g. PERSON vs LOCATION, PERSON vs SUBSTANCE)
     return False
+
+
+def _normalize_chunk(chunk: Any) -> DiscourseExtractionResult:
+    """Normalize DiscourseExtractionResult, SExprList AST, S-expression string, or dict."""
+    if isinstance(chunk, DiscourseExtractionResult):
+        return chunk
+    if isinstance(chunk, dict):
+        return DiscourseExtractionResult.from_dict(chunk)
+    if isinstance(chunk, str):
+        stripped = chunk.strip()
+        if stripped.startswith("("):
+            from parser.sexpr_parser import parse_sexpr
+            return parse_sexpr(stripped)
+        return DiscourseExtractionResult.from_json(chunk)
+    try:
+        from parser.sexpr_parser import SExprASTConverter, SExprList
+        if isinstance(chunk, SExprList):
+            return SExprASTConverter.from_ast(chunk)
+    except ImportError:
+        pass
+    raise TypeError(f"Unsupported chunk input type: {type(chunk)}")
 
 
 def _detect_temporal_gap(event: ExtractedEvent, chunk_text: Optional[str] = None) -> bool:
@@ -409,19 +442,56 @@ class GraphStitcher:
             if pid not in self._global_propositions:
                 return pid
 
+    def _lookup_entity_id(self, chunk_idx: int, local_id: Optional[str]) -> Optional[str]:
+        """Resolve a local entity ID to its canonical global entity ID in a case-resilient manner."""
+        if not local_id:
+            return None
+        # 1. Exact match in map
+        if (chunk_idx, local_id) in self._entity_id_map:
+            return self._entity_id_map[(chunk_idx, local_id)]
+        # 2. Case-insensitive match in chunk's entity id map
+        norm = local_id.strip().upper()
+        for (c_idx, l_id), g_id in self._entity_id_map.items():
+            if c_idx == chunk_idx and l_id.strip().upper() == norm:
+                return g_id
+        # 3. Direct global entity ID match (case-insensitive)
+        for gid in self._global_entities:
+            if gid.strip().upper() == norm:
+                return gid
+        return None
+
+    def _lookup_event_id(self, chunk_idx: int, local_id: Optional[str]) -> Optional[str]:
+        """Resolve a local event ID to its canonical global event ID in a case-resilient manner."""
+        if not local_id:
+            return None
+        if (chunk_idx, local_id) in self._event_id_map:
+            return self._event_id_map[(chunk_idx, local_id)]
+        norm = local_id.strip().upper()
+        for (c_idx, l_id), g_id in self._event_id_map.items():
+            if c_idx == chunk_idx and l_id.strip().upper() == norm:
+                return g_id
+        for gid in self._global_events:
+            if gid.strip().upper() == norm:
+                return gid
+        return None
+
     # ---------------------------------------------------------------------------
     # Core Chunk Ingestion & Stitching
     # ---------------------------------------------------------------------------
 
-    def add_chunk(self, chunk: DiscourseExtractionResult):
-        """Ingest and stitch a single discourse extraction chunk into the running DAG."""
+    def add_chunk(self, chunk: Union[DiscourseExtractionResult, Any]):
+        """Ingest and stitch a single discourse extraction chunk into the running DAG.
+
+        Accepts DiscourseExtractionResult, SExprList AST, S-expression string, or dict.
+        """
+        chunk_res = _normalize_chunk(chunk)
         chunk_idx = self._chunk_count
         self._chunk_count += 1
-        chunk_id = chunk.chunk_id or f"chunk_{chunk_idx:04d}"
+        chunk_id = chunk_res.chunk_id or f"chunk_{chunk_idx:04d}"
         self._chunk_ids.append(chunk_id)
 
         # 1. Global Entity Resolution
-        for ent in chunk.entities:
+        for ent in chunk_res.entities:
             matched = self._find_matching_global_entity(ent)
             if matched is not None:
                 self._unify_entity(matched, ent)
@@ -453,26 +523,26 @@ class GraphStitcher:
 
         # 2. Event Re-Mapping
         current_chunk_remapped_event_ids: List[str] = []
-        for ev in chunk.events:
+        for ev in chunk_res.events:
             global_ev_id = self._mint_global_event_id()
             self._event_id_map[(chunk_idx, ev.id)] = global_ev_id
             current_chunk_remapped_event_ids.append(global_ev_id)
 
-            # Remap foreign keys to global entity IDs
-            remap_agent = self._entity_id_map.get((chunk_idx, ev.agent_id)) if ev.agent_id else None
-            remap_patient = self._entity_id_map.get((chunk_idx, ev.patient_id)) if ev.patient_id else None
-            remap_theme = self._entity_id_map.get((chunk_idx, ev.theme_id)) if ev.theme_id else None
-            remap_loc = self._entity_id_map.get((chunk_idx, ev.location_id)) if ev.location_id else None
-            remap_inst = self._entity_id_map.get((chunk_idx, ev.instrument_id)) if ev.instrument_id else None
+            # Remap foreign keys to global entity IDs (case-resilient)
+            remap_agent = self._lookup_entity_id(chunk_idx, ev.agent_id)
+            remap_patient = self._lookup_entity_id(chunk_idx, ev.patient_id)
+            remap_theme = self._lookup_entity_id(chunk_idx, ev.theme_id)
+            remap_loc = self._lookup_entity_id(chunk_idx, ev.location_id)
+            remap_inst = self._lookup_entity_id(chunk_idx, ev.instrument_id)
 
             remapped_event = ExtractedEvent(
                 id=global_ev_id,
                 predicate=ev.predicate,
-                agent_id=remap_agent or (ev.agent_id if ev.agent_id in self._global_entities else None),
-                patient_id=remap_patient or (ev.patient_id if ev.patient_id in self._global_entities else None),
-                theme_id=remap_theme or (ev.theme_id if ev.theme_id in self._global_entities else None),
-                location_id=remap_loc or (ev.location_id if ev.location_id in self._global_entities else None),
-                instrument_id=remap_inst or (ev.instrument_id if ev.instrument_id in self._global_entities else None),
+                agent_id=remap_agent,
+                patient_id=remap_patient,
+                theme_id=remap_theme,
+                location_id=remap_loc,
+                instrument_id=remap_inst,
                 temporal_anchor=ev.temporal_anchor,
                 tense=ev.tense,
                 aspect=ev.aspect,
@@ -489,8 +559,8 @@ class GraphStitcher:
             if self._last_terminal_event_id is not None:
                 # Check for explicit temporal gap
                 has_gap = False
-                if self.auto_detect_temporal_gap and chunk.events:
-                    has_gap = _detect_temporal_gap(chunk.events[0])
+                if self.auto_detect_temporal_gap and chunk_res.events:
+                    has_gap = _detect_temporal_gap(chunk_res.events[0])
 
                 rel_type = "TEMP_ALLEN_BEFORE" if has_gap else self.default_temporal_relation
 
@@ -508,28 +578,9 @@ class GraphStitcher:
             self._last_terminal_event_id = current_chunk_remapped_event_ids[-1]
 
         # 4. Intra-Chunk Relation Re-Mapping
-        for rel in chunk.relations:
-            # Remap source_id
-            src_id = rel.source_id
-            if (chunk_idx, src_id) in self._event_id_map:
-                new_src = self._event_id_map[(chunk_idx, src_id)]
-            elif (chunk_idx, src_id) in self._entity_id_map:
-                new_src = self._entity_id_map[(chunk_idx, src_id)]
-            elif src_id in self._global_events or src_id in self._global_entities:
-                new_src = src_id
-            else:
-                new_src = src_id
-
-            # Remap target_id
-            tgt_id = rel.target_id
-            if (chunk_idx, tgt_id) in self._event_id_map:
-                new_tgt = self._event_id_map[(chunk_idx, tgt_id)]
-            elif (chunk_idx, tgt_id) in self._entity_id_map:
-                new_tgt = self._entity_id_map[(chunk_idx, tgt_id)]
-            elif tgt_id in self._global_events or tgt_id in self._global_entities:
-                new_tgt = tgt_id
-            else:
-                new_tgt = tgt_id
+        for rel in chunk_res.relations:
+            new_src = self._lookup_event_id(chunk_idx, rel.source_id) or self._lookup_entity_id(chunk_idx, rel.source_id) or rel.source_id
+            new_tgt = self._lookup_event_id(chunk_idx, rel.target_id) or self._lookup_entity_id(chunk_idx, rel.target_id) or rel.target_id
 
             remapped_rel = ExtractedRelation(
                 relation_type=rel.relation_type,
@@ -541,23 +592,13 @@ class GraphStitcher:
             self._global_relations.append(remapped_rel)
 
         # 5. Proposition Re-Mapping
-        for prop in chunk.propositions:
+        for prop in chunk_res.propositions:
             global_pid = self._mint_global_prop_id()
             self._prop_id_map[(chunk_idx, prop.id)] = global_pid
 
-            # Remap source agent
-            remap_src_agent = self._entity_id_map.get((chunk_idx, prop.source_agent_id)) if prop.source_agent_id else None
-            # Remap event_id
-            remap_ev = self._event_id_map.get((chunk_idx, prop.event_id)) if prop.event_id else None
-            # Remap subject_id (could be entity or event)
-            remap_sub = None
-            if prop.subject_id:
-                if (chunk_idx, prop.subject_id) in self._entity_id_map:
-                    remap_sub = self._entity_id_map[(chunk_idx, prop.subject_id)]
-                elif (chunk_idx, prop.subject_id) in self._event_id_map:
-                    remap_sub = self._event_id_map[(chunk_idx, prop.subject_id)]
-                else:
-                    remap_sub = prop.subject_id
+            remap_src_agent = self._lookup_entity_id(chunk_idx, prop.source_agent_id) or prop.source_agent_id
+            remap_ev = self._lookup_event_id(chunk_idx, prop.event_id) or prop.event_id
+            remap_sub = self._lookup_entity_id(chunk_idx, prop.subject_id) or self._lookup_event_id(chunk_idx, prop.subject_id) or prop.subject_id
 
             remapped_prop = ExtractedProposition(
                 id=global_pid,
@@ -565,8 +606,8 @@ class GraphStitcher:
                 predicate=prop.predicate,
                 subject_id=remap_sub,
                 epistemic_status=prop.epistemic_status,
-                source_agent_id=remap_src_agent or prop.source_agent_id,
-                event_id=remap_ev or prop.event_id,
+                source_agent_id=remap_src_agent,
+                event_id=remap_ev,
                 properties=dict(prop.properties),
             )
             self._global_propositions[global_pid] = remapped_prop
@@ -608,7 +649,7 @@ class GraphStitcher:
 
         return result
 
-    def stitch(self, chunks: List[DiscourseExtractionResult]) -> DiscourseExtractionResult:
+    def stitch(self, chunks: Sequence[Any]) -> DiscourseExtractionResult:
         """Stitch a sequence of discourse chunks into a unified extraction result."""
         self.reset()
         for chunk in chunks:
@@ -617,7 +658,7 @@ class GraphStitcher:
 
     def stitch_to_graph(
         self,
-        chunks: List[DiscourseExtractionResult],
+        chunks: Sequence[Any],
         compiler: Optional[ASGCompiler] = None,
         validate: bool = True,
     ) -> QuantaGraph:
@@ -632,7 +673,7 @@ class GraphStitcher:
 # ---------------------------------------------------------------------------
 
 def stitch(
-    chunks: List[DiscourseExtractionResult],
+    chunks: Sequence[Any],
     **kwargs,
 ) -> DiscourseExtractionResult:
     """Convenience function to stitch extraction results into a unified result."""
@@ -641,7 +682,7 @@ def stitch(
 
 
 def stitch_to_graph(
-    chunks: List[DiscourseExtractionResult],
+    chunks: Sequence[Any],
     compiler: Optional[ASGCompiler] = None,
     validate: bool = True,
     **kwargs,
