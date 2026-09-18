@@ -219,4 +219,9 @@ orx.db-wal
 .openresearch/
 worktrees/
 .worktrees/
+
+# LoRA training models, GGUFs, and Unsloth cache
+unsloth_compiled_cache/
+models/
+data/training/
 
