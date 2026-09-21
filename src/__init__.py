@@ -1,5 +1,11 @@
 """QUANTA: Quaternary Universal Abstract Natural Topology Architecture."""
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from core.types import (
     BandContract,
     QuantaVector,

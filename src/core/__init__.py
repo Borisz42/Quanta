@@ -32,6 +32,15 @@ from core.asg import (
 )
 from core.page_table import PageTableStorage
 from core.valency import TypeConstraintRegistry, ValencyConstraint, validate_valency
+from core.artifacts import (
+    ArtifactCriticality,
+    ArtifactSpec,
+    MissingArtifactError,
+    require_artifacts,
+    audit_artifacts,
+    resolve_artifact_path,
+    ARTIFACT_REGISTRY,
+)
 
 __all__ = [
     "BandContract",
@@ -62,4 +71,11 @@ __all__ = [
     "TypeConstraintRegistry",
     "ValencyConstraint",
     "validate_valency",
+    "ArtifactCriticality",
+    "ArtifactSpec",
+    "MissingArtifactError",
+    "require_artifacts",
+    "audit_artifacts",
+    "resolve_artifact_path",
+    "ARTIFACT_REGISTRY",
 ]

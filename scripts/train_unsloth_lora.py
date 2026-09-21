@@ -36,6 +36,14 @@ SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / ".env")
+except ImportError:
+    pass
+
+from core.artifacts import require_artifacts, MissingArtifactError
+
 logger = logging.getLogger(__name__)
 
 # Standard instruction formatting template for S-expression transduction
@@ -371,6 +379,8 @@ def main() -> int:
     print(f"  Max Steps / LR:      steps={args.max_steps}, lr={args.learning_rate}")
     print(f"  Dry-Run Mode:        {args.dry_run}")
     print("=" * 70)
+
+    require_artifacts(args.dataset_path, component="UnslothQLoRAPipeline")
 
     try:
         res = train_lora(

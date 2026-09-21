@@ -85,6 +85,7 @@ from core.slots import get_slot_by_name
 from core.types import QuantaVector, QuaternaryValue
 from core.asg import QuantaNode
 from core.valency import validate_valency, TypeConstraintRegistry, ValencyConstraint
+from core.artifacts import require_artifacts, MissingArtifactError
 
 
 LEXNAME_TO_WN_ROOT_SLOT: Dict[str, str] = {
@@ -131,6 +132,11 @@ class ConceptNetLexicalGrounder:
     def __init__(self, offline_cache_path: Optional[Union[str, Path]] = None):
         self._cache: Dict[str, GroundedLexicalConcept] = {}
         if offline_cache_path is None:
+            require_artifacts(
+                "data/conceptnet_offline.db",
+                "data/conceptnet_slots.json",
+                component="ConceptNetLexicalGrounder",
+            )
             default_db = find_quanta_data_file("conceptnet_offline.db")
             if default_db and default_db.exists():
                 offline_cache_path = default_db
@@ -618,6 +624,8 @@ class WordNetLexicalGrounder:
 
     def __init__(self, offline_cache_path: Optional[Union[str, Path]] = None):
         self._cache: Dict[str, Dict[str, Any]] = {}
+        if offline_cache_path is None and not NLTK_WN_AVAILABLE:
+            require_artifacts("data/wordnet_offline.db", component="WordNetLexicalGrounder")
         self.offline_cache_path = Path(offline_cache_path) if offline_cache_path else None
 
         if self.offline_cache_path and self.offline_cache_path.exists():
@@ -1348,6 +1356,8 @@ class FrameNetValencyResolver:
         if path and path.exists():
             self.load_templates(path)
         else:
+            if templates_path is None:
+                require_artifacts("data/framenet_valency.json", component="FrameNetValencyResolver")
             self._init_builtins()
 
     @classmethod

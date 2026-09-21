@@ -10,7 +10,7 @@
 
 param (
     [Parameter(Position = 0, Mandatory = $false)]
-    [ValidateSet("test", "test-verbose", "lint", "export", "help")]
+    [ValidateSet("test", "test-verbose", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
     [string]$Target = "test"
 )
 
@@ -37,7 +37,19 @@ switch ($Target) {
         Write-Host "Generating translation examples and exports..." -ForegroundColor Cyan
         python src/scripts/generate_translation_examples.py
     }
+    "gather-artifacts" {
+        Write-Host "Auditing and gathering all required QUANTA runtime artifacts..." -ForegroundColor Cyan
+        python scripts/gather_artifacts.py
+    }
+    "init" {
+        Write-Host "Initializing QUANTA environment and downloading runtime artifacts..." -ForegroundColor Cyan
+        python scripts/init_quanta.py
+    }
+    "sync-hf" {
+        Write-Host "Checking synchronization with Hugging Face (Borisz42/QUANTA)..." -ForegroundColor Cyan
+        python scripts/sync_hf.py --check
+    }
     "help" {
-        Write-Host "Available targets: test, test-verbose, lint, export, help" -ForegroundColor Green
+        Write-Host "Available targets: test, test-verbose, lint, export, gather-artifacts, init, sync-hf, help" -ForegroundColor Green
     }
 }

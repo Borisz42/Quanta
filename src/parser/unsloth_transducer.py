@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import requests
 
+from core.artifacts import require_artifacts, MissingArtifactError
 from parser.entity_manifest import EntityRecord
 from parser.schema import (
     DiscourseExtractionResult,
@@ -175,6 +176,7 @@ def _locate_gbnf_grammar(custom_path: Optional[Union[str, Path]] = None) -> Path
         if c.is_file():
             return c.resolve()
 
+    require_artifacts("data/grammar/quanta_asg.gbnf", component="UnslothTransducer")
     raise FileNotFoundError(
         "Could not locate 'quanta_asg.gbnf'. Ensure 'data/grammar/quanta_asg.gbnf' exists."
     )
