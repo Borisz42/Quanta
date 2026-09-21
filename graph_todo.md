@@ -8,6 +8,9 @@
 > 2. **Effectively Unlimited Context Scaling** via CPU Discourse Chunking (150–350 words) and Working Memory Entity Manifests.
 > 3. **Strict $\mathcal{O}(1)$ Physical VRAM Execution ($M = 64\text{ to }512$)** via Virtual Page-Table Attention and Hierarchical Merkle Sub-Graph Folding.
 > 4. **Zero Structural & Logical Hallucinations** through Answer Set Programming (ASP) with Minimal Unsatisfiable Core (MUC) closed-loop prompt repair.
+>
+> **Autonomous LLM Context Expansion Roadmap:**
+> For the actionable task-by-task engineering plan covering canonical node interning, SIMD spreading-activation retrieval, dynamic world-state tracking, and OpenAI/MCP middleware proxy serving, consult **[`CONTEXT_EXPANSION_ROADMAP.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md)**.
 
 ---
 

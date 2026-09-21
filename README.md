@@ -3,6 +3,12 @@
 
 ---
 
+> [!TIP]
+> **Active Implementation Roadmap & Action Plan**:
+> For the actionable, task-by-task engineering roadmap detailing how QUANTA functions as an external LLM context expansion solution (including canonical node interning, SIMD spreading activation retrieval, dynamic world-state tracking, and OpenAI/MCP proxy serving), see **[`CONTEXT_EXPANSION_ROADMAP.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md)**.
+
+---
+
 ### Executive Summary: The Mentalese Neuro-Symbolic Coprocessor
 
 Contemporary Large Language Models (LLMs) built upon continuous, autoregressive Transformer architectures operate over unconstrained floating-point spaces ($\mathbb{R}^d$) and face fundamental structural limitations:

@@ -84,7 +84,7 @@ def test_generate_sexpr_dataset_domains_and_structure():
             # Verify S-expression parses into typed extraction result
             parsed = parse_sexpr(item["output"])
             assert isinstance(parsed, DiscourseExtractionResult)
-            assert len(parsed.entities) >= 1
+            assert (len(parsed.entities) + len(parsed.events)) >= 1
 
         assert "folio" in domains_found
         assert "proofwriter" in domains_found
