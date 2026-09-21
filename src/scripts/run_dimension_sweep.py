@@ -1,7 +1,7 @@
 """Automated Dimension Sweep Benchmarking Script for QUANTA.
 
 Sweeps across dimension counts d in {64, 128, 256, 512, 1024, 2048} and generates
-the four empirical publication curves specified in docs/dim1024.md:
+the four empirical publication curves specified in docs/publication.md:
 1. Curve 1: Anchor-Free Collision Rate (R_coll vs d) with 10,000 distinct concept propositions.
 2. Curve 2: Rate-Distortion & Total Correlation Saturation (sum H(D_i), H(V_d), TC(V_d) vs d).
 3. Curve 3: Symbolic Solver Grounding Latency (tau_ASP vs d).

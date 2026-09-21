@@ -393,7 +393,7 @@ $$\max_{S \subset \mathcal{F}, \vert{}S\vert{}=256} \left[ \frac{1}{\vert{}S\ver
 
 ### 4.4. ConceptNet 256-D Optimization & 2-Tier Vector Decoding
 
-To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/conceptnetDimensions.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/conceptnetDimensions.md)):
+To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/publication.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md)):
 
 * **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix 4-valued non-monotonic propagation ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$) expanding 34M assertions to **54.42M active assertions** across $\{0, 1, 2, 3\}$ (`13.31M` TRUE, `23.1K` FALSE, `41.09M` MAYBE).
 * **Usage-Weighted Ontological Density Scoring (U-ODS)**: Ranks concept utility by combining direct degree, relation entropy, affordance ratio, DAG centrality, and real-world Zipf corpus frequency:
@@ -968,11 +968,7 @@ quanta/
 │   ├── validation_corpus/        # Benchmark validation datasets
 │   └── virtual_page_table/       # Merkle-folded library schemas
 ├── docs/
-│   ├── dim1024.md                # 1024-dimension 8-band architecture & hardware feasibility
-│   ├── conceptnetDimensions.md   # ConceptNet 5.7.0 256-D U-ODS derivation & Belnap lattice
-│   ├── QUANTA_NeuroSymbolic_Architecture_Defense.md # Comprehensive theoretical literature defense
-│   ├── DimensionEval.md          # Information profiler & dimension evaluation
-│   └── multilingual_realizer_architecture.md # Typological cross-lingual realizer design
+│   └── publication.md            # Comprehensive theoretical foundation, empirical defense, and publication manuscript
 ├── output/
 │   ├── canonical_slots_layout.json      # 1024-dimension canonical slot definitions (8 bands)
 │   ├── optimal_1024_dimensions.csv      # mRMR ranked 1024 dimensions
@@ -1043,8 +1039,8 @@ quanta/
 │   ├── test_realizers.py         # Multi-target reverse realizers (English, FOL, Code)
 │   ├── test_sexpr_parser.py      # S-expression lexer, parser & AST converter
 │   └── test_unsloth_transducer.py# Unsloth transducer with GBNF grammar injection
-├── graph_todo.md                 # Active Master Roadmap: Neuro-Symbolic Blueprint & Pipeline
-├── todo.md                       # Comprehensive Implementation Roadmap & Engineering Manual
+├── CONTEXT_EXPANSION_ROADMAP.md  # Master Engineering Roadmap: 8-Phase Context Expansion & Experiments
+├── ACTION_PLAN.md                # Quick Index & Module Routing Guide
 └── README.md
 ```
 
@@ -1052,7 +1048,7 @@ quanta/
 
 ## 11. Implementation Roadmap & Master Milestones
 
-The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md):
+The operational master roadmap is governed by [`CONTEXT_EXPANSION_ROADMAP.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md) (indexed via [`ACTION_PLAN.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/ACTION_PLAN.md)):
 
 * **Phase 0: Documentation Audit, Clean-Up & Architectural Alignment [Completed]**
   * Repository documentation sanitized, outdated scratchpads removed, and theoretical defense aligned with the decoupled local SLM coprocessor paradigm.
@@ -1074,8 +1070,8 @@ The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users
   * Constant $\mathcal{O}(1)$ VRAM execution canvas ($M=512$, $\le 128\text{ KB}$) with Host-RAM storage (`src/memory/page_table.py`) and AVX-512 SIMD bitwise Hamming search at $>25\text{ M nodes/sec}$.
 * **Phase 9: End-to-End Multi-Chapter & Book Benchmark Suite [Completed]**
   * Unified cognitive pipeline (`src/pipeline/cognitive_pipeline.py`) and 100.0% slot preservation across complex sentences (counterfactuals, continuous kinematics, quantifier scope ambiguity, metalogical recursion) and multi-sentence narrative discourse paragraphs in `tests/test_end_to_end_suite.py` and `tests/test_translation_complex.py`.
-* **Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Ready for Implementation]**
-  * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution.
+* **Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Tracked in Roadmap Section 7]**
+  * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution. Full specification and OpenResearch experiment plan detailed in [Section 7 of CONTEXT_EXPANSION_ROADMAP.md](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md#7-section-7-knowledge-pre-compilation--encyclopedic-scale-wikidata--wikipedia).
 
 ---
 

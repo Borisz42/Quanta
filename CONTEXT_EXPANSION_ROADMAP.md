@@ -182,7 +182,7 @@ By compiling the top 50,000 most frequent ConceptNet vectors into a contiguous, 
 ## Section 3: Closed-Loop Round-Trip Lattice Meet Gate & Deep NSM Explication (Translation Accuracy)
 
 ### Context & Architectural Rationale
-In [`docs/DimensionEval.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/DimensionEval.md), the empirical cycle-consistency fidelity was measured at 89.5% with a translator Macro F1 of 0.467 on complex logical sentences. The primary cause is the **"NSM Explication Gap"**: when complex verbs (e.g. *"purchased"*, *"prohibited"*, *"transformed"*) are encountered, the parser extracts simple valency frames without decomposing them into their primitive NSM state transitions. Furthermore, reverse English realization can suffer from anaphoric ambiguity across long sentences.
+In [`docs/publication.md` Section 8.3](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md#83-information-profiler-audit-and-verifier-diagnostics), the empirical cycle-consistency fidelity was measured at 89.5% with a translator Macro F1 of 0.467 on complex logical sentences. The primary cause is the **"NSM Explication Gap"**: when complex verbs (e.g. *"purchased"*, *"prohibited"*, *"transformed"*) are encountered, the parser extracts simple valency frames without decomposing them into their primitive NSM state transitions. Furthermore, reverse English realization can suffer from anaphoric ambiguity across long sentences.
 
 By introducing an automated **Closed-Loop Round-Trip Lattice Meet Gate** ($\mathbf{v}_{\text{orig}} \sqcap \mathbf{v}_{\text{reparsed}}$) and expanding predicates into standard 3-prime NSM explication scripts, cycle-consistency Macro F1 will increase to $> 0.75$ with zero semantic drift.
 
@@ -330,7 +330,7 @@ To operate as an external context expander for existing LLM tools (Claude Deskto
 ## Section 7: Phase 10 Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) (World Knowledge)
 
 ### Context & Architectural Rationale
-As documented in [`graph_todo.md` Phase 10](file:///c:/Users/PC/Documents/GitHub/Quanta/graph_todo.md#L327-L360), document context must be grounded into universal human knowledge (~6.8M English Wikipedia articles, ~100M Wikidata triples):
+To scale beyond local episodic memory, document context must be grounded into universal human knowledge (~6.8M English Wikipedia articles, ~100M Wikidata triples):
 - Pre-compile encyclopedic knowledge into a read-only, memory-mapped database (`data/wikipedia_quanta.db`, ~25–40 GB on NVMe SSD).
 - Any query can mount this global knowledge base in read-only mode (`mode=ro`).
 - Physical GPU VRAM remains strictly $\mathcal{O}(1)$ ($M = 512$ nodes $\approx 128\text{ KB}$), while multi-hop trivia queries traverse the graph in $< 10\text{ ms}$ with $0.000000\%$ hallucination.
@@ -363,7 +363,7 @@ As documented in [`graph_todo.md` Phase 10](file:///c:/Users/PC/Documents/GitHub
 ## Section 8: Cross-Lingual Multilingual Forward Transduction Adapters (Universal Pivot)
 
 ### Context & Architectural Rationale
-[`docs/multilingual_realizer_architecture.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/multilingual_realizer_architecture.md) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. However, forward parsing currently relies on English spaCy models and English prompt demonstrations. To serve as a universal language-agnostic context expander, forward transduction must accept queries in German, Turkish, or Mandarin Chinese and compile them into the same canonical $\Sigma^{1024}$ ASG.
+[`docs/publication.md` Section 7](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. However, forward parsing currently relies on English spaCy models and English prompt demonstrations. To serve as a universal language-agnostic context expander, forward transduction must accept queries in German, Turkish, or Mandarin Chinese and compile them into the same canonical $\Sigma^{1024}$ ASG.
 
 ### Target Files
 - **[NEW]** `src/parser/multilingual_transducer.py`: Multilingual prompt templates and language-specific GBNF extensions.
