@@ -11,6 +11,7 @@ Saved to the output/ directory in JSON and Markdown formats with full ASG node g
 
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -19,6 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from core.slots import get_slot_by_index
+from parser.asg_compiler import ASGCompilationError
 from pipeline.cognitive_pipeline import CognitivePipeline
 from visualization.asg_visualizer import ASGVisualizer
 
@@ -26,22 +28,23 @@ from visualization.asg_visualizer import ASGVisualizer
 def generate_all_complex_examples(
     output_dir: Path,
     backend: str = "auto",
-    model: str = "qwen3.5-4b-mtp",
-    base_url: str = "http://127.0.0.1:1234/v1",
+    model: str = "qwen3.5-4b",
+    base_url: Optional[str] = None,
     timeout: float = 180.0,
 ):
+    target_base_url = base_url or os.environ.get("UNSLOTH_BASE_URL", "http://127.0.0.1:8888/v1")
     output_dir.mkdir(parents=True, exist_ok=True)
     pipeline = CognitivePipeline(
         transducer_backend=backend,
         model=model,
-        base_url=base_url,
+        base_url=target_base_url,
         timeout=timeout,
     )
 
     print("================================================================================")
     print("QUANTA COMPLEX TRANSLATION & DISCOURSE COHESION BENCHMARK GENERATOR")
     print(f"Target Output Directory: {output_dir.resolve()}")
-    print(f"Transducer Backend:      {backend} ({model} on {base_url})")
+    print(f"Transducer Backend:      {backend} ({model} on {target_base_url})")
     print("================================================================================\n")
 
     all_md_blocks = []
@@ -73,10 +76,26 @@ def generate_all_complex_examples(
         pipeline.reset()
         is_paragraph = (i == len(eng_complex_sentences))
         chunk_id = f"complex_{i:02d}"
-        graph = pipeline.process_chunk(sent, chunk_id=chunk_id, validate=True)
+        try:
+            if is_paragraph:
+                graph = pipeline.process(sent, validate=True)
+            else:
+                graph = pipeline.process_chunk(sent, chunk_id=chunk_id, validate=True)
+            is_valid = getattr(graph, "validation", None).is_valid if hasattr(graph, "validation") else True
+        except ASGCompilationError as ace:
+            # Handle ontological constraint violations caught by ASP gate gracefully
+            if is_paragraph:
+                graph = pipeline.process(sent, validate=False)
+            else:
+                graph = pipeline.process_chunk(sent, chunk_id=chunk_id, validate=False)
+            val_res = getattr(ace, "validation_result", None) or (
+                pipeline.validator.validate_graph(graph) if getattr(pipeline, "validator", None) else None
+            )
+            setattr(graph, "validation", val_res)
+            is_valid = False
+
         merkle_root = graph.compute_merkle_root()
         output_text = pipeline.realize(graph)
-        is_valid = getattr(graph, "validation", None).is_valid if hasattr(graph, "validation") else True
 
         vec = graph.to_proposition_vector()
         active_slots = {get_slot_by_index(k).name: int(v) for k, v in vec.active_slots().items()}
@@ -177,9 +196,19 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Generate QUANTA complex translation examples.")
     parser.add_argument("--output-dir", "-o", default=str(REPO_ROOT / "output"), help="Output directory")
-    parser.add_argument("--backend", "-b", default="auto", choices=["auto", "lmstudio", "lm_studio", "mock", "gguf"], help="Transducer backend")
-    parser.add_argument("--model", "-m", default="qwen3.5-4b-mtp", help="Model name in LM Studio")
-    parser.add_argument("--base-url", default="http://127.0.0.1:1234/v1", help="LM Studio API base URL")
+    parser.add_argument(
+        "--backend",
+        "-b",
+        default="auto",
+        choices=["auto", "unsloth", "mock_unsloth", "lmstudio", "lm_studio", "mock", "gguf"],
+        help="Transducer backend",
+    )
+    parser.add_argument("--model", "-m", default="qwen3.5-4b", help="Model name or preset in Unsloth / LM Studio")
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get("UNSLOTH_BASE_URL", "http://127.0.0.1:8888/v1"),
+        help="Transducer API base URL",
+    )
     parser.add_argument("--timeout", type=float, default=180.0, help="Request timeout in seconds")
     args = parser.parse_args()
 

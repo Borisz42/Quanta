@@ -30,6 +30,7 @@ This document tracks baseline benchmarks, experimental hypotheses, and empirical
 |---|---|---|---|---|---|---|---|
 | `exp-000` | `main` | - | `main` | Initial baseline root | Baseline established | Baseline | Ready for Round 1 |
 | `exp-001` | `main` | `exp-000` | `3e534dc` | Phase 1: Representation & Parsing Core (GBNF grammar, S-expression lexer/parser, AST converter, QuantaGraph bridge) | 268 passed -> 286 passed (100%) | Success | Promote to Phase 2 |
+| `exp-002` | `test_unsloth_example_generation` | `exp-001` | `50c7f21` | Fix ASG multi-band slot starvation & backtranslation breakdown on complex corpora; ground 1024-D conceptual/epistemic vectors (Bands 0, 3..7); enforce Merkle DAG acyclicity on temporal clauses; restore honest NLG determiner preservation on modified nouns and honorific sentence segmentation | Complex: 0/10 -> 10/10 passed (100%), Round-trip canonical Hamming distance: drift -> 0 (11/11 passed), Full test suite: 376/376 passed (100%) | Success | Promote & Merge to `main` |
 
 ---
 

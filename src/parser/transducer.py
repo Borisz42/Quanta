@@ -600,7 +600,7 @@ CANONICAL_STRESS_4_FIXTURE = DiscourseExtractionResult(
     ],
     propositions=[
         ExtractedProposition(id="P1", claim_text="decree legally void", epistemic_status="FACT", subject_id="E2", event_id="Ev1"),
-        ExtractedProposition(id="P2", claim_text="commissioner obligated to prevent", epistemic_status="PROHIBITED", subject_id="E3", event_id="Ev2"),
+        ExtractedProposition(id="P2", claim_text="commissioner obligated to prevent", epistemic_status="OBLIGATION", subject_id="E3", event_id="Ev2"),
         ExtractedProposition(id="P3", claim_text="clause validates origin", epistemic_status="HYPOTHESIS", subject_id="E4", event_id="Ev4"),
     ],
     metadata={"provenance": "canonical_fixture", "source": "Stress Test 4"},

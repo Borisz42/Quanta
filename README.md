@@ -1050,7 +1050,7 @@ The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users
 
 * **Phase 0: Documentation Audit, Clean-Up & Architectural Alignment [Completed]**
   * Repository documentation sanitized, outdated scratchpads removed, and theoretical defense aligned with the decoupled local SLM coprocessor paradigm.
-* **Phase 1: Core Grammar & S-Expression Specification [In Progress]**
+* **Phase 1: Core Grammar & S-Expression Specification [Completed]**
   * Formal GBNF grammar (`data/grammar/quanta_asg.gbnf`) and recursive-descent S-expression parser (`src/parser/sexpr_parser.py`) converting clauses into typed AST records.
 * **Phase 2: CPU Discourse Chunker & Active Entity Cataloguer [Completed, Enhanced]**
   * Natural boundary segmentation (`src/parser/chunker.py`) and Active Entity Manifest (`src/parser/entity_manifest.py`) minting canonical IDs (`E1`, `E2`), sub-millisecond entity matching, and SQLite LRU paging.
@@ -1060,24 +1060,16 @@ The operational master roadmap is governed by [`graph_todo.md`](file:///c:/Users
   * Unifies chunk graphs, resolves cross-chunk coreference, grounds entities to ConceptNet 5.7.0 and WordNet, wires Allen temporal and Pearl causal edges, and computes 256-bit BLAKE3 Merkle CIDs (`src/parser/graph_stitcher.py`, `src/parser/asg_compiler.py`).
 * **Phase 5: PyClingo Symbolic Validation & MUC Repair Loop [Completed]**
   * Formal ASP verification gate (`src/verification/clingo_gate.py`) isolating Minimal Unsatisfiable Cores (MUC) and orchestrating closed-loop prompt re-queueing (capped at 2 repair attempts).
-* **Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Open / Ready for Implementation]**
-  * Synthetic dataset generation from cached benchmarks (`data/raw/`), error-recovery training mix, and 4-bit Unsloth QLoRA recipe on RTX 3070 (`scripts/generate_sexpr_dataset.py`, `scripts/train_unsloth_lora.py`).
+* **Phase 6: Unsloth LoRA Fine-Tuning Pipeline [Completed]**
+  * Synthetic dataset generation (`scripts/generate_sexpr_dataset.py`), 4-bit Unsloth QLoRA recipe on RTX 3070 (`scripts/train_unsloth_lora.py`), GGUF quantization export (`scripts/export_gguf.py`), and evaluation benchmark harness in `tests/test_phase_six_lora_pipeline.py`.
 * **Phase 7: Deterministic Reverse Realizers & Multi-Target Emitters [Completed]**
   * Compositional English unrolling with 2-tier vector decoding (`src/realizer/english_nlg.py`), First-Order Logic emitter (`src/realizer/fol_emitter.py`), and Python code emitter (`src/realizer/code_emitter.py`).
 * **Phase 8: Hierarchical Merkle Folding & Virtual Page-Table Attention [Completed]**
   * Constant $\mathcal{O}(1)$ VRAM execution canvas ($M=512$, $\le 128\text{ KB}$) with Host-RAM storage (`src/memory/page_table.py`) and AVX-512 SIMD bitwise Hamming search at $>25\text{ M nodes/sec}$.
 * **Phase 9: End-to-End Multi-Chapter & Book Benchmark Suite [Completed]**
-  * Unified cognitive pipeline (`src/pipeline/cognitive_pipeline.py`) validating the Dr. Eleanor Vance narrative, 3-chunk working memory continuity, and $>10,000$-word book benchmark in `tests/test_end_to_end_suite.py`.
+  * Unified cognitive pipeline (`src/pipeline/cognitive_pipeline.py`) and 100.0% slot preservation across complex sentences (counterfactuals, continuous kinematics, quantifier scope ambiguity, metalogical recursion) and multi-sentence narrative discourse paragraphs in `tests/test_end_to_end_suite.py` and `tests/test_translation_complex.py`.
 * **Phase 10: Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Ready for Implementation]**
   * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution.
-
----
-
-## 12. Conclusion
-
-The QUANTA Mentalese Architecture moves beyond unconstrained continuous token generation. By coupling next-generation Small Language Models (Qwen 3.5, Gemma 4) served locally via Unsloth with discrete 1024-dimension quaternary vector spaces, compact GBNF S-expressions, universal semantic primes, and formal PyClingo / $s(\text{CASP})$ symbolic compilers, QUANTA eliminates structural hallucinations, achieves parallel generation throughput, and scales working context memory to host-memory limits.
-
-Execution remains practical on consumer workstations (RTX 3070 8GB VRAM + 16GB Host RAM), delivering a verifiable, high-throughput, neuro-symbolic cognitive architecture.
 
 ---
 

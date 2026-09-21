@@ -105,7 +105,7 @@ RULES & SCHEMA CONSTRAINTS:
    - Mint new IDs (E1, E2, ... or continuing beyond the highest existing ID) ONLY for genuinely novel entities.
 3. EVENT PREDICATES:
    - Format: `(event :id <id> :pred <predicate> [:agent <id>] [:patient <id>] [:theme <id>] [:location <id>] [:instrument <id>] [:time "<time>"] [:tense <tense>] [:aspect <aspect>] [:polarity TRUE|FALSE] [:raw-text "<text>"])`
-   - Link arguments directly to entity IDs.
+   - Link arguments directly to entity IDs. When an event takes another event as a clausal complement (e.g., pretend, know, believe, suspect, prove, want, obligate), set :theme <event_id> or :patient <event_id>.
 4. SPATIO-TEMPORAL & CAUSAL RELATIONS:
    - Format: `(relation :type <rel_type> :source <id> :target <id> [:mechanism "<mech>"] [:confidence <num>])`
    - Permitted types: TEMP_ALLEN_MEETS, TEMP_ALLEN_BEFORE, TEMP_ALLEN_DURING, CAUSAL_MECHANISM_LINK, CAUSAL_PREVENTIVE_BLOCK.
@@ -113,7 +113,7 @@ RULES & SCHEMA CONSTRAINTS:
    - Format: `(proposition :id <id> :claim "<claim_text>" [:subject <id>] [:status <epistemic_status>] [:source <id>] [:event <id>])`
    - Permitted statuses: FACT, HYPOTHESIS, OBSERVATION, DOUBTED, PROHIBITED, BELIEF, KNOWLEDGE, UNVERIFIED.
 
-ONE-SHOT DEMONSTRATION:
+DEMONSTRATION 1 (SIMPLE SVO & TIME):
 [USER INPUT]
 ACTIVE ENTITIES:
 - E1: Dr. Marcus Vance (aliases: Marcus)
@@ -131,6 +131,27 @@ Dr. Marcus Vance pressurized the argon cylinder inside the test chamber at noon.
   (event :id Ev2 :pred verify :agent E1 :time "immediately" :tense PAST :polarity TRUE :raw-text "He verified that the valve held.")
   (relation :type TEMP_ALLEN_MEETS :source Ev1 :target Ev2 :mechanism "sequential verification")
   (proposition :id P1 :claim "the valve held" :status FACT :source E1 :event Ev2)
+)
+
+DEMONSTRATION 2 (COMPLEX CLAUSAL & COUNTERFACTUAL DISCOURSE):
+[USER INPUT]
+CHUNK TEXT:
+Had Alice not falsely pretended to know that Bob believed her investment was secure, the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius.
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "complex_demo"
+  (entity :id E1 :type PERSON :label "Alice" :surface ("Alice" "her"))
+  (entity :id E2 :type PERSON :label "Bob" :surface "Bob")
+  (entity :id E3 :type PERSON :label "auditor" :surface "auditor")
+  (entity :id E4 :type OBJECT :label "investment" :surface "her investment")
+  (entity :id E5 :type OBJECT :label "due diligence" :surface "her due diligence")
+  (event :id Ev1 :pred pretend :agent E1 :theme Ev2 :polarity FALSE :modality "COUNTERFACTUAL" :raw-text "Had Alice not falsely pretended to know that Bob believed her investment was secure")
+  (event :id Ev2 :pred know :agent E1 :theme Ev3 :tense PAST :polarity TRUE :raw-text "to know that Bob believed her investment was secure")
+  (event :id Ev3 :pred believe :agent E2 :patient E4 :tense PAST :polarity TRUE :raw-text "Bob believed her investment was secure")
+  (event :id Ev4 :pred remark :agent E3 :patient E1 :polarity FALSE :modality "COUNTERFACTUAL" :raw-text "the auditor wouldn't have sarcastically remarked that her due diligence was a stroke of genius")
+  (relation :type CAUSAL_MECHANISM_LINK :source Ev1 :target Ev4 :mechanism "counterfactual condition")
+  (proposition :id P1 :claim "her investment was secure" :status BELIEF :source E2 :event Ev3)
+  (proposition :id P2 :claim "her due diligence was a stroke of genius" :status OBSERVATION :source E3 :event Ev4)
 )
 """
 
@@ -583,11 +604,20 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.model = resolve_model_name(model)
         return self.model
 
+    def _get_headers(self) -> Dict[str, str]:
+        """Compose request headers, omitting Authorization for keyless local endpoints."""
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key and self.api_key != "unsloth":
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
     def _detect_model(self, base_url: Optional[str] = None) -> str:
         """Query /models to detect active model or default to Qwen 3.5 4B."""
         target = (base_url or self.base_url).rstrip("/")
         url = f"{target}/models"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers: Dict[str, str] = {}
+        if self.api_key and self.api_key != "unsloth":
+            headers["Authorization"] = f"Bearer {self.api_key}"
         try:
             resp = self.session.get(url, headers=headers, timeout=1.5)
             if resp.status_code == 200:
@@ -609,7 +639,9 @@ class UnslothTransducer(BaseDiscourseTransducer):
         """Check if Unsloth endpoint is reachable and responsive."""
         target = (url or self.base_url).rstrip("/")
         endpoint = f"{target}/models"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers: Dict[str, str] = {}
+        if self.api_key and self.api_key != "unsloth":
+            headers["Authorization"] = f"Bearer {self.api_key}"
         try:
             resp = self.session.get(endpoint, headers=headers, timeout=1.5)
             return resp.status_code == 200
@@ -707,10 +739,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        headers = self._get_headers()
         payload = self._build_payload(
             text=content,
             active_entities=active_entities,

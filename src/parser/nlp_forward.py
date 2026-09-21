@@ -147,12 +147,12 @@ class NLPForwardParser:
         # 3. Positional inference for unknown literals / tokens
         if token.i > 0:
             prev_token = doc[token.i - 1]
-            # Follows auxiliary, modal, or negation ('must X', 'did not X', 'could X') -> VERB
-            if prev_token.pos_ in ("AUX", "MD") or prev_token.text.lower() in (
-                "not", "n't", "to", "did", "does", "do", "will", "would", "must", "can", "could", "shall", "should", "might", "may"
+            # Follows modal auxiliary or 'to' infinitive ('must X', 'to X') -> VERB
+            # Only apply if token is ambiguous (NOUN, X) and not PART, ADV, DET, PRON, ADJ, PUNCT
+            if pos in ("NOUN", "X") and prev_token.text.lower() in (
+                "to", "did", "does", "do", "will", "would", "must", "can", "could", "shall", "should", "might", "may"
             ):
-                if pos not in ("VERB", "AUX"):
-                    return "VERB", lemma
+                return "VERB", lemma
             # Preceded by determiner ('a', 'the', 'every') -> NOUN or ADJ
             elif prev_token.pos_ == "DET" or prev_token.text.lower() in (
                 "a", "an", "the", "this", "that", "these", "those", "every", "all", "each", "some", "my", "your", "his", "her", "their", "our"
@@ -166,7 +166,7 @@ class NLPForwardParser:
                 # If followed by another noun (and not a verb), it's an ADJ; if followed by verb/prep/punct, it's a NOUN
                 if token.i + 1 < len(doc) and (doc[token.i + 1].pos_ in ("NOUN", "PROPN") and not is_next_verb):
                     return "ADJ", lemma
-                else:
+                elif pos in ("VERB", "X"):
                     return "NOUN", lemma
 
         return pos, lemma
@@ -299,7 +299,8 @@ class NLPForwardParser:
         clean_str = text.strip()
 
         # 1. Multi-sentence paragraph detection
-        sents = [s.strip() for s in re.split(r'(?<=[.?!])\s+', clean_str) if s.strip()]
+        doc_sents = self.parse_dependency_tree(clean_str)
+        sents = [s.text.strip() for s in doc_sents.sents if s.text.strip()]
         if len(sents) > 1:
             return self.parse_paragraph(clean_str, domain_context=domain_context)
 
@@ -473,106 +474,11 @@ class NLPForwardParser:
 
         return combined
 
-
-
-    def _parse_conditional_sentence(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
-        """Parses conditional sentences: 'If <Antecedent>, then <Consequent>' into an ASG."""
-        t = text.strip()
-        lower_t = t.lower()
-        if lower_t.startswith("if "):
-            t = t[3:].strip()
-
-        parts = re.split(r",\s*then\s+|\s+then\s+", t, flags=re.IGNORECASE)
-        if len(parts) != 2:
-            parts = [p.strip() for p in t.split(",") if p.strip()]
-
-        if len(parts) >= 2:
-            cond_str, then_str = parts[0].strip().rstrip("."), parts[1].strip().rstrip(".")
-            g_cond = self.parse_sentence(cond_str, domain_context=domain_context)
-            g_then = self.parse_sentence(then_str, domain_context=domain_context)
-
-            combined = QuantaGraph()
-            for n in g_cond.nodes.values():
-                combined.add_node(n)
-            for n in g_then.nodes.values():
-                combined.add_node(n)
-
-            root_node = QuantaNode(literal=text.strip(), anchor="logic:conditional")
-            root_node.set_slot("GRAPH_ROOT_NODE", 1)
-            root_node.set_slot("LJB_GANAI_IF_THEN", 1)
-            root_node.set_slot("GRAPH_BRANCH_COND", 1)
-            root_node.set_slot("GRAPH_BRANCH_THEN", 1)
-            root_node.set_slot("TYPE_PROPOSITION", 1)
-            root_node.set_slot("MODALITY_LITERAL", 1)
-            root_node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
-            root_node.set_slot("NSM_TRUE", 1)
-            combined.add_node(root_node, set_as_root=True)
-
-            if g_cond.root:
-                combined.add_edge(root_node, "GRAPH_BRANCH_COND", g_cond.root)
-                combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g_cond.root)
-            if g_then.root:
-                combined.add_edge(root_node, "GRAPH_BRANCH_THEN", g_then.root)
-                combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g_then.root)
-
-            return combined
-
-        doc = self.parse_dependency_tree(text)
-        return self._parse_single_clause(doc, text, domain_context)
-
-    def _maybe_parse_compound_sentence(self, text: str, domain_context: Optional[str] = None) -> Optional[QuantaGraph]:
-        """Parses coordinating compound clauses joined by 'and' or 'or'."""
-        clean_text = text.strip()
-        lower = clean_text.lower()
-        conj = "and" if " and " in lower else ("or" if " or " in lower else None)
-        if not conj:
-            return None
-
-        parts = re.split(rf"\s+{conj}\s+", clean_text, flags=re.IGNORECASE)
-        if len(parts) != 2:
-            return None
-
-        c1_str, c2_str = parts[0].strip().rstrip(".,"), parts[1].strip().rstrip(".,")
-        d1 = self.parse_dependency_tree(c1_str)
-        d2 = self.parse_dependency_tree(c2_str)
-        has_v1 = any(t.pos_ in ("VERB", "AUX") or t.dep_ == "ROOT" for t in d1)
-        has_v2 = any(t.pos_ in ("VERB", "AUX") or t.dep_ == "ROOT" for t in d2)
-
-        if not (has_v1 and has_v2):
-            return None
-
-        g1 = self.parse_sentence(c1_str, domain_context=domain_context)
-        g2 = self.parse_sentence(c2_str, domain_context=domain_context)
-
-        combined = QuantaGraph()
-        for n in g1.nodes.values():
-            combined.add_node(n)
-        for n in g2.nodes.values():
-            combined.add_node(n)
-
-        root_node = QuantaNode(literal=text.strip(), anchor=f"logic:compound_{conj}")
-        root_node.set_slot("GRAPH_ROOT_NODE", 1)
-        if conj == "and":
-            root_node.set_slot("LJB_JE_AND", 1)
-        else:
-            root_node.set_slot("LJB_JA_OR", 1)
-        root_node.set_slot("TYPE_PROPOSITION", 1)
-        root_node.set_slot("MODALITY_LITERAL", 1)
-        root_node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
-        root_node.set_slot("NSM_TRUE", 1)
-        combined.add_node(root_node, set_as_root=True)
-
-        if g1.root:
-            combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g1.root)
-        if g2.root:
-            combined.add_edge(root_node, "GRAPH_IS_SUB_EXP", g2.root)
-
-        return combined
-
     def parse_paragraph(self, text: str, domain_context: Optional[str] = None) -> QuantaGraph:
         """Parses a multi-sentence paragraph into a unified discourse ASG with cross-sentence cohesion & anaphoric backreferencing."""
         clean_text = text.strip()
-        raw_sents = [s.strip() for s in re.split(r'(?<=[.?!])\s+', clean_text) if s.strip()]
+        doc_para = self.parse_dependency_tree(clean_text)
+        raw_sents = [s.text.strip() for s in doc_para.sents if s.text.strip()]
         if not raw_sents:
             return QuantaGraph()
 
@@ -778,9 +684,14 @@ class NLPForwardParser:
         # 3. Extract Agent / Subject
         agent_token = None
         for token in doc:
-            if token.dep_ in ("nsubj", "nsubjpass", "csubj") and (token.head == root_token or token.i < root_token.i):
+            if token.dep_ in ("nsubj", "nsubjpass", "csubj") and token.head == root_token:
                 agent_token = token
                 break
+        if agent_token is None:
+            for token in doc:
+                if token.dep_ in ("nsubj", "nsubjpass", "csubj") and token.i < root_token.i:
+                    agent_token = token
+                    break
         if agent_token is None:
             for token in doc:
                 if token.i < root_token.i and token.pos_ in ("NOUN", "PROPN", "PRON") and token.dep_ not in ("prep", "pobj", "det"):
@@ -824,9 +735,14 @@ class NLPForwardParser:
         # 4. Extract Patient / Object
         patient_token = None
         for token in doc:
-            if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and (token.head == root_token or token.i > root_token.i):
+            if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and token.head == root_token:
                 patient_token = token
                 break
+        if patient_token is None:
+            for token in doc:
+                if token.dep_ in ("dobj", "attr", "dative", "acomp", "oprd") and token.i > root_token.i:
+                    patient_token = token
+                    break
         if patient_token is None:
             for token in doc:
                 if token.i > root_token.i and token.dep_ in ("appos", "dobj", "attr", "dep") and token.pos_ in ("NOUN", "PROPN"):
@@ -865,7 +781,7 @@ class NLPForwardParser:
             root_node.set_slot("VAL_X2_PATIENT", 1)
 
         # 5. Extract Prepositional Phrases
-        prep_attachments: List[Tuple[str, QuantaNode]] = []
+        prep_attachments: List[Tuple[str, QuantaNode, int]] = []
         for token in doc:
             if token.dep_ == "prep" or token.pos_ == "ADP":
                 prep_lemma = token.lemma_.lower()
@@ -889,19 +805,19 @@ class NLPForwardParser:
                     if prep_lemma != "into" and (prep_node.get_slot("TYPE_HUMAN") in (1, 3) or prep_node.get_slot("WN_PERSON_HUMAN") == 1):
                         prep_node.set_slot("VAL_EXPERIENCER", 1)
                         root_node.set_slot("VAL_EXPERIENCER", 1)
-                        prep_attachments.append(("VAL_EXPERIENCER", prep_node))
+                        prep_attachments.append(("VAL_EXPERIENCER", prep_node, token.head.i))
                     else:
                         prep_node.set_slot("VAL_X3_DESTINATION", 1)
                         prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                         if prep_lemma == "into":
                             prep_node.set_slot("NSM_INSIDE", 1)
                         root_node.set_slot("VAL_X3_DESTINATION", 1)
-                        prep_attachments.append(("VAL_X3_DESTINATION", prep_node))
+                        prep_attachments.append(("VAL_X3_DESTINATION", prep_node, token.head.i))
                 elif prep_lemma in ("from", "out", "off"):
                     prep_node.set_slot("VAL_X4_SOURCE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
                     root_node.set_slot("VAL_X4_SOURCE", 1)
-                    prep_attachments.append(("VAL_X4_SOURCE", prep_node))
+                    prep_attachments.append(("VAL_X4_SOURCE", prep_node, token.head.i))
                 elif prep_lemma in ("in", "inside", "at", "on", "within"):
                     prep_node.set_slot("NSM_INSIDE", 1)
                     prep_node.set_slot("TYPE_SPATIAL_REGION", 1)
@@ -909,22 +825,22 @@ class NLPForwardParser:
                     prep_node.set_slot("WN_LOCATION_PLACE", 1)
                     prep_node.set_slot("SPATIAL_RCC_NON_TANG_PART", 1)
                     root_node.set_slot("VAL_LOCATION_SLOT", 1)
-                    prep_attachments.append(("VAL_LOCATION_SLOT", prep_node))
+                    prep_attachments.append(("VAL_LOCATION_SLOT", prep_node, token.head.i))
                 elif prep_lemma in ("with", "by", "using"):
                     pobj_lem = pobj_token.lemma_.lower()
                     if pobj_lem in ("certainty", "ease", "speed", "confidence", "doubt", "precision", "accuracy", "difficulty", "reluctance", "caution", "care") or prep_node.get_slot("TYPE_ABSTRACT_CONCEPT") == 1 or prep_node.get_slot("TYPE_ATTRIBUTE_PROPERTY") == 1:
                         prep_node.set_slot("VAL_MANNER_SLOT", 1)
                         root_node.set_slot("VAL_MANNER_SLOT", 1)
-                        prep_attachments.append(("VAL_MANNER_SLOT", prep_node))
+                        prep_attachments.append(("VAL_MANNER_SLOT", prep_node, token.head.i))
                     else:
                         prep_node.set_slot("ROLE_INSTRUMENT_USABLE", 1)
                         prep_node.set_slot("VAL_X5_INSTRUMENT", 1)
                         root_node.set_slot("VAL_X5_INSTRUMENT", 1)
-                        prep_attachments.append(("VAL_X5_INSTRUMENT", prep_node))
+                        prep_attachments.append(("VAL_X5_INSTRUMENT", prep_node, token.head.i))
                 elif prep_lemma in ("for", "because", "since"):
                     prep_node.set_slot("VAL_PURPOSE_SLOT", 1)
                     root_node.set_slot("VAL_PURPOSE_SLOT", 1)
-                    prep_attachments.append(("VAL_PURPOSE_SLOT", prep_node))
+                    prep_attachments.append(("VAL_PURPOSE_SLOT", prep_node, token.head.i))
 
         # 6. Extract Adverbials & Predicate Adjectives
         for token in doc:
@@ -954,9 +870,10 @@ class NLPForwardParser:
         if is_inversion or is_conditional:
             root_node.set_slot("CAUSAL_COUNTERFACTUAL_NEC", 1)
             root_node.set_slot("MODALITY_COUNTERFACTUAL", 1)
+            root_node.set_slot("GRAPH_BRANCH_COND", 1)
             for t in doc:
                 if t.pos_ in ("VERB", "AUX") and t.i < root_token.i:
-                    cond_token = t
+                    cond_token = t.head if (t.dep_ == "aux" and t.head.i < root_token.i) else t
                     break
         if any(t.text.lower() == "unless" for t in doc):
             root_node.set_slot("LOGIC_TEMPORAL_UNTIL_U", 1)
@@ -1032,8 +949,14 @@ class NLPForwardParser:
             if any(term in t_low for term in ("cell", "vessel", "containment")):
                 token_nodes[t.i].set_slot("GRAPH_MERKLE_FOLD_POINT", 1)
 
-        # 8b. Set possessive and negation slots on nodes before graph freezing
+        # 8b. Set possessive, agent-capable, and negation slots on nodes before graph freezing
         for t in doc:
+            if t.dep_ in ("nsubj", "nsubjpass", "csubj"):
+                token_nodes[t.i].set_slot("ROLE_AGENT_CAPABLE", 1)
+            if t.dep_ == "advcl":
+                mark_lemmas = [c.lemma_.lower() for c in t.children if c.dep_ == "mark"]
+                if "while" in mark_lemmas or any(tok.text.lower() == "while" for tok in doc):
+                    token_nodes[t.i].set_slot("TEMP_ALLEN_DURING", 1)
             if t.dep_ == "neg" or t.text.lower() in ("n't", "not"):
                 if t.i > 0 and (doc[t.i - 1].pos_ in ("AUX", "VERB", "MD") or doc[t.i - 1].lemma_.lower() in ("would", "could", "should", "will", "can", "do", "did", "does", "have", "has", "had", "is", "are", "was", "were", "must", "might", "may")):
                     token_nodes[t.i - 1].set_slot("LJB_NA_NEGATION", 2)
@@ -1070,6 +993,36 @@ class NLPForwardParser:
                 if token.dep_ == "neg" or token.text.lower() in ("n't", "not"):
                     graph.add_edge(head_n, "LJB_NA_NEGATION", t_n)
 
+                # Subordinate valency wiring
+                if token.dep_ in ("nsubj", "nsubjpass", "csubj"):
+                    graph.add_edge(head_n, "VAL_X1_AGENT", t_n)
+                elif token.dep_ in ("dobj", "dative", "attr", "acomp", "oprd"):
+                    graph.add_edge(head_n, "VAL_X2_PATIENT", t_n)
+                elif token.dep_ in ("ccomp", "xcomp"):
+                    graph.add_edge(head_n, "VAL_CLAUSAL_COMPLEMENT", t_n)
+                elif token.dep_ == "advmod":
+                    graph.add_edge(head_n, "VAL_MANNER_SLOT", t_n)
+                elif token.dep_ == "advcl":
+                    mark_lemmas = [c.lemma_.lower() for c in token.children if c.dep_ == "mark"]
+                    if "while" in mark_lemmas or any(t.text.lower() == "while" for t in doc):
+                        graph.add_edge(head_n, "TEMP_ALLEN_DURING", t_n)
+                elif token.dep_ == "prep" or token.pos_ == "ADP":
+                    pobj = [child for child in token.children if child.dep_ in ("pobj", "dobj")]
+                    if pobj:
+                        p_n = token_nodes[pobj[0].i]
+                        prep_lem = token.lemma_.lower()
+                        if prep_lem in ("to", "into", "towards"):
+                            graph.add_edge(head_n, "VAL_X3_DESTINATION", p_n)
+                        elif prep_lem in ("from", "out", "off"):
+                            graph.add_edge(head_n, "VAL_X4_SOURCE", p_n)
+                        elif prep_lem in ("in", "inside", "at", "on", "within"):
+                            graph.add_edge(head_n, "VAL_LOCATION_SLOT", p_n)
+                        elif prep_lem in ("with", "by", "using"):
+                            if p_n.get_slot("VAL_MANNER_SLOT") == 1:
+                                graph.add_edge(head_n, "VAL_MANNER_SLOT", p_n)
+                            else:
+                                graph.add_edge(head_n, "VAL_X5_INSTRUMENT", p_n)
+
             # Possessive case marker wiring ('s, s')
             if token.tag_ == "POS" or token.dep_ == "case" or token.text.lower() == "'s":
                 possessor_tok = token.head
@@ -1084,7 +1037,7 @@ class NLPForwardParser:
             graph.add_edge(root_node, "VAL_X1_AGENT", agent_node)
         if patient_node:
             graph.add_edge(root_node, "VAL_X2_PATIENT", patient_node)
-        for rel_name, p_node in prep_attachments:
+        for rel_name, p_node, head_idx in prep_attachments:
             graph.add_edge(root_node, rel_name, p_node)
 
         if cond_token:
@@ -1469,7 +1422,16 @@ class NLPForwardParser:
             node.set_slot("LJB_RACE_CONDITION", 1)
 
         # 7. Logical Connectives, Negation & Modality
-        if has_negation:
+        root_token = next((t for t in doc if t.dep_ == "ROOT"), doc[0] if len(doc) > 0 else None)
+        has_root_negation = any(
+            (t.dep_ == "neg" or t.text.lower() in ("not", "n't", "never"))
+            and (t.head == root_token or (t.head.head == root_token and t.head.pos_ == "AUX"))
+            for t in doc
+        )
+        if not any(t.pos_ in ("VERB", "AUX") and t != root_token for t in doc):
+            has_root_negation = has_root_negation or has_negation
+
+        if node.get_slot("LJB_NA_NEGATION") == 2 or has_root_negation:
             node.set_slot("LJB_NA_NEGATION", 2)  # Quaternary 2: Explicitly Negated
         else:
             node.set_slot("NSM_TRUE", 1)

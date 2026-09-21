@@ -1,8 +1,8 @@
 # QUANTA Operational Refactor Plan: Phased Neuro-Symbolic Implementation
 
-> **Status:** Active Operational Blueprint  
+> **Status:** Completed (Phases 1–5 Operational & Verified)  
 > **Target Architecture:** QUANTA Neuro-Symbolic Cognitive Engine  
-> **Baseline Test Suite:** 268 passed (`pytest tests/`)  
+> **Baseline Test Suite:** 376 passed (`pytest tests/`)  
 > **Execution Strategy:** 5 Phased Milestones with Strict Test Boundaries  
 
 ---
@@ -287,7 +287,7 @@ This phase completes the operational bridge, connecting the 3-pass ingestion pip
 pytest tests/ -v
 ```
 - [x] End-to-end execution of a multi-sentence narrative: text $\to$ S-expr $\to$ QuantaGraph $\to$ English NLG.
-- [x] All 268 baseline tests pass without regression.
+- [x] All 376 test suite cases pass without regression (including baseline, transducer, stitcher, repair, pipeline, slots, and complex translation suites).
 - [x] All new test files pass cleanly:
   - `tests/test_sexpr_parser.py`
   - `tests/test_unsloth_transducer.py`

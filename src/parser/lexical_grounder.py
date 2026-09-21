@@ -3,9 +3,76 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import json
+import logging
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+logger = logging.getLogger(__name__)
+
+
+def find_quanta_data_file(filename: str) -> Optional[Path]:
+    """Robust multi-path locator for Quanta offline data files (SQLite DBs, codebooks, JSONs).
+
+    Searches:
+    1. Direct Path('data') / filename (current working directory)
+    2. Local repo root: (Path(__file__).resolve().parents[2] / 'data' / filename)
+    3. Environment variable QUANTA_DATA_DIR / filename
+    4. Git common directory parent / 'data' / filename (for git worktrees)
+    5. Fallback well-known paths (e.g., C:/Users/PC/Documents/GitHub/Quanta/data/)
+
+    If found outside local data/, attempts to create an NTFS hardlink in local data/ for zero-copy access.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    local_data_dir = repo_root / "data"
+    local_target = local_data_dir / filename
+    if local_target.exists():
+        return local_target
+
+    cwd_target = Path("data") / filename
+    if cwd_target.exists():
+        return cwd_target.resolve()
+
+    # Search candidates
+    candidates: List[Path] = []
+
+    env_data = os.environ.get("QUANTA_DATA_DIR")
+    if env_data:
+        candidates.append(Path(env_data) / filename)
+
+    # Git common dir (worktree parent)
+    try:
+        git_dir = subprocess.check_output(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(repo_root),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if git_dir:
+            common_root = Path(git_dir).resolve().parent
+            candidates.append(common_root / "data" / filename)
+    except Exception:
+        pass
+
+    # Well-known fallback paths on current system
+    candidates.append(Path(r"C:\Users\PC\Documents\GitHub\Quanta\data") / filename)
+    candidates.append(repo_root.parent / "Quanta" / "data" / filename)
+
+    for cand in candidates:
+        if cand.exists():
+            # Try to create local hardlink for zero-copy high performance
+            try:
+                local_data_dir.mkdir(parents=True, exist_ok=True)
+                if not local_target.exists():
+                    os.link(str(cand), str(local_target))
+                    return local_target
+            except Exception:
+                pass
+            return cand
+
+    return None
 
 try:
     from nltk.corpus import wordnet as wn
@@ -64,13 +131,15 @@ class ConceptNetLexicalGrounder:
     def __init__(self, offline_cache_path: Optional[Union[str, Path]] = None):
         self._cache: Dict[str, GroundedLexicalConcept] = {}
         if offline_cache_path is None:
-            default_db = Path("data/conceptnet_offline.db")
-            if default_db.exists():
+            default_db = find_quanta_data_file("conceptnet_offline.db")
+            if default_db and default_db.exists():
                 offline_cache_path = default_db
         self.offline_cache_path = Path(offline_cache_path) if offline_cache_path else None
         self._conn: Optional[sqlite3.Connection] = None
         if self.offline_cache_path and self.offline_cache_path.exists():
             self._conn = sqlite3.connect(str(self.offline_cache_path), check_same_thread=False)
+        else:
+            logger.warning("ConceptNet offline database not found. Lexical concept grounding will be impaired.")
 
     @classmethod
     def get_default(cls) -> ConceptNetLexicalGrounder:
@@ -324,6 +393,34 @@ class ConceptNetLexicalGrounder:
                 active_slots.pop("TYPE_ARTIFACT", None)
                 active_slots.pop("TYPE_INANIMATE_PHYSICAL", None)
 
+            if not active_slots or len(active_slots) == 0:
+                # Fallback: attempt WordNet enrichment when ConceptNet 5.7 has empty slots
+                try:
+                    wn_grounder = WordNetLexicalGrounder.get_default()
+                    if wn_grounder:
+                        wn_syn = wn_grounder.resolve_synset(r_lemma, pos=r_pos)
+                        if wn_syn:
+                            wn_root_slot_idx = wn_grounder.get_wordnet_root_category(wn_syn)
+                            if wn_root_slot_idx is not None:
+                                from core.slots import SLOT_INDEX_TO_NAME
+                                wn_slot_name = SLOT_INDEX_TO_NAME.get(wn_root_slot_idx)
+                                if wn_slot_name:
+                                    active_slots[wn_slot_name] = 1
+                                    vec[wn_slot_name] = 1
+                except Exception:
+                    pass
+
+            if r_pos == "v" or pos_norm == "v":
+                if "WN_ACT_ACTION" not in active_slots:
+                    active_slots["WN_ACT_ACTION"] = 1
+                    vec["WN_ACT_ACTION"] = 1
+                if "CN_Q115_EVENT" not in active_slots:
+                    active_slots["CN_Q115_EVENT"] = 1
+                    vec["CN_Q115_EVENT"] = 1
+                if "CN_Q092_ACT" not in active_slots:
+                    active_slots["CN_Q092_ACT"] = 1
+                    vec["CN_Q092_ACT"] = 1
+
             canonical_anchor = f"cn:{lang}:{r_lemma} ({r_pos})"
             concept = GroundedLexicalConcept(
                 lemma=r_lemma,
@@ -529,8 +626,8 @@ class WordNetLexicalGrounder:
     @classmethod
     def get_default(cls) -> WordNetLexicalGrounder:
         if cls._default_instance is None:
-            default_db = Path("data/wordnet_offline.db")
-            cls._default_instance = cls(offline_cache_path=default_db if default_db.exists() else None)
+            default_db = find_quanta_data_file("wordnet_offline.db")
+            cls._default_instance = cls(offline_cache_path=default_db if default_db and default_db.exists() else None)
         return cls._default_instance
 
     def load_cache(self, path: Union[str, Path]):
@@ -1247,8 +1344,8 @@ class FrameNetValencyResolver:
 
     def __init__(self, templates_path: Optional[Union[str, Path]] = None):
         self._templates: Dict[str, FrameNetTemplate] = {}
-        path = Path(templates_path) if templates_path else Path("data/framenet_valency.json")
-        if path.exists():
+        path = Path(templates_path) if templates_path else find_quanta_data_file("framenet_valency.json")
+        if path and path.exists():
             self.load_templates(path)
         else:
             self._init_builtins()

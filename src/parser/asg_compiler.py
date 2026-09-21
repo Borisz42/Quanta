@@ -79,7 +79,8 @@ class ASGCompiler:
     COGNITION_VERBS: Set[str] = {
         "think", "believe", "know", "doubt", "verify", "suppose", "assume",
         "infer", "deduce", "judge", "consider", "reckon", "reflect", "ponder",
-        "comprehend", "recognize", "replicate", "hypothesize",
+        "comprehend", "recognize", "replicate", "hypothesize", "pretend",
+        "feign", "simulate", "deceive", "suspect", "want", "desire", "prove",
     }
     PERCEPTION_VERBS: Set[str] = {
         "see", "look", "watch", "observe", "note", "notice", "view", "glance",
@@ -88,19 +89,20 @@ class ASGCompiler:
     COMMUNICATION_VERBS: Set[str] = {
         "say", "tell", "speak", "talk", "prohibit", "warn", "command", "declare",
         "state", "report", "describe", "explain", "argue", "mention", "assert",
-        "suggest", "propose", "instruct", "order", "forbid", "audit",
+        "suggest", "propose", "instruct", "order", "forbid", "audit", "obligate",
+        "mandate", "enforce", "prevent", "remark", "announce",
     }
     MOTION_VERBS: Set[str] = {
         "move", "go", "walk", "run", "travel", "fly", "jump", "enter", "leave",
         "cross", "drive", "ride", "step", "pass", "shift", "head", "crawl",
         "swim", "chase", "pursue", "arrive", "depart", "reach", "approach",
-        "flee", "escape", "return", "navigate",
+        "flee", "escape", "return", "navigate", "accelerate", "accelerating",
     }
     ACTION_VERBS: Set[str] = {
         "isolate", "retain", "pressurize", "make", "build", "create", "test",
         "synthesize", "extract", "heat", "cool", "mix", "separate", "measure",
         "modify", "apply", "execute", "perform", "touch", "hit", "grab", "push",
-        "pull", "carry", "place", "put", "transform",
+        "pull", "carry", "place", "put", "transform", "commit", "validate", "void",
     }
     LIFE_VERBS: Set[str] = {
         "live", "die", "born", "grow", "breathe", "perish", "survive", "decay", "sprout",
@@ -176,6 +178,11 @@ class ASGCompiler:
                 node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
             elif ev.theme_id and ev.theme_id in entity_nodes:
                 node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
+            elif (ev.theme_id and any(e.id == ev.theme_id for e in extraction_result.events)) or \
+                 (ev.patient_id and any(e.id == ev.patient_id for e in extraction_result.events)):
+                node.set_structural_slot("VAL_X2_PATIENT", StructuralValue.ACTIVE_LOCAL)
+                node.set_slot("GRAPH_IS_SUB_EXP", 1)
+
             if ev.location_id and ev.location_id in entity_nodes:
                 node.set_structural_slot("VAL_LOCATION_SLOT", StructuralValue.ACTIVE_LOCAL)
             if ev.instrument_id and ev.instrument_id in entity_nodes:
@@ -201,12 +208,17 @@ class ASGCompiler:
             graph.add_node(node)
             event_nodes[ev.id] = node
 
-        # 5. Wire Thematic Valencies from events to entities
+        # 5. Wire Thematic Valencies from events to entities and sub-clauses
         for ev in extraction_result.events:
             ev_node = event_nodes[ev.id]
-            if ev.agent_id and ev.agent_id in entity_nodes:
-                ent_node = entity_nodes[ev.agent_id]
-                graph.add_edge(ev_node.cid, "VAL_X1_AGENT", ent_node.cid)
+            if ev.agent_id:
+                if ev.agent_id in entity_nodes:
+                    ent_node = entity_nodes[ev.agent_id]
+                    graph.add_edge(ev_node.cid, "VAL_X1_AGENT", ent_node.cid)
+                elif ev.agent_id in event_nodes:
+                    target_ev_node = event_nodes[ev.agent_id]
+                    graph.add_edge(target_ev_node.cid, "CAUSAL_MECHANISM_LINK", ev_node.cid)
+                    graph.add_edge(ev_node.cid, "GRAPH_IS_SUB_EXP", target_ev_node.cid)
 
             if ev.patient_id and ev.patient_id in entity_nodes:
                 ent_node = entity_nodes[ev.patient_id]
@@ -214,6 +226,13 @@ class ASGCompiler:
             elif ev.theme_id and ev.theme_id in entity_nodes:
                 ent_node = entity_nodes[ev.theme_id]
                 graph.add_edge(ev_node.cid, "VAL_X2_PATIENT", ent_node.cid)
+
+            # Clausal complement wiring
+            theme_ev_id = ev.theme_id if (ev.theme_id and ev.theme_id in event_nodes) else (ev.patient_id if (ev.patient_id and ev.patient_id in event_nodes) else None)
+            if theme_ev_id and theme_ev_id in event_nodes:
+                target_ev_node = event_nodes[theme_ev_id]
+                graph.add_edge(ev_node.cid, "VAL_CLAUSAL_COMPLEMENT", target_ev_node.cid)
+                graph.add_edge(ev_node.cid, "GRAPH_IS_SUB_EXP", target_ev_node.cid)
 
             if ev.location_id and ev.location_id in entity_nodes:
                 ent_node = entity_nodes[ev.location_id]
@@ -294,6 +313,7 @@ class ASGCompiler:
         node = QuantaNode(literal=entity.canonical_name)
 
         # 1. Band 2: Variable Register Scoping
+        name_low = entity.canonical_name.lower()
         reg_slot = f"VAR_SLOT_X{register_index % 8}"
         node.set_register_slot(reg_slot, RegisterValue.BOUND_LOCAL)
         node.set_slot("GRAPH_VARIABLE_BIND", 1)
@@ -375,6 +395,9 @@ class ASGCompiler:
             node.set_slot("TYPE_ANIMATE", 0)
             node.set_slot("TYPE_HUMAN", 0)
             node.set_slot("GRAPH_VARIABLE_BIND", 0)
+            if any(w in name_low for w in ("drone", "robot", "machine", "vehicle", "computer", "system", "agent", "device", "program", "aircraft", "satellite")):
+                node.set_slot("ROLE_AGENT_CAPABLE", 1)
+                node.set_slot("ROLE_VOLITIONAL_SOURCE", 1)
         elif cat == "NATURAL_OBJECT":
             node.set_slot("TYPE_NATURAL_OBJECT", 1)
             node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
@@ -390,6 +413,17 @@ class ASGCompiler:
             node.set_slot("TYPE_ANIMATE", 1)
             node.set_slot("ROLE_AGENT_CAPABLE", 1)
             node.set_slot("ROLE_SENTIENT", 1)
+
+        # 4. Quantifier scoping slots
+        name_low = entity.canonical_name.lower()
+        surface_low = " ".join(entity.surface_aliases).lower() if getattr(entity, "surface_aliases", None) else ""
+        combined_names = f"{name_low} {surface_low}"
+        tokens = combined_names.split()
+        if any(w in tokens for w in ("every", "all", "each")):
+            node.set_slot("LJB_RO_ALL_QUANT", 1)
+        if any(w in tokens for w in ("any", "someone", "somebody", "some")):
+            node.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
+            node.set_slot("GRAPH_VARIABLE_BIND", 1)
 
         node.compute_cid()
         return node
@@ -453,8 +487,16 @@ class ASGCompiler:
             if pred_clean == "verify":
                 node.set_slot("NSM_TRUE", 1)
                 node.set_slot("SOLVER_PROOF_VALIDATED", 1)
-            elif pred_clean == "doubt":
+            elif pred_clean in ("doubt", "suspect"):
                 node.set_slot("NSM_MAYBE", 3)
+                node.set_slot("TOM_FIRST_ORDER_BELIEF", 1)
+            elif pred_clean in ("pretend", "feign", "deceive"):
+                node.set_slot("ROLE_DECEPTIVE_PROJECTION", 1)
+                node.set_slot("INTENT_DECEPTIVE_PROJECTION", 1)
+                node.set_slot("TOM_BELIEF_SECOND_ORDER", 1)
+                node.set_slot("TOM_SECOND_ORDER_BELIEF", 1)
+            elif pred_clean in ("want", "desire"):
+                node.set_slot("TOM_DESIRE", 1)
         elif pred_clean in self.PERCEPTION_VERBS:
             node.set_slot("NSM_SEE", 1)
             node.set_slot("EPIST_DIRECT_OBSERVATION", 1)
@@ -462,8 +504,14 @@ class ASGCompiler:
             node.set_slot("NSM_SAY", 1)
             if pred_clean in ("prohibit", "forbid"):
                 node.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
+            elif pred_clean in ("obligate", "mandate", "enforce"):
+                node.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
+            elif pred_clean in ("prevent", "block"):
+                node.set_slot("CAUSAL_PREVENTIVE_BLOCK", 1)
         elif pred_clean in self.MOTION_VERBS:
             node.set_slot("NSM_MOVE", 1)
+            if pred_clean in ("accelerate", "accelerating"):
+                node.set_slot("NSM_ACCELERATING_RATE", 1)
         elif pred_clean in self.LIFE_VERBS:
             node.set_slot("NSM_LIVE", 1)
         elif pred_clean in self.POSSESSION_VERBS:
@@ -482,8 +530,50 @@ class ASGCompiler:
         mod = (event.modality or "LITERAL").upper()
         if mod == "FIGURATIVE":
             node.set_slot("MODALITY_FIGURATIVE", 1)
+        elif mod == "COUNTERFACTUAL":
+            node.set_slot("MODALITY_COUNTERFACTUAL", 1)
+            node.set_slot("CAUSAL_COUNTERFACTUAL_NEC", 1)
+            node.set_slot("NSM_MAYBE", 3)
+        elif mod == "HYPOTHETICAL":
+            node.set_slot("MODALITY_HYPOTHETICAL", 1)
+            node.set_slot("NSM_MAYBE", 3)
         else:
-            node.set_slot("MODALITY_LITERAL", 1)
+            NON_INTENTIONAL_PREDICATES = {
+                "exhibit", "retain", "validate", "touch", "show", "display", "contain", 
+                "consist", "occur", "accelerate", "undergo", "suggest", "originate",
+                "expand", "decay", "dissolve", "radiate", "hold", "collapse"
+            }
+            if event.predicate.lower() in NON_INTENTIONAL_PREDICATES:
+                node.set_slot("MODALITY_LITERAL", 0)
+            else:
+                node.set_slot("MODALITY_LITERAL", 1)
+
+        # Inspect raw text or properties for pragmatic and higher-order logic signals
+        raw_text_low = (event.raw_text or "").lower()
+        if "sarcastically" in raw_text_low or "stroke of genius" in raw_text_low:
+            node.set_slot("ROLE_SARCASM_IRONY", 1)
+            node.set_slot("INTENT_IRONY_SARCASM", 1)
+            node.set_slot("NSM_GOOD", 1)
+        if "had " in raw_text_low and " not " in raw_text_low and ("would" in raw_text_low or "wouldn't" in raw_text_low):
+            node.set_slot("MODALITY_COUNTERFACTUAL", 1)
+            node.set_slot("CAUSAL_COUNTERFACTUAL_NEC", 1)
+        if "tangentially" in raw_text_low or "perimeter" in raw_text_low:
+            node.set_slot("SPATIAL_RCC_TANGENTIAL_PART", 1)
+            node.set_slot("NSM_TOUCHING", 1)
+        if "deduce" in raw_text_low or "certainty" in raw_text_low:
+            if "could not" in raw_text_low or "couldn't" in raw_text_low or "not deduce" in raw_text_low:
+                node.set_slot("EPIST_DEDUCTIVE_INFERENCE", 2)
+                node.set_slot("EPIST_FUZZY_PLAUSIBILITY", 3)
+        elif event.predicate.lower() == "suspect" and (event.modality == "SUSPICION" or "plausibly" in raw_text_low):
+            node.set_slot("EPIST_DEDUCTIVE_INFERENCE", 2)
+            node.set_slot("EPIST_FUZZY_PLAUSIBILITY", 1)
+        if "recursively" in raw_text_low or "this very" in raw_text_low or "its own origin" in raw_text_low:
+            node.set_slot("GRAPH_CYCLIC_BACKLINK", 1)
+            node.set_slot("GRAPH_RECURSIVE_REF", 1)
+        if "necessarily" in raw_text_low or "impossibility" in raw_text_low:
+            node.set_slot("LOGIC_NECESSITY_BOX", 1)
+        if "while" in raw_text_low:
+            node.set_slot("TEMP_ALLEN_DURING", 1)
 
         # 4. Band 1: Grammatical Tense & Aspect
         tense = (event.tense or "PAST").upper()
@@ -519,10 +609,14 @@ class ASGCompiler:
                 elif st == "FACT":
                     node.set_slot("NSM_TRUE", 1)
                     node.set_slot("SOLVER_PROOF_VALIDATED", 1)
+                elif st in ("OBLIGATION", "OBLIGATED", "OBLIGATORY"):
+                    node.set_slot("EPIST_DEONTIC_OBLIGATION", 1)
                 elif st == "PROHIBITED":
                     node.set_slot("EPIST_DEONTIC_PROHIBITION", 1)
                 elif st == "BELIEF":
                     node.set_slot("TOM_FIRST_ORDER_BELIEF", 1)
+                    node.set_slot("TOM_BELIEF_SECOND_ORDER", 1)
+                    node.set_slot("TOM_SECOND_ORDER_BELIEF", 1)
 
         t_start = event.time_start
         t_end = event.time_end

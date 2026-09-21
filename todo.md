@@ -477,6 +477,7 @@ If Mentalese captures true invariant semantics, transforming surface text into a
 - [x] **9.6** 🧪 Negation round-trip: "X did not Y" → ASG → English → verify negation preserved
 - [x] **9.7** 🧪 Uncertainty round-trip: "Did X perhaps Y?" → ASG → English → verify question/modal preserved
 - [x] **9.8** 🧪 ConceptNet translation suite: dedicated round-trip & vector decoding verification (`tests/test_conceptnet_translation.py`)
+- [x] **9.9** 🧪 Complex sentence & narrative discourse round-trip: verify 100% slot preservation across counterfactuals, kinematics, quantifier scope ambiguity, metalogical recursion, and multi-sentence discourse paragraphs (`tests/test_translation_complex.py`).
 
 ---
 

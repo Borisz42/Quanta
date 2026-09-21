@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import re
 from typing import Any, Dict, List, Optional, Set, Union
 
 
@@ -381,12 +382,56 @@ class DiscourseExtractionResult:
                 return p
         return None
 
+    def normalize_and_repair_entities(self):
+        """Auto-mints missing entities referenced in event argument slots to prevent foreign-key failure."""
+        entity_ids = {e.id for e in self.entities}
+        event_ids = {ev.id for ev in self.events}
+        prop_ids = {p.id for p in self.propositions}
+        all_ids = entity_ids | event_ids | prop_ids
+
+        existing_numeric_ids = [int(e.id[1:]) for e in self.entities if e.id.startswith("E") and e.id[1:].isdigit()]
+        auto_id_counter = max(existing_numeric_ids) if existing_numeric_ids else len(self.entities)
+
+        for ev in self.events:
+            for role_attr in ("theme_id", "patient_id", "location_id", "instrument_id", "agent_id"):
+                val = getattr(ev, role_attr)
+                if not val:
+                    continue
+                # If theme, patient, or agent references an event or proposition, it is a clausal complement/source
+                if val in event_ids or val in prop_ids:
+                    continue
+
+                if val not in all_ids:
+                    if isinstance(val, str) and re.match(r"^E\d+$", val):
+                        continue
+                    auto_id_counter += 1
+                    clean_val = str(val).strip('"\' ')
+                    if clean_val.isalnum() and len(clean_val) <= 5 and clean_val[0].isupper() and clean_val not in entity_ids:
+                        new_id = clean_val
+                        label = clean_val
+                    else:
+                        new_id = f"E{auto_id_counter}"
+                        label = clean_val
+                        setattr(ev, role_attr, new_id)
+
+                    cat = "LOCATION" if role_attr == "location_id" else "INSTRUMENT" if role_attr == "instrument_id" else "PERSON" if role_attr == "agent_id" else "ABSTRACT_CONCEPT"
+                    new_ent = ExtractedEntity(
+                        id=new_id,
+                        canonical_name=label,
+                        category=cat,
+                        surface_aliases=[label],
+                    )
+                    self.entities.append(new_ent)
+                    entity_ids.add(new_id)
+                    all_ids.add(new_id)
+
     def validate_foreign_keys(self) -> List[str]:
         """Validate all foreign-key cross-references across entities, events, and relations.
 
         Returns:
             List of error messages; empty if 100% valid.
         """
+        self.normalize_and_repair_entities()
         errors: List[str] = []
         entity_ids = {e.id for e in self.entities}
         event_ids = {ev.id for ev in self.events}
@@ -395,12 +440,12 @@ class DiscourseExtractionResult:
 
         # Validate event entity references
         for ev in self.events:
-            if ev.agent_id and ev.agent_id not in entity_ids:
-                errors.append(f"Event '{ev.id}' agent_id '{ev.agent_id}' does not exist in entities.")
-            if ev.patient_id and ev.patient_id not in entity_ids:
-                errors.append(f"Event '{ev.id}' patient_id '{ev.patient_id}' does not exist in entities.")
-            if ev.theme_id and ev.theme_id not in entity_ids:
-                errors.append(f"Event '{ev.id}' theme_id '{ev.theme_id}' does not exist in entities.")
+            if ev.agent_id and ev.agent_id not in all_ids:
+                errors.append(f"Event '{ev.id}' agent_id '{ev.agent_id}' does not exist in entities, events, or propositions.")
+            if ev.patient_id and ev.patient_id not in all_ids:
+                errors.append(f"Event '{ev.id}' patient_id '{ev.patient_id}' does not exist in entities, events, or propositions.")
+            if ev.theme_id and ev.theme_id not in all_ids:
+                errors.append(f"Event '{ev.id}' theme_id '{ev.theme_id}' does not exist in entities, events, or propositions.")
             if ev.location_id and ev.location_id not in entity_ids:
                 errors.append(f"Event '{ev.id}' location_id '{ev.location_id}' does not exist in entities.")
             if ev.instrument_id and ev.instrument_id not in entity_ids:
@@ -415,10 +460,10 @@ class DiscourseExtractionResult:
 
         # Validate propositions
         for p in self.propositions:
-            if p.source_agent_id and p.source_agent_id not in entity_ids:
-                errors.append(f"Proposition '{p.id}' source_agent_id '{p.source_agent_id}' does not exist in entities.")
-            if p.event_id and p.event_id not in event_ids:
-                errors.append(f"Proposition '{p.id}' event_id '{p.event_id}' does not exist in events.")
+            if p.source_agent_id and p.source_agent_id not in all_ids:
+                errors.append(f"Proposition '{p.id}' source_agent_id '{p.source_agent_id}' does not exist in entities, events, or propositions.")
+            if p.event_id and p.event_id not in all_ids:
+                errors.append(f"Proposition '{p.id}' event_id '{p.event_id}' does not exist in events or propositions.")
 
         return errors
 

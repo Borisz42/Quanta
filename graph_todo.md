@@ -320,6 +320,7 @@ Demonstrates the full cognitive cycle on both complex single paragraphs and mult
 - [x] **9.2** Multi-Chunk Continuity Test: run a 3-chunk continuous narrative; verify entity IDs introduced in Chunk 1 are reused in Chunk 3 without passing text tokens.
 - [x] **9.3** Long-Context Book Benchmark: ingest $>10,000$ words into `PageTable`; verify VRAM remains flat ($\le 512$ nodes) and past facts are retrieved in $< 10\text{ ms}$ with zero hallucination.
 - [x] **9.4** Regenerate `output/complex_translation_graphs_eng_eng.md` with authentic ASG ASCII hierarchies, Mermaid diagrams, and realizer traces.
+- [x] **9.5** 🧪 Complex Translation & Multi-Band Semantic Grounding Invariance: verify all 5 stress benchmark examples achieve 100.0% slot preservation and zero canonical Hamming drift (`tests/test_translation_complex.py`, `tests/test_round_trip.py`).
 
 ---
 
