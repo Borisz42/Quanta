@@ -173,9 +173,7 @@ Where:
 #### Barrier 1: The Principle of Semantic Compositionality (Linguistic Limit)
 Extensive research across cognitive linguistics, lexicography, and formal ontology (Wierzbicka & Goddard’s Natural Semantic Metalanguage, WordNet, FrameNet, Cyc, and SUMO) demonstrates that human abstract reasoning decomposes into a finite inventory of **$\sim 800$ to $1000$ primitive functional distinctions**. 
 
-Beyond 1024 dimensions, concepts are no longer orthogonal primitives; they are **composite graphs of existing primitives**. For example, *"microscope"* is not an atomic slot, but the composition:
-
-$$\text{Microscope} = \text{AFFORD\_OPTICAL\_SENSE} \sqcap \text{AFFORD\_MAGNIFY} \sqcap \text{DOMAIN\_SCIENCE}$$
+Beyond 1024 dimensions, concepts are no longer orthogonal primitives; they are **composite graphs of existing primitives**. For example, *"microscope"* is not an atomic slot, but a composite expression over existing primitives: `AFFORD_OPTICAL_SENSE` $\sqcap$ `AFFORD_MAGNIFY` $\sqcap$ `DOMAIN_SCIENCE`.
 
 Allocating dedicated vector slots beyond 1024 violates semantic compositionality, resulting in **$>99\%$ vector sparsity (wasted dead bits)** with zero increase in primitive discriminative power.
 

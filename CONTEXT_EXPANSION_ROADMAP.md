@@ -280,8 +280,8 @@ The system must close the temporal validity interval of the initial location ($t
 - [ ] **Task 5.2: Non-Monotonic Transition Resolver**
   - In `WorldStateManager.update_from_event(event_node, graph)`:
     - If an event asserts a mutually exclusive property (e.g. moving to a new location or phase transition), find existing active state record ($t_{\text{end}} = \text{None}$).
-    - Close the prior state: set $t_{\text{end}} = \text{event.time_start}$ and wire `TEMP_ALLEN_FINISHES` edge.
-    - Open new state: set $t_{\text{start}} = \text{event.time_start}$.
+    - Close the prior state: set $t_{\text{end}} =$ `event.time_start` and wire `TEMP_ALLEN_FINISHES` edge.
+    - Open new state: set $t_{\text{start}} =$ `event.time_start`.
 - [ ] **Task 5.3: Temporal Point-in-Time State Queries**
   - Implement `get_entity_state_at(entity_cid: str, property_name: str, timestamp: float) -> Optional[QuantaNode]`.
   - Allows answering queries like: *"Where was the specimen at 11:00 AM?"* vs *"Where is it now?"*

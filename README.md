@@ -149,8 +149,8 @@ To maximize expressive power, eliminate meaningless states (such as *"Maybe Root
 
 #### Polymorphic Lattice Algebra ($\sqcup_{\text{poly}}, \sqcap_{\text{poly}}$)
 Lattice operations dynamically apply the correct algebraic table per band:
-* **Epistemic Bands:** $\text{TRUE} \sqcup \text{FALSE} = \text{UNKNOWN}$ ($01 \sqcup 10 = 11$, Belnap knowledge aggregation).
-* **Structural Bands:** $\text{ACTIVE\_LOCAL} \sqcup \text{ACTIVE\_EXTERNAL} = \text{ACTIVE\_EXTERNAL}$ ($01 \sqcup 10 = 10$, External pointer priority) and $\text{ACTIVE\_LOCAL} \sqcup \text{ACTIVE\_MERKLE} = \text{ACTIVE\_MERKLE}$ ($01 \sqcup 11 = 11$), preventing local/external nodes from accidentally collapsing into Merkle cryptographic page-faults upon join.
+* **Epistemic Bands:** `TRUE` $\sqcup$ `FALSE` = `UNKNOWN` ($01 \sqcup 10 = 11$, Belnap knowledge aggregation).
+* **Structural Bands:** `ACTIVE_LOCAL` $\sqcup$ `ACTIVE_EXTERNAL` = `ACTIVE_EXTERNAL` ($01 \sqcup 10 = 10$, External pointer priority) and `ACTIVE_LOCAL` $\sqcup$ `ACTIVE_MERKLE` = `ACTIVE_MERKLE` ($01 \sqcup 11 = 11$), preventing local/external nodes from accidentally collapsing into Merkle cryptographic page-faults upon join.
 
 Discretizing the state space maps conceptual states directly to fixed discrete symbols, halting the accumulation of continuous floating-point noise across deep neural layers while preserving the 256-byte cache-line footprint.
 
