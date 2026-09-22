@@ -131,6 +131,9 @@ class ReferringExpressionGenerator:
         self.mention_counts: Dict[str, int] = {}
         self.extraction_result = extraction_result
         self.entity_map: Dict[str, Any] = {}
+        self.recency_list: List[str] = []
+        self.last_subject_key: Optional[str] = None
+        self.episode_entities: Set[str] = set()
         if extraction_result and hasattr(extraction_result, "entities"):
             for ent in extraction_result.entities:
                 self.entity_map[ent.id] = ent
@@ -139,6 +142,38 @@ class ReferringExpressionGenerator:
     def reset(self):
         """Resets discourse state for a fresh narrative unrolling."""
         self.mention_counts.clear()
+        self.recency_list.clear()
+        self.last_subject_key = None
+        self.episode_entities.clear()
+
+    def start_paragraph(self):
+        """Starts a new paragraph/episode, clearing recency state."""
+        self.recency_list.clear()
+        self.last_subject_key = None
+        self.episode_entities.clear()
+
+    def is_ambiguous(self, key: str, gender: str) -> bool:
+        """Determines whether pronominal reference to key would be ambiguous."""
+        if not self.recency_list:
+            return False
+        try:
+            reversed_recency = list(reversed(self.recency_list))
+            last_idx = reversed_recency.index(key)
+            intervening = reversed_recency[:last_idx]
+            for other_key in intervening:
+                if other_key != key:
+                    other_rec = self.entity_map.get(other_key) or self.entity_map.get(other_key.lower())
+                    other_aliases = [a.lower() for a in getattr(other_rec, "surface_aliases", [])] if other_rec else []
+                    other_low = other_key.lower()
+                    if gender == "female":
+                        if any(w in other_low or w in other_aliases for w in ("she", "her", "woman", "ms.", "mrs.", "female", "alice", "mary", "jane", "carol")):
+                            return True
+                    elif gender == "male":
+                        if any(w in other_low or w in other_aliases for w in ("he", "him", "man", "mr.", "male", "bob", "john", "david", "marcus")):
+                            return True
+        except ValueError:
+            pass
+        return False
 
     def get_entity_key(self, node: QuantaNode) -> str:
         """Determines unique canonical key for an entity node."""
@@ -162,6 +197,8 @@ class ReferringExpressionGenerator:
         key = self.get_entity_key(node)
         count = self.mention_counts.get(key, 0)
         self.mention_counts[key] = count + 1
+        self.recency_list.append(key)
+        self.episode_entities.add(key)
 
         ent_record = None
         if self.extraction_result:
@@ -205,6 +242,8 @@ class ReferringExpressionGenerator:
 
         # --- 1. FIRST MENTION (count == 0) ---
         if count == 0:
+            if role == "subject":
+                self.last_subject_key = key
             if is_human:
                 if ent_record and (ent_record.canonical_name.lower() in ("supervisor", "her supervisor") or any("supervisor" in a.lower() for a in getattr(ent_record, "surface_aliases", []))):
                     return "her supervisor"
@@ -285,14 +324,26 @@ class ReferringExpressionGenerator:
                     return "the laboratory director"
 
             if role == "subject":
-                if count == 1:
-                    return "she" if is_female else ("he" if is_male else "they")
-                else:
+                gender = "female" if is_female else ("male" if is_male else "neuter")
+                topic_shifted = (self.last_subject_key is not None and self.last_subject_key != key)
+                ambiguous = self.is_ambiguous(key, gender)
+
+                if (topic_shifted or ambiguous or count >= 2) and (ent_record or node.literal):
                     if ent_record and " " in ent_record.canonical_name:
                         parts = ent_record.canonical_name.split()
                         first_name = parts[1] if parts[0] in ("Dr.", "Dr", "Prof.", "Mr.", "Ms.", "Mrs.") and len(parts) > 1 else parts[0]
+                        self.last_subject_key = key
                         return first_name
-                    return "she" if is_female else ("he" if is_male else "they")
+                    elif node.literal and isinstance(node.literal, str):
+                        lit_parts = node.literal.strip().split()
+                        if len(lit_parts) > 1:
+                            first_name = lit_parts[1] if lit_parts[0] in ("Dr.", "Dr", "Prof.", "Mr.", "Ms.", "Mrs.") else lit_parts[0]
+                            self.last_subject_key = key
+                            return first_name
+                        self.last_subject_key = key
+                        return node.literal.strip()
+                self.last_subject_key = key
+                return "she" if is_female else ("he" if is_male else "they")
             elif role == "possessive":
                 return "her" if is_female else ("his" if is_male else "their")
             else:

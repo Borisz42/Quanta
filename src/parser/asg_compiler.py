@@ -112,6 +112,91 @@ class ASGCompiler:
         "receive", "buy", "sell", "obtain", "gain", "retain",
     }
 
+    # Structured 3-prime multi-hop NSM explication schemas (Section 3 / Task 3.2)
+    NSM_EXPLICATION_SCHEMAS: Dict[str, Dict[str, int]] = {
+        "buy": {"NSM_DO": 1, "NSM_HAVE": 1, "NSM_PART": 1},
+        "purchase": {"NSM_DO": 1, "NSM_HAVE": 1, "NSM_PART": 1},
+        "purchased": {"NSM_DO": 1, "NSM_HAVE": 1, "NSM_PART": 1},
+        "sell": {"NSM_DO": 1, "NSM_HAVE": 1, "NSM_PART": 1},
+        "sold": {"NSM_DO": 1, "NSM_HAVE": 1, "NSM_PART": 1},
+        "prohibit": {
+            "NSM_SAY": 1,
+            "NSM_DO": 1,
+            "EPIST_DEONTIC_PROHIBITION": 1,
+            "DEONTIC_MUSTNOT_PROHIBITED": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+        "prohibited": {
+            "NSM_SAY": 1,
+            "NSM_DO": 1,
+            "EPIST_DEONTIC_PROHIBITION": 1,
+            "DEONTIC_MUSTNOT_PROHIBITED": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+        "forbid": {
+            "NSM_SAY": 1,
+            "NSM_DO": 1,
+            "EPIST_DEONTIC_PROHIBITION": 1,
+            "DEONTIC_MUSTNOT_PROHIBITED": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+        "forbidden": {
+            "NSM_SAY": 1,
+            "NSM_DO": 1,
+            "EPIST_DEONTIC_PROHIBITION": 1,
+            "DEONTIC_MUSTNOT_PROHIBITED": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+        "transform": {
+            "NSM_DO": 1,
+            "NSM_HAPPEN": 1,
+            "PHYS_ENTROPY_THERMAL": 1,
+            "PHYS_ENTROPY_DELTA_S": 1,
+        },
+        "transformed": {
+            "NSM_DO": 1,
+            "NSM_HAPPEN": 1,
+            "PHYS_ENTROPY_THERMAL": 1,
+            "PHYS_ENTROPY_DELTA_S": 1,
+        },
+        "transformation": {
+            "NSM_DO": 1,
+            "NSM_HAPPEN": 1,
+            "PHYS_ENTROPY_THERMAL": 1,
+            "PHYS_ENTROPY_DELTA_S": 1,
+        },
+        "transmute": {
+            "NSM_DO": 1,
+            "NSM_HAPPEN": 1,
+            "PHYS_ENTROPY_THERMAL": 1,
+            "PHYS_ENTROPY_DELTA_S": 1,
+        },
+        "transmuted": {
+            "NSM_DO": 1,
+            "NSM_HAPPEN": 1,
+            "PHYS_ENTROPY_THERMAL": 1,
+            "PHYS_ENTROPY_DELTA_S": 1,
+        },
+        "replicate": {
+            "NSM_DO": 1,
+            "NSM_SAME": 1,
+            "SOLVER_PROOF_VALIDATED": 1,
+        },
+        "replicating": {
+            "NSM_DO": 1,
+            "NSM_SAME": 1,
+            "SOLVER_PROOF_VALIDATED": 1,
+        },
+        "prevent": {
+            "NSM_DO": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+        "block": {
+            "NSM_DO": 1,
+            "CAUSAL_PREVENTIVE_BLOCK": 1,
+        },
+    }
+
     def __init__(
         self,
         conceptnet_grounder: Optional[ConceptNetLexicalGrounder] = None,
@@ -571,6 +656,18 @@ class ASGCompiler:
             # Default active action prime
             node.set_slot("NSM_DO", 1)
 
+        # Multi-Hop NSM Explication Script Expansion (Section 3 / Task 3.2)
+        schema = self.NSM_EXPLICATION_SCHEMAS.get(pred_clean)
+        if not schema and " " in pred_clean:
+            for token in pred_clean.split():
+                if token in self.NSM_EXPLICATION_SCHEMAS:
+                    schema = self.NSM_EXPLICATION_SCHEMAS[token]
+                    break
+        if schema:
+            for slot_name, slot_val in schema.items():
+                if slot_name in SLOT_NAME_TO_INDEX:
+                    node.set_slot(slot_name, slot_val)
+
         # 3. Polarity & Modality
         if event.polarity:
             node.set_slot("NSM_TRUE", 1)
@@ -624,6 +721,17 @@ class ASGCompiler:
             node.set_slot("LOGIC_NECESSITY_BOX", 1)
         if "while" in raw_text_low:
             node.set_slot("TEMP_ALLEN_DURING", 1)
+        if "replicat" in raw_text_low:
+            node.set_slot("NSM_SAME", 1)
+            node.set_slot("SOLVER_PROOF_VALIDATED", 1)
+        if "transform" in raw_text_low or "transmute" in raw_text_low:
+            node.set_slot("NSM_DO", 1)
+            node.set_slot("NSM_HAPPEN", 1)
+            node.set_slot("PHYS_ENTROPY_THERMAL", 1)
+        if "buy" in raw_text_low or "purchas" in raw_text_low:
+            node.set_slot("NSM_DO", 1)
+            node.set_slot("NSM_HAVE", 1)
+            node.set_slot("NSM_PART", 1)
 
         # 4. Band 1: Grammatical Tense & Aspect
         tense = (event.tense or "PAST").upper()

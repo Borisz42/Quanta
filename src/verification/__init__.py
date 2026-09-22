@@ -20,6 +20,11 @@ from verification.clingo_gate import (
     MUCRepairManager,
     RepairResult,
 )
+from verification.lattice_gate import (
+    ContradictionDetail,
+    LatticeInvarianceGate,
+    LatticeMeetResult,
+)
 
 __all__ = [
     "ClingoVerificationGate",
@@ -27,4 +32,7 @@ __all__ = [
     "MUCDiagnostic",
     "MUCDiagnosticResult",
     "RepairResult",
+    "ContradictionDetail",
+    "LatticeInvarianceGate",
+    "LatticeMeetResult",
 ]

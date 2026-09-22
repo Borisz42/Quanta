@@ -18,6 +18,7 @@ from parser.nlp_forward import NLPForwardParser
 from parser.fol_parser import FOLParser
 from parser.ast_parser import ASTForwardParser
 from solver.validator_gate import ValidationGate, ValidationResult
+from verification.lattice_gate import LatticeInvarianceGate, LatticeMeetResult
 from realizer.english_nlg import EnglishRealizer
 from realizer.fol_emitter import FOLEmitter
 from realizer.code_emitter import CodeEmitter
@@ -70,13 +71,16 @@ class RoundTripResult:
     slot_preservation_rate: float = 1.0
     validation_pass: bool = True
     muc_errors: List[str] = field(default_factory=list)
+    lattice_meet_errors: List[str] = field(default_factory=list)
+    is_meet_sound: bool = True
+    meet_vector: Optional[QuantaVector] = None
     stage_timings: Dict[str, float] = field(default_factory=dict)
     stage_logs: List[StageLog] = field(default_factory=list)
     total_duration_ms: float = 0.0
 
     def is_invariant(self, max_hamming: int = 0) -> bool:
         """Checks if the round-trip is invariant within allowed Hamming tolerance."""
-        return self.validation_pass and self.hamming_distance <= max_hamming
+        return self.validation_pass and self.is_meet_sound and self.hamming_distance <= max_hamming
 
 
 class TwoWayTranslationPipeline:
@@ -87,11 +91,13 @@ class TwoWayTranslationPipeline:
         spacy_model: str = "en_core_web_sm",
         offline_cache_path: Optional[str] = None,
         rules_path: Optional[str] = None,
+        lattice_gate: Optional[LatticeInvarianceGate] = None,
     ):
         self.nlp_parser = NLPForwardParser(spacy_model=spacy_model, offline_cache_path=offline_cache_path)
         self.fol_parser = FOLParser(offline_cache_path=offline_cache_path)
         self.ast_parser = ASTForwardParser(offline_cache_path=offline_cache_path)
         self.validator = ValidationGate(rules_path=rules_path)
+        self.lattice_gate = lattice_gate if lattice_gate is not None else LatticeInvarianceGate()
 
         # Realizers
         self.english_realizer = EnglishRealizer()
@@ -364,6 +370,17 @@ class TwoWayTranslationPipeline:
             "preservation_rate": preservation,
         })
 
+        # Stage 5: Closed-Loop Lattice Meet Gate Audit (Section 3 / Task 3.1)
+        t0 = time.perf_counter()
+        meet_audit = self.lattice_gate.audit_round_trip(g1, g2)
+        meet_status = "success" if meet_audit.is_sound else "warning"
+        _log_stage("lattice_meet_audit", time.perf_counter() - t0, meet_status, {
+            "is_sound": meet_audit.is_sound,
+            "preservation_rate": meet_audit.preservation_rate,
+            "contradiction_count": meet_audit.contradiction_count,
+            "error_count": len(meet_audit.errors),
+        })
+
         total_duration = (time.perf_counter() - start_total) * 1000.0
         return RoundTripResult(
             original_input=input_data,
@@ -376,6 +393,9 @@ class TwoWayTranslationPipeline:
             slot_preservation_rate=preservation,
             validation_pass=v2.is_valid,
             muc_errors=v2.errors if not v2.is_valid else [],
+            lattice_meet_errors=meet_audit.errors,
+            is_meet_sound=meet_audit.is_sound,
+            meet_vector=meet_audit.meet_vector,
             stage_timings=stage_timings,
             stage_logs=stage_logs,
             total_duration_ms=round(total_duration, 3),
