@@ -157,22 +157,22 @@ By compiling the top 50,000 most frequent ConceptNet vectors into a contiguous, 
   ```
 
 ### Tasks
-- [ ] **Task 2.1: Implement Codebook Compiler (`scripts/compile_mmap_codebook.py`)**
+- [x] **Task 2.1: Implement Codebook Compiler (`scripts/compile_mmap_codebook.py`)**
   - Ingest `data/concept_codebook.csv.gz` and export:
     1. `data/concept_codebook.bin`: Packed 256-byte binary vectors ($N \times 32$ `uint64`).
     2. `data/concept_codebook_index.json`: String hash offset table for $O(1)$ binary search or direct array indexing.
-- [ ] **Task 2.2: Implement `MmapLexicalGrounder` (`src/parser/mmap_grounder.py`)**
+- [x] **Task 2.2: Implement `MmapLexicalGrounder` (`src/parser/mmap_grounder.py`)**
   - Implement memory-mapped file reader using `numpy.memmap`.
   - Provide instant zero-copy lookup: `resolve_concept_vector(concept_name: str) -> Optional[QuantaVector]`.
   - Benchmark that single concept resolution completes in $< 0.01\text{ ms}$ on CPU.
-- [ ] **Task 2.3: Pre-Warmed GBNF Grammar State Machine**
+- [x] **Task 2.3: Pre-Warmed GBNF Grammar State Machine**
   - In `src/parser/unsloth_transducer.py`, cache the compiled grammar representation or send pre-tokenized grammar hashes to avoid re-parsing GBNF grammar on every HTTP request.
-- [ ] **Task 2.4: Asynchronous Multi-Stage Ingestion Pipeline**
+- [x] **Task 2.4: Asynchronous Multi-Stage Ingestion Pipeline**
   - Refactor `CognitivePipeline.process_narrative` into an asynchronous pipeline using `asyncio` queues:
     - Stage 1 (CPU): Discourse Chunker & Pre-scan Entity Matcher ($N+1$)
     - Stage 2 (GPU): Batched SLM Transduction via Unsloth ($N$)
     - Stage 3 (CPU): ASG Compiler, Mmap Grounding & Clingo ASP Verification ($N-1$)
-- [ ] **Task 2.5: 🧪 Write Latency Benchmarks (`tests/test_mmap_grounder_speed.py`)**
+- [x] **Task 2.5: 🧪 Write Latency Benchmarks (`tests/test_mmap_grounder_speed.py`)**
   - Measure single-concept lookup: assert mean latency $< 0.1\text{ ms}$.
   - Ingest 10,000 words: assert end-to-end throughput $> 150\text{ words/sec}$.
   - Run: `pytest tests/test_mmap_grounder_speed.py -v`.
