@@ -109,6 +109,22 @@ ARTIFACT_REGISTRY: List[ArtifactSpec] = [
         min_size_bytes=1_000_000,
     ),
     ArtifactSpec(
+        "data/concept_codebook.bin",
+        "Offline Databases",
+        ArtifactCriticality.OPTIONAL,
+        "Zero-copy memory-mapped quaternary concept codebook binary",
+        generator_script="scripts/compile_mmap_codebook.py",
+        min_size_bytes=10_000_000,
+    ),
+    ArtifactSpec(
+        "data/concept_codebook_index.json",
+        "Offline Databases",
+        ArtifactCriticality.OPTIONAL,
+        "Fast offset index for memory-mapped concept codebook",
+        generator_script="scripts/compile_mmap_codebook.py",
+        min_size_bytes=5_000_000,
+    ),
+    ArtifactSpec(
         "data/wordnet_offline.db",
         "Offline Databases",
         ArtifactCriticality.CRITICAL,

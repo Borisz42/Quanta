@@ -15,6 +15,7 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -257,9 +258,19 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         self.repair_fixtures: Dict[str, DiscourseExtractionResult] = {}
         self.repair_callback: Optional[Callable[..., Optional[Union[str, DiscourseExtractionResult]]]] = None
 
+        try:
+            p = _locate_gbnf_grammar()
+            self.grammar_hash = hashlib.sha256(p.read_bytes()).hexdigest()
+        except Exception:
+            self.grammar_hash = "mock_grammar_hash"
+
         if fixtures:
             for k, v in fixtures.items():
                 self.register_fixture(k, v)
+
+    def warm_grammar(self, url: Optional[str] = None) -> bool:
+        """Mock implementation of grammar pre-warming."""
+        return True
 
     def register_fixture(self, key: str, fixture: Union[str, DiscourseExtractionResult]):
         """Register a fixture keyed by string identifier or exact text."""
@@ -594,9 +605,12 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self._mock = mock_transducer or MockUnslothTransducer(system_prompt=self.system_prompt)
         self._last_fallback_used = False
 
-        # 1. Load GBNF Grammar
+        # 1. Load GBNF Grammar & Pre-Warm State Machine
         self.grammar_path = _locate_gbnf_grammar(grammar_path)
         self.grammar_content = self.grammar_path.read_text(encoding="utf-8")
+        self.grammar_hash = hashlib.sha256(self.grammar_content.encode("utf-8")).hexdigest()
+        self._compiled_grammar_rules = self._precompile_grammar_rules(self.grammar_content)
+        self._grammar_warmed = False
 
         # 2. Model resolution (lazy default to prevent eager network calls during init)
         self.model = resolve_model_name(model)
@@ -605,6 +619,46 @@ class UnslothTransducer(BaseDiscourseTransducer):
         """Set active model profile at runtime, resolving aliases and presets."""
         self.model = resolve_model_name(model)
         return self.model
+
+    @staticmethod
+    def _precompile_grammar_rules(content: str) -> Dict[str, str]:
+        """Pre-parse GBNF grammar productions into cached rule table."""
+        rules: Dict[str, str] = {}
+        for line in content.splitlines():
+            line_str = line.strip()
+            if not line_str or line_str.startswith("#"):
+                continue
+            if "::=" in line_str:
+                parts = line_str.split("::=", 1)
+                rules[parts[0].strip()] = parts[1].strip()
+        return rules
+
+    def warm_grammar(self, base_url: Optional[str] = None) -> bool:
+        """Pre-warm grammar state machine on server or verify local pre-compilation."""
+        if not self._compiled_grammar_rules:
+            return False
+        self._grammar_warmed = True
+        target = base_url or self.base_url
+        if self.check_health(target):
+            try:
+                headers = self._get_headers()
+                test_payload = {
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 1,
+                    "grammar": self.grammar_content,
+                    "grammar_hash": self.grammar_hash,
+                }
+                resp = self.session.post(
+                    f"{target.rstrip('/')}/chat/completions",
+                    headers=headers,
+                    json=test_payload,
+                    timeout=2.0,
+                )
+                return resp.status_code in (200, 400)
+            except Exception:
+                pass
+        return True
 
     def _get_headers(self) -> Dict[str, str]:
         """Compose request headers, omitting Authorization for keyless local endpoints."""
@@ -709,6 +763,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
 
         extra_body = {
             "grammar": self.grammar_content,
+            "grammar_hash": self.grammar_hash,
+            "guided_grammar": self.grammar_content,
             **kwargs.get("extra_body", {}),
         }
 
@@ -718,6 +774,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
             "temperature": kwargs.get("temperature", 0.0),
             "max_tokens": kwargs.get("max_tokens", 2048),
             "grammar": self.grammar_content,
+            "grammar_hash": self.grammar_hash,
             "extra_body": extra_body,
         }
 

@@ -118,8 +118,17 @@ class ASGCompiler:
         wordnet_grounder: Optional[WordNetLexicalGrounder] = None,
         validator_gate: Optional[ValidationGate] = None,
         interner: Optional[Any] = None,
+        mmap_grounder: Optional[Any] = None,
     ):
         """Initialize the compiler with grounding backends and symbolic validation gate."""
+        if mmap_grounder is None:
+            try:
+                from parser.mmap_grounder import MmapLexicalGrounder
+                self.mmap_grounder = MmapLexicalGrounder.get_default()
+            except Exception:
+                self.mmap_grounder = None
+        else:
+            self.mmap_grounder = mmap_grounder
         self.conceptnet_grounder = conceptnet_grounder or ConceptNetLexicalGrounder.get_default()
         self.wordnet_grounder = wordnet_grounder or WordNetLexicalGrounder.get_default()
         self.validator_gate = validator_gate or ValidatorGate()
@@ -348,12 +357,19 @@ class ASGCompiler:
                 lookup_name = lookup_name[len(prefix):].strip()
                 break
 
-        res = self.conceptnet_grounder.resolve_concept(lookup_name, pos="n")
+        res = None
+        if self.mmap_grounder and self.mmap_grounder.is_available():
+            res = self.mmap_grounder.resolve_concept(lookup_name, pos="n")
+        if not res:
+            res = self.conceptnet_grounder.resolve_concept(lookup_name, pos="n")
         if not res and " " in lookup_name:
             # Fallback: try head noun / individual tokens in reverse order
             tokens = lookup_name.split()
             for token in reversed(tokens):
-                res = self.conceptnet_grounder.resolve_concept(token, pos="n")
+                if self.mmap_grounder and self.mmap_grounder.is_available():
+                    res = self.mmap_grounder.resolve_concept(token, pos="n")
+                if not res:
+                    res = self.conceptnet_grounder.resolve_concept(token, pos="n")
                 if res:
                     break
 
@@ -361,7 +377,10 @@ class ASGCompiler:
             # Fallback to WordNet
             wn_syn = self.wordnet_grounder.resolve_synset(lookup_name, pos="n")
             if wn_syn:
-                res = self.conceptnet_grounder.resolve_concept(wn_syn, pos="n")
+                if self.mmap_grounder and self.mmap_grounder.is_available():
+                    res = self.mmap_grounder.resolve_concept(wn_syn, pos="n")
+                if not res:
+                    res = self.conceptnet_grounder.resolve_concept(wn_syn, pos="n")
 
         if res:
             node.anchor = res.synset_name
@@ -491,11 +510,18 @@ class ASGCompiler:
         pred_clean = event.predicate.strip().lower()
 
         # 1. ConceptNet 5.7.0 Grounding for Verb
-        res = self.conceptnet_grounder.resolve_concept(pred_clean, pos="v")
+        res = None
+        if self.mmap_grounder and self.mmap_grounder.is_available():
+            res = self.mmap_grounder.resolve_concept(pred_clean, pos="v")
+        if not res:
+            res = self.conceptnet_grounder.resolve_concept(pred_clean, pos="v")
         if not res and self.wordnet_grounder:
             wn_syn = self.wordnet_grounder.resolve_synset(pred_clean, pos="v")
             if wn_syn:
-                res = self.conceptnet_grounder.resolve_concept(wn_syn, pos="v")
+                if self.mmap_grounder and self.mmap_grounder.is_available():
+                    res = self.mmap_grounder.resolve_concept(wn_syn, pos="v")
+                if not res:
+                    res = self.conceptnet_grounder.resolve_concept(wn_syn, pos="v")
 
         if res:
             node.anchor = res.synset_name

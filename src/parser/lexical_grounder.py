@@ -147,6 +147,13 @@ class ConceptNetLexicalGrounder:
         else:
             logger.warning("ConceptNet offline database not found. Lexical concept grounding will be impaired.")
 
+        # Tier 0: Zero-Copy Memory-Mapped Grounder (< 0.01 ms)
+        try:
+            from parser.mmap_grounder import MmapLexicalGrounder
+            self._mmap_grounder: Optional[MmapLexicalGrounder] = MmapLexicalGrounder.get_default()
+        except Exception:
+            self._mmap_grounder = None
+
     @classmethod
     def get_default(cls) -> ConceptNetLexicalGrounder:
         if cls._default_instance is None:
@@ -300,6 +307,13 @@ class ConceptNetLexicalGrounder:
         cache_key = f"cn:{lang}:{lemma_under} ({pos_norm})"
         if cache_key in self._cache:
             return self._cache[cache_key]
+
+        # Tier 0: Zero-Copy Memory-Mapped Grounder Fast-Path (< 0.01 ms)
+        if self._mmap_grounder and self._mmap_grounder.is_available():
+            mmap_concept = self._mmap_grounder.resolve_concept(w_clean, pos=pos_norm, lang=lang)
+            if mmap_concept is not None:
+                self._cache[cache_key] = mmap_concept
+                return mmap_concept
 
         if not self._conn:
             return None

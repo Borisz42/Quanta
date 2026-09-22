@@ -13,6 +13,8 @@ Integrates the complete five-stage operational neuro-symbolic cycle:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 from pathlib import Path
 import time
@@ -348,36 +350,158 @@ class CognitivePipeline:
 
         return graph
 
-    def process_narrative(
+    async def process_narrative_async(
         self,
         text: str,
         chapter_id: str = "ch_01",
         validate: bool = True,
+        queue_size: int = 4,
     ) -> Tuple[List[QuantaGraph], QuantaNode]:
-        """Process a multi-paragraph narrative or chapter.
+        """Asynchronously process a multi-paragraph narrative using a 3-stage pipelined architecture.
 
-        Splits text into discourse chunks, executes streaming coreference resolution,
-        compiles episode ASGs, and folds the episode sub-graphs into a Chapter Merkle root.
+        Stages execute concurrently via asyncio queues:
+        - Stage 1 (CPU): Discourse Chunker & Pre-scan Entity Matcher (N+1)
+        - Stage 2 (GPU): SLM Transduction & Repair (N)
+        - Stage 3 (CPU): ASG Compiler, Mmap Grounding & Clingo ASP Verification (N-1)
         """
         chunks = self.chunker.chunk_text(text, chapter_id=chapter_id)
-        episode_graphs: List[QuantaGraph] = []
-        episode_fold_nodes: List[QuantaNode] = []
+        if not chunks:
+            chunks = [
+                DiscourseChunk(
+                    chunk_id=f"chunk_{int(time.time() * 1000)}",
+                    text=text.strip(),
+                    chapter_id=chapter_id,
+                )
+            ]
 
-        for chk in chunks:
-            g = self.process_chunk(
+        # For a single chunk, fast path directly
+        if len(chunks) == 1:
+            chk = chunks[0]
+            g = await asyncio.to_thread(
+                self.process_chunk,
                 chunk_text=chk.text,
                 chunk_id=chk.chunk_id,
                 chapter_id=chapter_id,
                 validate=validate,
             )
-            episode_graphs.append(g)
-
-            # Fold discourse episode into 32-byte Merkle fold node
             fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
             self.page_table.store_node(fold_node)
             self.active_canvas.put(fold_node)
-            episode_fold_nodes.append(fold_node)
             self.merkle_book.add_chunk_node(fold_node, chapter_id=chapter_id)
+            chapter_fold = self.merkle_book.fold_chapter(chapter_id=chapter_id)
+            self.page_table.store_node(chapter_fold)
+            self.active_canvas.put(chapter_fold)
+            return [g], chapter_fold
+
+        # Multi-stage asynchronous queue pipeline
+        q_transduction: asyncio.Queue[Optional[Tuple[DiscourseChunk, List[Any], Optional[str]]]] = asyncio.Queue(maxsize=queue_size)
+        q_compilation: asyncio.Queue[Optional[Tuple[DiscourseChunk, Optional[DiscourseExtractionResult]]]] = asyncio.Queue(maxsize=queue_size)
+
+        episode_graphs: List[QuantaGraph] = []
+        episode_fold_nodes: List[QuantaNode] = []
+
+        # Stage 1: Producer (Discourse Chunking & Pre-scan Entity Matching)
+        async def stage_chunk_and_prescan():
+            for chk in chunks:
+                self.entity_engine.pre_scan_and_page(chk.text)
+                manifest_prompt = self.entity_engine.format_prompt_block()
+                active_ents = (
+                    self.entity_engine.manifest.all_active()
+                    if hasattr(self.entity_engine, "manifest")
+                    else []
+                )
+                await q_transduction.put((chk, active_ents, manifest_prompt))
+            await q_transduction.put(None)
+
+        # Stage 2: Transformer (SLM Transduction)
+        async def stage_transduce():
+            while True:
+                item = await q_transduction.get()
+                if item is None:
+                    await q_compilation.put(None)
+                    q_transduction.task_done()
+                    break
+
+                chk, active_ents, manifest_prompt = item
+                extraction: Optional[DiscourseExtractionResult] = None
+
+                if self.repair_manager is not None:
+                    repair_res = await asyncio.to_thread(
+                        self.repair_manager.repair_chunk,
+                        text=chk.text,
+                        transducer=self.transducer,
+                        active_entities=active_ents,
+                        chunk_id=chk.chunk_id,
+                    )
+                    if repair_res.extraction_result is not None:
+                        extraction = repair_res.extraction_result
+                    elif repair_res.final_sexpr:
+                        extraction = parse_sexpr(repair_res.final_sexpr)
+                    elif repair_res.graph is not None and hasattr(repair_res.graph, "extraction_result"):
+                        extraction = repair_res.graph.extraction_result
+                    else:
+                        if not repair_res.success and repair_res.error_message:
+                            raise ASGCompilationError(repair_res.error_message)
+                        extraction = await asyncio.to_thread(
+                            self._invoke_transducer_chunk,
+                            chk.text,
+                            chk.chunk_id,
+                            active_entities=active_ents,
+                            active_manifest_prompt=manifest_prompt,
+                        )
+                else:
+                    extraction = await asyncio.to_thread(
+                        self._invoke_transducer_chunk,
+                        chk.text,
+                        chk.chunk_id,
+                        active_entities=active_ents,
+                        active_manifest_prompt=manifest_prompt,
+                    )
+
+                await q_compilation.put((chk, extraction))
+                q_transduction.task_done()
+
+        # Stage 3: Consumer (ASG Compiler, Mmap Grounding & ASP Verification)
+        async def stage_compile_and_verify():
+            while True:
+                item = await q_compilation.get()
+                if item is None:
+                    q_compilation.task_done()
+                    break
+
+                chk, extraction = item
+                if extraction is not None and hasattr(extraction, "entities"):
+                    self.entity_engine.update_from_extraction([e.to_dict() for e in extraction.entities])
+                    if hasattr(self, "stitcher") and self.stitcher is not None:
+                        self.stitcher.add_chunk(extraction)
+
+                # Compile to verified QuantaGraph ASG
+                g = await asyncio.to_thread(self.compiler.compile, extraction, validate=validate)
+
+                for node in g.nodes.values():
+                    self.page_table.store_node(node)
+                    self.active_canvas.put(node)
+
+                assert len(self.active_canvas) <= self.active_canvas.capacity, (
+                    f"Active canvas exceeded bound: {len(self.active_canvas)} > {self.active_canvas.capacity}"
+                )
+
+                # Fold discourse episode into 32-byte Merkle fold node
+                fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
+                self.page_table.store_node(fold_node)
+                self.active_canvas.put(fold_node)
+                episode_fold_nodes.append(fold_node)
+                self.merkle_book.add_chunk_node(fold_node, chapter_id=chapter_id)
+                episode_graphs.append(g)
+
+                q_compilation.task_done()
+
+        # Execute 3 stages concurrently
+        await asyncio.gather(
+            stage_chunk_and_prescan(),
+            stage_transduce(),
+            stage_compile_and_verify(),
+        )
 
         # Fold into Chapter Merkle Root
         chapter_fold = self.merkle_book.fold_chapter(chapter_id=chapter_id)
@@ -385,6 +509,34 @@ class CognitivePipeline:
         self.active_canvas.put(chapter_fold)
 
         return episode_graphs, chapter_fold
+
+    def process_narrative(
+        self,
+        text: str,
+        chapter_id: str = "ch_01",
+        validate: bool = True,
+    ) -> Tuple[List[QuantaGraph], QuantaNode]:
+        """Process a multi-paragraph narrative or chapter using asynchronous multi-stage pipelining.
+
+        Splits text into discourse chunks, executes streaming coreference resolution,
+        compiles episode ASGs, and folds the episode sub-graphs into a Chapter Merkle root.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(
+                    asyncio.run,
+                    self.process_narrative_async(text, chapter_id=chapter_id, validate=validate),
+                )
+                return future.result()
+        else:
+            return asyncio.run(
+                self.process_narrative_async(text, chapter_id=chapter_id, validate=validate)
+            )
 
     def ingest_book(
         self,

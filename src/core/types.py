@@ -249,14 +249,14 @@ def pack_quaternary_array(arr: Union[Sequence[int], np.ndarray]) -> bytes:
 
 def unpack_quaternary_bytes(data: bytes) -> np.ndarray:
     """Unpacks a packed bytes payload into a numpy array with values in {0, 1, 2, 3} (4 slots per byte)."""
-    num_slots = len(data) * 4
-    out = np.empty(num_slots, dtype=np.uint8)
-    for i in range(len(data)):
-        b = data[i]
-        out[4 * i + 0] = b & 0x03
-        out[4 * i + 1] = (b >> 2) & 0x03
-        out[4 * i + 2] = (b >> 4) & 0x03
-        out[4 * i + 3] = (b >> 6) & 0x03
+    if not data:
+        return np.empty(0, dtype=np.uint8)
+    b = np.frombuffer(data, dtype=np.uint8)
+    out = np.empty(len(data) * 4, dtype=np.uint8)
+    out[0::4] = b & 0x03
+    out[1::4] = (b >> 2) & 0x03
+    out[2::4] = (b >> 4) & 0x03
+    out[3::4] = (b >> 6) & 0x03
     return out
 
 
