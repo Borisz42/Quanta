@@ -109,22 +109,22 @@ To achieve maximum memory efficiency and node reuse:
   ```
 
 ### Tasks
-- [ ] **Task 1.1: Register-Masked Canonical CID Computation**
+- [x] **Task 1.1: Register-Masked Canonical CID Computation**
   - Update `QuantaNode.compute_cid()` in `src/core/asg.py` to support `masked_bands=(2,)` or `mask_registers=True`.
   - When masked, slots 256–383 are treated as `0 (IRRELEVANT)` during BLAKE3 hashing, ensuring two identical concepts with different execution registers yield identical CIDs.
   - Preserve backward compatibility with existing tests by maintaining unmasked CID when explicit registers are intentionally part of the proof contract.
-- [ ] **Task 1.2: Implement `CanonicalNodeInterner` (`src/memory/node_interner.py`)**
+- [x] **Task 1.2: Implement `CanonicalNodeInterner` (`src/memory/node_interner.py`)**
   - Create `CanonicalNodeInterner` with two-level caching:
     1. Tier 1: In-memory `weakref.WeakValueDictionary` mapping `(anchor, normalized_name, core_vector_bytes) -> QuantaNode`.
     2. Tier 2: SQLite-backed CID index linked with `PageTable`.
   - Provide atomic methods: `intern_node(node: QuantaNode) -> QuantaNode`, `lookup(anchor: str, literal: str) -> Optional[QuantaNode]`, and `stats() -> Dict[str, Any]` (tracking hits, misses, reuse rate).
-- [ ] **Task 1.3: Refactor `ASGCompiler.compile_entity()` for Node Reuse**
+- [x] **Task 1.3: Refactor `ASGCompiler.compile_entity()` for Node Reuse**
   - Modify `src/parser/asg_compiler.py`: Before minting a new `QuantaNode`, query `CanonicalNodeInterner`.
   - If a matching entity exists, reuse the existing instance and record its canonical CID.
   - Apply the active register (`VAR_SLOT_Xk`) as an execution annotation on the graph/manifest rather than mutating the immutable interned vector.
-- [ ] **Task 1.4: Refactor `GraphStitcher` for Canonical Deduplication**
+- [x] **Task 1.4: Refactor `GraphStitcher` for Canonical Deduplication**
   - In `src/parser/graph_stitcher.py`, ensure that when entities from Chunk $N$ match entities from Chunk $1$, the stitcher reuses the exact same interned `QuantaNode` reference across all event valencies.
-- [ ] **Task 1.5: 🧪 Write Unit Tests & Benchmarks (`tests/test_canonical_node_interning.py`)**
+- [x] **Task 1.5: 🧪 Write Unit Tests & Benchmarks (`tests/test_canonical_node_interning.py`)**
   - Verify that compiling the same concept in 10 different chunks produces identical CIDs.
   - Verify that a 5-chunk narrative reduces total allocated nodes by $\ge 50\%$.
   - Assert that node reuse rate is $\ge 75\%$ and `interner.stats()["hits"] > 0`.

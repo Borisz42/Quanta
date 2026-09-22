@@ -117,11 +117,17 @@ class ASGCompiler:
         conceptnet_grounder: Optional[ConceptNetLexicalGrounder] = None,
         wordnet_grounder: Optional[WordNetLexicalGrounder] = None,
         validator_gate: Optional[ValidationGate] = None,
+        interner: Optional[Any] = None,
     ):
         """Initialize the compiler with grounding backends and symbolic validation gate."""
         self.conceptnet_grounder = conceptnet_grounder or ConceptNetLexicalGrounder.get_default()
         self.wordnet_grounder = wordnet_grounder or WordNetLexicalGrounder.get_default()
         self.validator_gate = validator_gate or ValidatorGate()
+        if interner is None:
+            from memory.node_interner import get_global_interner
+            self.interner = get_global_interner()
+        else:
+            self.interner = interner
 
     def compile(
         self,
@@ -159,6 +165,7 @@ class ASGCompiler:
             node = self.compile_entity(ent, register_index=i)
             cid = graph.add_node(node)
             entity_nodes[ent.id] = node
+            graph.register_bindings[cid] = f"VAR_SLOT_X{i % 8}"
 
         # 4. Event compilation (Phase 4.3)
         entity_cids = {ent_id: node.cid for ent_id, node in entity_nodes.items()}
@@ -310,12 +317,25 @@ class ASGCompiler:
                 except ImportError:
                     raise TypeError(f"Unsupported entity input type: {type(entity)}")
 
+        reg_slot = f"VAR_SLOT_X{register_index % 8}"
+
+        # 0. Check interner for pre-existing canonical entity before minting / grounding
+        if self.interner is not None:
+            cached_node = self.interner.lookup(literal=entity.canonical_name)
+            if cached_node is None and getattr(entity, "surface_aliases", None):
+                for alias in entity.surface_aliases:
+                    cached_node = self.interner.lookup(literal=alias)
+                    if cached_node is not None:
+                        break
+            if cached_node is not None:
+                cached_node.register_binding = reg_slot
+                return cached_node
+
         node = QuantaNode(literal=entity.canonical_name)
 
-        # 1. Band 2: Variable Register Scoping
+        # 1. Band 2: Decoupled Variable Register Scoping
         name_low = entity.canonical_name.lower()
-        reg_slot = f"VAR_SLOT_X{register_index % 8}"
-        node.set_register_slot(reg_slot, RegisterValue.BOUND_LOCAL)
+        node.register_binding = reg_slot
         node.set_slot("GRAPH_VARIABLE_BIND", 1)
         node.set_slot("GRAPH_LEAF", 1)
 
@@ -426,6 +446,10 @@ class ASGCompiler:
             node.set_slot("GRAPH_VARIABLE_BIND", 1)
 
         node.compute_cid()
+        if self.interner is not None:
+            interned = self.interner.intern_node(node)
+            interned.register_binding = reg_slot
+            return interned
         return node
 
     def compile_event(

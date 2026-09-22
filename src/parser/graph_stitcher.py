@@ -32,7 +32,7 @@ from dataclasses import replace
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
-from core.asg import QuantaGraph
+from core.asg import QuantaGraph, QuantaNode
 from parser.asg_compiler import ASGCompiler
 from parser.entity_manifest import (
     ActiveEntityManifest,
@@ -211,6 +211,7 @@ class GraphStitcher:
         auto_detect_temporal_gap: bool = True,
         entity_similarity_threshold: float = 0.7,
         compiler: Optional[ASGCompiler] = None,
+        interner: Optional[Any] = None,
         alias_clusters: Optional[List[Iterable[str]]] = None,
         coreference_map: Optional[Dict[str, str]] = None,
     ):
@@ -226,6 +227,7 @@ class GraphStitcher:
                 gap phrase (e.g. 'three hours later') is detected on the chunk boundary.
             entity_similarity_threshold: Minimum matching confidence score to merge entities.
             compiler: Optional ASGCompiler for stitch_to_graph.
+            interner: Optional CanonicalNodeInterner for node deduplication.
             alias_clusters: Optional explicit list of alias/name sets known to corefer.
             coreference_map: Optional explicit mapping from surface name to canonical name.
         """
@@ -236,6 +238,15 @@ class GraphStitcher:
         self.auto_detect_temporal_gap = auto_detect_temporal_gap
         self.entity_similarity_threshold = entity_similarity_threshold
         self.compiler = compiler
+
+        if interner is None:
+            if compiler is not None and getattr(compiler, "interner", None) is not None:
+                self.interner = compiler.interner
+            else:
+                from memory.node_interner import get_global_interner
+                self.interner = get_global_interner()
+        else:
+            self.interner = interner
 
         # Explicit coreference overrides
         self.alias_clusters: List[Set[str]] = [
@@ -662,10 +673,62 @@ class GraphStitcher:
         compiler: Optional[ASGCompiler] = None,
         validate: bool = True,
     ) -> QuantaGraph:
-        """Stitch extraction chunks and compile directly into a validated QuantaGraph."""
+        """Stitch extraction chunks and compile directly into a validated QuantaGraph with interned nodes."""
         stitched_res = self.stitch(chunks)
-        asg_comp = compiler or self.compiler or ASGCompiler()
+        asg_comp = compiler or self.compiler or ASGCompiler(interner=self.interner)
         return asg_comp.compile(stitched_res, validate=validate)
+
+    def stitch_graphs(
+        self,
+        graphs: Sequence[QuantaGraph],
+    ) -> QuantaGraph:
+        """Stitches multiple pre-compiled QuantaGraph instances into a unified graph.
+
+        Deduplicates entity nodes using CanonicalNodeInterner so that recurring
+        entities across chunks share the exact same interned QuantaNode instance,
+        and rewires event valency edges accordingly.
+        """
+        unified = QuantaGraph()
+        cid_remap: Dict[str, str] = {}
+        last_event_node: Optional[QuantaNode] = None
+
+        for graph_idx, g in enumerate(graphs):
+            current_first_event: Optional[QuantaNode] = None
+            for node in g._node_list:
+                is_leaf = (node.get_slot("GRAPH_LEAF") == 1) or (node.get_slot("GRAPH_VARIABLE_BIND") == 1)
+                if is_leaf:
+                    # Entity node: intern and deduplicate
+                    interned = self.interner.intern_node(node) if self.interner is not None else node
+                    new_cid = unified.add_node(interned)
+                    cid_remap[node.cid] = new_cid
+                    if hasattr(node, "canonical_cid"):
+                        cid_remap[node.canonical_cid] = new_cid
+                else:
+                    # Event node: clone and add
+                    ev_node = QuantaNode(
+                        vector=node.vector.copy(),
+                        anchor=node.anchor,
+                        literal=node.literal,
+                        parent_cid=node.parent_cid,
+                    )
+                    ev_node.edges = {rel: list(targets) for rel, targets in node.edges.items()}
+                    ev_cid = unified.add_node(ev_node)
+                    cid_remap[node.cid] = ev_cid
+                    if current_first_event is None:
+                        current_first_event = ev_node
+                    last_event_node = ev_node
+
+            # Wire inter-chunk temporal relation
+            if graph_idx > 0 and last_event_node is not None and current_first_event is not None:
+                unified.add_edge(last_event_node.cid, self.default_temporal_relation, current_first_event.cid)
+
+        # Rewire any edges pointing to remapped entity CIDs
+        for node in unified._node_list:
+            for rel in list(node.edges.keys()):
+                node.edges[rel] = [cid_remap.get(tgt, tgt) for tgt in node.edges[rel]]
+            node.compute_cid()
+
+        return unified
 
 
 # ---------------------------------------------------------------------------
@@ -692,10 +755,20 @@ def stitch_to_graph(
     return stitcher.stitch_to_graph(chunks, compiler=compiler, validate=validate)
 
 
+def stitch_graphs(
+    graphs: Sequence[QuantaGraph],
+    **kwargs,
+) -> QuantaGraph:
+    """Convenience function to stitch pre-compiled QuantaGraphs into a unified graph."""
+    stitcher = GraphStitcher(**kwargs)
+    return stitcher.stitch_graphs(graphs)
+
+
 __all__ = [
     "GraphStitcher",
     "stitch",
     "stitch_to_graph",
+    "stitch_graphs",
     "HONORIFICS",
     "ARTICLES_AND_POSSESSIVES",
     "GENERIC_PRONOUNS",

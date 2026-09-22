@@ -31,15 +31,20 @@ class QuantaNode:
     """
 
     __slots__ = (
+        "__weakref__",
         "vector",
         "edges",
         "anchor",
         "literal",
         "parent_cid",
         "_cid_cache",
+        "_canonical_cid_cache",
+        "register_binding",
         "time_start",
         "time_end",
     )
+
+    _default_interner: Optional[Any] = None
 
     def __init__(
         self,
@@ -81,12 +86,15 @@ class QuantaNode:
         self.literal: Optional[Any] = literal
         self.parent_cid: Optional[str] = parent_cid
         self._cid_cache: Optional[str] = None
+        self._canonical_cid_cache: Optional[str] = None
+        self.register_binding: Optional[str] = None
         self.time_start: Optional[Union[int, float]] = None
         self.time_end: Optional[Union[int, float]] = None
 
     def invalidate_cache(self):
-        """Invalidates cached CID."""
+        """Invalidates cached CID and canonical CID."""
         self._cid_cache = None
+        self._canonical_cid_cache = None
 
     def set_slot(self, slot: Union[int, str], value: Union[int, QuaternaryValue, StructuralValue, RegisterValue]):
         """Sets a slot by index or name."""
@@ -95,7 +103,17 @@ class QuantaNode:
 
     def get_slot(self, slot: Union[int, str]) -> QuaternaryValue:
         """Gets slot value by index or name."""
-        return self.vector[slot]
+        val = self.vector[slot]
+        if val == QuaternaryValue.IRRELEVANT and self.register_binding is not None:
+            slot_str = slot if isinstance(slot, str) else None
+            if slot_str is None:
+                from core.slots import get_slot_by_index
+                slot_def = get_slot_by_index(int(slot))
+                if slot_def is not None:
+                    slot_str = slot_def.name
+            if slot_str == self.register_binding:
+                return QuaternaryValue.TRUE
+        return val
 
     def get_structural_slot(self, slot: Union[int, str]) -> StructuralValue:
         """Gets slot value as a strongly-typed StructuralValue (Band 1 routing)."""
@@ -108,7 +126,17 @@ class QuantaNode:
 
     def get_register_slot(self, slot: Union[int, str]) -> RegisterValue:
         """Gets slot value as a strongly-typed RegisterValue (Band 2 scoping)."""
-        return self.vector.get_register_slot(slot)
+        val = self.vector.get_register_slot(slot)
+        if val == RegisterValue.UNBOUND and self.register_binding is not None:
+            slot_str = slot if isinstance(slot, str) else None
+            if slot_str is None:
+                from core.slots import get_slot_by_index
+                slot_def = get_slot_by_index(int(slot))
+                if slot_def is not None:
+                    slot_str = slot_def.name
+            if slot_str == self.register_binding:
+                return RegisterValue.BOUND_LOCAL
+        return val
 
     def set_register_slot(self, slot: Union[int, str], value: Union[int, RegisterValue]):
         """Sets register scoping slot (Band 2)."""
@@ -136,18 +164,38 @@ class QuantaNode:
             self.edges[relation].append(target_cid)
         self.invalidate_cache()
 
-    def compute_cid(self) -> str:
+    def compute_cid(
+        self,
+        masked_bands: Optional[Sequence[int]] = None,
+        mask_registers: bool = False,
+    ) -> str:
         """Computes the deterministic 256-bit BLAKE3 Content Identifier (CID).
         
+        Args:
+            masked_bands: Optional sequence of band indices (0..7) to mask (treat as 0) during hashing.
+            mask_registers: If True, treats Band 2 (slots 256–383, execution registers) as 0.
+        
         The hash incorporates:
-        1. 256-byte packed quaternary semantic vector
+        1. 256-byte packed quaternary semantic vector (optionally band-masked)
         2. Lexical anchor string (UTF-8)
         3. Canonical JSON-serialized literal payload
         4. Deterministically sorted relation edges: (relation, sorted child CIDs)
         """
         hasher = blake3.blake3()
         # 1. Quaternary vector (256 bytes)
-        hasher.update(self.vector.to_bytes())
+        vec_bytes = bytearray(self.vector.to_bytes())
+        effective_masked_bands = set(masked_bands or ())
+        if mask_registers:
+            effective_masked_bands.add(2)
+
+        if effective_masked_bands:
+            for b in effective_masked_bands:
+                start_byte = b * 32
+                end_byte = (b + 1) * 32
+                if end_byte <= len(vec_bytes):
+                    vec_bytes[start_byte:end_byte] = b"\x00" * (end_byte - start_byte)
+
+        hasher.update(bytes(vec_bytes))
 
         # 2. Lexical Anchor
         anchor_bytes = (self.anchor or "").encode("utf-8")
@@ -176,8 +224,38 @@ class QuantaNode:
                 hasher.update(target_bytes)
 
         cid = hasher.hexdigest()
-        self._cid_cache = cid
+        if not effective_masked_bands:
+            self._cid_cache = cid
+        elif effective_masked_bands == {2}:
+            self._canonical_cid_cache = cid
         return cid
+
+    def compute_canonical_cid(self) -> str:
+        """Computes the canonical 256-bit BLAKE3 CID with Band 2 registers masked."""
+        return self.compute_cid(mask_registers=True)
+
+    @property
+    def canonical_cid(self) -> str:
+        """Hexadecimal 256-bit BLAKE3 Canonical CID (Band 2 registers masked)."""
+        if self._canonical_cid_cache is None:
+            return self.compute_canonical_cid()
+        return self._canonical_cid_cache
+
+    @classmethod
+    def set_default_interner(cls, interner: Optional[Any]):
+        """Sets the process-wide default CanonicalNodeInterner."""
+        cls._default_interner = interner
+
+    @classmethod
+    def get_default_interner(cls) -> Optional[Any]:
+        """Gets the process-wide default CanonicalNodeInterner."""
+        return cls._default_interner
+
+    def intern(self) -> QuantaNode:
+        """Interns this node using the default interner if available."""
+        if self._default_interner is not None:
+            return self._default_interner.intern_node(self)
+        return self
 
     @property
     def cid(self) -> str:
@@ -274,6 +352,7 @@ class QuantaGraph:
         self._node_list: List[QuantaNode] = []
         self._cid_to_node: Dict[str, QuantaNode] = {}
         self.root_cid: Optional[str] = root_cid
+        self.register_bindings: Dict[str, str] = {}
 
     @property
     def nodes(self) -> Dict[str, QuantaNode]:
@@ -294,13 +373,13 @@ class QuantaGraph:
         return cid
 
     def get_node(self, cid: str) -> Optional[QuantaNode]:
-        """Retrieves node by CID (supporting current CIDs and historical alias CIDs)."""
+        """Retrieves node by CID (supporting current CIDs, canonical CIDs, and historical alias CIDs)."""
         if cid in self._cid_to_node:
             node = self._cid_to_node[cid]
             if node in self._node_list:
                 return node
         for n in self._node_list:
-            if n.cid == cid:
+            if n.cid == cid or n.canonical_cid == cid:
                 self._cid_to_node[cid] = n
                 return n
         return None
@@ -308,6 +387,7 @@ class QuantaGraph:
     def copy(self) -> QuantaGraph:
         """Create a deep copy of the QuantaGraph and its QuantaNodes."""
         cloned = QuantaGraph(root_cid=self.root_cid)
+        cloned.register_bindings = dict(self.register_bindings)
         for node in self._node_list:
             new_node = QuantaNode(
                 vector=node.vector.copy(),
@@ -316,6 +396,7 @@ class QuantaGraph:
                 parent_cid=node.parent_cid,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
+            new_node.register_binding = node.register_binding
             cloned.add_node(new_node)
         cloned.root_cid = self.root_cid
         for attr in ("extraction_result", "validation", "chunk_id", "entity_nodes", "event_nodes"):
