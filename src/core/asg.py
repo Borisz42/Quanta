@@ -181,12 +181,18 @@ class QuantaNode:
         3. Canonical JSON-serialized literal payload
         4. Deterministically sorted relation edges: (relation, sorted child CIDs)
         """
-        hasher = blake3.blake3()
-        # 1. Quaternary vector (256 bytes)
-        vec_bytes = bytearray(self.vector.to_bytes())
         effective_masked_bands = set(masked_bands or ())
         if mask_registers:
             effective_masked_bands.add(2)
+
+        if not effective_masked_bands and self._cid_cache is not None:
+            return self._cid_cache
+        if effective_masked_bands == {2} and self._canonical_cid_cache is not None:
+            return self._canonical_cid_cache
+
+        hasher = blake3.blake3()
+        # 1. Quaternary vector (256 bytes)
+        vec_bytes = bytearray(self.vector.to_bytes())
 
         if effective_masked_bands:
             for b in effective_masked_bands:

@@ -29,6 +29,7 @@ from core.asg import (
     fold_discourse_episode,
 )
 from memory.page_table import ActiveCanvas, PageTable, SemanticPageFaultHandler
+from memory.spreading_activation import SpreadingActivationRetriever
 from parser.asg_compiler import ASGCompilationError, ASGCompiler
 from parser.chunker import DiscourseChunk, DiscourseChunker
 from parser.entity_manifest import EntityPagingEngine, EntityRecord
@@ -139,7 +140,10 @@ class CognitivePipeline:
         self.code_emitter = code_emitter or CodeEmitter()
         self.query_answerer = GraphQueryAnswerer(realizer=self.realizer)
 
-        # 9. Merkle Book State
+        # 9. Spreading-Activation Context Retriever
+        self.retriever = SpreadingActivationRetriever(realizer=self.realizer)
+
+        # 10. Merkle Book State
         self.merkle_book = HierarchicalMerkleBook()
 
     def process(
@@ -571,6 +575,35 @@ class CognitivePipeline:
 
         return self.merkle_book, book_root_node.cid
 
+    def retrieve_context(
+        self,
+        query: str,
+        format: str = "english",
+        max_tokens: int = 500,
+        top_k: int = 5,
+        max_depth: int = 2,
+    ) -> str:
+        """Retrieves minimal relevant verified ASG context for external LLMs via spreading activation.
+
+        Args:
+            query: Natural language question or query pattern.
+            format: 'english' (compositional NLG sentences) or 'sexpr' (compact GBNF S-expression).
+            max_tokens: Maximum context token length.
+            top_k: Number of SIMD seeds to explore.
+            max_depth: Depth of spreading activation traversal.
+
+        Returns:
+            Formatted context string for host LLM prompt injection.
+        """
+        return self.retriever.retrieve_context(
+            query=query,
+            page_table=self.page_table,
+            format=format,
+            max_tokens=max_tokens,
+            top_k=top_k,
+            max_depth=max_depth,
+        )
+
     def answer_query(
         self,
         query: str,
@@ -598,7 +631,21 @@ class CognitivePipeline:
         if ans and ans != "I do not have sufficient information in the knowledge graph to verify this.":
             return ans
 
-        # 2. Query PageTable if not in active canvas
+        # 2. Query PageTable via Spreading Activation
+        retrieved_subgraph = self.retriever.retrieve_subgraph_for_query(
+            query=query,
+            page_table=self.page_table,
+            top_k=5,
+            max_depth=2,
+        )
+        if retrieved_subgraph is not None and len(retrieved_subgraph.nodes) > 0:
+            ans = self.realizer.answer_query(retrieved_subgraph, query)
+            if ans and ans != "I do not have sufficient information in the knowledge graph to verify this.":
+                elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                logger.info("PageTable spreading-activation query answered in %.2f ms: '%s' -> '%s'", elapsed_ms, query, ans)
+                return ans
+
+        # 3. Fallback scan if spreading activation did not resolve
         cur = self.page_table._conn.cursor()
         cur.execute("SELECT cid FROM nodes LIMIT 500")
         rows = cur.fetchall()
@@ -614,7 +661,7 @@ class CognitivePipeline:
 
         ans = self.realizer.answer_query(temp_graph, query)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        logger.info("PageTable query answered in %.2f ms: '%s' -> '%s'", elapsed_ms, query, ans)
+        logger.info("PageTable fallback query answered in %.2f ms: '%s' -> '%s'", elapsed_ms, query, ans)
         return ans
 
     def realize(self, graph: QuantaGraph) -> str:

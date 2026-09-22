@@ -475,7 +475,7 @@ class PageTable(MutableMapping):
 
         return cids
 
-    def fetch_node(self, cid: str) -> Optional[QuantaNode]:
+    def fetch_node(self, cid: str, update_access: bool = False) -> Optional[QuantaNode]:
         """Fetches and reconstructs a QuantaNode from SQLite storage."""
         with self._lock:
             cur = self._conn.cursor()
@@ -503,25 +503,52 @@ class PageTable(MutableMapping):
                 literal=literal,
                 parent_cid=parent_cid,
             )
+            node._cid_cache = cid
 
-            # Update access telemetry
-            now = time.time()
-            with self._conn:
-                self._conn.execute(
-                    "UPDATE nodes SET access_count = access_count + 1, last_accessed = ? WHERE cid = ?",
-                    (now, cid),
-                )
+            # Update access telemetry only if requested
+            if update_access:
+                now = time.time()
+                with self._conn:
+                    self._conn.execute(
+                        "UPDATE nodes SET access_count = access_count + 1, last_accessed = ? WHERE cid = ?",
+                        (now, cid),
+                    )
 
             return node
 
-    def fetch_nodes(self, cids: Sequence[str]) -> List[Optional[QuantaNode]]:
-        """Fetches multiple QuantaNodes in a batch query."""
+    def fetch_nodes(self, cids: Sequence[str], update_access: bool = False) -> List[Optional[QuantaNode]]:
+        """Fetches multiple QuantaNodes in a fast batch query."""
         if not cids:
             return []
-        nodes: List[Optional[QuantaNode]] = []
-        for cid in cids:
-            nodes.append(self.fetch_node(cid))
-        return nodes
+        nodes_dict: Dict[str, QuantaNode] = {}
+        with self._lock:
+            cur = self._conn.cursor()
+            placeholders = ",".join("?" for _ in cids)
+            cur.execute(
+                f"""
+                SELECT cid, vector_bytes, anchor_id, literal, parent_cid, edges 
+                FROM nodes WHERE cid IN ({placeholders})
+                """,
+                tuple(cids),
+            )
+            rows = cur.fetchall()
+            for row in rows:
+                cid, vector_bytes, anchor_id, literal_str, parent_cid, edges_str = row
+                anchor = self.interner.resolve(anchor_id)
+                literal = json.loads(literal_str) if literal_str is not None else None
+                edges = json.loads(edges_str) if edges_str else {}
+                vec = QuantaVector.from_bytes(vector_bytes)
+                node = QuantaNode(
+                    vector=vec,
+                    edges=edges,
+                    anchor=anchor,
+                    literal=literal,
+                    parent_cid=parent_cid,
+                )
+                node._cid_cache = cid
+                nodes_dict[cid] = node
+
+        return [nodes_dict.get(cid) for cid in cids]
 
     def has_node(self, cid: str) -> bool:
         """Checks whether a node exists in storage."""

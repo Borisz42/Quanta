@@ -15,6 +15,7 @@ from memory.page_table import (
     batch_quaternary_hamming,
     topk_hamming_search,
 )
+from memory.spreading_activation import SpreadingActivationRetriever
 
 __all__ = [
     "ActiveCanvas",
@@ -22,6 +23,7 @@ __all__ = [
     "PageTable",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
+    "SpreadingActivationRetriever",
     "StringInternTable",
     "batch_quaternary_hamming",
     "get_global_interner",
