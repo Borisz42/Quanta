@@ -33,6 +33,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from core.asg import QuantaGraph, QuantaNode
+from memory.world_state import WorldStateManager
 from parser.asg_compiler import ASGCompiler
 from parser.entity_manifest import (
     ActiveEntityManifest,
@@ -214,6 +215,7 @@ class GraphStitcher:
         interner: Optional[Any] = None,
         alias_clusters: Optional[List[Iterable[str]]] = None,
         coreference_map: Optional[Dict[str, str]] = None,
+        world_state: Optional[WorldStateManager] = None,
     ):
         """Initialize GraphStitcher.
 
@@ -230,6 +232,7 @@ class GraphStitcher:
             interner: Optional CanonicalNodeInterner for node deduplication.
             alias_clusters: Optional explicit list of alias/name sets known to corefer.
             coreference_map: Optional explicit mapping from surface name to canonical name.
+            world_state: Optional WorldStateManager tracking dynamic fluents and belief revisions.
         """
         self.storage = storage if storage is not None else EntityStorage(":memory:")
         self.paging_engine = paging_engine if paging_engine is not None else EntityPagingEngine(db_path=":memory:")
@@ -238,6 +241,9 @@ class GraphStitcher:
         self.auto_detect_temporal_gap = auto_detect_temporal_gap
         self.entity_similarity_threshold = entity_similarity_threshold
         self.compiler = compiler
+        self.world_state: WorldStateManager = (
+            world_state if world_state is not None else WorldStateManager()
+        )
 
         if interner is None:
             if compiler is not None and getattr(compiler, "interner", None) is not None:
@@ -294,6 +300,7 @@ class GraphStitcher:
         self._next_prop_num = 1
         self._last_terminal_event_id = None
         self.manifest.reset()
+        self.world_state.reset()
 
     # ---------------------------------------------------------------------------
     # Global Entity Resolution & Matching
@@ -507,6 +514,10 @@ class GraphStitcher:
             if matched is not None:
                 self._unify_entity(matched, ent)
                 self._entity_id_map[(chunk_idx, ent.id)] = matched.id
+                self.world_state._name_to_cid[matched.canonical_name.lower()] = matched.id
+                self.world_state._cid_to_name[matched.id] = matched.canonical_name
+                for a in matched.surface_aliases:
+                    self.world_state._name_to_cid[a.lower()] = matched.id
             else:
                 new_id = self._mint_global_entity_id()
                 new_ent = ExtractedEntity(
@@ -518,6 +529,12 @@ class GraphStitcher:
                 )
                 self._global_entities[new_id] = new_ent
                 self._entity_id_map[(chunk_idx, ent.id)] = new_id
+
+                self.world_state._name_to_cid[new_ent.canonical_name.lower()] = new_id
+                self.world_state._cid_to_name[new_id] = new_ent.canonical_name
+                for a in new_ent.surface_aliases:
+                    self.world_state._name_to_cid[a.lower()] = new_id
+
 
                 # Register in ActiveEntityManifest
                 self.manifest.add_or_update(
@@ -563,6 +580,24 @@ class GraphStitcher:
                 arguments=dict(ev.arguments),
             )
             self._global_events[global_ev_id] = remapped_event
+
+            # Update world-state tracking fluents and non-monotonic transitions
+            self.world_state.update_from_event(remapped_event)
+            for src_id, rel, tgt_id in list(self.world_state._pending_graph_edges):
+                if rel == "TEMP_ALLEN_FINISHES" and tgt_id == remapped_event.id:
+                    finishes_rel = ExtractedRelation(
+                        relation_type="TEMP_ALLEN_FINISHES",
+                        source_id=src_id,
+                        target_id=tgt_id,
+                        mechanism="world_state_non_monotonic_transition",
+                        confidence=1.0,
+                    )
+                    if not any(
+                        r.relation_type == "TEMP_ALLEN_FINISHES" and r.source_id == src_id and r.target_id == tgt_id
+                        for r in self._global_relations
+                    ):
+                        self._global_relations.append(finishes_rel)
+
 
         # 3. Cross-Chunk Temporal Interval Synthesis
         if current_chunk_remapped_event_ids:
@@ -676,7 +711,10 @@ class GraphStitcher:
         """Stitch extraction chunks and compile directly into a validated QuantaGraph with interned nodes."""
         stitched_res = self.stitch(chunks)
         asg_comp = compiler or self.compiler or ASGCompiler(interner=self.interner)
-        return asg_comp.compile(stitched_res, validate=validate)
+        graph = asg_comp.compile(stitched_res, validate=validate)
+        self.world_state.sync_graph(graph)
+        setattr(graph, "world_state", self.world_state)
+        return graph
 
     def stitch_graphs(
         self,
@@ -728,7 +766,28 @@ class GraphStitcher:
                 node.edges[rel] = [cid_remap.get(tgt, tgt) for tgt in node.edges[rel]]
             node.compute_cid()
 
+        # Update world state from pre-compiled graphs
+        for g in graphs:
+            for node in g._node_list:
+                if node.get_slot("TYPE_EVENT") == 1:
+                    self.world_state.update_from_event(node, graph=unified)
+        self.world_state.sync_graph(unified)
+        setattr(unified, "world_state", self.world_state)
+
         return unified
+
+    def get_entity_state_at(
+        self,
+        entity_name_or_cid: str,
+        property_name: str = "VAL_LOCATION_SLOT",
+        timestamp: Optional[float] = None,
+    ) -> Optional[QuantaNode]:
+        """Query entity point-in-time state from dynamic world model."""
+        return self.world_state.get_entity_state_at(
+            entity_name_or_cid=entity_name_or_cid,
+            property_name=property_name,
+            timestamp=timestamp,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -764,13 +823,33 @@ def stitch_graphs(
     return stitcher.stitch_graphs(graphs)
 
 
+def get_entity_state_at(
+    stitcher_or_graph: Any,
+    entity_name_or_cid: str,
+    property_name: str = "VAL_LOCATION_SLOT",
+    timestamp: Optional[float] = None,
+) -> Optional[QuantaNode]:
+    """Convenience function to query entity point-in-time state."""
+    if hasattr(stitcher_or_graph, "world_state") and stitcher_or_graph.world_state is not None:
+        return stitcher_or_graph.world_state.get_entity_state_at(
+            entity_name_or_cid, property_name=property_name, timestamp=timestamp
+        )
+    if hasattr(stitcher_or_graph, "get_entity_state_at"):
+        return stitcher_or_graph.get_entity_state_at(
+            entity_name_or_cid, property_name=property_name, timestamp=timestamp
+        )
+    return None
+
+
 __all__ = [
     "GraphStitcher",
     "stitch",
     "stitch_to_graph",
     "stitch_graphs",
+    "get_entity_state_at",
     "HONORIFICS",
     "ARTICLES_AND_POSSESSIVES",
     "GENERIC_PRONOUNS",
     "TEMPORAL_GAP_PATTERNS",
 ]
+

@@ -283,21 +283,31 @@ The system must close the temporal validity interval of the initial location ($t
 - **[MODIFY]** [`src/parser/graph_stitcher.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/graph_stitcher.py): Hook world-state updates during chunk stitching.
 - **[NEW]** `tests/test_world_state_tracking.py`: Dynamic state update and temporal query tests.
 
+### OpenResearch Experiment Definition
+- **Experiment ID**: `exp-007a`
+- **Title**: *Dynamic World-State Tracking & Non-Monotonic Belief Revision*
+- **Hypothesis**: Maintaining dynamic fluent state intervals $[t_{\text{start}}, t_{\text{end}})$ and resolving state transitions via non-monotonic belief revision with `TEMP_ALLEN_FINISHES` links will allow accurate temporal point-in-time queries without destroying historical truth or violating Merkle DAG integrity.
+- **Command**:
+  ```powershell
+  .\orx.ps1 create-experiment quanta --parent exp-006a --title "Dynamic World-State Tracking" --description "Fluent state representation and non-monotonic transition resolver with point-in-time queries"
+  ```
+
 ### Tasks
-- [ ] **Task 5.1: Implement Fluent State Representation (`src/memory/world_state.py`)**
+- [x] **Task 5.1: Implement Fluent State Representation (`src/memory/world_state.py`)**
   - Define `EntityStateRecord` tracking `entity_cid`, `property_slot` (e.g. `VAL_LOCATION_SLOT`), `value_cid`, `t_start`, `t_end`, and `epistemic_status`.
-- [ ] **Task 5.2: Non-Monotonic Transition Resolver**
+- [x] **Task 5.2: Non-Monotonic Transition Resolver**
   - In `WorldStateManager.update_from_event(event_node, graph)`:
     - If an event asserts a mutually exclusive property (e.g. moving to a new location or phase transition), find existing active state record ($t_{\text{end}} = \text{None}$).
     - Close the prior state: set $t_{\text{end}} =$ `event.time_start` and wire `TEMP_ALLEN_FINISHES` edge.
     - Open new state: set $t_{\text{start}} =$ `event.time_start`.
-- [ ] **Task 5.3: Temporal Point-in-Time State Queries**
+- [x] **Task 5.3: Temporal Point-in-Time State Queries**
   - Implement `get_entity_state_at(entity_cid: str, property_name: str, timestamp: float) -> Optional[QuantaNode]`.
   - Allows answering queries like: *"Where was the specimen at 11:00 AM?"* vs *"Where is it now?"*
-- [ ] **Task 5.4: 🧪 Write World-State Tests (`tests/test_world_state_tracking.py`)**
+- [x] **Task 5.4: 🧪 Write World-State Tests (`tests/test_world_state_tracking.py`)**
   - Verify sequential location change updates states correctly without deleting historical records.
   - Assert that querying historical timestamps returns past state, while querying current timestamp returns updated state.
   - Run: `pytest tests/test_world_state_tracking.py -v`.
+
 
 ---
 

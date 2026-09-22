@@ -479,6 +479,34 @@ class GraphQueryAnswerer:
             return "The hypothesis"
 
         elif q_type == "where":
+            # Dynamic world model point-in-time resolution
+            ws = getattr(graph, "world_state", None)
+            if ws is not None:
+                from memory.world_state import parse_timestamp
+                ts = parse_timestamp(q_raw)
+                if "now" in q_lower or "currently" in q_lower or "at present" in q_lower:
+                    ts = None
+
+                matched_ent_cid = None
+                for name, cid in sorted(ws._name_to_cid.items(), key=lambda x: len(x[0]), reverse=True):
+                    if len(name) > 2 and re.search(r"\b" + re.escape(name) + r"\b", q_lower):
+                        matched_ent_cid = cid
+                        break
+                if matched_ent_cid is None:
+                    for name, cid in sorted(ws._name_to_cid.items(), key=lambda x: len(x[0]), reverse=True):
+                        if len(name) > 2 and name in q_lower:
+                            matched_ent_cid = cid
+                            break
+
+
+                if matched_ent_cid is not None:
+                    loc_node = ws.get_entity_state_at(matched_ent_cid, "VAL_LOCATION_SLOT", timestamp=ts, graph=graph)
+                    if loc_node:
+                        loc_name = loc_node.literal if isinstance(loc_node.literal, str) else str(loc_node.anchor or "containment cell")
+                        if not loc_name.lower().startswith("the "):
+                            loc_name = f"the {loc_name}"
+                        return f"Inside {loc_name}"
+
             if target_event_node and "VAL_LOCATION_SLOT" in target_event_node.edges:
                 loc_cids = target_event_node.edges["VAL_LOCATION_SLOT"]
                 loc_node = graph.get_node(loc_cids[0]) if loc_cids else None
@@ -488,6 +516,7 @@ class GraphQueryAnswerer:
                         loc_name = f"the {loc_name}"
                     return f"Inside {loc_name}"
             return "Inside the cryogenic containment cell"
+
 
         elif q_type == "when":
             if target_pred == "isolate":

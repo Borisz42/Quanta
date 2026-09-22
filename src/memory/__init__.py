@@ -16,18 +16,27 @@ from memory.page_table import (
     topk_hamming_search,
 )
 from memory.spreading_activation import SpreadingActivationRetriever
+from memory.world_state import (
+    EntityStateRecord,
+    WorldStateManager,
+    parse_timestamp,
+)
 
 __all__ = [
     "ActiveCanvas",
     "CanonicalNodeInterner",
+    "EntityStateRecord",
     "PageTable",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
     "SpreadingActivationRetriever",
     "StringInternTable",
+    "WorldStateManager",
     "batch_quaternary_hamming",
     "get_global_interner",
+    "parse_timestamp",
     "reset_global_interner",
     "set_global_interner",
     "topk_hamming_search",
 ]
+
