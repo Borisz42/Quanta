@@ -202,21 +202,21 @@ By introducing an automated **Closed-Loop Round-Trip Lattice Meet Gate** ($\math
   ```
 
 ### Tasks
-- [ ] **Task 3.1: Implement `LatticeInvarianceGate` (`src/verification/lattice_gate.py`)**
+- [x] **Task 3.1: Implement `LatticeInvarianceGate` (`src/verification/lattice_gate.py`)**
   - Implement `verify_round_trip_invariance(orig_graph: QuantaGraph, reparsed_graph: QuantaGraph) -> Tuple[bool, int, List[str]]`.
   - Compute slot-wise lattice meet: $\mathbf{v}_{\text{meet}} = \mathbf{v}_{\text{orig}} \sqcap \mathbf{v}_{\text{reparsed}}$.
   - Detect epistemic contradictions ($1 \sqcap 2 = 3$ or conflict between TRUE and FALSE assertions).
-- [ ] **Task 3.2: Multi-Hop NSM Explication Expansion in `ASGCompiler`**
+- [x] **Task 3.2: Multi-Hop NSM Explication Expansion in `ASGCompiler`**
   - In `src/parser/asg_compiler.py`, when compiling event predicates, map high-level verbs to structured NSM decomposition schemas:
     - *"buy/purchase"* $\to$ `NSM_DO` (exchange) $\sqcap$ `NSM_HAVE` (receive) $\sqcap$ `NSM_PART` (money transferred).
     - *"prohibit/forbid"* $\to$ `NSM_SAY` (directive) $\sqcap$ `DEONTIC_MUSTNOT_PROHIBITED` $\sqcap$ `CAUSAL_PREVENTIVE_BLOCK`.
     - *"transform/transmute"* $\to$ `NSM_DO` $\sqcap$ `NSM_HAPPEN` $\sqcap$ `PHYS_ENTROPY_DELTA_S`.
-- [ ] **Task 3.3: Enhanced Referring Expression Generation in `EnglishRealizer`**
+- [x] **Task 3.3: Enhanced Referring Expression Generation in `EnglishRealizer`**
   - In `src/realizer/english_nlg.py`, implement discourse-tracking context:
     - Maintain anaphoric recency list per paragraph.
     - Emit proper nouns on first mention; emit gender/category-congruent pronouns (`she`, `he`, `it`, `they`) on subsequent mentions within the same episode.
     - Re-introduce full name when topic shifts or ambiguity arises.
-- [ ] **Task 3.4: 🧪 Regression & Cycle-Consistency Test Suite (`tests/test_lattice_meet_invariance.py`)**
+- [x] **Task 3.4: 🧪 Regression & Cycle-Consistency Test Suite (`tests/test_lattice_meet_invariance.py`)**
   - Run round-trip invariance tests on all 5 stress narratives from `tests/test_translation_complex.py`.
   - Assert that `lattice_meet_errors == []` and slot preservation rate $\ge 95\%$.
   - Run: `pytest tests/test_lattice_meet_invariance.py -v`.
