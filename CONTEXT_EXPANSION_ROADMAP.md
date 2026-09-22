@@ -326,21 +326,21 @@ To operate as an external context expander for existing LLM tools (Claude Deskto
 - **[NEW]** `tests/test_context_expansion_server.py`: Integration tests with mock client requests.
 
 ### Tasks
-- [ ] **Task 6.1: Implement OpenAI-Compatible Reverse Proxy (`src/server/proxy.py`)**
+- [x] **Task 6.1: Implement OpenAI-Compatible Reverse Proxy (`src/server/proxy.py`)**
   - Expose `/v1/models` and `/v1/chat/completions`.
   - In `/v1/chat/completions`:
     1. Parse incoming `messages`.
     2. If total token count exceeds threshold (e.g. > 2,000 tokens), chunk and ingest prior dialogue into `CognitivePipeline`.
     3. Extract the last user message, run `SpreadingActivationRetriever.retrieve_context()`, and inject compact context as a system prompt prefix.
     4. Forward compressed request to target backend (Unsloth `:8888` or upstream provider) and stream response.
-- [ ] **Task 6.2: Implement Model Context Protocol (MCP) Server (`src/server/mcp_server.py`)**
+- [x] **Task 6.2: Implement Model Context Protocol (MCP) Server (`src/server/mcp_server.py`)**
   - Implement JSON-RPC 2.0 stdio server supporting MCP specification:
     - Tool `quanta_ingest_document(doc_id: str, content: str)`: Ingests long document into PageTable.
     - Tool `quanta_query_memory(query: str, max_tokens: int = 500)`: Retrieves relevant verified subgraph context.
     - Tool `quanta_get_entity_details(name_or_cid: str)`: Returns full 1024-D vector analysis and active edges.
-- [ ] **Task 6.3: Create Startup Script (`scripts/serve.ps1`)**
+- [x] **Task 6.3: Create Startup Script (`scripts/serve.ps1`)**
   - Add PowerShell script: `.\scripts\serve.ps1 -Port 8000 -Backend "http://localhost:8888/v1"`.
-- [ ] **Task 6.4: 🧪 Integration Test Suite (`tests/test_context_expansion_server.py`)**
+- [x] **Task 6.4: 🧪 Integration Test Suite (`tests/test_context_expansion_server.py`)**
   - Start proxy test fixture, send multi-turn conversation with 5,000 words of background narrative, assert proxy compresses payload and delivers accurate context.
   - Run: `pytest tests/test_context_expansion_server.py -v`.
 
