@@ -239,20 +239,29 @@ A true context expansion engine requires **Query-Driven Spreading Activation**:
 - **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/pipeline/cognitive_pipeline.py): Connect `answer_query` and add `retrieve_context`.
 - **[NEW]** `tests/test_spreading_activation_retrieval.py`: Retrieval accuracy and latency tests.
 
+### OpenResearch Experiment Definition
+- **Experiment ID**: `exp-006a`
+- **Title**: *Query-Driven Spreading-Activation Sub-Graph Attention (Context Retrieval)*
+- **Hypothesis**: Transducing questions into query ASGs and propagating activation along thematic valencies and causal links from SIMD-Hamming seeds will retrieve minimal causal subgraphs in $< 5.0\text{ ms}$ over 100,000 nodes without distractor facts.
+- **Command**:
+  ```powershell
+  .\orx.ps1 create-experiment quanta --parent exp-005a --title "Spreading Activation Sub-Graph Attention" --description "Valency-guided spreading activation context retrieval with sub-5ms 100k latency"
+  ```
+
 ### Tasks
-- [ ] **Task 4.1: Query ASG Transduction**
+- [x] **Task 4.1: Query ASG Transduction**
   - Implement `compile_query_asg(query_text: str) -> QuantaGraph` in `src/memory/spreading_activation.py`.
   - Mark target question words (*"who"*, *"what"*, *"where"*, *"why"*) with `GRAPH_QUERY_TARGET=3` and assign `QUERY_TARGET_?X`.
-- [ ] **Task 4.2: SIMD Top-K Seed Selection**
+- [x] **Task 4.2: SIMD Top-K Seed Selection**
   - Use `SimdHammingIndex.search(query_vec, top_k=5)` to identify initial seed CIDs in host memory in $< 1\text{ ms}$.
-- [ ] **Task 4.3: Implement Spreading Activation Traversal**
+- [x] **Task 4.3: Implement Spreading Activation Traversal**
   - Implement `traverse_subgraph(seed_cids: List[str], page_table: PageTable, max_depth: int = 2, decay: float = 0.7) -> QuantaGraph`.
   - Traverse edges: `VAL_X1_AGENT`, `VAL_X2_PATIENT`, `VAL_LOCATION_SLOT`, `CAUSAL_MECHANISM_LINK`, `TEMP_ALLEN_MEETS`.
   - Collect all activated nodes above threshold $\theta = 0.35$.
-- [ ] **Task 4.4: Dynamic Context Builder for Host LLMs**
+- [x] **Task 4.4: Dynamic Context Builder for Host LLMs**
   - Implement `format_context_for_llm(subgraph: QuantaGraph, format: str = "english", max_tokens: int = 500) -> str`.
   - Supports format `"english"` (honest NLG sentences) and format `"sexpr"` (compact GBNF S-expressions).
-- [ ] **Task 4.5: 🧪 Write Retrieval Accuracy Tests (`tests/test_spreading_activation_retrieval.py`)**
+- [x] **Task 4.5: 🧪 Write Retrieval Accuracy Tests (`tests/test_spreading_activation_retrieval.py`)**
   - Ingest a multi-chapter narrative into `PageTable`.
   - Run multi-hop queries: assert retrieved context contains exact facts required to answer the question without irrelevant distractors.
   - Assert retrieval latency is $< 5\text{ ms}$ over 100,000 nodes.
