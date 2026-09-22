@@ -49,10 +49,11 @@ class QuantaProxyConfig:
     context_format: str = "english"  # 'english' or 'sexpr'
     always_enrich: bool = False
     page_table_path: Optional[Union[str, Path]] = None
-    transducer_backend: str = "mock"
     pipeline: Optional[CognitivePipeline] = None
     timeout_seconds: float = 30.0
     fallback_to_local: bool = True
+    target_model: Optional[str] = None
+    transducer_backend: str = "mock"
 
 
 # -----------------------------------------------------------------------------
@@ -362,6 +363,10 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         # Construct payload for downstream backend
         downstream_payload = _dump_model(request, exclude_unset=True)
         downstream_payload["messages"] = compressed_messages
+        if cfg.target_model:
+            downstream_payload["model"] = cfg.target_model
+        elif "8888" in cfg.backend_url and downstream_payload.get("model") in ("quanta-context-expander", "default", None):
+            downstream_payload["model"] = "unsloth/Qwen3.5-4B-MTP-GGUF"
 
         if request.stream:
             return await _handle_streaming_response(
