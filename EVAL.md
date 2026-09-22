@@ -31,6 +31,7 @@ This document tracks baseline benchmarks, experimental hypotheses, and empirical
 | `exp-000` | `main` | - | `main` | Initial baseline root | Baseline established | Baseline | Ready for Round 1 |
 | `exp-001` | `main` | `exp-000` | `3e534dc` | Phase 1: Representation & Parsing Core (GBNF grammar, S-expression lexer/parser, AST converter, QuantaGraph bridge) | 268 passed -> 286 passed (100%) | Success | Promote to Phase 2 |
 | `exp-002` | `test_unsloth_example_generation` | `exp-001` | `50c7f21` | Fix ASG multi-band slot starvation & backtranslation breakdown on complex corpora; ground 1024-D conceptual/epistemic vectors (Bands 0, 3..7); enforce Merkle DAG acyclicity on temporal clauses; restore honest NLG determiner preservation on modified nouns and honorific sentence segmentation | Complex: 0/10 -> 10/10 passed (100%), Round-trip canonical Hamming distance: drift -> 0 (11/11 passed), Full test suite: 376/376 passed (100%) | Success | Promote & Merge to `main` |
+| `exp-003b` | `exp/canonical-node-interning` | `exp-002` | `8df1733` | Decouple ephemeral Band 2 registers from node CIDs and apply global hash-consing interner to maximize node reuse across chunks and translations | Cross-chunk node reuse: < 5% -> 73.3% (narrative) / 90.0% (repetition), Node allocation reduction: 0% -> 73.3%, Tests: 380/380 -> 387/387 passed (100%), Canonical Hamming drift: d_H = 0 | Success | Ready to merge / Proceed to Section 2 |
 
 ---
 
