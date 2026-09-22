@@ -10,13 +10,17 @@
 
 param (
     [Parameter(Position = 0, Mandatory = $false)]
-    [ValidateSet("test", "test-verbose", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
+    [ValidateSet("test", "test-verbose", "demo", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
     [string]$Target = "test"
 )
 
 $ErrorActionPreference = "Stop"
 
 switch ($Target) {
+    "demo" {
+        Write-Host "Running QUANTA Context Expansion System Demonstration..." -ForegroundColor Cyan
+        python scripts/demonstrate_context_expansion.py
+    }
     "test" {
         Write-Host "Running QUANTA test suite..." -ForegroundColor Cyan
         pytest
@@ -50,6 +54,6 @@ switch ($Target) {
         python scripts/sync_hf.py --check
     }
     "help" {
-        Write-Host "Available targets: test, test-verbose, lint, export, gather-artifacts, init, sync-hf, help" -ForegroundColor Green
+        Write-Host "Available targets: test, test-verbose, demo, lint, export, gather-artifacts, init, sync-hf, help" -ForegroundColor Green
     }
 }

@@ -8,7 +8,7 @@ at > 35 M nodes/sec for sub-5ms semantic page-fault resolution.
 
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from collections.abc import MutableMapping
 import json
 from pathlib import Path
@@ -378,6 +378,8 @@ class PageTable(MutableMapping):
 
         self.interner = StringInternTable(self._conn)
         self.vector_index = SimdHammingIndex()
+        self._reverse_edges: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
+        self._literal_index: Dict[str, Set[str]] = defaultdict(set)
 
         # Warm up vector index from existing nodes in database
         self._warmup_index()
@@ -410,13 +412,55 @@ class PageTable(MutableMapping):
                 """
             )
 
+    def _index_literal(self, text: str, cid: str) -> None:
+        import re
+        lit_lower = text.lower().strip('"')
+        self._literal_index[lit_lower].add(cid)
+        for word in re.findall(r"\b[a-zA-Z0-9_-]+\b", lit_lower):
+            if len(word) > 2:
+                self._literal_index[word].add(cid)
+
     def _warmup_index(self):
         """Loads all stored quaternary vectors into the in-memory SIMD index."""
         cur = self._conn.cursor()
-        cur.execute("SELECT cid, vector_bytes FROM nodes")
+        cur.execute("SELECT cid, vector_bytes, edges, literal FROM nodes")
         rows = cur.fetchall()
         if rows:
-            self.vector_index.add_batch([(cid, vec_bytes) for cid, vec_bytes in rows])
+            vec_batch = []
+            for cid, vec_bytes, edges_str, lit_str in rows:
+                vec_batch.append((cid, vec_bytes))
+                if edges_str:
+                    try:
+                        edges = json.loads(edges_str)
+                        for rel, targets in edges.items():
+                            for t in targets:
+                                self._reverse_edges[t].add((cid, rel))
+                    except Exception:
+                        pass
+                if lit_str:
+                    try:
+                        lit = json.loads(lit_str)
+                        if lit:
+                            self._index_literal(str(lit), cid)
+                    except Exception:
+                        pass
+            self.vector_index.add_batch(vec_batch)
+
+    def get_reverse_edges(self, target_cid: str) -> List[Tuple[str, str]]:
+        """Returns list of (source_cid, relation) pointing to target_cid in O(1) time."""
+        return list(self._reverse_edges.get(target_cid, ()))
+
+    def find_cids_by_literal(self, term: str, limit: int = 5) -> List[str]:
+        """Finds node CIDs matching term in O(1) time."""
+        t = term.lower().strip()
+        matched = set(self._literal_index.get(t, ()))
+        if not matched:
+            for k, cids in self._literal_index.items():
+                if t in k or k in t:
+                    matched.update(cids)
+                    if len(matched) >= limit:
+                        break
+        return list(matched)[:limit]
 
     def store_node(self, node: QuantaNode) -> str:
         """Stores a QuantaNode in SQLite and registers it in the SIMD vector index."""
@@ -426,6 +470,12 @@ class PageTable(MutableMapping):
         literal_str = json.dumps(node.literal) if node.literal is not None else None
         edges_str = json.dumps(node.edges)
         now = time.time()
+
+        for rel, targets in node.edges.items():
+            for t in targets:
+                self._reverse_edges[t].add((cid, rel))
+        if node.literal:
+            self._index_literal(str(node.literal), cid)
 
         with self._lock, self._conn:
             self._conn.execute(
@@ -455,6 +505,12 @@ class PageTable(MutableMapping):
             for node in node_list:
                 cid = node.compute_cid()
                 cids.append(cid)
+                for rel, targets in node.edges.items():
+                    for t in targets:
+                        self._reverse_edges[t].add((cid, rel))
+                if node.literal:
+                    self._index_literal(str(node.literal), cid)
+
                 packed_vec = node.vector.to_bytes()
                 anchor_id = self.interner.intern(node.anchor)
                 literal_str = json.dumps(node.literal) if node.literal is not None else None

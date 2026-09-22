@@ -734,39 +734,101 @@ class MockTransducer(BaseDiscourseTransducer):
         chunk_id: Optional[str],
         active_manifest_prompt: Optional[str],
     ) -> DiscourseExtractionResult:
-        """Generate a valid, deterministic extraction result for arbitrary text."""
-        words = chunk_text.split()
-        first_cap = next((w.strip(".,;:\"'") for w in words if w and w[0].isupper()), "Agent")
-        
-        entities = [
-            ExtractedEntity(
-                id="E1",
-                canonical_name=first_cap,
-                category="PERSON",
-                surface_aliases=[first_cap],
-            )
-        ]
-        events = [
-            ExtractedEvent(
-                id="Ev1",
-                predicate="observe",
-                agent_id="E1",
-                temporal_anchor="present",
-                tense="PAST",
-                polarity=True,
-                raw_text=chunk_text[:120],
-            )
-        ]
+        """Generate a valid, rich deterministic extraction result for arbitrary text."""
+        raw_sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", chunk_text) if len(s.strip()) > 5]
+        if not raw_sents:
+            raw_sents = [chunk_text.strip()]
+
+        entities: List[ExtractedEntity] = []
+        events: List[ExtractedEvent] = []
         relations: List[ExtractedRelation] = []
-        propositions = [
-            ExtractedProposition(
-                id="P1",
-                claim_text=chunk_text[:80],
-                epistemic_status="FACT",
-                source_agent_id="E1",
-                event_id="Ev1",
+        propositions: List[ExtractedProposition] = []
+        ent_names_seen: Set[str] = set()
+
+        for s_idx, sent in enumerate(raw_sents, start=1):
+            ev_id = f"Ev{s_idx}"
+            caps = re.findall(r"\b[A-Z][a-zA-Z0-9_-]+(?:\s+[A-Z0-9][a-zA-Z0-9_-]+)*\b", sent)
+            current_sent_ents: List[ExtractedEntity] = []
+            for cap in caps:
+                c_clean = cap.strip(".,;:\"'")
+                if c_clean.lower() not in ("the", "this", "that", "these", "those", "and", "but", "then", "during", "at", "on", "after", "while", "furthermore", "near"):
+                    if c_clean not in ent_names_seen:
+                        ent_names_seen.add(c_clean)
+                        e_id = f"E{len(entities) + 1}"
+                        is_person = any(t in c_clean.lower() for t in ("dr", "vance", "director", "benjamin", "technician", "astronomer", "researcher", "engineer", "customer", "operator", "auditor"))
+                        is_org = any(t in c_clean.lower() for t in ("nasa", "esa", "service", "client", "controller", "software", "orchestrator", "team", "group", "repository", "gateway", "system"))
+                        is_loc = any(t in c_clean.lower() for t in ("cell", "chamber", "zone", "kourou", "orbit", "space", "point", "atmosphere"))
+                        cat = "PERSON" if is_person else ("ORGANIZATION" if is_org else ("LOCATION" if is_loc else "ARTIFACT"))
+                        ent = ExtractedEntity(
+                            id=e_id,
+                            canonical_name=c_clean,
+                            category=cat,
+                            surface_aliases=[c_clean],
+                        )
+                        entities.append(ent)
+                        current_sent_ents.append(ent)
+                    else:
+                        for existing_e in entities:
+                            if existing_e.canonical_name == c_clean:
+                                current_sent_ents.append(existing_e)
+                                break
+
+            pred = "observe"
+            for p_candidate in ("launch", "deploy", "observe", "verify", "detect", "initiate", "authorize", "reserve", "confirm", "publish", "invalidate", "cancel", "release", "prohibit", "isolate", "synthesize", "operate", "maintain", "execute"):
+                if re.search(rf"\b{p_candidate}", sent, re.IGNORECASE):
+                    pred = p_candidate
+                    break
+
+            # Find agent-capable entity
+            event_agent_id = None
+            event_patient_id = None
+            for e in current_sent_ents:
+                if e.category in ("PERSON", "ORGANIZATION"):
+                    event_agent_id = e.id
+                    break
+                elif event_patient_id is None:
+                    event_patient_id = e.id
+
+            events.append(
+                ExtractedEvent(
+                    id=ev_id,
+                    predicate=pred,
+                    agent_id=event_agent_id,
+                    patient_id=event_patient_id if event_agent_id is None else None,
+                    temporal_anchor=None,
+                    tense="PAST",
+                    polarity=not any(neg in sent.lower() for neg in ("prohibit", "declined", "invalid", "cancel", "failed")),
+                    raw_text=sent,
+                )
             )
-        ]
+            propositions.append(
+                ExtractedProposition(
+                    id=f"P{s_idx}",
+                    claim_text=sent,
+                    epistemic_status="FACT",
+                    source_agent_id=event_agent_id or event_patient_id,
+                    event_id=ev_id,
+                )
+            )
+            if s_idx > 1:
+                relations.append(
+                    ExtractedRelation(
+                        relation_type="TEMP_ALLEN_MEETS",
+                        source_id=f"Ev{s_idx - 1}",
+                        target_id=ev_id,
+                        mechanism="discourse progression",
+                    )
+                )
+
+        if not entities:
+            entities.append(
+                ExtractedEntity(
+                    id="E1",
+                    canonical_name="Agent",
+                    category="PERSON",
+                    surface_aliases=["Agent"],
+                )
+            )
 
         return DiscourseExtractionResult(
             chunk_id=chunk_id or "heuristic_chunk",

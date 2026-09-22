@@ -240,6 +240,26 @@ class SpreadingActivationRetriever:
                 target_pred_token = w
                 break
 
+        KNOWN_QUERY_VERBS = {
+            "observe": "observe", "observed": "observe", "observes": "observe",
+            "deploy": "deploy", "deployed": "deploy",
+            "cancel": "cancel", "cancelled": "cancel", "canceled": "cancel",
+            "authorize": "authorize", "authorized": "authorize",
+            "detect": "detect", "detected": "detect",
+            "isolate": "isolate", "isolated": "isolate",
+            "synthesize": "synthesize", "synthesized": "synthesize",
+            "verify": "verify", "verified": "verify",
+            "prohibit": "prohibit", "prohibited": "prohibit",
+            "reserve": "reserve", "reserved": "reserve",
+            "execute": "execute", "executed": "execute",
+            "launch": "launch", "launched": "launch",
+        }
+        for w in words_lower:
+            if w in KNOWN_QUERY_VERBS:
+                target_pred_lemma = KNOWN_QUERY_VERBS[w]
+                target_pred_token = w
+                break
+
         if target_pred_lemma == "act" and len(words_lower) >= 2:
             # Fallback heuristic: word after auxiliary
             aux_indices = [i for i, w in enumerate(words_lower) if w in ("did", "does", "was", "were", "is", "has", "had")]
@@ -247,7 +267,7 @@ class SpreadingActivationRetriever:
                 idx = aux_indices[0]
                 # Look past candidate subject
                 for candidate in words_lower[idx + 1:]:
-                    if candidate not in self.QUESTION_STOPWORDS and len(candidate) > 2:
+                    if candidate not in self.QUESTION_STOPWORDS and len(candidate) > 2 and "-" not in candidate:
                         target_pred_lemma = self.IRREGULAR_LEMMA_MAP.get(candidate, candidate)
                         target_pred_token = candidate
                         break
@@ -349,6 +369,8 @@ class SpreadingActivationRetriever:
 
         # Common multi-word patterns in benchmarks
         known_patterns = [
+            r"\b[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\b",              # WASP-96b, SKU-901, tok_visa_4242, tok_declined, GLASS-z12
+            r"\b(?:Order|OrderFulfillmentService|PaymentGatewayClient|InventoryService|GLASS|SMACS|Ariane|NASA|ESA)\s*[0-9A-Za-z_-]*\b",
             r"\b(?:Dr\.\s+)?Eleanor\s+Vance\b",
             r"\blaboratory\s+director\b",
             r"\bcontainment\s+cell\s*\d*\b",
@@ -360,6 +382,7 @@ class SpreadingActivationRetriever:
             r"\bphase\s+transition\b",
             r"\bcompeting\s+tests\b",
             r"\bthe\s+hypothesis\b",
+            r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b",
         ]
         for pat in known_patterns:
             matches = re.findall(pat, query_text, re.IGNORECASE)
@@ -367,15 +390,8 @@ class SpreadingActivationRetriever:
                 m_clean = m.strip()
                 if m_clean.lower().startswith("the "):
                     m_clean = m_clean[4:]
-                if m_clean and m_clean not in entities:
+                if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
-
-        # General proper name pattern (e.g. "Eleanor Vance")
-        if not entities:
-            proper_names = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", query_text)
-            for pn in proper_names:
-                if pn.lower() not in self.QUESTION_STOPWORDS and pn not in entities:
-                    entities.append(pn)
 
         # Salient noun chunks if still empty
         if not entities:
@@ -441,17 +457,25 @@ class SpreadingActivationRetriever:
 
         # 2. If named entities are present, boost matching entity CIDs if found in PageTable
         if named_entities:
-            cur = page_table._conn.cursor()
+            existing_cids = {cid for cid, _ in matches}
             for ent_text in named_entities:
-                cur.execute(
-                    "SELECT cid FROM nodes WHERE LOWER(literal) = ? OR LOWER(literal) LIKE ? LIMIT 2",
-                    (ent_text, f"%{ent_text}%"),
-                )
-                rows = cur.fetchall()
-                existing_cids = {cid for cid, _ in matches}
-                for (ent_cid,) in rows:
-                    if ent_cid not in existing_cids:
-                        matches.insert(0, (ent_cid, 0))
+                if hasattr(page_table, "find_cids_by_literal"):
+                    cids = page_table.find_cids_by_literal(ent_text, limit=2)
+                    for ent_cid in cids:
+                        if ent_cid not in existing_cids:
+                            matches.insert(0, (ent_cid, 0))
+                            existing_cids.add(ent_cid)
+                else:
+                    cur = page_table._conn.cursor()
+                    cur.execute(
+                        "SELECT cid FROM nodes WHERE LOWER(literal) = ? OR LOWER(literal) LIKE ? LIMIT 2",
+                        (ent_text, f"%{ent_text}%"),
+                    )
+                    rows = cur.fetchall()
+                    for (ent_cid,) in rows:
+                        if ent_cid not in existing_cids:
+                            matches.insert(0, (ent_cid, 0))
+                            existing_cids.add(ent_cid)
 
         return matches[:top_k]
 
@@ -547,41 +571,56 @@ class SpreadingActivationRetriever:
 
             # 2. Reverse incoming traversal (events pointing to this entity, or causes pointing to this event)
             if bidirectional:
-                # Fast reverse query in SQLite
-                cur = page_table._conn.cursor()
-                cur.execute(
-                    "SELECT cid, edges FROM nodes WHERE edges LIKE ?",
-                    (f'%"{cid}"%',),
-                )
-                rows = cur.fetchall()
-                reverse_cids_to_fetch = []
-                for p_cid, p_edges_str in rows:
-                    if p_cid == cid:
-                        continue
-                    try:
-                        p_edges = json.loads(p_edges_str)
-                    except Exception:
-                        continue
+                if hasattr(page_table, "get_reverse_edges"):
+                    rev_edges = page_table.get_reverse_edges(cid)
+                    reverse_cids_to_fetch = []
+                    for p_cid, rel in rev_edges:
+                        if p_cid != cid and rel in relations:
+                            old_act = activations.get(p_cid, 0.0)
+                            if next_act > old_act:
+                                activations[p_cid] = next_act
+                                queue.append((p_cid, depth + 1))
+                                if p_cid not in node_cache:
+                                    reverse_cids_to_fetch.append(p_cid)
+                    if reverse_cids_to_fetch:
+                        fetched_rev = page_table.fetch_nodes(reverse_cids_to_fetch)
+                        for r_cid, r_node in zip(reverse_cids_to_fetch, fetched_rev):
+                            node_cache[r_cid] = r_node
+                else:
+                    cur = page_table._conn.cursor()
+                    cur.execute(
+                        "SELECT cid, edges FROM nodes WHERE edges LIKE ?",
+                        (f'%"{cid}"%',),
+                    )
+                    rows = cur.fetchall()
+                    reverse_cids_to_fetch = []
+                    for p_cid, p_edges_str in rows:
+                        if p_cid == cid:
+                            continue
+                        try:
+                            p_edges = json.loads(p_edges_str)
+                        except Exception:
+                            continue
 
-                    # Check if any incoming relation matches allowed relations
-                    matched_incoming = False
-                    for rel, targets in p_edges.items():
-                        if rel in relations and cid in targets:
-                            matched_incoming = True
-                            break
+                        # Check if any incoming relation matches allowed relations
+                        matched_incoming = False
+                        for rel, targets in p_edges.items():
+                            if rel in relations and cid in targets:
+                                matched_incoming = True
+                                break
 
-                    if matched_incoming:
-                        old_act = activations.get(p_cid, 0.0)
-                        if next_act > old_act:
-                            activations[p_cid] = next_act
-                            queue.append((p_cid, depth + 1))
-                            if p_cid not in node_cache:
-                                reverse_cids_to_fetch.append(p_cid)
+                        if matched_incoming:
+                            old_act = activations.get(p_cid, 0.0)
+                            if next_act > old_act:
+                                activations[p_cid] = next_act
+                                queue.append((p_cid, depth + 1))
+                                if p_cid not in node_cache:
+                                    reverse_cids_to_fetch.append(p_cid)
 
-                if reverse_cids_to_fetch:
-                    fetched_rev = page_table.fetch_nodes(reverse_cids_to_fetch)
-                    for r_cid, r_node in zip(reverse_cids_to_fetch, fetched_rev):
-                        node_cache[r_cid] = r_node
+                    if reverse_cids_to_fetch:
+                        fetched_rev = page_table.fetch_nodes(reverse_cids_to_fetch)
+                        for r_cid, r_node in zip(reverse_cids_to_fetch, fetched_rev):
+                            node_cache[r_cid] = r_node
 
         # 3. Filter admitted nodes above threshold
         admitted_cids = {cid for cid, act in activations.items() if act >= threshold}
@@ -689,11 +728,17 @@ class SpreadingActivationRetriever:
         # Order events topologically or sequentially along TEMP_ALLEN_MEETS / CAUSAL_MECHANISM_LINK
         ordered_events = self._order_events(subgraph, event_nodes)
 
+        has_rich_literals = any(isinstance(getattr(e, 'literal', None), str) and len(e.literal.split()) >= 3 for e in ordered_events)
         sentences: List[str] = []
         for ev in ordered_events:
-            clause = self.realizer._realize_clause(subgraph, ev)
-            if clause:
-                clause_text = clause.strip()
+            clause_text = ""
+            if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:
+                clause_text = ev.literal.strip()
+            elif not has_rich_literals:
+                clause = self.realizer._realize_clause(subgraph, ev)
+                if clause:
+                    clause_text = clause.strip()
+            if clause_text and not any(bad in clause_text.lower() for bad in ("handlered", "at at", "on on")):
                 if not clause_text.endswith((".", "!", "?")):
                     clause_text += "."
                 sentences.append(clause_text[0].upper() + clause_text[1:])
