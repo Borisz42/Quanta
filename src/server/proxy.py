@@ -32,6 +32,8 @@ import httpx
 from pydantic import BaseModel, Field
 
 from pipeline.cognitive_pipeline import CognitivePipeline
+from pipeline.tracer import PipelineExecutionTracer
+from server.unsloth_manager import UnslothServerManager
 
 logger = logging.getLogger("quanta.server.proxy")
 
@@ -54,6 +56,8 @@ class QuantaProxyConfig:
     fallback_to_local: bool = True
     target_model: Optional[str] = None
     transducer_backend: str = "mock"
+    tracer: Optional[PipelineExecutionTracer] = None
+    unsloth_manager: Optional[UnslothServerManager] = None
 
 
 # -----------------------------------------------------------------------------
@@ -350,6 +354,16 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 tokens_saved,
                 len(retrieved_context),
             )
+
+            tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
+            if tracer is not None:
+                tracer.record_reverse_proxy(
+                    raw_tokens=raw_tokens,
+                    compressed_tokens=compressed_tokens,
+                    latency_ms=(time.perf_counter() - t0) * 1000.0,
+                    turns_pruned=len(dialogue_history),
+                    details={"user_query": user_query[:100], "context_injected": bool(retrieved_context)},
+                )
         else:
             # Under threshold and not force-enriched: preserve messages as-is
             compressed_messages = [
@@ -367,6 +381,18 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             downstream_payload["model"] = cfg.target_model
         elif "8888" in cfg.backend_url and downstream_payload.get("model") in ("quanta-context-expander", "default", None):
             downstream_payload["model"] = "unsloth/Qwen3.5-4B-MTP-GGUF"
+
+        # Verify GPU policy if targeting local Unsloth backend
+        if "8888" in cfg.backend_url or "localhost" in cfg.backend_url:
+            mgr = cfg.unsloth_manager or UnslothServerManager()
+            try:
+                mgr.enforce_gpu_policy()
+            except RuntimeError as rerr:
+                logger.warning("GPU policy enforcement alert: %s", rerr)
+                if not cfg.fallback_to_local:
+                    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(rerr))
+
+        tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
 
         if request.stream:
             return await _handle_streaming_response(
@@ -391,6 +417,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 query=user_query,
                 context=retrieved_context,
                 timeout=cfg.timeout_seconds,
+                tracer=tracer,
             )
 
     return app
@@ -410,8 +437,10 @@ async def _handle_unary_response(
     query: str,
     context: str,
     timeout: float,
+    tracer: Optional[PipelineExecutionTracer] = None,
 ) -> JSONResponse:
     """Forwards non-streaming request to backend or returns local neuro-symbolic completion."""
+    t0 = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
@@ -419,8 +448,22 @@ async def _handle_unary_response(
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
+            dt_s = time.perf_counter() - t0
             if resp.status_code == 200:
-                return JSONResponse(content=resp.json(), status_code=200)
+                data = resp.json()
+                usage = data.get("usage", {})
+                if tracer is not None:
+                    tracer.record_backend_call(
+                        method="POST",
+                        url=f"{backend_url.rstrip('/')}/chat/completions",
+                        status_code=resp.status_code,
+                        latency_s=dt_s,
+                        tokens_gen=usage.get("completion_tokens", 0),
+                        tps=usage.get("completion_tokens", 0) / max(0.001, dt_s),
+                        prompt_tokens=usage.get("prompt_tokens", 0),
+                        details={"model": payload.get("model")},
+                    )
+                return JSONResponse(content=data, status_code=200)
             logger.warning("Downstream backend responded with status %d: %s", resp.status_code, resp.text)
     except Exception as exc:
         logger.info("Downstream backend unavailable (%s). Falling back to local QUANTA response.", exc)
