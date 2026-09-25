@@ -7,7 +7,7 @@ This repository integrates **OpenResearch (`orx`)** with **Google Antigravity** 
 When acting as an autonomous ML research agent, follow this 5-step cycle for every experiment round:
 
 1. **Formulate Hypothesis**:
-   - Inspect [EVAL.md](file:///c:/Users/PC/Documents/GitHub/Quanta/EVAL.md) to review baseline metrics and past experiment runs.
+   - Inspect [EVAL.md](EVAL.md) to review baseline metrics and past experiment runs.
    - Propose a single, specific, falsifiable hypothesis (e.g., hyperparameter adjustment, vector dimensionality change, bundling/binding heuristic, loss modification).
 2. **Worktree / Branch Isolation**:
    - Do not collide on `main`. Create an isolated Git branch or worktree:
@@ -31,7 +31,7 @@ When acting as an autonomous ML research agent, follow this 5-step cycle for eve
      ```
 5. **Inspect & Record in EVAL.md**:
    - Inspect stdout and log outputs with `.\orx.ps1 logs <runId>`.
-   - Record the baseline vs. variant metrics, commit SHA, and outcome verdict in [EVAL.md](file:///c:/Users/PC/Documents/GitHub/Quanta/EVAL.md).
+   - Record the baseline vs. variant metrics, commit SHA, and outcome verdict in [EVAL.md](EVAL.md).
    - Determine the next move: **repair** (if crashed/unanswered), **refill** (try an alternate sibling), **promote** (winner descends into next round), or **stop**.
 
 ---

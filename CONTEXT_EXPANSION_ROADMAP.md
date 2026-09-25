@@ -4,7 +4,7 @@
 > **Repository:** `Borisz42/Quanta`  
 > **Target Role:** Verifiable, Memory-Bound Neuro-Symbolic LLM Context Expansion Coprocessor  
 > **Hardware Target:** NVIDIA RTX 3070 (8GB VRAM) + 16GB Host RAM  
-> **Autonomous Research Protocol:** Governed by OpenResearch (`.\orx.ps1`), [`AGENTS.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/AGENTS.md), and [`EVAL.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/EVAL.md)  
+> **Autonomous Research Protocol:** Governed by OpenResearch (`.\orx.ps1`), [`AGENTS.md`](AGENTS.md), and [`EVAL.md`](EVAL.md)  
 
 ---
 
@@ -86,17 +86,17 @@ Each section provides:
 ## Section 1: Canonical Node Interning & Global Hash-Consing (Memory Efficiency & Node Reuse)
 
 ### Context & Architectural Rationale
-Currently, in [`src/parser/asg_compiler.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/asg_compiler.py#L317-L318), entity compilation sets `reg_slot = f"VAR_SLOT_X{register_index % 8}"` directly into the 1024-D quaternary vector. This tightly couples an entity's ephemeral position in a single chunk extraction to its immutable packed vector. If `"synthetic compound"` appears as entity 0 in Chunk 1, its vector activates `VAR_SLOT_X0`; if it appears as entity 2 in Chunk 2, its vector activates `VAR_SLOT_X2`. Consequently, the 256-byte vector changes, its BLAKE3 CID changes, and redundant nodes are allocated across chapters and translation round-trips.
+Currently, in [`src/parser/asg_compiler.py`](src/parser/asg_compiler.py#L317-L318), entity compilation sets `reg_slot = f"VAR_SLOT_X{register_index % 8}"` directly into the 1024-D quaternary vector. This tightly couples an entity's ephemeral position in a single chunk extraction to its immutable packed vector. If `"synthetic compound"` appears as entity 0 in Chunk 1, its vector activates `VAR_SLOT_X0`; if it appears as entity 2 in Chunk 2, its vector activates `VAR_SLOT_X2`. Consequently, the 256-byte vector changes, its BLAKE3 CID changes, and redundant nodes are allocated across chapters and translation round-trips.
 
 To achieve maximum memory efficiency and node reuse:
 1. **Decouple Ephemeral Execution Registers from Node Identity**: Band 2 variable registers (`VAR_SLOT_X0`..`X7`) represent active canvas execution state, not permanent ontological meaning. The node's canonical CID must be computed over its semantic and structural bands (Bands 0, 1, 3–7), while register assignments are tracked in execution context or masked during canonical hashing.
 2. **Canonical Node Interning Pool (`CanonicalNodeInterner`)**: Implement a global Flyweight hash-consing pool. When the compiler or translator resolves a concept or named entity, it checks the interner. If an identical concept exists, it returns the interned node pointer rather than instantiating a new object.
 
 ### Target Files
-- **[MODIFY]** [`src/core/asg.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/core/asg.py): Add register-masked CID computation and node interning hook.
+- **[MODIFY]** [`src/core/asg.py`](src/core/asg.py): Add register-masked CID computation and node interning hook.
 - **[NEW]** `src/memory/node_interner.py`: Implement thread-safe `CanonicalNodeInterner` with weak references and SQLite persistence.
-- **[MODIFY]** [`src/parser/asg_compiler.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/asg_compiler.py): Separate persistent concept vectors from ephemeral register assignments; integrate with interner.
-- **[MODIFY]** [`src/parser/graph_stitcher.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/graph_stitcher.py): Reuse interned nodes when consolidating global identities.
+- **[MODIFY]** [`src/parser/asg_compiler.py`](src/parser/asg_compiler.py): Separate persistent concept vectors from ephemeral register assignments; integrate with interner.
+- **[MODIFY]** [`src/parser/graph_stitcher.py`](src/parser/graph_stitcher.py): Reuse interned nodes when consolidating global identities.
 - **[NEW]** `tests/test_canonical_node_interning.py`: Comprehensive test suite for node deduplication and reuse.
 
 ### OpenResearch Experiment Definition
@@ -143,8 +143,8 @@ By compiling the top 50,000 most frequent ConceptNet vectors into a contiguous, 
 - **[NEW]** `scripts/compile_mmap_codebook.py`: Script compiling `data/concept_codebook.csv.gz` into raw uint64 binary array.
 - **[NEW]** `data/concept_codebook.bin`: Zero-copy binary codebook (50,000 concepts $\times$ 32 words $\times$ 8 bytes $\approx 12.8\text{ MB}$).
 - **[NEW]** `src/parser/mmap_grounder.py`: Zero-copy $O(1)$ SIMD pointer lexical grounder.
-- **[MODIFY]** [`src/parser/asg_compiler.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/asg_compiler.py): Route lookups to `MmapLexicalGrounder`.
-- **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/pipeline/cognitive_pipeline.py): Implement asynchronous producer-consumer pipeline.
+- **[MODIFY]** [`src/parser/asg_compiler.py`](src/parser/asg_compiler.py): Route lookups to `MmapLexicalGrounder`.
+- **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](src/pipeline/cognitive_pipeline.py): Implement asynchronous producer-consumer pipeline.
 - **[NEW]** `tests/test_mmap_grounder_speed.py`: Latency and throughput benchmarks.
 
 ### OpenResearch Experiment Definition
@@ -182,14 +182,14 @@ By compiling the top 50,000 most frequent ConceptNet vectors into a contiguous, 
 ## Section 3: Closed-Loop Round-Trip Lattice Meet Gate & Deep NSM Explication (Translation Accuracy)
 
 ### Context & Architectural Rationale
-In [`docs/publication.md` Section 8.3](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md#83-information-profiler-audit-and-verifier-diagnostics), the empirical cycle-consistency fidelity was measured at 89.5% with a translator Macro F1 of 0.467 on complex logical sentences. The primary cause is the **"NSM Explication Gap"**: when complex verbs (e.g. *"purchased"*, *"prohibited"*, *"transformed"*) are encountered, the parser extracts simple valency frames without decomposing them into their primitive NSM state transitions. Furthermore, reverse English realization can suffer from anaphoric ambiguity across long sentences.
+In [`docs/publication.md` Section 8.3](docs/publication.md#83-information-profiler-audit-and-verifier-diagnostics), the empirical cycle-consistency fidelity was measured at 89.5% with a translator Macro F1 of 0.467 on complex logical sentences. The primary cause is the **"NSM Explication Gap"**: when complex verbs (e.g. *"purchased"*, *"prohibited"*, *"transformed"*) are encountered, the parser extracts simple valency frames without decomposing them into their primitive NSM state transitions. Furthermore, reverse English realization can suffer from anaphoric ambiguity across long sentences.
 
 By introducing an automated **Closed-Loop Round-Trip Lattice Meet Gate** ($\mathbf{v}_{\text{orig}} \sqcap \mathbf{v}_{\text{reparsed}}$) and expanding predicates into standard 3-prime NSM explication scripts, cycle-consistency Macro F1 will increase to $> 0.75$ with zero semantic drift.
 
 ### Target Files
 - **[NEW]** `src/verification/lattice_gate.py`: `LatticeInvarianceGate` computing lattice meet consistency.
-- **[MODIFY]** [`src/parser/asg_compiler.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/asg_compiler.py): Add multi-hop NSM explication script expansion.
-- **[MODIFY]** [`src/realizer/english_nlg.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/realizer/english_nlg.py): Enhanced anaphora and determiner preservation.
+- **[MODIFY]** [`src/parser/asg_compiler.py`](src/parser/asg_compiler.py): Add multi-hop NSM explication script expansion.
+- **[MODIFY]** [`src/realizer/english_nlg.py`](src/realizer/english_nlg.py): Enhanced anaphora and determiner preservation.
 - **[NEW]** `tests/test_lattice_meet_invariance.py`: Verification tests for round-trip lattice meet.
 
 ### OpenResearch Experiment Definition
@@ -226,7 +226,7 @@ By introducing an automated **Closed-Loop Round-Trip Lattice Meet Gate** ($\math
 ## Section 4: Query-Driven Spreading-Activation Sub-Graph Attention (Context Retrieval)
 
 ### Context & Architectural Rationale
-When an external LLM needs context to answer a user prompt, passing the entire 100k-node book or document graph is impossible. Currently, [`CognitivePipeline.answer_query()`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/pipeline/cognitive_pipeline.py#L423-L466) only performs a flat scan or active canvas lookup.
+When an external LLM needs context to answer a user prompt, passing the entire 100k-node book or document graph is impossible. Currently, [`CognitivePipeline.answer_query()`](src/pipeline/cognitive_pipeline.py#L423-L466) only performs a flat scan or active canvas lookup.
 
 A true context expansion engine requires **Query-Driven Spreading Activation**:
 1. Transduce the incoming question into an ASG query pattern with `GRAPH_QUERY_TARGET=3` in Band 1 and `QUERY_TARGET_?X` in Band 2.
@@ -236,7 +236,7 @@ A true context expansion engine requires **Query-Driven Spreading Activation**:
 
 ### Target Files
 - **[NEW]** `src/memory/spreading_activation.py`: `SpreadingActivationRetriever` class.
-- **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/pipeline/cognitive_pipeline.py): Connect `answer_query` and add `retrieve_context`.
+- **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](src/pipeline/cognitive_pipeline.py): Connect `answer_query` and add `retrieve_context`.
 - **[NEW]** `tests/test_spreading_activation_retrieval.py`: Retrieval accuracy and latency tests.
 
 ### OpenResearch Experiment Definition
@@ -280,7 +280,7 @@ The system must close the temporal validity interval of the initial location ($t
 
 ### Target Files
 - **[NEW]** `src/memory/world_state.py`: `WorldStateManager` tracking dynamic fluents and Allen intervals.
-- **[MODIFY]** [`src/parser/graph_stitcher.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/graph_stitcher.py): Hook world-state updates during chunk stitching.
+- **[MODIFY]** [`src/parser/graph_stitcher.py`](src/parser/graph_stitcher.py): Hook world-state updates during chunk stitching.
 - **[NEW]** `tests/test_world_state_tracking.py`: Dynamic state update and temporal query tests.
 
 ### OpenResearch Experiment Definition
@@ -415,11 +415,11 @@ To scale beyond local episodic memory, document context must be grounded into un
 ## Section 8: Cross-Lingual Multilingual Forward Transduction Adapters (Universal Pivot)
 
 ### Context & Architectural Rationale
-[`docs/publication.md` Section 7](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. However, forward parsing currently relies on English spaCy models and English prompt demonstrations. To serve as a universal language-agnostic context expander, forward transduction must accept queries in German, Turkish, or Mandarin Chinese and compile them into the same canonical $\Sigma^{1024}$ ASG.
+[`docs/publication.md` Section 7](docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. However, forward parsing currently relies on English spaCy models and English prompt demonstrations. To serve as a universal language-agnostic context expander, forward transduction must accept queries in German, Turkish, or Mandarin Chinese and compile them into the same canonical $\Sigma^{1024}$ ASG.
 
 ### Target Files
 - **[NEW]** `src/parser/multilingual_transducer.py`: Multilingual prompt templates and language-specific GBNF extensions.
-- **[MODIFY]** [`src/parser/entity_manifest.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/parser/entity_manifest.py): Support agglutinative case-inflected entity aliases.
+- **[MODIFY]** [`src/parser/entity_manifest.py`](src/parser/entity_manifest.py): Support agglutinative case-inflected entity aliases.
 - **[NEW]** `tests/test_multilingual_pipeline.py`: End-to-end cross-lingual translation invariance tests.
 
 ### Tasks

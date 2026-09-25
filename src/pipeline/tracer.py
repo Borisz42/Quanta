@@ -330,7 +330,7 @@ stateDiagram-v2
     [*] --> PENDING: POST /api/checkout (Order 1042 / 1043)
     
     state "PENDING<br/>(Awaiting Payment Gateway)" as PENDING
-    state "PAYMENT_AUTHORIZED<br/>(tok_visa_4242 -> txn_9941)" as AUTH
+    state "PAYMENT_AUTHORIZED<br/>(tok_visa_4242 ⇒ txn_9941)" as AUTH
     state "INVENTORY_RESERVED<br/>(4 units SKU-901 in Zone B)" as RESERVED
     state "FULFILLED<br/>(Carrier Dispatched & Kafka Event)" as FULFILLED
     state "CANCELLED<br/>(Saga Compensating Rollback)" as CANCELLED
@@ -350,7 +350,7 @@ stateDiagram-v2
 flowchart LR
     subgraph Ingestion["1. Ingestion & Grounding"]
         IN["Discourse Text / Dialogue"] --> CHK["Discourse Chunker"]
-        CHK --> MMAP["Mmap Lexical Grounder<br/>(<0.05ms Zero-Copy Codebook)"]
+        CHK --> MMAP["Mmap Lexical Grounder<br/>(sub-0.05ms Zero-Copy Codebook)"]
     end
 
     subgraph NeuralTransduction["2. Constrained Transduction"]
@@ -361,11 +361,11 @@ flowchart LR
     subgraph MemoryDAG["3. Neuro-Symbolic Memory"]
         MUC --> INTERN["Canonical BLAKE3 Interner<br/>(Flyweight Consing >70% Reuse)"]
         INTERN --> PT["PageTable Merkle DAG<br/>(NVMe SQLite Storage)"]
-        PT --> CANVAS["Active Canvas (M <= 512)<br/>(Strict O(1) Physical VRAM)"]
+        PT --> CANVAS["Active Canvas (M ≤ 512)<br/>(Strict O(1) Physical VRAM)"]
     end
 
     subgraph ReasoningRetrieval["4. Query & Subgraph Attention"]
-        USER_Q["Active User Query"] --> SPREAD["Spreading Activation Engine<br/>(<5ms Energy Propagation)"]
+        USER_Q["Active User Query"] --> SPREAD["Spreading Activation Engine<br/>(sub-5ms Energy Propagation)"]
         CANVAS --> SPREAD
         PT --> SPREAD
         SPREAD --> CTX["Verified Grounded Subgraph"]

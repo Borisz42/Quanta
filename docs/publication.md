@@ -459,7 +459,7 @@ Surface transduction runs locally on consumer hardware (e.g. NVIDIA RTX 3070 8GB
 1. **Qwen 3.5 4B Dense (`unsloth/Qwen3.5-4B-MTP-GGUF`):** Quantized to `Q5_K_M` (~3.0 GB VRAM), utilizing native Multi-Token Prediction (MTP) speculative decoding (`--spec-type draft-mtp --spec-draft-n-max 2`). This achieves **45.3–56.0 tokens/second** sustained decoding throughput on a consumer NVIDIA GeForce RTX 3070 (8GB VRAM) with sub-30ms TTFT, leaving over 5.0 GB VRAM completely free for concurrency buffers ($B = 16\text{ to }32$).
 2. **Qwen 3.5 2B & Gemma 4 E2B / E4B:** Alternative lightweight workhorses supporting fast GBNF S-expression extraction and speculative drafting.
 
-Managed via `UnslothServerManager` ([`src/server/unsloth_manager.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/server/unsloth_manager.py)) with automated background process wake-up, real-time `nvidia-smi` telemetry, and a strict GPU execution policy that raises `RuntimeError` if GPU acceleration fails unless explicitly overridden with `QUANTA_ALLOW_CPU_OFFLOAD=1`.
+Managed via `UnslothServerManager` ([`src/server/unsloth_manager.py`](src/server/unsloth_manager.py)) with automated background process wake-up, real-time `nvidia-smi` telemetry, and a strict GPU execution policy that raises `RuntimeError` if GPU acceleration fails unless explicitly overridden with `QUANTA_ALLOW_CPU_OFFLOAD=1`.
 
 ### 6.3 Hardware-Accelerated Virtual Page-Table Attention & Merkle Folding
 

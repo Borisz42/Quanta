@@ -5,7 +5,7 @@
 
 > [!TIP]
 > **Active Implementation Roadmap & Action Plan**:
-> For the actionable, task-by-task engineering roadmap detailing how QUANTA functions as an external LLM context expansion solution (including canonical node interning, SIMD spreading activation retrieval, dynamic world-state tracking, and OpenAI/MCP proxy serving), see **[`CONTEXT_EXPANSION_ROADMAP.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md)**.
+> For the actionable, task-by-task engineering roadmap detailing how QUANTA functions as an external LLM context expansion solution (including canonical node interning, SIMD spreading activation retrieval, dynamic world-state tracking, and OpenAI/MCP proxy serving), see **[`CONTEXT_EXPANSION_ROADMAP.md`](CONTEXT_EXPANSION_ROADMAP.md)**.
 
 ---
 
@@ -17,7 +17,7 @@ When interacting with host LLMs or agentic workflows, QUANTA intercepts dialogue
 
 | Bottleneck | Traditional Autoregressive Model | QUANTA Context Expansion Coprocessor |
 | :--- | :--- | :--- |
-| **Context Horizon** | GPU VRAM-bound ($32\text{k}\text{--}128\text{k}$ tokens) | **Host-RAM bound** ($10\text{M}+$ token equivalents) |
+| **Context Horizon** | GPU VRAM-bound (32k–128k tokens) | **Host-RAM bound** (10M+ token equivalents) |
 | **Context Overhead** | ~2 MB VRAM per 1,000 tokens (KV cache) | **256 KB RAM** per 1,000 concept nodes |
 | **Logic Verification** | None (pure statistical sampling) | **$s(\text{CASP})$ / PyClingo ASP solver gates** |
 | **Hallucination Rate** | Unbounded (probabilistic drift) | **Zero structural/temporal hallucinations** |
@@ -34,7 +34,7 @@ QUANTA processes discourse and serves host LLMs through a unified, 7-stage pipel
 flowchart LR
     subgraph Ingestion["1. Ingestion & Grounding"]
         IN["Discourse Text / Dialogue"] --> CHK["Discourse Chunker"]
-        CHK --> MMAP["Mmap Lexical Grounder<br/>(<0.05ms Zero-Copy Codebook)"]
+        CHK --> MMAP["Mmap Lexical Grounder<br/>(sub-0.05ms Zero-Copy Codebook)"]
     end
 
     subgraph NeuralTransduction["2. Constrained Transduction"]
@@ -45,11 +45,11 @@ flowchart LR
     subgraph MemoryDAG["3. Neuro-Symbolic Memory"]
         MUC --> INTERN["Canonical BLAKE3 Interner<br/>(Flyweight Consing >70% Reuse)"]
         INTERN --> PT["PageTable Merkle DAG<br/>(NVMe SQLite Storage)"]
-        PT --> CANVAS["Active Canvas (M <= 512)<br/>(Strict O(1) Physical VRAM)"]
+        PT --> CANVAS["Active Canvas (M ≤ 512)<br/>(Strict O(1) Physical VRAM)"]
     end
 
     subgraph ReasoningRetrieval["4. Query & Subgraph Attention"]
-        USER_Q["Active User Query"] --> SPREAD["Spreading Activation Engine<br/>(<5ms Energy Propagation)"]
+        USER_Q["Active User Query"] --> SPREAD["Spreading Activation Engine<br/>(sub-5ms Energy Propagation)"]
         CANVAS --> SPREAD
         PT --> SPREAD
         SPREAD --> CTX["Verified Grounded Subgraph"]
@@ -63,19 +63,19 @@ flowchart LR
 ```
 
 ### Pipeline Stage Details:
-1. **Stage 1: Ingestion & Lexical Grounding:** Discourse Chunker segments text into 150–350 word semantic blocks. The Zero-Copy Memory-Mapped Codebook (`data/concept_codebook.bin`) unpacks 1024-D concept anchors in $< 0.05\text{ ms}$ ($0.32\text{ µs}$ single-concept lookup) via vectorized SIMD operations.
-2. **Stage 2: Constrained Neural Transduction:** Small Language Models (`unsloth/Qwen3.5-4B-MTP-GGUF`) under context-free GBNF grammars extract compact S-expressions ($4\times$ token reduction over JSON-LD). Clingo Answer Set Programming gates verify axioms; detected conflicts isolate Minimal Unsatisfiable Cores (MUCs) for closed-loop self-repair (capped at 2 attempts).
-3. **Stage 3: Neuro-Symbolic Memory & Canonical Hash-Consing:** Ephemeral variable registers (`VAR_SLOT_X0`..`X7`) are decoupled from content hashes. The global Flyweight `CanonicalNodeInterner` achieves $> 57\text{--}73\%$ node reuse across chunks. Subgraphs fold into 256-bit BLAKE3 CIDs stored in SQLite `PageTable`. A strictly bounded `ActiveCanvas` ($M \le 512$ nodes, $\le 128\text{ KB}$) guarantees $\mathcal{O}(1)$ physical GPU VRAM.
+1. **Stage 1: Ingestion & Lexical Grounding:** Discourse Chunker segments text into 150–350 word semantic blocks. The Zero-Copy Memory-Mapped Codebook (`data/concept_codebook.bin`) unpacks 1024-D concept anchors in sub-0.05 ms (0.32 µs single-concept lookup) via vectorized SIMD operations.
+2. **Stage 2: Constrained Neural Transduction:** Small Language Models (`unsloth/Qwen3.5-4B-MTP-GGUF`) under context-free GBNF grammars extract compact S-expressions (4× token reduction over JSON-LD). Clingo Answer Set Programming gates verify axioms; detected conflicts isolate Minimal Unsatisfiable Cores (MUCs) for closed-loop self-repair (capped at 2 attempts).
+3. **Stage 3: Neuro-Symbolic Memory & Canonical Hash-Consing:** Ephemeral variable registers (`VAR_SLOT_X0`..`X7`) are decoupled from content hashes. The global Flyweight `CanonicalNodeInterner` achieves > 57%–73% node reuse across chunks. Subgraphs fold into 256-bit BLAKE3 CIDs stored in SQLite `PageTable`. A strictly bounded `ActiveCanvas` ($M \le 512$ nodes, $\le 128\text{ KB}$) guarantees $\mathcal{O}(1)$ physical GPU VRAM.
 4. **Stage 4: Dynamic World-State Tracking:** Non-monotonic belief revision maintains fluent state intervals $[t_{\text{start}}, t_{\text{end}})$ and synthesizes `TEMP_ALLEN_FINISHES` edges, allowing precise historical point-in-time state queries without deleting past records.
-5. **Stage 5: Reasoning & Subgraph Attention:** Query ASGs compile unification targets ($?X$). The SIMD `SpreadingActivationRetriever` traverses valencies and causal DAGs, extracting minimal relevant subgraphs over 100k+ nodes in $< 5.0\text{ ms}$ ($2.63\text{ ms}$ minimum).
-6. **Stage 6: Host LLM Middleware:** OpenAI-compatible reverse proxy (`http://localhost:8000/v1/chat/completions`) intercepts long dialogue, offloads prior turns to `PageTable`, injects retrieved subgraphs into system prompts ($56.2\%\text{--}85.0\%$ token footprint reduction), and streams completions. Complementary Model Context Protocol (MCP) server exposes stdio JSON-RPC 2.0 tools (`quanta_ingest_document`, `quanta_query_memory`, `quanta_get_entity_details`).
+5. **Stage 5: Reasoning & Subgraph Attention:** Query ASGs compile unification targets ($?X$). The SIMD `SpreadingActivationRetriever` traverses valencies and causal DAGs, extracting minimal relevant subgraphs over 100k+ nodes in sub-5.0 ms (2.63 ms minimum).
+6. **Stage 6: Host LLM Middleware:** OpenAI-compatible reverse proxy (`http://localhost:8000/v1/chat/completions`) intercepts long dialogue, offloads prior turns to `PageTable`, injects retrieved subgraphs into system prompts (56.2%–85.0% token footprint reduction), and streams completions. Complementary Model Context Protocol (MCP) server exposes stdio JSON-RPC 2.0 tools (`quanta_ingest_document`, `quanta_query_memory`, `quanta_get_entity_details`).
 7. **Stage 7: Local Unsloth GPU Serving:** Downstream neural generation executes against local llama-server / Unsloth on port `:8888`.
 
 ---
 
 ## Hardware Engine: Unsloth GPU Manager & Strict CPU Offload Guard
 
-QUANTA enforces hardware-level reliability via [`src/server/unsloth_manager.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/server/unsloth_manager.py):
+QUANTA enforces hardware-level reliability via [`src/server/unsloth_manager.py`](src/server/unsloth_manager.py):
 
 * **Autonomous Background Server Wake-Up:** Detects if the local Unsloth/llama-server process is active on `http://127.0.0.1:8888/v1`. If offline, automatically discovers local GGUF weights, spawns the server as a background subprocess, and polls `/health` until ready.
 * **Strict GPU Execution Policy Guard:** Prohibits silent fallback to slow CPU inference. If GPU acceleration is unavailable, `enforce_gpu_policy()` immediately raises `RuntimeError: Strict GPU Execution Policy Enforced`. CPU execution is permitted *only* when the environment flag `QUANTA_ALLOW_CPU_OFFLOAD=1` is explicitly set.
@@ -90,7 +90,7 @@ QUANTA enforces hardware-level reliability via [`src/server/unsloth_manager.py`]
 
 ## Empirical Knowledge Graph Grounding Proofs (Ablation Probes)
 
-Automated ablation probes in [`scripts/demonstrate_context_expansion.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/scripts/demonstrate_context_expansion.py) prove conclusively that completions originate from the neuro-symbolic knowledge graph rather than LLM pre-training weights:
+Automated ablation probes in [`scripts/demonstrate_context_expansion.py`](scripts/demonstrate_context_expansion.py) prove conclusively that completions originate from the neuro-symbolic knowledge graph rather than LLM pre-training weights:
 
 | Probe Name | Tested Fact / Entity | Without Graph Context (Parametric Zero-Shot) | With Graph Context (QUANTA Neuro-Symbolic) | Grounding Verdict |
 |---|---|---|---|---|
@@ -101,7 +101,7 @@ Automated ablation probes in [`scripts/demonstrate_context_expansion.py`](file:/
 
 ## Ingested Workload Topologies (Execution Tracer Visualizations)
 
-Generated by the execution tracer ([`src/pipeline/tracer.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/pipeline/tracer.py)):
+Generated by the execution tracer ([`src/pipeline/tracer.py`](src/pipeline/tracer.py)):
 
 ### Workload A: James Webb Space Telescope (Optics & Scientific Payload)
 ```mermaid
@@ -153,7 +153,7 @@ stateDiagram-v2
     [*] --> PENDING: POST /api/checkout (Order 1042 / 1043)
     
     state "PENDING<br/>(Awaiting Payment Gateway)" as PENDING
-    state "PAYMENT_AUTHORIZED<br/>(tok_visa_4242 -> txn_9941)" as AUTH
+    state "PAYMENT_AUTHORIZED<br/>(tok_visa_4242 ⇒ txn_9941)" as AUTH
     state "INVENTORY_RESERVED<br/>(4 units SKU-901 in Zone B)" as RESERVED
     state "FULFILLED<br/>(Carrier Dispatched & Kafka Event)" as FULFILLED
     state "CANCELLED<br/>(Saga Compensating Rollback)" as CANCELLED
@@ -218,7 +218,7 @@ To prevent circular dictionary definitions, Mentalese roots its non-primitive vo
 ### 1.3 Unambiguous Topology & Categorical Anchors
 
 Syntactic structure is governed by Lojban construct grammar, utilizing fixed predicate place structures (*brivla* valencies like `klama` agent/destination/origin slots) and structural logic operators (*cmavo*). This design eliminates syntactical ambiguity. Leaf entities and relational edges are tied to established categorical taxonomies:
-* **ConceptNet 5.7.0 Offline Knowledge Graph:** Grounds concepts into 256 data-driven taxonomic and affordance dimensions across 403,503 concepts and 713,784 multi-POS entries stored in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+* **ConceptNet 5.7.0 Offline Knowledge Graph:** Grounds concepts into 256 data-driven taxonomic and affordance dimensions across 403,503 concepts and 713,784 multi-POS entries stored in [`data/conceptnet_offline.db`](data/conceptnet_offline.db).
 * **WordNet Synsets & FrameNet Roles:** Provide fine-grained lexical anchors and thematic place roles (`Agent`, `Patient`, `Donor`, `Theme`, `Instrument`, `Location`).
 
 ### 1.4 Cryptographic Merkle-Tree Sub-Graph Folding
@@ -314,7 +314,7 @@ Enables algebraic variable unification, lexical register scoping, and formal ded
   - `0 (IRRELEVANT / INACTIVE)`: Unasserted dimensions and 2nd-order+ associative drift ($d \ge 2$).
 * **Vectorized Realization Decoding & Statistics:**
   1. *Tier 1 (In-Memory SIMD)*: **22,470 unique singletons** (30.80% of core archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage) decode in $<5\text{ ms}$ via vectorized $4 \times 4$ cost matrix $\mathbf{C}$.
-  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query 403,503 pre-packed quaternary vectors across 13.33M active non-zero assertions in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+  2. *Tier 2 (Category Basin Search)*: Specialized technical terms query 403,503 pre-packed quaternary vectors across 13.33M active non-zero assertions in [`data/conceptnet_offline.db`](data/conceptnet_offline.db).
 * **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`):** Legacy symbolic names (`TYPE_ANIMATE` $\to$ `CN_Q011_ANIMAL`, `TYPE_HUMAN` $\to$ `CN_Q007_PERSON`, `AFFORD_INCISED_CUTTING` $\to$ `CN_Q074_CUT`) resolve dynamically into canonical `CN_Q*` indices via `src/core/slots.py`.
 
 #### Band 5: Theory of Mind, Multi-Agent Beliefs, Goals & Pragmatics (640–767)
@@ -334,7 +334,7 @@ Directs formal non-monotonic Answer Set Programming engines and modal alethic lo
 #### Band 7: Spatio-Temporal Calculi, Pearl Causal Counterfactuals & Branching Logic (896–1023)
 Qualitative spatial mereotopology, full temporal interval algebra, Pearl causal DAGs, and model-checking temporal logics.
 * **`896–927` (Full 13-Relation Allen Interval Temporal Calculus):** Exact temporal intervals and inverses (`TEMP_ALLEN_BEFORE` $<$, `TEMP_ALLEN_MEETS` $m$, `TEMP_ALLEN_OVERLAPS` $o$, `TEMP_ALLEN_STARTS` $s$, `TEMP_ALLEN_DURING` $d$, `TEMP_ALLEN_FINISHES` $f$, `TEMP_ALLEN_EQUALS` $=$, and all 6 exact inverse relations `TEMP_ALLEN_AFTER_INV`, `TEMP_ALLEN_MET_BY_INV`, `TEMP_ALLEN_CONTAINS_INV`, etc.).
-* **`928–959` (Full RCC-8 Spatial Mereotopology):** Spatial containment and boundary contacts (`SPATIAL_RCC_DISCONNECTED` $DC$, `SPATIAL_RCC_EXT_CONNECTED` $EC$, `SPATIAL_RCC_PARTIAL_OVERLAP` $PO`, `SPATIAL_RCC_TANGENTIAL_PART` $TPP`, `SPATIAL_RCC_NON_TANGENTIAL_PART` $NTPP$, and all inverse relations).
+* **`928–959` (Full RCC-8 Spatial Mereotopology):** Spatial containment and boundary contacts (`SPATIAL_RCC_DISCONNECTED` $DC$, `SPATIAL_RCC_EXT_CONNECTED` $EC$, `SPATIAL_RCC_PARTIAL_OVERLAP` $PO$, `SPATIAL_RCC_TANGENTIAL_PART` $TPP$, `SPATIAL_RCC_NON_TANGENTIAL_PART` $NTPP$, and all inverse relations).
 * **`960–991` (Full Pearl Causal Hierarchy & Counterfactuals):** Causal DAG structural equations (`CAUSAL_L1_ASSOCIATIONAL`, `CAUSAL_L2_INTERVENTIONAL_DO`, `CAUSAL_L3_COUNTERFACTUAL`, `CAUSAL_MECHANISM_LINK`, `CAUSAL_ENABLING_CONDITION`, `CAUSAL_PREVENTIVE_BLOCK`, `CAUSAL_COMMON_CONFOUNDER`, `CAUSAL_COLLIDER_SINK`).
 * **`992–1023` (Linear & Branching Temporal Logics - LTL / CTL):** Model checking verification (`LTL_ALWAYS_GLOBALLY_G`, `LTL_EVENTUALLY_FINALLY_F`, `LTL_NEXT_STATE_X`, `LTL_UNTIL_CONDITION_U`, `CTL_ALL_GLOBALLY_AG`, `CTL_ALL_FINALLY_AF`, `CTL_EXISTS_GLOBALLY_EG`, `MODEL_CHECK_SAFETY_PROPERTY`, `MODEL_CHECK_LIVENESS_PROPERTY`).
 
@@ -379,7 +379,7 @@ $$\boxed{d^* = \arg\min_{d} \left[ \mathcal{L}_{\text{Distortion}}(d) + \lambda 
 
 ### 3.3 Empirical Dimension Sweep Benchmark Results
 
-The automated dimension sweep benchmark suite ([`src/scripts/run_dimension_sweep.py`](file:///c:/Users/PC/Documents/GitHub/Quanta/src/scripts/run_dimension_sweep.py)) swept across $d \in \{64, 128, 256, 512, 1024, 2048\}$ with **10,000 distinct concept propositions** and **1,000,000 SIMD nodes**:
+The automated dimension sweep benchmark suite ([`src/scripts/run_dimension_sweep.py`](src/scripts/run_dimension_sweep.py)) swept across $d \in \{64, 128, 256, 512, 1024, 2048\}$ with **10,000 distinct concept propositions** and **1,000,000 SIMD nodes**:
 
 | Dimension ($d$) | Packed Bytes | Collision Rate ($R_{\text{coll}}$) | Unique CIDs | Joint Entropy $H(V_d)$ | Total Corr. $\text{TC}(V_d)$ | Solver Latency ($\tau_{\text{ASP}}$) | SIMD Throughput (1M nodes) | Host RAM (1M nodes) |
 |---|---|---|---|---|---|---|---|---|
@@ -448,15 +448,15 @@ $$\max_{S \subset \mathcal{F}, \vert{}S\vert{}=256} \left[ \frac{1}{\vert{}S\ver
 
 ### 4.4. ConceptNet 256-D Optimization & 2-Tier Vector Decoding
 
-To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/publication.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/docs/publication.md)):
+To eliminate manual ontology engineering bottlenecks, **Band 3 (Slots 384–511)** and **Band 4 (Slots 512–639)** are populated with **256 globally optimal discriminative dimensions** extracted from **ConceptNet 5.7.0** (see [`docs/publication.md`](docs/publication.md)):
 
 * **Transitive Matrix Expansion**: Depth $d=2$ BLAS sparse matrix 4-valued non-monotonic propagation ($M_{\text{false}} \succ M_{\text{true}} \succ M_{\text{maybe}}$) expanding 34M assertions to **54.42M active assertions** across $\{0, 1, 2, 3\}$ (`13.31M` TRUE, `23.1K` FALSE, `41.09M` MAYBE).
 * **Usage-Weighted Ontological Density Scoring (U-ODS)**: Ranks concept utility by combining direct degree, relation entropy, affordance ratio, DAG centrality, and real-world Zipf corpus frequency:
   $$\text{U-ODS}(c) = \left[ \log_2(1 + \text{deg}(c)) \cdot (1.0 + 1.2 H_{\text{rel}}(c)) \cdot (1.0 + 1.5 \alpha(c)) + 0.5 \min(3, \tau(c)) \right] \cdot \left(1.0 + 2.0 \frac{\text{Zipf}(c)}{8.0}\right)$$
 * **Multi-Way Inverted-Index Hopcroft Partition Solver**: Solves the optimal 256 dimensions across 72,953 unique semantic archetypes using 4-way Gini reduction ($\Delta \text{Gini} = \frac{1}{2}(W^2 - \sum W_v^2)$) and smaller-part Hopcroft subtraction.
 * **Vectorized 4-Valued Realization Decoding Architecture**:
-  1. **Tier 1 (In-Memory SIMD)**: **25,292 singletons (34.67% of archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage)** decode in **$<5\text{ ms}$** via vectorized $4 \times 4$ cost matrix $\mathbf{C}$ over [`data/concept_codebook.csv.gz`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/concept_codebook.csv.gz).
-  2. **Tier 2 (Category Basin Search)**: Specialized technical/taxonomic terms query 403,503 pre-packed quaternary vectors across indexed category clusters in [`data/conceptnet_offline.db`](file:///c:/Users/PC/Documents/GitHub/Quanta/data/conceptnet_offline.db).
+  1. **Tier 1 (In-Memory SIMD)**: **25,292 singletons (34.67% of archetypes, mean Zipf: 3.52, $>95\%$ conversational coverage)** decode in **$<5\text{ ms}$** via vectorized $4 \times 4$ cost matrix $\mathbf{C}$ over [`data/concept_codebook.csv.gz`](data/concept_codebook.csv.gz).
+  2. **Tier 2 (Category Basin Search)**: Specialized technical/taxonomic terms query 403,503 pre-packed quaternary vectors across indexed category clusters in [`data/conceptnet_offline.db`](data/conceptnet_offline.db).
 * **Semantic Bridge Layer (`LEGACY_ONTOLOGY_ALIASES`)**: Reconciles legacy symbolic constants (`TYPE_ANIMATE`, `TYPE_HUMAN`, `TYPE_NATURAL_OBJECT`, `AFFORD_INCISED_CUTTING`) with canonical `CN_Q*` slots, preserving 100% solver test compatibility.
 
 ### 4.5 The Compact S-Expression Grammar Specification
@@ -983,10 +983,10 @@ Prototyping, fine-tuning, and deploying the complete QUANTA neuro-symbolic pipel
 | Pipeline Stage | Execution Target | Memory Allocation | Feasibility & Performance Metrics |
 | :--- | :--- | :--- | :--- |
 | **Pass 1: CPU Heuristic Surface Cataloguer** | Local Workstation (CPU) | Multithreaded Python, Host RAM | **Fully Feasible.** spaCy NER + regex surface pre-scan processes 50,000 words in $<500\text{ ms}$. Zero GPU VRAM used. |
-| **Pass 2: Batched SLM Transduction** | Unsloth GPU Server (`:8888`) | RTX 3070 (~3.0 GB VRAM) | **Fully Feasible.** Runs `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q5_K_M` with native Multi-Token Prediction (`--spec-type draft-mtp --spec-draft-n-max 2`), delivering **45.3–56.0 tok/s** on RTX 3070 with sub-30ms TTFT and strict GPU offload guard. Leaves **>5.0 GB VRAM free** for batch concurrency ($B=16\text{–}32$). |
+| **Pass 2: Batched SLM Transduction** | Unsloth GPU Server (`:8888`) | RTX 3070 (~3.0 GB VRAM) | **Fully Feasible.** Runs `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q5_K_M` with native Multi-Token Prediction (`--spec-type draft-mtp --spec-draft-n-max 2`), delivering **45.3–56.0 tok/s** on RTX 3070 with sub-30ms TTFT and strict GPU offload guard. Leaves **>5.0 GB VRAM free** for batch concurrency ($B \in [16, 32]$). |
 | **Pass 3: Graph Compilation & Proofs** | Local Workstation (CPU) | Multi-core CPU, Host RAM | **Fully Feasible.** ConceptNet 5.7.0/WordNet vector grounding ($>10,000\text{ nodes/s}$) and PyClingo ASP verification ($<5\text{ ms}$ per chunk). |
 | **LoRA Fine-Tuning Adaptation** | Unsloth CLI / Studio | RTX 3070 (8GB VRAM, BF16/FP16) | **Fully Feasible.** 16-bit LoRA ($r=16, \alpha=32$) on Qwen 3.5 2B/4B over 20,000 verified pairs trains in $<20\text{ minutes}$. |
-| **Host-RAM Virtual Page Table** | System RAM / NVMe Cache | 256 KB per 1,000 concept nodes | **Fully Feasible.** 1,000,000 active concept nodes occupy **256 MB RAM**, scanned in **$19.49\text{ ms}$** via AVX-512 SIMD bitwise Hamming search. |
+| **Host-RAM Virtual Page Table** | System RAM / NVMe Cache | 256 KB per 1,000 concept nodes | **Fully Feasible.** 1,000,000 active concept nodes occupy **256 MB RAM**, scanned in **19.49 ms** via AVX-512 SIMD bitwise Hamming search. |
 
 ---
 
@@ -1127,22 +1127,22 @@ quanta/
 
 ## 11. Implementation Roadmap & Master Milestones
 
-The operational master roadmap is governed by [`CONTEXT_EXPANSION_ROADMAP.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md):
+The operational master roadmap is governed by [`CONTEXT_EXPANSION_ROADMAP.md`](CONTEXT_EXPANSION_ROADMAP.md):
 
 * **Section 1: Canonical Node Interning & Global Hash-Consing [Completed]**
-  * Decoupled Band 2 registers from node CIDs; global `CanonicalNodeInterner` achieving $>57\text{--}73\%$ node reuse across chunks.
+  * Decoupled Band 2 registers from node CIDs; global `CanonicalNodeInterner` achieving > 57%–73% node reuse across chunks.
 * **Section 2: Memory-Mapped Lexical Grounding & High-Throughput Ingestion [Completed]**
-  * Zero-copy binary codebook (`data/concept_codebook.bin`) achieving $0.32\text{ µs}$ lookup latency and $>3,100\text{ w/s}$ ingestion.
+  * Zero-copy binary codebook (`data/concept_codebook.bin`) achieving 0.32 µs lookup latency and > 3,100 w/s ingestion.
 * **Section 3: Closed-Loop Round-Trip Lattice Meet Gate & Deep NSM Explication [Completed]**
   * Enforced algebraic meet consistency ($v_{\text{orig}} \sqcap v_{\text{reparsed}}$) and 4-slot NSM schemas, eliminating semantic drift.
 * **Section 4: Query-Driven Spreading-Activation Sub-Graph Attention [Completed]**
-  * AVX-512 SIMD Hamming seed search and energy propagation over 100k+ nodes in $<5.0\text{ ms}$ ($2.63\text{ ms}$ minimum).
+  * AVX-512 SIMD Hamming seed search and energy propagation over 100k+ nodes in sub-5.0 ms (2.63 ms minimum).
 * **Section 5: Dynamic World-State Tracking & Non-Monotonic Belief Revision [Completed]**
   * Fluent state intervals $[t_{\text{start}}, t_{\text{end}})$ and `TEMP_ALLEN_FINISHES` edge synthesis for accurate historical point-in-time WHERE queries.
 * **Section 6: OpenAI-Compatible Reverse Proxy & MCP Server [Completed]**
-  * Reverse proxy (`:8000`) with dialogue token compression ($56.2\%\text{--}85.0\%$), stdio JSON-RPC MCP server, autonomous Unsloth GPU manager (`:8888`), strict CPU offload guard, execution tracer with Mermaid exporters, and empirical grounding ablation suite.
+  * Reverse proxy (`:8000`) with dialogue token compression (56.2%–85.0%), stdio JSON-RPC MCP server, autonomous Unsloth GPU manager (`:8888`), strict CPU offload guard, execution tracer with Mermaid exporters, and empirical grounding ablation suite.
 * **Section 7: Phase 10 Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation) [Open / Next]**
-  * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution. Full specification detailed in [Section 7 of CONTEXT_EXPANSION_ROADMAP.md](file:///c:/Users/PC/Documents/GitHub/Quanta/CONTEXT_EXPANSION_ROADMAP.md#section-7-phase-10-global-knowledge-base-mount-wikipedia--wikidata-pre-compilation-world-knowledge).
+  * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`) for sub-10ms multi-hop trivia resolution. Full specification detailed in [Section 7 of CONTEXT_EXPANSION_ROADMAP.md](CONTEXT_EXPANSION_ROADMAP.md#section-7-phase-10-global-knowledge-base-mount-wikipedia--wikidata-pre-compilation-world-knowledge).
 * **Section 8: Cross-Lingual Multilingual Forward Transduction Adapters [Planned]**
   * Universal non-English ingestion (German, Turkish, Mandarin) compiling into canonical $\Sigma^{1024}$ ASG.
 
