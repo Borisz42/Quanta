@@ -68,6 +68,8 @@ OpenResearch CLI is available via the root PowerShell wrapper `.\orx.ps1`:
 | Load OpenResearch guide | `.\orx.ps1 skill` / `.\orx.ps1 skill <module-name>` |
 | Literature search | `.\orx.ps1 discover keyword "<query>"` / `.\orx.ps1 paper <id>` |
 | QUANTA test runner | `.\scripts\dev.ps1 test` / `pytest` |
+| Context expansion demonstration | `python scripts/demonstrate_context_expansion.py` |
+| GPU manager & tracer tests | `pytest tests/test_unsloth_manager.py tests/test_pipeline_tracer.py` |
 
 ---
 
