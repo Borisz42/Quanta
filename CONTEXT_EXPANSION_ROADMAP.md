@@ -10,7 +10,7 @@
 
 ## Instructions for Future Agent Sessions
 
-This document is organized into **8 independent, modular sections** with numbered task IDs (`Task X.Y`) and checkboxes (`- [ ]`). 
+This document is organized into **9 independent, modular sections** with numbered task IDs (`Task X.Y`) and checkboxes (`- [ ]`). 
 When spinning up a new session, you can prompt the agent:
 > *"Start working on Section 1"* or *"Implement Task 1.1 and Task 1.2"* or *"Run OpenResearch Experiment for Section 2"*.
 
@@ -79,7 +79,8 @@ Each section provides:
 - [Section 5: Dynamic World-State Tracking & Non-Monotonic Belief Revision](#section-5-dynamic-world-state-tracking--non-monotonic-belief-revision-world-model) *(Temporal Invalidation & State Updates)*
 - [Section 6: OpenAI-Compatible Reverse Proxy & Model Context Protocol (MCP) Server](#section-6-openai-compatible-reverse-proxy--model-context-protocol-mcp-server-llm-integration) *(Host LLM Middleware)*
 - [Section 7: Phase 10 Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation)](#section-7-phase-10-global-knowledge-base-mount-wikipedia--wikidata-pre-compilation-world-knowledge) *(Encyclopedic Grounding)*
-- [Section 8: Cross-Lingual Multilingual Forward Transduction Adapters](#section-8-cross-lingual-multilingual-forward-transduction-adapters-universal-pivot) *(Universal Non-English Parsing)*
+- [Section 8: Cross-Lingual Multilingual Forward Transduction Adapters](#section-8-cross-lingual-multilingual-forward-transduction-adapters-universal-pivot) *(Universal Non-English & Hungarian Parsing)*
+- [Section 9: Polyglot Formal Code & Program AST Transduction (Python & Java Semantics)](#section-9-polyglot-formal-code--program-ast-transduction-python--java-semantics) *(Universal Code Graph Coprocessor)*
 
 ---
 
@@ -500,23 +501,94 @@ Serves as the ultimate capstone integration evaluation, unifying Sections 1 thro
 ## Section 8: Cross-Lingual Multilingual Forward Transduction Adapters (Universal Pivot)
 
 ### Context & Architectural Rationale
-[`docs/publication.md` Section 7](docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. However, forward parsing currently relies on English spaCy models and English prompt demonstrations. To serve as a universal language-agnostic context expander, forward transduction must accept queries in German, Turkish, or Mandarin Chinese and compile them into the same canonical $\Sigma^{1024}$ ASG.
+[`docs/publication.md` Section 7](docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. To serve as a universal language-agnostic context expander, forward transduction must accept discourse in **Hungarian** (agglutinative Uralic with front/back vowel harmony, 18+ grammatical cases, and verbal prefixes), **German** (fusional), **Turkish** (agglutinative), and **Mandarin Chinese** (isolating), compiling them into the same canonical $\Sigma^{1024}$ ASG.
+
+Crucially, **language-specific hardcoding is minimized**: rather than maintaining brittle regex morphological parsers or massive static declension tables, QUANTA relies on the **Neural Discourse Transducer** (Qwen-4B / SLM with GBNF grammar constraints and few-shot in-context demonstrations) to normalize inflected surface forms to canonical lemmas and NSM primes directly. In `EntityMatcher`, surface recognition is generalized via boundary-relaxed prefix/stem matching with subword tolerance.
 
 ### Target Files
 - **[NEW]** `src/parser/multilingual_transducer.py`: Multilingual prompt templates and language-specific GBNF extensions.
-- **[MODIFY]** [`src/parser/entity_manifest.py`](src/parser/entity_manifest.py): Support agglutinative case-inflected entity aliases.
-- **[NEW]** `tests/test_multilingual_pipeline.py`: End-to-end cross-lingual translation invariance tests.
+- **[MODIFY]** [`src/parser/entity_manifest.py`](src/parser/entity_manifest.py): Support generalized agglutinative entity alias matching (boundary-relaxed prefix/stem matching tolerant of case inflections without language-specific hardcodings).
+- **[MODIFY]** [`src/realizer/multilingual.py`](src/realizer/multilingual.py): Register `"hu"` / `"hungarian"` adapter; generalize typological constituent order and acoustic harmony heuristic.
+- **[NEW]** `tests/test_hungarian_pipeline.py`: Dedicated Hungarian translation, entity resolution, and round-trip cycle-consistency tests.
+- **[NEW]** `tests/test_multilingual_pipeline.py`: End-to-end cross-lingual translation invariance tests (German, Turkish, Mandarin).
 
 ### Tasks
 - [ ] **Task 8.1: Multilingual S-Expression Transduction Prompts**
-  - Author prompt templates in `src/parser/multilingual_transducer.py` with demonstrations for German, Turkish, and Mandarin.
-  - Ground non-English verbs directly to universal NSM primes (Band 0) and ConceptNet multi-lingual concept IDs (`/c/de/...`, `/c/zh/...`, `/c/tr/...`).
-- [ ] **Task 8.2: Inflected Entity Alias Resolution**
-  - In `src/parser/entity_manifest.py`, extend `EntityMatcher` with lightweight stemming/lemmatization to match agglutinative case suffixes (e.g. Turkish `-da/-de`, `-a/-e`).
-- [ ] **Task 8.3: 🧪 Cross-Lingual Round-Trip Tests (`tests/test_multilingual_pipeline.py`)**
-  - Ingest German paragraph $\to$ compile to ASG $\to$ realize in English.
-  - Assert that canonical slot preservation is $\ge 95\%$ and Hamming distance is 0 on core concepts.
-  - Run: `pytest tests/test_multilingual_pipeline.py -v`.
+  - Author prompt templates in `src/parser/multilingual_transducer.py` with demonstrations for Hungarian, German, Turkish, and Mandarin.
+  - Ground non-English verbs directly to universal NSM primes (Band 0) and ConceptNet multi-lingual concept IDs (`/c/hu/...`, `/c/de/...`, `/c/zh/...`, `/c/tr/...`).
+- [ ] **Task 8.2: Generalized Agglutinative Entity Alias Resolution**
+  - In `src/parser/entity_manifest.py`, extend `EntityMatcher` with boundary-relaxed subword/stem matching to handle agglutinative case declensions (Hungarian *-ban/-ben*, *-nak/-nek*, *-val/-vel*, *-t*; Turkish *-da/-de*, *-a/-e*) without brittle hardcoded morphological tables.
+- [ ] **Task 8.3: 🧪 Hungarian & Multilingual Cross-Lingual Pipeline Tests (`tests/test_hungarian_pipeline.py` & `tests/test_multilingual_pipeline.py`)**
+  - Test Hungarian $\to$ ASG $\to$ English cross-lingual translation.
+  - Test full Hungarian $\to$ ASG $\to$ Hungarian round-trip cycle consistency.
+  - Assert canonical slot preservation is $\ge 95\%$ and Hamming distance is 0 on core concept vectors ($d_H = 0$).
+  - Run: `pytest tests/test_hungarian_pipeline.py tests/test_multilingual_pipeline.py -v`.
+
+---
+
+## Section 9: Polyglot Formal Code & Program AST Transduction (Python & Java Semantics)
+
+### Context & Architectural Rationale
+Software repositories contain thousands of source files where LLM context windows quickly saturate. Furthermore, flat token sequences fail to preserve lexical scopes, call hierarchies, inheritance trees, type signatures, and control-flow graphs (CFGs).
+
+Section 9 establishes a memory-bound, polyglot code transduction coprocessor:
+1. Ingests source code in **Python** (dynamic, functional/OOP, indentation-scoped) and **Java** (static, strictly typed, class/interface-scoped) into content-addressed $\Sigma^{1024}$ ASGs.
+2. Represents code semantics across QUANTA's 8 quaternary bands:
+   - Band 0: Computational NSM Primitives (Execution, State Mutation, Branching, Returns).
+   - Band 1: Structural AST roles (`GRAPH_FUNCTION_DEF`, `GRAPH_CLASS_DEF`, `GRAPH_INTERFACE_DEF`, `GRAPH_CALL_SITE`, `GRAPH_VARIABLE_BIND`, `GRAPH_CONTROL_LOOP`, `GRAPH_BRANCH_COND`, `GRAPH_EXCEPTION_HANDLE`).
+   - Band 2: Formal execution registers & local variable bindings.
+   - Band 5: Lexical scoping & package/class containment (`CONTAINED_IN`, `MEMBER_OF`).
+   - Band 6: Static type signatures (primitives, reference types, generics).
+   - Band 7: Formal CFG transitions, def-use data dependencies, and cross-file call links (`CALLS`, `INHERITS_FROM`, `IMPLEMENTS`, `IMPORTS`, `CFG_NEXT`, `DATA_FLOW_DEF_USE`).
+3. Intersects with `SpreadingActivationRetriever` (Section 4) to allow Host LLMs to query code topologies (e.g. *"Show all callers of processOrder and their exception handlers"*) in $< 5\text{ ms}$ over 100k+ lines of code, compressing prompt token footprint by $> 75\%$.
+4. Provides **bidirectional code realization**: reconstructs valid, executable Python and Java source code from ASG subgraphs via `PolyglotCodeEmitter`.
+
+### Target Files
+- **[NEW]** `src/parser/code_parser_base.py`: Abstract `CodeLanguageAdapter` and AST symbol extraction interfaces.
+- **[MODIFY]** `src/parser/ast_parser.py`: Upgrade Python parser with call-site resolution, type annotations, and module imports.
+- **[NEW]** `src/parser/java_parser.py`: Dedicated Java AST parser (classes, interfaces, methods, static types, fields, control-flow, calls).
+- **[NEW]** `src/parser/polyglot_code_transducer.py`: Unified multi-language entry point dispatching by file extension (`.py`, `.java`).
+- **[MODIFY]** `src/realizer/code_emitter.py`: Expand emitter to support bidirectional code generation for both Python and Java.
+- **[NEW]** `tests/test_polyglot_code_transduction.py`: Comprehensive test suite for Python and Java code understanding and round-trip execution.
+
+### OpenResearch Experiment Definition
+- **Experiment ID**: `exp-009a`
+- **Title**: *Polyglot Formal Code AST Transduction & Spreading-Activation Retrieval*
+- **Hypothesis**: Mapping multi-file Python and Java ASTs to 1024-D quaternary ASG topologies will allow sub-5ms spreading-activation retrieval of callers and type hierarchies while enabling bidirectional round-trip code generation with zero AST syntax loss.
+- **Command**:
+  ```powershell
+  .\orx.ps1 create-experiment quanta --parent exp-006a --title "Polyglot Code Transduction" --description "Python and Java AST-to-ASG coprocessor with call graph retrieval and code emitter"
+  ```
+
+### Tasks
+- [ ] **Task 9.1: Universal Code AST Schema & Abstract Adapter (`src/parser/code_parser_base.py`)**
+  - Define `CodeSymbol`, `CodeScope`, `TypeSignature`, and `ControlFlowEdge` dataclasses.
+  - Implement `CodeLanguageAdapter` ABC with `parse_source()`, `build_call_graph()`, and `extract_type_signatures()`.
+  - Map formal AST constructs to 1024-D slot vectors (Band 1 AST roles, Band 5 scoping, Band 6 type signatures, Band 7 CFG/call relations).
+- [ ] **Task 9.2: Enhanced Python Semantic Parser (`src/parser/ast_parser.py`)**
+  - Extend Python parser to resolve `ast.Call` sites into explicit `CALLS` edges linking caller and callee nodes.
+  - Extract PEP 484 type annotations into Band 6 type slots.
+  - Map `import` and `from ... import` statements into Band 7 `IMPORTS` dependency edges.
+  - Track lexical variable scoping and def-use data-flow chains.
+- [ ] **Task 9.3: Dedicated Java Semantic AST Parser (`src/parser/java_parser.py`)**
+  - Implement lightweight, zero-dependency Java AST parser:
+    - Package and import statements (`IMPORTS`).
+    - Class and Interface declarations (`GRAPH_CLASS_DEF`, `GRAPH_INTERFACE_DEF`).
+    - Modifiers: `public`, `private`, `protected`, `static`, `final`, `abstract`.
+    - Inheritance (`extends` -> `INHERITS_FROM`) and interface implementation (`implements` -> `IMPLEMENTS`).
+    - Method declarations with explicit parameter types, return types, and `throws` exception signatures.
+    - Method invocation sites (`GRAPH_CALL_SITE` -> `CALLS`).
+    - Try-catch-finally exception structures (`GRAPH_EXCEPTION_HANDLE`).
+- [ ] **Task 9.4: Bidirectional Code Generation (`src/realizer/code_emitter.py`)**
+  - Expand `CodeEmitter` into `PolyglotCodeEmitter` supporting both Python and Java.
+  - `PythonCodeEmitter`: Emits idiomatic, executable Python functions, classes, loops, and async defs.
+  - `JavaCodeEmitter`: Emits valid Java classes, interfaces, method headers, typed parameters, and control-flow blocks from ASG topologies.
+  - Implement `format_code_context_for_llm()` to inject compact code signatures and dependency skeletons into Host LLM prompts.
+- [ ] **Task 9.5: 🧪 Polyglot Code Understanding & Round-Trip Tests (`tests/test_polyglot_code_transduction.py`)**
+  - Ingest Python programs $\to$ parse to ASG $\to$ regenerate Python code $\to$ verify execution (e.g. `factorial(5) == 120`).
+  - Ingest Java OOP programs (e.g. `OrderService` with interfaces, dependencies, and exceptions) $\to$ parse to ASG $\to$ regenerate Java code $\to$ assert syntactically valid Java class structure.
+  - Run `SpreadingActivationRetriever` on code graphs: assert sub-5ms retrieval of exact caller-callee and inheritance subgraphs.
+  - Run: `pytest tests/test_polyglot_code_transduction.py -v`.
 
 ---
 
@@ -555,6 +627,9 @@ pytest tests/test_wikipedia_kb.py -v
 pytest tests/test_multihop_reasoning_scale.py -v
 python scripts/run_multihop_benchmark.py --mode offline --samples 50
 
-# Section 8: Multilingual Pipeline
-pytest tests/test_multilingual_pipeline.py -v
+# Section 8: Hungarian & Multilingual Pipeline
+pytest tests/test_hungarian_pipeline.py tests/test_multilingual_pipeline.py -v
+
+# Section 9: Polyglot Code Transduction (Python & Java)
+pytest tests/test_ast_parser.py tests/test_polyglot_code_transduction.py -v
 ```
