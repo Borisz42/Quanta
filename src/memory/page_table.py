@@ -903,6 +903,12 @@ class ActiveCanvas:
         return self.active_nodes
 
 
+    @property
+    def size(self) -> int:
+        """Returns the number of active nodes currently in the canvas."""
+        with self._lock:
+            return len(self._nodes)
+
     def active_memory_bytes(self) -> int:
         """Computes physical quaternary vector footprint in bytes (256 bytes per node)."""
         with self._lock:

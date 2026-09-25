@@ -356,20 +356,40 @@ class GlobalKnowledgeBase:
         with self._lock:
             cur = self._conn.cursor()
             for step_idx, step_prop in enumerate(path):
-                prop_upper = step_prop.strip().upper()
+                prop_clean = step_prop.strip()
+                prop_upper = prop_clean.upper()
+                prop_norm = prop_upper.replace(" ", "_")
                 placeholders = ",".join("?" for _ in current_qids)
                 sql = f"""
                     SELECT DISTINCT object_qid FROM triples
                     WHERE subject_qid IN ({placeholders})
-                      AND (property_name = ? OR property_pid = ?)
+                      AND (property_name = ? OR property_name = ? OR property_pid = ? OR property_pid = ?)
                 """
-                params = list(current_qids) + [prop_upper, prop_upper]
+                params = list(current_qids) + [prop_upper, prop_norm, prop_upper, prop_norm]
                 cur.execute(sql, params)
-                next_qids = [r[0] for r in cur.fetchall()]
-                if not next_qids:
+                next_raw = [r[0] for r in cur.fetchall()]
+                if not next_raw:
                     current_qids = []
                     break
-                current_qids = next_qids
+
+                # Resolve intermediate aliases or labels to QIDs for subsequent hop traversal
+                resolved_qids: List[str] = []
+                for val in next_raw:
+                    if val.upper().startswith("Q") and val[1:].isdigit():
+                        resolved_qids.append(val.upper())
+                    else:
+                        cur.execute("SELECT qid FROM aliases WHERE alias_lower = ? LIMIT 1", (val.lower(),))
+                        ar = cur.fetchone()
+                        if ar:
+                            resolved_qids.append(ar[0])
+                        else:
+                            cur.execute("SELECT qid FROM nodes WHERE label_lower = ? LIMIT 1", (val.lower(),))
+                            nr = cur.fetchone()
+                            if nr:
+                                resolved_qids.append(nr[0])
+                            else:
+                                resolved_qids.append(val)
+                current_qids = list(dict.fromkeys(resolved_qids))
 
             # 3. Reconstruct destination nodes
             result_nodes: List[QuantaNode] = []

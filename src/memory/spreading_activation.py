@@ -490,7 +490,7 @@ class SpreadingActivationRetriever:
         max_depth: int = 2,
         decay: float = 0.7,
         threshold: float = 0.35,
-        allowed_relations: Optional[Set[str]] = None,
+        allowed_relations: Optional[Union[Set[str], Sequence[str], str]] = None,
         bidirectional: bool = True,
     ) -> QuantaGraph:
         """Traverses the PageTable knowledge graph via spreading activation.
@@ -510,13 +510,26 @@ class SpreadingActivationRetriever:
             max_depth: Maximum BFS traversal depth (default 2).
             decay: Activation attenuation factor per hop (gamma, default 0.7).
             threshold: Minimum activation cutoff (theta, default 0.35).
-            allowed_relations: Allowed edge types for spreading (default standard valencies).
+            allowed_relations: Allowed edge types for spreading (default standard valencies,
+                or '*' / 'all' to allow all relations including encyclopedic triples).
             bidirectional: Whether to spread activation along incoming edges.
 
         Returns:
             QuantaGraph containing only admitted nodes and interconnecting edges.
         """
-        relations = allowed_relations or self.DEFAULT_ALLOWED_RELATIONS
+        allow_all = (
+            allowed_relations in ("*", "all")
+            or (isinstance(allowed_relations, (set, list, tuple)) and "*" in allowed_relations)
+        )
+        if allow_all:
+            relations: Set[str] = set()
+        elif isinstance(allowed_relations, str):
+            relations = {allowed_relations}
+        elif allowed_relations is not None:
+            relations = set(allowed_relations)
+        else:
+            relations = self.DEFAULT_ALLOWED_RELATIONS
+
         activations: Dict[str, float] = {}
         queue: deque[Tuple[str, int]] = deque()
         node_cache: Dict[str, Optional[QuantaNode]] = {}
@@ -555,7 +568,7 @@ class SpreadingActivationRetriever:
             # 1. Forward outgoing traversal along allowed relations
             next_level_targets: List[str] = []
             for rel, targets in node.edges.items():
-                if rel in relations:
+                if allow_all or rel in relations:
                     for target_cid in targets:
                         old_act = activations.get(target_cid, 0.0)
                         if next_act > old_act:
@@ -575,7 +588,7 @@ class SpreadingActivationRetriever:
                     rev_edges = page_table.get_reverse_edges(cid)
                     reverse_cids_to_fetch = []
                     for p_cid, rel in rev_edges:
-                        if p_cid != cid and rel in relations:
+                        if p_cid != cid and (allow_all or rel in relations):
                             old_act = activations.get(p_cid, 0.0)
                             if next_act > old_act:
                                 activations[p_cid] = next_act
@@ -605,7 +618,7 @@ class SpreadingActivationRetriever:
                         # Check if any incoming relation matches allowed relations
                         matched_incoming = False
                         for rel, targets in p_edges.items():
-                            if rel in relations and cid in targets:
+                            if (allow_all or rel in relations) and cid in targets:
                                 matched_incoming = True
                                 break
 
