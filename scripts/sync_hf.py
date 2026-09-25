@@ -162,10 +162,13 @@ class QuantaHFSynchronizer:
         # Collect tracked local specs
         specs_to_check = list(ARTIFACT_REGISTRY)
 
-        # Filter if targeted file requested
+        # Filter if targeted file requested (supports comma-separated string or list)
         if target_file:
-            norm_target = normalize_rel_path(target_file)
-            specs_to_check = [s for s in specs_to_check if normalize_rel_path(s.rel_path) == norm_target]
+            if isinstance(target_file, str):
+                targets = {normalize_rel_path(t.strip()) for t in target_file.split(",") if t.strip()}
+            else:
+                targets = {normalize_rel_path(t) for t in target_file}
+            specs_to_check = [s for s in specs_to_check if normalize_rel_path(s.rel_path) in targets]
 
         print(f"[*] Comparing {len(specs_to_check)} tracked artifacts against remote tree...", flush=True)
         checked_paths = set()
@@ -313,19 +316,32 @@ class QuantaHFSynchronizer:
             size_s = format_size(d.local_size)
 
             print(f"[{idx}/{len(upload_candidates)}] Uploading {rel_p} ({size_s})...", flush=True)
-            try:
-                commit_msg = f"QUANTA: upload {rel_p} ({size_s})"
-                self.api.upload_file(
-                    path_or_fileobj=str(loc_p),
-                    path_in_repo=rel_p,
-                    repo_id=self.repo_id,
-                    repo_type=self.repo_type,
-                    commit_message=commit_msg,
-                )
-                print(f"  [OK] Successfully uploaded {rel_p}", flush=True)
-                uploaded_count += 1
-            except Exception as e:
-                print(f"  [!] Failed to upload {rel_p}: {e}", file=sys.stderr, flush=True)
+            max_retries = 3
+            file_uploaded = False
+            file_t0 = time.perf_counter()
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    commit_msg = f"QUANTA: upload {rel_p} ({size_s})"
+                    self.api.upload_file(
+                        path_or_fileobj=str(loc_p),
+                        path_in_repo=rel_p,
+                        repo_id=self.repo_id,
+                        repo_type=self.repo_type,
+                        commit_message=commit_msg,
+                    )
+                    file_elapsed = time.perf_counter() - file_t0
+                    print(f"  [OK] Successfully uploaded {rel_p} in {file_elapsed:.1f}s", flush=True)
+                    uploaded_count += 1
+                    file_uploaded = True
+                    break
+                except Exception as e:
+                    if attempt < max_retries:
+                        backoff = 3 ** attempt
+                        print(f"  [!] Upload attempt {attempt}/{max_retries} failed ({e}). Retrying in {backoff}s...", file=sys.stderr, flush=True)
+                        time.sleep(backoff)
+                    else:
+                        print(f"  [!] Failed to upload {rel_p} after {max_retries} attempts: {e}", file=sys.stderr, flush=True)
 
         elapsed = time.perf_counter() - t0
         print(f"\n[*] Upload completed: {uploaded_count}/{len(upload_candidates)} files in {elapsed:.1f}s.")
@@ -414,10 +430,11 @@ def main() -> int:
         help="Simulate synchronization without performing uploads or downloads",
     )
     parser.add_argument(
-        "--file",
+        "--file", "--target", "--artifact",
+        dest="file",
         type=str,
         default=None,
-        help="Target a single specific artifact path (e.g. data/conceptnet_offline.db)",
+        help="Target a single specific artifact path or comma-separated list (e.g. data/wikipedia_quanta.db)",
     )
 
     args = parser.parse_args()

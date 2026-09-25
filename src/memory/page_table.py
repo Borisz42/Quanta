@@ -380,6 +380,7 @@ class PageTable(MutableMapping):
         self.vector_index = SimdHammingIndex()
         self._reverse_edges: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
         self._literal_index: Dict[str, Set[str]] = defaultdict(set)
+        self.global_kb: Optional[Any] = None
 
         # Warm up vector index from existing nodes in database
         self._warmup_index()
@@ -544,6 +545,8 @@ class PageTable(MutableMapping):
             )
             row = cur.fetchone()
             if not row:
+                if self.global_kb is not None:
+                    return self.global_kb.get_entity_by_cid(cid)
                 return None
 
             vector_bytes, anchor_id, literal_str, parent_cid, edges_str = row
@@ -604,7 +607,18 @@ class PageTable(MutableMapping):
                 node._cid_cache = cid
                 nodes_dict[cid] = node
 
+        if self.global_kb is not None:
+            for cid in cids:
+                if cid not in nodes_dict:
+                    fallback_node = self.global_kb.get_entity_by_cid(cid)
+                    if fallback_node is not None:
+                        nodes_dict[cid] = fallback_node
+
         return [nodes_dict.get(cid) for cid in cids]
+
+    def mount_global_kb(self, global_kb: Any):
+        """Mounts a GlobalKnowledgeBase as read-only universal encyclopedic fallback provider."""
+        self.global_kb = global_kb
 
     def has_node(self, cid: str) -> bool:
         """Checks whether a node exists in storage."""

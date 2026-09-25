@@ -124,6 +124,13 @@ REQUIRED_ARTIFACTS: List[ArtifactItem] = [
         "FrameNet semantic roles and valency mappings",
         generator_fn="src/scripts/export_framenet_valency.py",
     ),
+    ArtifactItem(
+        "data/wikipedia_quanta.db",
+        "Offline Databases",
+        "Phase 10 Global Encyclopedic Knowledge Base (4.6M English Wikipedia entities SQLite DB)",
+        generator_fn="scripts/download_english_wikidata.py",
+        is_critical=False,
+    ),
     # 3. Grammars
     ArtifactItem(
         "data/grammar/quanta_asg.gbnf",
