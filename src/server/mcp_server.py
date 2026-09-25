@@ -46,8 +46,9 @@ class MCPServer:
         pipeline: Optional[CognitivePipeline] = None,
         page_table_path: Optional[Union[str, Path]] = None,
         transducer_backend: str = "mock",
+        global_kb: Optional[Any] = None,
     ):
-        """Initializes the MCP Server with an underlying CognitivePipeline."""
+        """Initializes the MCP Server with an underlying CognitivePipeline and optional GlobalKnowledgeBase."""
         if pipeline is not None:
             self.pipeline = pipeline
         else:
@@ -56,6 +57,7 @@ class MCPServer:
                 page_table_path=page_table_path,
             )
 
+        self.global_kb = global_kb
         self._tools = {
             "quanta_ingest_document": self._tool_ingest_document,
             "quanta_query_memory": self._tool_query_memory,
@@ -270,9 +272,24 @@ class MCPServer:
         )
 
         if not context or not context.strip():
+            if self.global_kb is not None:
+                # Query global encyclopedic knowledge base
+                kb_nodes = self.global_kb.lookup_entity(query, limit=3)
+                if kb_nodes:
+                    facts = []
+                    for kn in kb_nodes:
+                        qid = kn.literal.get("qid") if kn.literal else None
+                        lbl = kn.literal.get("label", kn.anchor) if kn.literal else kn.anchor
+                        desc = kn.literal.get("description", "") if kn.literal else ""
+                        triples = self.global_kb.get_triples(subject_qid=qid, limit=8) if qid else []
+                        triple_strs = [f"{t['property_name']}: {t['object_qid']}" for t in triples]
+                        fact_desc = f"- {lbl} ({qid}): {desc}" + (f" | Relations: {', '.join(triple_strs)}" if triple_strs else "")
+                        facts.append(fact_desc)
+                    return "QUANTA Encyclopedic Knowledge Graph:\n" + "\n".join(facts)
+
             # Fallback to direct answerer check
             ans = self.pipeline.answer_query(query)
-            if ans and ans.strip():
+            if ans and ans.strip() and "I do not have sufficient" not in ans and not ans.startswith("The hypothesis"):
                 return f"Direct Graph Fact: {ans.strip()}"
             return f"No active sub-graph memories found matching query: '{query}'."
 
@@ -372,6 +389,16 @@ class MCPServer:
                 row = cur.fetchone()
                 if row:
                     return pt.fetch_node(row[0])
+
+        # 4. Fallback to GlobalKnowledgeBase if available
+        if self.global_kb is not None:
+            if target.upper().startswith("Q") and target[1:].isdigit():
+                kn = self.global_kb.get_entity_by_qid(target.upper())
+                if kn is not None:
+                    return kn
+            kn_list = self.global_kb.lookup_entity(target, limit=1)
+            if kn_list:
+                return kn_list[0]
 
         return None
 

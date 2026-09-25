@@ -144,7 +144,7 @@ class UnslothServerManager:
                 "error": str(exc),
             }
 
-    def is_service_responsive(self, timeout: float = 3.0) -> bool:
+    def is_service_responsive(self, timeout: float = 8.0) -> bool:
         """Checks if the server responds on /v1/models."""
         try:
             with httpx.Client(timeout=timeout) as client:
@@ -155,7 +155,7 @@ class UnslothServerManager:
 
     def ensure_unsloth_service_running(self, timeout: float = 30.0) -> bool:
         """Ensures that the Unsloth server is responsive, launching it in background if down."""
-        if self.is_service_responsive(timeout=3.0):
+        if self.is_service_responsive(timeout=5.0):
             logger.info("Unsloth service is already running on %s", self.base_url)
             return True
 
