@@ -148,6 +148,14 @@ ARTIFACT_REGISTRY: List[ArtifactSpec] = [
         generator_script="src/scripts/export_framenet_valency.py",
         min_size_bytes=5_000,
     ),
+    ArtifactSpec(
+        "data/wikipedia_quanta.db",
+        "Offline Databases",
+        ArtifactCriticality.OPTIONAL,
+        "Phase 10 Global Encyclopedic Knowledge Base (4.6M English Wikipedia entities & 21M triples SQLite DB)",
+        generator_script="scripts/download_english_wikidata.py",
+        min_size_bytes=1_000_000,
+    ),
     # 3. Grammars
     ArtifactSpec(
         "data/grammar/quanta_asg.gbnf",

@@ -246,8 +246,20 @@ def parse_wikidata5m_entry(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
+def format_eta(seconds: float) -> str:
+    """Formats seconds into human-readable hh:mm:ss string."""
+    if seconds < 0 or seconds > 86400 * 30:
+        return "calculating..."
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h:02d}h {m:02d}m {s:02d}s"
+    return f"{m:02d}m {s:02d}s"
+
+
 def download_archive_with_progress(url: str, dest_path: Path):
-    """Downloads a remote file with real-time percentage and speed display."""
+    """Downloads a remote file with real-time percentage, speed, and ETA display."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading %s to %s...", url, dest_path)
 
@@ -257,6 +269,7 @@ def download_archive_with_progress(url: str, dest_path: Path):
         downloaded = 0
         block_size = 1024 * 1024  # 1 MB
         t0 = time.perf_counter()
+        last_log = t0
 
         while True:
             chunk = resp.read(block_size)
@@ -264,11 +277,20 @@ def download_archive_with_progress(url: str, dest_path: Path):
                 break
             out_f.write(chunk)
             downloaded += len(chunk)
-            elapsed = time.perf_counter() - t0
+            now = time.perf_counter()
+            elapsed = now - t0
             speed_mb = (downloaded / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+
             if total_size > 0:
                 pct = (downloaded / total_size) * 100
-                print(f"\rDownloading: {downloaded / (1024*1024):.1f} / {total_size / (1024*1024):.1f} MB ({pct:.1f}%) at {speed_mb:.1f} MB/s...", end="", flush=True)
+                rem_bytes = max(0, total_size - downloaded)
+                eta_sec = (rem_bytes / (1024 * 1024)) / speed_mb if speed_mb > 0 else 0
+                eta_str = format_eta(eta_sec)
+                print(f"\rDownloading Archive: {downloaded / (1024*1024):.1f} / {total_size / (1024*1024):.1f} MB ({pct:.1f}%) at {speed_mb:.1f} MB/s [ETA: {eta_str}]...", end="", flush=True)
+
+                if now - last_log >= 15.0 or downloaded >= total_size:
+                    last_log = now
+                    logger.info("Download: %.1f/%.1f MB (%.1f%%) at %.1f MB/s [ETA: %s]", downloaded / (1024*1024), total_size / (1024*1024), pct, speed_mb, eta_str)
             else:
                 print(f"\rDownloading: {downloaded / (1024*1024):.1f} MB at {speed_mb:.1f} MB/s...", end="", flush=True)
 
@@ -301,7 +323,7 @@ def main():
     parser.add_argument(
         "--keep-archive",
         action="store_true",
-        help="Download and retain the 1.4 GB archive on disk rather than streaming in memory",
+        help="Retain the downloaded 1.4 GB archive on disk after compilation",
     )
     parser.add_argument(
         "--archive-path",
@@ -320,11 +342,15 @@ def main():
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    archive_path = Path(args.archive_path) if args.keep_archive else None
-    if args.keep_archive and not archive_path.exists():
-        download_archive_with_progress(HF_WIKIDATA5M_URL, archive_path)
+    archive_path = Path(args.archive_path)
+    downloaded_temporary = False
 
-    # 1. Stream filtered entities
+    # Download archive first to ensure zero connection interruptions during multi-hour compilation
+    if not archive_path.exists():
+        download_archive_with_progress(HF_WIKIDATA5M_URL, archive_path)
+        downloaded_temporary = not args.keep_archive
+
+    # 1. Stream filtered entities from local archive
     stream = stream_hf_wikidata5m(
         url=HF_WIKIDATA5M_URL,
         max_entities=args.max_entities,
@@ -348,36 +374,70 @@ def main():
 
         stream = tee_stream()
 
-    # 3. Compile directly into SQLite database
+    # 3. Compile directly into SQLite database with ETA tracking
     compiler = WikidataSqliteCompiler()
+    total_expected = args.max_entities or 4_665_331
+    last_log_time = [0.0]
+
     def progress_callback(count: int, elapsed: float):
+        now = time.perf_counter()
         rate = count / elapsed if elapsed > 0 else 0
-        print(f"\rCompiled {count:,} entities in {elapsed:.1f}s ({rate:,.0f} entities/s)...", end="", flush=True)
+        pct = (count / total_expected) * 100 if total_expected > 0 else 0
+        rem_count = max(0, total_expected - count)
+        eta_sec = rem_count / rate if rate > 0 else 0
+        eta_str = format_eta(eta_sec)
+
+        print(
+            f"\rCompiled {count:,}/{total_expected:,} entities ({pct:.1f}%) in {elapsed:.1f}s ({rate:,.0f} ent/s) [ETA: {eta_str}]...",
+            end="",
+            flush=True,
+        )
+
+        # Log periodically every 20 seconds so task logs record clean ETA history
+        if now - last_log_time[0] >= 20.0 or count >= total_expected:
+            last_log_time[0] = now
+            logger.info(
+                "Progress: %d / %d (%.1f%%) | Rate: %.0f ent/s | Elapsed: %.1fs | ETA: %s",
+                count,
+                total_expected,
+                pct,
+                rate,
+                elapsed,
+                eta_str,
+            )
 
     limit_str = f"{args.max_entities:,}" if args.max_entities else "all 4.6M"
     print(f"Streaming and compiling {limit_str} English Wikidata entities into {output_path}...")
-    t0 = time.perf_counter()
 
-    stats = compiler.compile_database(
-        entities=stream,
-        db_path=output_path,
-        batch_size=args.batch_size,
-        progress_callback=progress_callback,
-    )
-    print()
+    try:
+        stats = compiler.compile_database(
+            entities=stream,
+            db_path=output_path,
+            batch_size=args.batch_size,
+            progress_callback=progress_callback,
+        )
+        print()
 
-    elapsed = stats["elapsed_seconds"]
-    size_mb = stats["file_size_bytes"] / (1024 * 1024)
-    print("=" * 70)
-    print(f"English Wikidata Pre-Compilation Complete!")
-    print(f"  Target DB:     {stats['db_path']}")
-    print(f"  Total Nodes:   {stats['total_nodes']:,}")
-    print(f"  Total Aliases: {stats['total_aliases']:,}")
-    print(f"  Total Triples: {stats['total_triples']:,}")
-    print(f"  File Size:     {size_mb:.2f} MB")
-    print(f"  Elapsed Time:  {elapsed:.2f} s")
-    print(f"  Throughput:    {stats['nodes_per_second']:,.0f} nodes/sec")
-    print("=" * 70)
+        elapsed = stats["elapsed_seconds"]
+        size_mb = stats["file_size_bytes"] / (1024 * 1024)
+        print("=" * 70)
+        print(f"English Wikidata Pre-Compilation Complete!")
+        print(f"  Target DB:     {stats['db_path']}")
+        print(f"  Total Nodes:   {stats['total_nodes']:,}")
+        print(f"  Total Aliases: {stats['total_aliases']:,}")
+        print(f"  Total Triples: {stats['total_triples']:,}")
+        print(f"  File Size:     {size_mb:.2f} MB")
+        print(f"  Elapsed Time:  {elapsed:.2f} s")
+        print(f"  Throughput:    {stats['nodes_per_second']:,.0f} nodes/sec")
+        print("=" * 70)
+    finally:
+        # Clean up temporary archive if requested to save disk space
+        if downloaded_temporary and archive_path.exists():
+            logger.info("Cleaning up temporary archive %s to preserve disk space...", archive_path.name)
+            try:
+                archive_path.unlink()
+            except Exception as e:
+                logger.warning("Could not delete temporary archive: %s", e)
 
 
 if __name__ == "__main__":
