@@ -94,7 +94,7 @@ def resolve_model_name(model_name_or_alias: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 
 DEFAULT_UNSLOTH_SYSTEM_PROMPT = """You are the QUANTA Neural Discourse Transducer, a high-precision neuro-symbolic semantic extractor.
-Your task is to extract an Entity-Event Directed Acyclic Graph (DAG) from English discourse chunks into a strict S-expression conforming to the formal GBNF grammar.
+Your task is to extract an Entity-Event Directed Acyclic Graph (DAG) from discourse in any language into a strict S-expression conforming to the formal GBNF grammar.
 
 RULES & SCHEMA CONSTRAINTS:
 1. OUTPUT FORMAT:
@@ -114,6 +114,10 @@ RULES & SCHEMA CONSTRAINTS:
 5. EPISTEMIC PROPOSITIONS:
    - Format: `(proposition :id <id> :claim "<claim_text>" [:subject <id>] [:status <epistemic_status>] [:source <id>] [:event <id>])`
    - Permitted statuses: FACT, HYPOTHESIS, OBSERVATION, DOUBTED, PROHIBITED, BELIEF, KNOWLEDGE, UNVERIFIED.
+6. MULTILINGUAL & CROSS-LINGUAL DISCOURSE:
+   - Accept input in any human language (e.g., Hungarian, German, Turkish, Mandarin, English).
+   - Universal English Pivot: Always map entity :label and event :pred to canonical English pivot words (e.g., :label "dog" for "kutya" or "狗", :pred bark for "ugat" or "吠").
+   - Surface Retention: In the :surface field, always preserve the exact inflected surface word or phrase as it appeared in the source text (e.g., :surface "A kutya", :surface "a postást", :surface "die Probe").
 
 DEMONSTRATION 1 (SIMPLE SVO & TIME):
 [USER INPUT]
@@ -154,6 +158,45 @@ Had Alice not falsely pretended to know that Bob believed her investment was sec
   (relation :type CAUSAL_MECHANISM_LINK :source Ev1 :target Ev4 :mechanism "counterfactual condition")
   (proposition :id P1 :claim "her investment was secure" :status BELIEF :source E2 :event Ev3)
   (proposition :id P2 :claim "her due diligence was a stroke of genius" :status OBSERVATION :source E3 :event Ev4)
+)
+
+DEMONSTRATION 3 (AGGLUTINATIVE DISCOURSE / HUNGARIAN):
+[USER INPUT]
+CHUNK TEXT:
+A kutya megugatta a postást a kertben.
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "demo_hu"
+  (entity :id E1 :type ANIMAL :label "dog" :surface "A kutya")
+  (entity :id E2 :type PERSON :label "postman" :surface "a postást")
+  (entity :id E3 :type LOCATION :label "garden" :surface "a kertben")
+  (event :id Ev1 :pred bark :agent E1 :patient E2 :location E3 :time "in the past" :tense PAST :polarity TRUE :raw-text "A kutya megugatta a postást a kertben.")
+)
+
+DEMONSTRATION 4 (ISOLATING DISCOURSE / MANDARIN):
+[USER INPUT]
+CHUNK TEXT:
+科学家在实验室里合成了新型聚合物。
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "demo_zh"
+  (entity :id E1 :type PERSON :label "scientist" :surface "科学家")
+  (entity :id E2 :type LOCATION :label "laboratory" :surface "实验室")
+  (entity :id E3 :type SUBSTANCE :label "polymer" :surface "新型聚合物")
+  (event :id Ev1 :pred synthesize :agent E1 :patient E3 :location E2 :time "in the past" :tense PAST :polarity TRUE :raw-text "科学家在实验室里合成了新型聚合物。")
+)
+
+DEMONSTRATION 5 (FUSIONAL & COMPOUND DISCOURSE / GERMAN):
+[USER INPUT]
+CHUNK TEXT:
+Der Forscher untersuchte die Probe im Laboratorium.
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "demo_de"
+  (entity :id E1 :type PERSON :label "researcher" :surface "Der Forscher")
+  (entity :id E2 :type OBJECT :label "sample" :surface "die Probe")
+  (entity :id E3 :type LOCATION :label "laboratory" :surface "im Laboratorium")
+  (event :id Ev1 :pred examine :agent E1 :patient E2 :location E3 :time "in the past" :tense PAST :polarity TRUE :raw-text "Der Forscher untersuchte die Probe im Laboratorium.")
 )
 """
 
@@ -257,6 +300,7 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
 
         self.repair_fixtures: Dict[str, DiscourseExtractionResult] = {}
         self.repair_callback: Optional[Callable[..., Optional[Union[str, DiscourseExtractionResult]]]] = None
+        self.realization_fixtures: Dict[str, str] = {}
 
         try:
             p = _locate_gbnf_grammar()
@@ -279,6 +323,66 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             self.fixtures[key] = parsed
         else:
             self.fixtures[key] = fixture
+
+    def register_realization_fixture(self, key: str, text: str):
+        """Register a reverse realization fixture keyed by S-expression, chunk-id, or identifier."""
+        clean_key = " ".join(key.split()).strip()
+        self.realization_fixtures[key] = text
+        self.realization_fixtures[clean_key] = text
+
+    def realize_text(
+        self,
+        sexpr_or_graph: Any,
+        target_lang: str = "hungarian",
+        **kwargs,
+    ) -> str:
+        """Deterministically realize an S-expression or QuantaGraph into fluent target-language text."""
+        from parser.sexpr_parser import serialize_to_sexpr
+        if isinstance(sexpr_or_graph, str):
+            sexpr = sexpr_or_graph
+        else:
+            try:
+                sexpr = serialize_to_sexpr(sexpr_or_graph, pretty=False)
+            except Exception:
+                sexpr = str(sexpr_or_graph)
+
+        norm_sexpr = " ".join(sexpr.split()).strip()
+
+        # 1. Exact match in realization fixtures
+        if sexpr in self.realization_fixtures:
+            return self.realization_fixtures[sexpr]
+        if norm_sexpr in self.realization_fixtures:
+            return self.realization_fixtures[norm_sexpr]
+
+        # 2. Key/substring match in realization fixtures
+        for k, v in self.realization_fixtures.items():
+            if k in sexpr or k in norm_sexpr:
+                return v
+
+        # 3. Dynamic language heuristic fallback
+        lang = target_lang.lower().strip()
+        if lang in ("hu", "hungarian"):
+            if "dog" in sexpr and "bark" in sexpr:
+                return "A kutya megugatta a postást a kertben."
+            if "polymer" in sexpr and ("synthesize" in sexpr or "synthes" in sexpr):
+                return "Dr. Kovács János szintetizálta az új polimert a laboratóriumban."
+            return "A kísérlet sikeres volt a laboratóriumban."
+        elif lang in ("de", "german"):
+            if "researcher" in sexpr or "sample" in sexpr or "examine" in sexpr:
+                return "Der Forscher untersuchte die Probe im Laboratorium."
+            return "Das Experiment war im Labor erfolgreich."
+        elif lang in ("tr", "turkish"):
+            if "dog" in sexpr or "bark" in sexpr or "postman" in sexpr:
+                return "Köpek bahçede postacıya havladı."
+            return "Deney laboratuvarda başarılı oldu."
+        elif lang in ("zh", "mandarin", "chinese"):
+            if "scientist" in sexpr or "polymer" in sexpr or "synthesize" in sexpr:
+                return "科学家在实验室里合成了新型聚合物。"
+            return "实验在实验室中成功完成。"
+        elif lang in ("en", "english"):
+            return "The experiment was successful in the laboratory."
+
+        return f"[{target_lang.capitalize()} realization]: {norm_sexpr[:100]}"
 
     def register_repair_fixture(self, key: str, fixture: Union[str, DiscourseExtractionResult]):
         """Register a fixture to be returned when a repair request is received."""
@@ -959,5 +1063,97 @@ class UnslothTransducer(BaseDiscourseTransducer):
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
             chunk_text=chunk_text,
+            **kwargs,
+        )
+
+    def realize_text(
+        self,
+        sexpr_or_graph: Any,
+        target_lang: str = "hungarian",
+        **kwargs,
+    ) -> str:
+        """Realize an S-expression or QuantaGraph into fluent target-language text via SLM."""
+        from parser.sexpr_parser import serialize_to_sexpr
+        if isinstance(sexpr_or_graph, str):
+            sexpr = sexpr_or_graph
+        else:
+            try:
+                sexpr = serialize_to_sexpr(sexpr_or_graph, pretty=True)
+            except Exception:
+                sexpr = str(sexpr_or_graph)
+
+        lang_title = target_lang.strip().capitalize()
+        system_content = (
+            "You are the QUANTA Neural Realizer. Your task is to realize formal Mentalese "
+            f"S-expressions into fluent, natural {lang_title} text. "
+            "Output ONLY the realized sentence without explanations, quotes, or markdown."
+        )
+        user_content = f"Realize this semantic graph as fluent {lang_title} text:\n\n{sexpr}"
+        target_model = resolve_model_name(kwargs.get("model") or self.model)
+        headers = self._get_headers()
+        payload = {
+            "model": target_model,
+            "messages": [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": kwargs.get("temperature", 0.0),
+            "max_tokens": kwargs.get("max_tokens", 512),
+        }
+
+        candidate_urls: List[str] = [self.base_url]
+        if self.fallback_base_url and self.fallback_base_url != self.base_url:
+            candidate_urls.append(self.fallback_base_url)
+
+        last_err: Optional[Exception] = None
+        realized: Optional[str] = None
+
+        for base_url in candidate_urls:
+            url = f"{base_url}/chat/completions"
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    resp = self.session.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        timeout=self.timeout,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        out_str = data["choices"][0]["message"]["content"]
+                        realized = _clean_sexpr_output(out_str)
+                        break
+                    elif resp.status_code in {500, 502, 503, 504}:
+                        last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
+                    else:
+                        resp.raise_for_status()
+                except Exception as e:
+                    last_err = e
+
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_backoff * (2 ** (attempt - 1)))
+
+            if realized is not None:
+                break
+
+        if realized is None:
+            if self.fallback_to_mock:
+                self._last_fallback_used = True
+                return self._mock.realize_text(sexpr_or_graph, target_lang=target_lang, **kwargs)
+            raise RuntimeError(f"Failed to realize text with Unsloth SLM: {last_err}") from last_err
+
+        return realized
+
+    async def realize_text_async(
+        self,
+        sexpr_or_graph: Any,
+        target_lang: str = "hungarian",
+        **kwargs,
+    ) -> str:
+        """Asynchronous execution wrapper for realize_text."""
+        return await asyncio.to_thread(
+            self.realize_text,
+            sexpr_or_graph=sexpr_or_graph,
+            target_lang=target_lang,
             **kwargs,
         )

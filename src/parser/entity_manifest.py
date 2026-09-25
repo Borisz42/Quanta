@@ -685,22 +685,42 @@ class ActiveEntityManifest:
 
 
 
+def _normalize_diacritics(s: str) -> str:
+    """Decompose and strip combining diacritical marks across all Unicode scripts."""
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", s.lower())
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 class EntityMatcher:
     """Sub-millisecond regex / Trie matcher for pre-scanning chunk surface text.
     
     Compiles known aliases into an optimized word-boundary pattern,
     ignoring common pronouns to avoid false-positive dormant resurrection.
+    Supports language-agnostic prefix, Levenshtein, and character n-gram
+    matching to handle agglutinative and inflected forms without language-specific rules.
     """
 
-    def __init__(self, ignored_tokens: Optional[Set[str]] = None):
+    def __init__(
+        self,
+        ignored_tokens: Optional[Set[str]] = None,
+        enable_fuzzy: bool = True,
+        fuzzy_threshold: float = 0.70,
+        min_prefix_len: int = 3,
+    ):
         self.ignored_tokens = set(ignored_tokens or PRE_SCAN_IGNORED_TOKENS)
+        self.enable_fuzzy = enable_fuzzy
+        self.fuzzy_threshold = fuzzy_threshold
+        self.min_prefix_len = min_prefix_len
         self._alias_to_ids: Dict[str, Set[str]] = {}
+        self._prefix_to_aliases: Dict[str, List[Tuple[str, str, Set[str]]]] = {}
         self._compiled_regex: Optional[re.Pattern] = None
         self._dirty: bool = True
 
     def build_index(self, alias_to_ids_map: Dict[str, List[str]]):
         """Rebuild matcher index from an alias-to-canonical-IDs map."""
         self._alias_to_ids.clear()
+        self._prefix_to_aliases.clear()
         for alias, ids in alias_to_ids_map.items():
             clean = alias.strip()
             if not clean:
@@ -709,6 +729,11 @@ class EntityMatcher:
             if lower in self.ignored_tokens or len(lower) < 2:
                 continue
             self._alias_to_ids.setdefault(lower, set()).update(ids)
+
+            norm = _normalize_diacritics(clean)
+            if len(norm) >= self.min_prefix_len:
+                pfx = norm[:self.min_prefix_len]
+                self._prefix_to_aliases.setdefault(pfx, []).append((norm, lower, self._alias_to_ids[lower]))
 
         self._dirty = True
 
@@ -726,8 +751,51 @@ class EntityMatcher:
         self._compiled_regex = re.compile(pattern_str, re.IGNORECASE)
         self._dirty = False
 
-    def match_chunk(self, chunk_text: str) -> Dict[str, Set[str]]:
+    @staticmethod
+    def _ngram_similarity(s1: str, s2: str, n: int = 2) -> float:
+        """Compute character n-gram Dice similarity coefficient."""
+        if s1 == s2:
+            return 1.0
+        if len(s1) < n or len(s2) < n:
+            return 1.0 if s1 == s2 else 0.0
+        ng1 = [s1[i : i + n] for i in range(len(s1) - n + 1)]
+        ng2 = [s2[i : i + n] for i in range(len(s2) - n + 1)]
+        from collections import Counter
+        c1 = Counter(ng1)
+        c2 = Counter(ng2)
+        common = sum((c1 & c2).values())
+        return (2.0 * common) / (len(ng1) + len(ng2))
+
+    @staticmethod
+    def _levenshtein_similarity(s1: str, s2: str) -> float:
+        """Compute normalized Levenshtein edit distance similarity in [0.0, 1.0]."""
+        if s1 == s2:
+            return 1.0
+        m, n = len(s1), len(s2)
+        if m == 0 or n == 0:
+            return 0.0
+        if m < n:
+            s1, s2 = s2, s1
+            m, n = n, m
+        previous_row = list(range(n + 1))
+        for i, c1 in enumerate(s1):
+            current_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                insertions = previous_row[j + 1] + 1
+                deletions = current_row[j] + 1
+                substitutions = previous_row[j] + (c1 != c2)
+                current_row.append(min(insertions, deletions, substitutions))
+            previous_row = current_row
+        dist = previous_row[-1]
+        return max(0.0, 1.0 - (dist / max(m, n)))
+
+    def match_chunk(self, chunk_text: str, fuzzy: Optional[bool] = None) -> Dict[str, Set[str]]:
         """Scan chunk text for registered entity aliases.
+        
+        Performs sub-millisecond exact regex boundary matching first.
+        If fuzzy is True (or default self.enable_fuzzy), performs language-agnostic
+        prefix and character n-gram / Levenshtein matching to catch inflected,
+        agglutinated, or compound surface forms without language-specific suffix tables.
         
         Returns:
             Dictionary mapping canonical_id -> set of matched surface alias strings.
@@ -735,15 +803,62 @@ class EntityMatcher:
         if self._dirty:
             self._compile_pattern()
 
-        if not self._compiled_regex or not chunk_text:
+        if not chunk_text:
             return {}
 
         matches: Dict[str, Set[str]] = {}
-        for m in self._compiled_regex.finditer(chunk_text):
-            matched_str = m.group(0)
-            canonical_ids = self._alias_to_ids.get(matched_str.lower(), set())
-            for cid in canonical_ids:
-                matches.setdefault(cid, set()).add(matched_str)
+        exact_matched_tokens: Set[str] = set()
+
+        # 1. Exact regex boundary match (< 0.1 ms)
+        if self._compiled_regex:
+            for m in self._compiled_regex.finditer(chunk_text):
+                matched_str = m.group(0)
+                exact_matched_tokens.add(matched_str.lower())
+                canonical_ids = self._alias_to_ids.get(matched_str.lower(), set())
+                for cid in canonical_ids:
+                    matches.setdefault(cid, set()).add(matched_str)
+
+        # 2. Language-agnostic fuzzy/prefix matching for agglutinative/inflected forms
+        do_fuzzy = self.enable_fuzzy if fuzzy is None else fuzzy
+        if do_fuzzy and self._prefix_to_aliases:
+            tokens = re.findall(r"[\w\u00C0-\u024F\u1E00-\u1EFF]+", chunk_text)
+            for tok in tokens:
+                tok_clean = tok.strip()
+                tok_low = tok_clean.lower()
+                if tok_low in exact_matched_tokens or tok_low in self.ignored_tokens or len(tok_low) < self.min_prefix_len:
+                    continue
+
+                norm_tok = _normalize_diacritics(tok_clean)
+                if len(norm_tok) < self.min_prefix_len:
+                    continue
+
+                pfx = norm_tok[:self.min_prefix_len]
+                candidates = self._prefix_to_aliases.get(pfx)
+                if not candidates:
+                    continue
+
+                for norm_alias, alias_low, canonical_ids in candidates:
+                    # A. Prefix match (agglutinative suffixes: e.g. kutya -> kutyát, kutyának, kutyával)
+                    if norm_tok.startswith(norm_alias):
+                        diff_len = len(norm_tok) - len(norm_alias)
+                        if diff_len <= 6:
+                            for cid in canonical_ids:
+                                matches.setdefault(cid, set()).add(tok_clean)
+                            continue
+
+                    # B. Levenshtein edit distance & character n-gram overlap
+                    if abs(len(norm_tok) - len(norm_alias)) <= 4:
+                        lev_sim = self._levenshtein_similarity(norm_tok, norm_alias)
+                        if lev_sim >= self.fuzzy_threshold:
+                            for cid in canonical_ids:
+                                matches.setdefault(cid, set()).add(tok_clean)
+                            continue
+
+                        ngram_sim = self._ngram_similarity(norm_tok, norm_alias, n=2)
+                        if ngram_sim >= self.fuzzy_threshold:
+                            for cid in canonical_ids:
+                                matches.setdefault(cid, set()).add(tok_clean)
+                            continue
 
         return matches
 

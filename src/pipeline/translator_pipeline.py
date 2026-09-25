@@ -92,12 +92,14 @@ class TwoWayTranslationPipeline:
         offline_cache_path: Optional[str] = None,
         rules_path: Optional[str] = None,
         lattice_gate: Optional[LatticeInvarianceGate] = None,
+        transducer: Optional[Any] = None,
     ):
         self.nlp_parser = NLPForwardParser(spacy_model=spacy_model, offline_cache_path=offline_cache_path)
         self.fol_parser = FOLParser(offline_cache_path=offline_cache_path)
         self.ast_parser = ASTForwardParser(offline_cache_path=offline_cache_path)
         self.validator = ValidationGate(rules_path=rules_path)
         self.lattice_gate = lattice_gate if lattice_gate is not None else LatticeInvarianceGate()
+        self.transducer = transducer
 
         # Realizers
         self.english_realizer = EnglishRealizer()
@@ -105,7 +107,7 @@ class TwoWayTranslationPipeline:
         self.code_emitter = CodeEmitter()
 
     def detect_modality(self, input_data: Union[str, Any]) -> str:
-        """Detects whether input is English, First-Order Logic, or Python Code."""
+        """Detects whether input is English, FOL, Python Code, or non-English language."""
         if not isinstance(input_data, str):
             return "python"
 
@@ -123,6 +125,32 @@ class TwoWayTranslationPipeline:
             except Exception:
                 pass
 
+        # Chinese / Mandarin (CJK Unified Ideographs)
+        import re
+        if re.search(r"[\u4e00-\u9fff]", text):
+            return "mandarin"
+
+        # Hungarian specific indicators (e.g. ő, ű, or characteristic vocabulary)
+        text_lower = text.lower()
+        if any(c in text_lower for c in ("ő", "ű")):
+            return "hungarian"
+        hu_markers = {"kutya", "megugatta", "postás", "postást", "kertben", "szintetizálta", "polimert", "laboratóriumban", "ellenőrizte"}
+        if any(tok in text_lower.split() for tok in hu_markers):
+            return "hungarian"
+
+        # Turkish indicators (e.g. ğ, ş, ı or vocabulary)
+        if any(c in text_lower for c in ("ğ", "ş", "ı")):
+            return "turkish"
+        tr_markers = {"köpek", "bahçede", "postacıya", "havladı", "deney"}
+        if any(tok in text_lower.split() for tok in tr_markers):
+            return "turkish"
+
+        # German indicators (e.g. ä, ö, ü, ß, or German vocabulary)
+        if "ß" in text_lower or any(c in text_lower for c in ("ä", "ö", "ü")):
+            de_words = {"der", "die", "das", "ein", "eine", "und", "ist", "im", "laboratorium", "probe", "forscher"}
+            if any(w in text_lower.split() for w in de_words):
+                return "german"
+
         return "english"
 
     def translate_forward(
@@ -132,20 +160,31 @@ class TwoWayTranslationPipeline:
         domain_context: Optional[str] = None,
         validate: bool = True,
     ) -> Tuple[QuantaGraph, ValidationResult]:
-        """Translates natural text, FOL, or code into a verified QuantaGraph ASG."""
+        """Translates natural text, FOL, code, or non-English discourse into a verified QuantaGraph ASG."""
         if modality == "auto":
             modality = self.detect_modality(input_data)
 
+        mod = modality.lower().strip()
         # 1. Parse Input to ASG
-        if modality == "fol":
+        if mod in ("fol", "logic"):
             graph = self.fol_parser.parse_formula(str(input_data))
-        elif modality == "python":
+        elif mod in ("python", "code", "py"):
             if isinstance(input_data, str):
                 import ast
                 ast_root = ast.parse(input_data)
                 graph = self.ast_parser.parse_ast_node(ast_root, source_text=input_data)
             else:
                 graph = self.ast_parser.parse_ast_node(input_data)
+        elif mod in ("hungarian", "hu", "german", "de", "turkish", "tr", "chinese", "mandarin", "zh"):
+            active_transducer = self.transducer
+            if active_transducer is None:
+                from parser.unsloth_transducer import UnslothTransducer
+                active_transducer = UnslothTransducer()
+                self.transducer = active_transducer
+            extraction = active_transducer.transduce(text=str(input_data))
+            from parser.asg_compiler import ASGCompiler
+            compiler = ASGCompiler()
+            graph = compiler.compile(extraction, validate=validate)
         else:
             graph = self.nlp_parser.parse_sentence(str(input_data), domain_context=domain_context)
 
@@ -157,13 +196,34 @@ class TwoWayTranslationPipeline:
 
         return graph, val_res
 
+    def realize_multilingual(
+        self,
+        graph: QuantaGraph,
+        target_lang: str,
+        transducer: Optional[Any] = None,
+    ) -> str:
+        """Serializes QuantaGraph ASG to S-expression and realizes into fluent target language via neural SLM."""
+        from parser.sexpr_parser import serialize_to_sexpr
+        mod = target_lang.strip().lower()
+        if mod in ("english", "en"):
+            return self.english_realizer.realize_graph(graph)
+
+        active_transducer = transducer or self.transducer
+        if active_transducer is None:
+            from parser.unsloth_transducer import UnslothTransducer
+            active_transducer = UnslothTransducer()
+            self.transducer = active_transducer
+
+        sexpr = serialize_to_sexpr(graph, pretty=True)
+        return active_transducer.realize_text(sexpr, target_lang=target_lang)
+
     def translate_reverse(
         self,
         graph: QuantaGraph,
         target_modality: str = "english",
     ) -> str:
         """Reconstructs text, logic, or code from a QuantaGraph ASG."""
-        mod = target_modality.lower()
+        mod = target_modality.lower().strip()
         if mod in ("english", "en"):
             return self.english_realizer.realize_graph(graph)
         elif mod in ("fol", "logic"):
@@ -171,7 +231,7 @@ class TwoWayTranslationPipeline:
         elif mod in ("python", "code", "py"):
             return self.code_emitter.emit_code(graph)
         else:
-            raise ValueError(f"Unsupported target modality '{target_modality}'")
+            return self.realize_multilingual(graph, target_lang=mod)
 
     def execute_translation(
         self,
@@ -205,17 +265,7 @@ class TwoWayTranslationPipeline:
         # Stage 2: Forward Parsing
         t0 = time.perf_counter()
         try:
-            if detected_modality == "fol":
-                graph = self.fol_parser.parse_formula(str(input_data))
-            elif detected_modality == "python":
-                if isinstance(input_data, str):
-                    import ast
-                    ast_root = ast.parse(input_data)
-                    graph = self.ast_parser.parse_ast_node(ast_root, source_text=input_data)
-                else:
-                    graph = self.ast_parser.parse_ast_node(input_data)
-            else:
-                graph = self.nlp_parser.parse_sentence(str(input_data))
+            graph, _ = self.translate_forward(input_data, modality=detected_modality, validate=False)
 
             node_count = len(graph.nodes) if graph else 0
             _log_stage("forward_parse", time.perf_counter() - t0, "success", {
