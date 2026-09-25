@@ -218,8 +218,10 @@ HU_WORKLOAD_C_SEXPRS: Dict[str, str] = {
   (entity :id E12 :type ORGANIZATION :label "Industrial Safety Authority" :surface "Ipari Biztonsági Hatóság")
   (entity :id E2 :type SUBSTANCE :label "fluoropolymer matrix" :surface ("polimer" "fluoropolimer"))
   (entity :id E13 :type APPLICATION :label "open combustion engines and consumer goods" :surface "nyílt égésterű hajtóművekben és lakossági fogyasztási cikkekben")
+  (event :id Ev8a :pred supervise :agent E11 :patient E2 :time "experimental phase close" :tense PAST :polarity TRUE :raw-text "A kísérleti fázis zárásaként az Országos Atomenergia Hivatal és az Ipari Biztonsági Hatóság szigorú hatósági felügyeletet gyakorolt.")
   (event :id Ev8 :pred regulate :agent E11 :patient E2 :time "mandatory regulations" :tense PAST :polarity TRUE :raw-text "A hatósági ellenőrök részletes kötelező biztonsági előírásokat határoztak meg a polimer ipari gyártására és szállítására.")
-  (event :id Ev9 :pred prohibit :agent E11 :patient E2 :theme E13 :time "strictly" :tense PAST :polarity FALSE :raw-text "A hatóság szigorúan megtiltotta a polimer alkalmazását nyílt égésterű hajtóművekben és lakossági fogyasztási cikkekben a biztonsági kockázatok elkerülésére.")
+  (event :id Ev9 :pred prohibit :agent E12 :patient E2 :theme E13 :time "strictly" :tense PAST :polarity FALSE :raw-text "A hatóság szigorúan megtiltotta a polimer alkalmazását nyílt égésterű hajtóművekben és lakossági fogyasztási cikkekben a biztonsági kockázatok elkerülésére.")
+  (relation :type TEMP_ALLEN_MEETS :source Ev8a :target Ev8)
   (relation :type TEMP_ALLEN_MEETS :source Ev8 :target Ev9)
   (relation :type TEMP_ALLEN_DURING :source Ev9 :target Ev9)
 )""",
@@ -823,8 +825,8 @@ def run_demonstration(backend_mode: str = "auto"):
 
     multi_q = "Compare the final outcomes of Order 1042 and Order 1043 in the Java saga."
     t0_ret = time.perf_counter()
-    multi_ctx_1 = pipeline.retrieve_context("Order 1042 status FULFILLED", format="english", max_tokens=100)
-    multi_ctx_2 = pipeline.retrieve_context("Order 1043 status CANCELLED", format="english", max_tokens=100)
+    multi_ctx_1 = pipeline.retrieve_context("Order 1042 status FULFILLED", format="english", max_tokens=180)
+    multi_ctx_2 = pipeline.retrieve_context("Order 1043 status CANCELLED", format="english", max_tokens=180)
     t_multi_ret = (time.perf_counter() - t0_ret) * 1000.0
 
     # Deduplicate overlapping sentences between multi-hop branches
@@ -977,7 +979,7 @@ def run_demonstration(backend_mode: str = "auto"):
             "Melyik hatóságok határozták meg a biztonsági előírásokat a szegedi lézeres tesztek után, és milyen konkrét területeken tiltották meg szigorúan a polimer felhasználását?",
             "Az Országos Atomenergia Hivatal és az Ipari Biztonsági Hatóság határozta meg a kötelező biztonsági előírásokat, és szigorúan megtiltotta a polimer alkalmazását nyílt égésterű hajtóművekben, valamint lakossági fogyasztási cikkekben.",
             "Országos Atomenergia Hivatal Ipari Biztonsági Hatóság kötelező biztonsági előírásokat szigorúan megtiltotta nyílt égésterű hajtóművekben lakossági fogyasztási cikkekben",
-            ["atomenergia", "biztonsági", "oah"],
+            ["atomenergia", "oah", "ipari biztonsági", "hatóság"],
             ["nyílt égésterű", "hajtómű", "lakossági", "tilt"],
             "Az Országos Atomenergia Hivatal és az Ipari Biztonsági Hatóság határozta meg a biztonsági előírásokat, és szigorúan megtiltotta a polimer alkalmazását nyílt égésterű hajtóművekben és lakossági fogyasztási cikkekben.",
         ),
@@ -986,8 +988,8 @@ def run_demonstration(backend_mode: str = "auto"):
     hu_query_latencies = []
     for label, q_hu, grounded_reference, search_hint, exp_toks_1, exp_toks_2, fallback_hu_ans in hu_multi_queries:
         t0 = time.perf_counter()
-        combined_hu_query = f"{q_hu} {search_hint}"
-        ctx_hu = pipeline.retrieve_context(combined_hu_query, format="english", max_tokens=260)
+        # Query-driven spreading activation using natural question
+        ctx_hu = pipeline.retrieve_context(q_hu, format="english", max_tokens=260)
         if not ctx_hu or len(ctx_hu.strip()) < 20:
             # Fallback spreading activation using salient search hints
             ctx_hu = pipeline.retrieve_context(search_hint, format="english", max_tokens=260)
@@ -1071,8 +1073,13 @@ def run_demonstration(backend_mode: str = "auto"):
             quanta_hu_t_s = 0.25
             quanta_hu_tps = 55.0
 
+        has_negative_assertion = any(
+            neg in quanta_hu_ans.lower()
+            for neg in ["nem nevezi meg", "nem említi", "nem tartalmaz", "nem határozza meg konkrétan"]
+        )
         is_quanta_hu_ok = (
-            any(t in quanta_hu_ans.lower() for t in exp_toks_1)
+            not has_negative_assertion
+            and any(t in quanta_hu_ans.lower() for t in exp_toks_1)
             and any(t in quanta_hu_ans.lower() for t in exp_toks_2)
         )
 

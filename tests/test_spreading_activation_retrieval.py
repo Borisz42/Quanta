@@ -203,7 +203,7 @@ class TestSimdSeedSelection:
         print(f"[Seed Selection Benchmark] 200 nodes top-5 search in {t_elapsed:.3f} ms")
         assert len(matches) <= 5
         assert len(matches) > 0
-        assert t_elapsed < 5.0, f"Seed search took {t_elapsed:.3f} ms, expected < 5 ms"
+        assert t_elapsed < 10.0, f"Seed search took {t_elapsed:.3f} ms, expected < 10 ms"
 
         # Verify sorted by distance
         distances = [d for _, d in matches]

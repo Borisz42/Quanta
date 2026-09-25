@@ -192,6 +192,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
     app.state.config = cfg
     app.state.pipeline = pipeline
     app.state.stats = stats
+    app.state.ingested_turn_hashes = set()
 
     # -------------------------------------------------------------------------
     # Health & Models Endpoints
@@ -283,21 +284,27 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
             # Ingest dialogue history into CognitivePipeline if dialogue turns exist
             if dialogue_history:
-                # Group dialogue into an ingested narrative
+                # Group dialogue into an ingested narrative, only ingesting turns not previously seen
+                import hashlib
                 history_text_blocks = []
                 for m in dialogue_history:
                     if m.content and m.content.strip():
                         speaker = "Human" if m.role == "user" else "Assistant"
-                        history_text_blocks.append(f"{speaker}: {m.content.strip()}")
-                
-                history_text = "\n\n".join(history_text_blocks)
-                if history_text.strip():
-                    try:
-                        # Ingest into PageTable Merkle DAG
-                        pipeline.process(history_text)
-                        stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                    except Exception as e:
-                        logger.warning("Error during dialogue history ASG ingestion: %s", e)
+                        turn_text = f"{speaker}: {m.content.strip()}"
+                        turn_hash = hashlib.sha256(turn_text.encode("utf-8")).hexdigest()
+                        if turn_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                            history_text_blocks.append(turn_text)
+                            app.state.ingested_turn_hashes.add(turn_hash)
+
+                if history_text_blocks:
+                    history_text = "\n\n".join(history_text_blocks)
+                    if history_text.strip():
+                        try:
+                            # Ingest into PageTable Merkle DAG
+                            pipeline.process(history_text)
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                        except Exception as e:
+                            logger.warning("Error during dialogue history ASG ingestion: %s", e)
 
             # Retrieve active context via spreading activation
             try:

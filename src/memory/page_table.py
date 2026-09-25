@@ -424,11 +424,11 @@ class PageTable(MutableMapping):
     def _warmup_index(self):
         """Loads all stored quaternary vectors into the in-memory SIMD index."""
         cur = self._conn.cursor()
-        cur.execute("SELECT cid, vector_bytes, edges, literal FROM nodes")
+        cur.execute("SELECT cid, vector_bytes, edges, literal, anchor_id FROM nodes")
         rows = cur.fetchall()
         if rows:
             vec_batch = []
-            for cid, vec_bytes, edges_str, lit_str in rows:
+            for cid, vec_bytes, edges_str, lit_str, anchor_id in rows:
                 vec_batch.append((cid, vec_bytes))
                 if edges_str:
                     try:
@@ -445,6 +445,10 @@ class PageTable(MutableMapping):
                             self._index_literal(str(lit), cid)
                     except Exception:
                         pass
+                if anchor_id:
+                    anchor_str = self.interner.get(anchor_id)
+                    if anchor_str:
+                        self._index_literal(str(anchor_str), cid)
             self.vector_index.add_batch(vec_batch)
 
     def get_reverse_edges(self, target_cid: str) -> List[Tuple[str, str]]:
@@ -477,6 +481,8 @@ class PageTable(MutableMapping):
                 self._reverse_edges[t].add((cid, rel))
         if node.literal:
             self._index_literal(str(node.literal), cid)
+        if node.anchor:
+            self._index_literal(str(node.anchor), cid)
 
         with self._lock, self._conn:
             self._conn.execute(
@@ -511,6 +517,8 @@ class PageTable(MutableMapping):
                         self._reverse_edges[t].add((cid, rel))
                 if node.literal:
                     self._index_literal(str(node.literal), cid)
+                if node.anchor:
+                    self._index_literal(str(node.anchor), cid)
 
                 packed_vec = node.vector.to_bytes()
                 anchor_id = self.interner.intern(node.anchor)

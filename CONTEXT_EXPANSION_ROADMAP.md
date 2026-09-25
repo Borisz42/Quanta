@@ -553,6 +553,12 @@ ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: e
   - Measured prompt tokens, latency, generation throughput (tok/s), and factual ground truth verification.
   - Implemented `record_comparative_eval` in `PipelineExecutionTracer`, exporting structured comparison tables to `output/pipeline_execution_trace.md` and Antigravity artifact.
   - Formatted Head-to-Head Comparative Scorecard Table printed directly at run completion.
+- [x] **Task 8.8: Sanity Check, Hub-Node Degree Penalization & Regulatory Deontic Resolution**
+  - Resolved hub-node graph explosion in `SpreadingActivationRetriever.traverse_subgraph` by introducing logarithmic degree penalization ($\gamma_{\text{step}} = \gamma / \log_2(\text{in\_degree} + 1.0)$ for degree $>2$) on thematic edges (`VAL_X2_PATIENT`, `VAL_X1_AGENT`) while preserving direct causal/temporal sequences (`CAUSAL_LEADS_TO`, `TEMP_ALLEN_MEETS`, `CAUSAL_MECHANISM_LINK`).
+  - Purged duplicate sentences by introducing SHA-256 dialogue turn hashing in `QuantaProxyServer` and normalized sentence deduplication (`seen_sentences`) in `_format_english_context`.
+  - Added supervisory event `Ev8a` to `HU_WORKLOAD_C_SEXPRS['hu_ch4_biztonsag']`, linking regulatory authorities `E11` (*Országos Atomenergia Hivatal*) and `E12` (*Ipari Biztonsági Hatóság*).
+  - Removed artificial `search_hint` query cheating; enabled domain token extraction in `_extract_salient_entities` and anchor lemma indexing in `PageTable._literal_index` for $O(1)$ keyword matching.
+  - Hardened verification assertions: Hungarian regulatory query extracts exact authority names within 402 tokens (59.3% reduction vs 987 tokens baseline) and rejects negative assertion denials.
 
 ### Section 8 Verification Scorecard
 
@@ -562,12 +568,13 @@ ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: e
 | **Cross-Lingual Hamming Drift** | $d_H = 0$ on core propositions | **$d_H = 0$ across hu/de/tr/zh vs English** | **PASS** |
 | **Slot Preservation Rate** | $\ge 95\%$ | **$100.0\%$ slot preservation across languages** | **PASS** |
 | **Neural Reverse Realization** | Fluent target-language output from ASG | **Verified across Hungarian, German, Turkish, Mandarin** | **PASS** |
-| **Demonstrator Workload C Ingestion** | Ingest 4 Hungarian technical chapters | **114.3 w/s throughput, 127 active canvas nodes** | **PASS** |
-| **Hungarian Multi-Step Reasoning** | Sub-10ms retrieval & grounded synthesis | **9.584 ms mean latency, 3/3 queries grounded on RTX 3070** | **PASS** |
-| **Head-to-Head Baseline Token Savings** | $\ge 25\%$ prompt token reduction | **31.5% mean reduction (719 -> 493 tokens, up to 44.7%)** | **PASS** |
+| **Demonstrator Workload C Ingestion** | Ingest 4 Hungarian technical chapters | **110.3 w/s throughput, 128 active canvas nodes** | **PASS** |
+| **Hungarian Multi-Step Reasoning** | Sub-10ms retrieval & grounded synthesis | **9.573 ms mean latency, 3/3 queries grounded on RTX 3070** | **PASS** |
+| **Hungarian Part 9.3 Regulatory Deontic** | Exact authority names without ignorance denials | **402 tokens (59.3% save vs 987 base), OAH & IBH factually named** | **PASS** |
+| **Head-to-Head Baseline Token Savings** | $\ge 25\%$ prompt token reduction | **50.6% mean reduction (719 -> 355 tokens, up to 68.1% on Part 9.1)** | **PASS** |
 | **Head-to-Head Factual Accuracy** | Match or exceed raw text baseline accuracy | **Baseline 7/7 (100%) vs QUANTA 7/7 (100%)** | **PASS** |
 | **CI Mock Determinism** | All tests pass offline without GPU server | **17/17 Section 8 tests passed in 9.31s** | **PASS** |
-| **Full Regression Integrity** | Zero regressions on existing test suites | **38/38 unit tests passed in 16.25s** | **PASS** |
+| **Full Regression Integrity** | Zero regressions on existing test suites | **32/32 unit tests passed in 25.94s** | **PASS** |
 
 ---
 

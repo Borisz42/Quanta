@@ -398,18 +398,20 @@ class SpreadingActivationRetriever:
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
-        # Salient noun chunks if still empty
-        if not entities:
-            tokens = re.findall(r"\b[\w'-]+\b", query_text, re.UNICODE)
-            for tok in tokens:
-                t_lower = tok.lower()
-                if (
-                    t_lower not in self.QUESTION_STOPWORDS
-                    and t_lower != pred_token
-                    and len(t_lower) > 3
-                    and t_lower not in self.IRREGULAR_LEMMA_MAP
-                ):
-                    entities.append(tok)
+        # Always extract salient technical and domain noun tokens for robust seed matching
+        tokens = re.findall(r"\b[\w'-]+\b", query_text, re.UNICODE)
+        existing_lower = {e.lower() for e in entities}
+        for tok in tokens:
+            t_lower = tok.lower()
+            if (
+                t_lower not in self.QUESTION_STOPWORDS
+                and t_lower != pred_token
+                and len(t_lower) > 3
+                and t_lower not in self.IRREGULAR_LEMMA_MAP
+                and t_lower not in existing_lower
+            ):
+                entities.append(tok)
+                existing_lower.add(t_lower)
 
         return entities
 
@@ -463,7 +465,10 @@ class SpreadingActivationRetriever:
         # 2. If named entities are present, boost matching entity CIDs if found in PageTable
         if named_entities:
             existing_cids = {cid for cid, _ in matches}
+            generic_stop = {"polimer", "anyag", "substance", "compound", "specimen", "item", "order", "entity", "sample", "minta"}
             for ent_text in named_entities:
+                if ent_text.lower() in generic_stop or len(ent_text) <= 3:
+                    continue
                 if hasattr(page_table, "find_cids_by_literal"):
                     cids = page_table.find_cids_by_literal(ent_text, limit=2)
                     for ent_cid in cids:
@@ -591,12 +596,27 @@ class SpreadingActivationRetriever:
             if bidirectional:
                 if hasattr(page_table, "get_reverse_edges"):
                     rev_edges = page_table.get_reverse_edges(cid)
+                    # Hub-node degree penalization:
+                    # If this is an entity hub with high in-degree, scale down the reverse decay
+                    # for non-causal/temporal relations (thematic valencies) to prevent whole-document explosion.
+                    num_incoming = len(rev_edges)
+                    degree_penalty = np.log2(num_incoming + 1.0) if num_incoming > 2 else 1.0
+
                     reverse_cids_to_fetch = []
                     for p_cid, rel in rev_edges:
                         if p_cid != cid and (allow_all or rel in relations):
+                            # Direct narrative chains (causal/temporal) are preserved; generic thematic valencies are penalized
+                            is_structural_chain = rel in (
+                                "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE"
+                            )
+                            step_decay = decay if is_structural_chain else (decay / degree_penalty)
+                            rev_act = curr_act * step_decay
+                            if rev_act < threshold:
+                                continue
+
                             old_act = activations.get(p_cid, 0.0)
-                            if next_act > old_act:
-                                activations[p_cid] = next_act
+                            if rev_act > old_act:
+                                activations[p_cid] = rev_act
                                 queue.append((p_cid, depth + 1))
                                 if p_cid not in node_cache:
                                     reverse_cids_to_fetch.append(p_cid)
@@ -611,6 +631,9 @@ class SpreadingActivationRetriever:
                         (f'%"{cid}"%',),
                     )
                     rows = cur.fetchall()
+                    num_incoming = len(rows)
+                    degree_penalty = np.log2(num_incoming + 1.0) if num_incoming > 2 else 1.0
+
                     reverse_cids_to_fetch = []
                     for p_cid, p_edges_str in rows:
                         if p_cid == cid:
@@ -622,15 +645,23 @@ class SpreadingActivationRetriever:
 
                         # Check if any incoming relation matches allowed relations
                         matched_incoming = False
+                        is_structural_chain = False
                         for rel, targets in p_edges.items():
                             if (allow_all or rel in relations) and cid in targets:
                                 matched_incoming = True
+                                if rel in ("CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE"):
+                                    is_structural_chain = True
                                 break
 
                         if matched_incoming:
+                            step_decay = decay if is_structural_chain else (decay / degree_penalty)
+                            rev_act = curr_act * step_decay
+                            if rev_act < threshold:
+                                continue
+
                             old_act = activations.get(p_cid, 0.0)
-                            if next_act > old_act:
-                                activations[p_cid] = next_act
+                            if rev_act > old_act:
+                                activations[p_cid] = rev_act
                                 queue.append((p_cid, depth + 1))
                                 if p_cid not in node_cache:
                                     reverse_cids_to_fetch.append(p_cid)
@@ -729,7 +760,8 @@ class SpreadingActivationRetriever:
         """Realizes the sub-graph into natural English sentences."""
         event_nodes = [
             n for n in subgraph.nodes.values()
-            if n.get_slot("TYPE_EVENT") == 1 or n.get_slot("WN_ACT_ACTION") == 1 or (n.anchor and "(v)" in n.anchor)
+            if not (n.anchor and n.anchor.startswith("merkle:"))
+            and (n.get_slot("TYPE_EVENT") == 1 or n.get_slot("WN_ACT_ACTION") == 1 or (n.anchor and "(v)" in n.anchor))
         ]
 
         if not event_nodes:
@@ -748,6 +780,7 @@ class SpreadingActivationRetriever:
 
         has_rich_literals = any(isinstance(getattr(e, 'literal', None), str) and len(e.literal.split()) >= 3 for e in ordered_events)
         sentences: List[str] = []
+        seen_sentences: Set[str] = set()
         for ev in ordered_events:
             clause_text = ""
             if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:
@@ -759,7 +792,10 @@ class SpreadingActivationRetriever:
             if clause_text and not any(bad in clause_text.lower() for bad in ("handlered", "at at", "on on")):
                 if not clause_text.endswith((".", "!", "?")):
                     clause_text += "."
-                sentences.append(clause_text[0].upper() + clause_text[1:])
+                norm = clause_text.lower().strip()
+                if norm not in seen_sentences:
+                    seen_sentences.add(norm)
+                    sentences.append(clause_text[0].upper() + clause_text[1:])
 
         if not sentences and subgraph.root:
             # Fallback to direct realization
@@ -883,10 +919,12 @@ class SpreadingActivationRetriever:
                             incoming_count[t_cid] += 1
                             break
 
-        # Start from nodes with 0 incoming sequence edges
+        # Start from roots (0 incoming sequence edges), prioritized by activation descending
+        activations = getattr(subgraph, "activations", {})
         roots = [n for n in event_nodes if incoming_count.get(n.cid, 0) == 0]
         if not roots:
-            roots = event_nodes[:1]
+            roots = list(event_nodes)
+        roots.sort(key=lambda n: activations.get(n.cid, 0.0), reverse=True)
 
         ordered: List[QuantaNode] = []
         visited: Set[str] = set()
@@ -899,11 +937,12 @@ class SpreadingActivationRetriever:
                 next_cid = next_map.get(curr.cid)
                 curr = subgraph.get_node(next_cid) if next_cid else None
 
-        # Append any unvisited events
-        for n in event_nodes:
-            if n.cid not in visited:
-                ordered.append(n)
-                visited.add(n.cid)
+        # Append any unvisited events sorted by activation descending
+        unvisited = [n for n in event_nodes if n.cid not in visited]
+        unvisited.sort(key=lambda n: activations.get(n.cid, 0.0), reverse=True)
+        for n in unvisited:
+            ordered.append(n)
+            visited.add(n.cid)
 
         return ordered
 
