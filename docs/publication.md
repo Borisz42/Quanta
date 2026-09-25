@@ -523,83 +523,90 @@ To scale beyond localized episodic working context, QUANTA implements a high-thr
 
 In continuous token-based LLMs, multilingual reasoning suffers from **cross-lingual representational drift**: prompt semantics shift across languages due to tokenization fertility disparities and embedding divergence. QUANTA resolves this by treating the discrete quaternary vector space ($\Sigma^{1024}$) and Content-Addressed ASGs as the universal, invariant semantic pivot (*Mentalese*):
 
-$$\text{Source Surface Language } \mathcal{L}_1 \xrightarrow{\text{Forward Parser}} \mathcal{G}_{\text{ASG}} \in \Sigma^{1024} \xrightarrow{\text{Reverse Realizer}} \text{Target Surface Language } \mathcal{L}_2$$
+$$\text{Source } \mathcal{L}_1 \xrightarrow{\text{Neural Transducer (SLM)}} \mathcal{G}_{\text{ASG}} \in \Sigma^{1024} \xrightarrow{\text{Neural Realizer / English Realizer}} \text{Target } \mathcal{L}_2$$
 
-### 7.2 Typological Classification & Morphosyntactic Pipeline
+Crucially, both the forward transduction and reverse realization are performed by the same local Small Language Model (Qwen 3.5 4B, served via Unsloth Desktop). The SLM natively understands dozens of languages and performs morphological analysis, lemmatization, case stripping, and word sense disambiguation without any hand-coded grammar rules or static translation dictionaries.
 
-Natural languages vary fundamentally in how grammatical relationships (tense, aspect, modality, case, agreement) are encoded. The QUANTA Multilingual Realizer organizes generation into three primary typological families:
+### 7.2 Neural Forward Transduction (Any Language $\to$ ASG)
+
+The `UnslothTransducer` accepts discourse in any language the underlying SLM supports. Forward multilingual transduction requires no language-specific code:
 
 ```text
-                          ┌────────────────────────────┐
-                          │   Mentalese ASG (Σ^1024)   │
-                          └─────────────┬──────────────┘
-                                        │
-                 ┌──────────────────────┼──────────────────────┐
-                 ▼                      ▼                      ▼
-      ┌────────────────────┐ ┌────────────────────┐ ┌────────────────────┐
-      │     ISOLATING      │ │   AGGLUTINATIVE    │ │      FUSIONAL      │
-      │ (Analytic Grammar) │ │ (Morpheme Chaining)│ │(Portmanteau Fusing)│
-      └──────────┬─────────┘ └──────────┬─────────┘ └──────────┬─────────┘
-                 │                      │                      │
-                 ▼                      ▼                      ▼
-          Free Particles &      Prefix/Suffix Chains     Fused Case/Gender/
-         Strict Word Order        & Case Suffixes         Tense Inflection
+┌─────────────────────────────────────────────────────────────┐
+│  Source Discourse (any language)                            │
+│  "A kutya kergette a macskát."  (Hungarian)                │
+│  "Ein Hund biss den Briefträger." (German)                 │
+│  "狗咬了邮递员。" (Mandarin)                                  │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  UnslothTransducer (Qwen 3.5 4B via Unsloth Desktop)       │
+│  • Multilingual system prompt with few-shot demonstrations │
+│  • GBNF grammar constrains output to valid S-expressions   │
+│  • LLM handles morphology, lemmatization, case stripping   │
+│  • Entity labels emitted as English pivots                 │
+│    (:label "dog" not :label "kutya")                       │
+└──────────────────────┬──────────────────────────────────────┘
+                       │  S-expression (language-invariant)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  ASGCompiler + ConceptNet 5.7.0 (mmap-backed)              │
+│  • Multilingual concept grounding:                         │
+│    /c/hu/kutya → /c/en/dog edges exist natively            │
+│  • Band 0–7 slot assignment (language-invariant)           │
+│  • Content-addressing (CID hashing)                        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │  QuantaGraph (Σ^1024)
+                       ▼
+              Language-invariant ASG
 ```
 
-#### 1. Isolating / Analytic Family
-* **Characteristics:** Minimal to zero bound inflectional morphemes; grammatical relationships and aspect/tense are expressed through free lexical particles and strict constituent word order (typically SVO).
-* **Archetypes:** Mandarin Chinese, Vietnamese, Classical Chinese, analytic English expressions.
-* **Mapping:**
-  * `NSM_ONE=1` $\to$ singular numerical particle / classifier.
-  * `LJB_PU_PAST_TENSE=1` $\to$ aspect particle (`did`, `le 了`, `da 已`).
-  * `LJB_NA_NEGATION=2` $\to$ pre-verbal negative particle (`not`, `bu 不`, `mei 没`).
-  * `GRAPH_QUERY_TARGET=3` $\to$ modal interrogative particle (`maybe`, `ma 吗`).
+The system prompt is extended with multilingual few-shot demonstrations showing how non-English input maps to the same S-expression schema:
 
-#### 2. Agglutinative Family
-* **Characteristics:** Monomorphemic, highly regular affix chains concatenated onto invariable roots; explicit case suffixes for semantic roles; flexible constituent ordering (often SOV / Free Word Order).
-* **Archetypes:** Turkish, Hungarian, Finnish, Swahili, Japanese, Korean, Basque.
-* **Mapping:**
-  * Agent (`VAL_X1_AGENT`) $\to$ Nominative ($\emptyset$).
-  * Patient (`VAL_X2_PATIENT`) $\to$ Accusative (`-t`, `-i`, `-ni`, `-yı`).
-  * Location (`VAL_LOCATION_SLOT`) $\to$ Inessive/Locative (`-ban/-ben`, `-da/-de`).
-  * Destination (`VAL_X3_DESTINATION`) $\to$ Allative/Illative (`-ba/-be`, `-a/-e`, `-ye`).
-  * Instrument (`VAL_X5_INSTRUMENT`) $\to$ Instrumental (`-val/-vel`, `-le/-la`).
-  * Tense & Polarity $\to$ Verb stem suffix concatenation: $\text{Root} + \text{TenseSuffix} + \text{PersonSuffix}$.
+```text
+[USER INPUT]
+CHUNK TEXT:
+A kutya kergette a macskát.
 
-#### 3. Fusional / Inflectional Family
-* **Characteristics:** Portmanteau inflections combining case, number, gender, and definiteness into single indivisible morphemes; stem alternations (ablaut, umlaut); complex agreement systems.
-* **Archetypes:** German, Latin, Spanish, Russian, Sanskrit, Polish, Greek.
-* **Mapping:**
-  * Case agreement computed across Determiner + Adjective + Noun heads.
-  * Fused 3rd-person singular past/present verbal suffixes (e.g. German `-te`, Latin `-avit`).
-
-### 7.3 Polymorphic Adapter Interface
-
-Every language adapter implements the abstract `LanguageAdapter` contract registered in `MultilingualRealizerRegistry`:
-
-```python
-class LanguageAdapter(abc.ABC):
-    @abc.abstractmethod
-    def realize_noun_phrase(self, node: QuantaNode, graph: QuantaGraph, case: Optional[str] = None) -> str:
-        ...
-
-    @abc.abstractmethod
-    def inflect_verb(self, verb_node: QuantaNode, graph: QuantaGraph, is_negated: bool = False, is_uncertain: bool = False) -> str:
-        ...
-
-    @abc.abstractmethod
-    def format_clause(self, subject: Optional[str], verb: str, patient: Optional[str], modifiers: List[str]) -> str:
-        ...
-
-    def realize_graph(self, graph: QuantaGraph) -> str:
-        ...
+[ASSISTANT RESPONSE]
+(graph :chunk-id "hu_demo"
+  (entity :id E1 :type ANIMAL :label "dog" :surface "kutya")
+  (entity :id E2 :type ANIMAL :label "cat" :surface "macskát")
+  (event :id Ev1 :pred chase :agent E1 :patient E2
+         :tense PAST :polarity TRUE
+         :raw-text "A kutya kergette a macskát."))
 ```
 
-### 7.4 Zero Semantic Drift Theorem
+This design scales to any language the SLM supports without per-language engineering effort.
+
+### 7.3 Neural Reverse Realization (ASG $\to$ Any Language)
+
+Realization from ASGs into surface language operates in two modes:
+
+1. **English (deterministic):** The existing `EnglishRealizer` provides fast, rule-based, fully deterministic realization from ASGs to English prose. This is the primary output path and requires no neural inference.
+
+2. **Other languages (neural):** The SLM is given the S-expression and a realization prompt (e.g., *"Realize this semantic graph as fluent Hungarian text"*). The LLM handles morphological synthesis, agreement, constituent ordering, and vowel harmony natively — no hand-coded suffix tables or declension rules are needed.
+
+### 7.4 Typological Classification (Metadata)
+
+Natural languages vary fundamentally in how grammatical relationships are encoded. QUANTA maintains typological metadata via `LanguageConfig`, `MorphologicalType`, and `WordOrder` enums for downstream systems, test infrastructure, and documentation:
+
+| Family | Characteristics | Archetypes |
+|:---|:---|:---|
+| **Isolating** | Free particles, strict word order, minimal bound morphemes | Mandarin, Vietnamese |
+| **Agglutinative** | Regular affix chains, explicit case suffixes, flexible order | Turkish, Hungarian, Finnish, Japanese |
+| **Fusional** | Portmanteau inflections, stem alternations, agreement systems | German, Latin, Russian, Spanish |
+
+These classifications inform prompt construction and test expectations but do **not** drive hand-coded grammar rule engines. All morphological processing is delegated to the neural transducer.
+
+### 7.5 Zero Semantic Drift Theorem
 
 Under the Mentalese pivot, a proposition $\mathcal{P}$ round-tripped across arbitrary languages $\mathcal{L}_1$ and $\mathcal{L}_2$ maintains zero Hamming distance over all canonical semantic slots in Bands 0 through 7:
 
 $$d_H\big(\mathbf{v}(\mathcal{P}_{\mathcal{L}_1}), \mathbf{v}(\mathcal{P}_{\mathcal{L}_2})\big) = 0$$
+
+This invariance holds because the ASG representation is language-invariant: the same proposition parsed from Hungarian, German, or Mandarin produces identical quaternary vectors and content-addressed node identifiers.
 
 ---
 

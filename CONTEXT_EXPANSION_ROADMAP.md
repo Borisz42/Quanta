@@ -498,31 +498,61 @@ Serves as the ultimate capstone integration evaluation, unifying Sections 1 thro
 
 ---
 
-## Section 8: Cross-Lingual Multilingual Forward Transduction Adapters (Universal Pivot)
+## Section 8: Cross-Lingual Multilingual Forward Transduction via Neural Discourse Transducer
 
 ### Context & Architectural Rationale
-[`docs/publication.md` Section 7](docs/publication.md#7-bidirectional-translation-and-typological-multilingual-realization) specifies reverse realization into Isolating, Agglutinative, and Fusional languages. To serve as a universal language-agnostic context expander, forward transduction must accept discourse in **Hungarian** (agglutinative Uralic with front/back vowel harmony, 18+ grammatical cases, and verbal prefixes), **German** (fusional), **Turkish** (agglutinative), and **Mandarin Chinese** (isolating), compiling them into the same canonical $\Sigma^{1024}$ ASG.
+QUANTA's existing `UnslothTransducer` (Qwen 3.5 4B SLM with GBNF grammar-constrained decoding) already understands dozens of languages natively. Multilingual support requires extending the transducer's system prompt with multilingual few-shot demonstrations — **not** building hand-coded morphological analyzers, static translation dictionaries, or per-language suffix tables.
 
-Crucially, **language-specific hardcoding is minimized**: rather than maintaining brittle regex morphological parsers or massive static declension tables, QUANTA relies on the **Neural Discourse Transducer** (Qwen-4B / SLM with GBNF grammar constraints and few-shot in-context demonstrations) to normalize inflected surface forms to canonical lemmas and NSM primes directly. In `EntityMatcher`, surface recognition is generalized via boundary-relaxed prefix/stem matching with subword tolerance.
+ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: edges like `/c/hu/kutya` → `/c/en/dog` and `/c/de/Hund` → `/c/en/dog` exist in the database and are resolved by the existing `MMapConceptGrounder`. For reverse realization into non-English languages, the SLM generates fluent target-language text from S-expressions, handling morphology and agreement natively.
+
+**Design Principle:** Language-specific code belongs **only** in deterministic test fixture mocks (for CI offline determinism). The live pipeline delegates all morphological analysis, lemmatization, case stripping, word sense disambiguation, and surface generation to the neural transducer.
 
 ### Target Files
-- **[NEW]** `src/parser/multilingual_transducer.py`: Multilingual prompt templates and language-specific GBNF extensions.
-- **[MODIFY]** [`src/parser/entity_manifest.py`](src/parser/entity_manifest.py): Support generalized agglutinative entity alias matching (boundary-relaxed prefix/stem matching tolerant of case inflections without language-specific hardcodings).
-- **[MODIFY]** [`src/realizer/multilingual.py`](src/realizer/multilingual.py): Register `"hu"` / `"hungarian"` adapter; generalize typological constituent order and acoustic harmony heuristic.
-- **[NEW]** `tests/test_hungarian_pipeline.py`: Dedicated Hungarian translation, entity resolution, and round-trip cycle-consistency tests.
-- **[NEW]** `tests/test_multilingual_pipeline.py`: End-to-end cross-lingual translation invariance tests (German, Turkish, Mandarin).
+- **[MODIFY]** [`src/parser/unsloth_transducer.py`](src/parser/unsloth_transducer.py): Extend system prompt with multilingual few-shot demonstrations; accept any-language input.
+- **[MODIFY]** [`src/parser/entity_manifest.py`](src/parser/entity_manifest.py): Add language-agnostic fuzzy/prefix entity matching (edit distance, character n-gram overlap) — no language-specific suffix tables.
+- **[NEW]** `tests/test_multilingual_pipeline.py`: End-to-end cross-lingual tests using the neural transducer (with mock fixtures for offline CI).
+- **[NEW]** `tests/test_hungarian_pipeline.py`: Hungarian-specific tests with deterministic mock transducer fixtures.
+
+### OpenResearch Experiment Definition
+- **Experiment ID**: `exp-012a`
+- **Title**: *Neural Multilingual Forward Transduction via Unsloth SLM*
+- **Hypothesis**: Extending the Unsloth transducer's system prompt with multilingual few-shot demonstrations will enable direct forward parsing of Hungarian, German, Turkish, and Mandarin discourse into canonical $\Sigma^{1024}$ ASGs with zero Hamming drift ($d_H = 0$), eliminating the need for language-specific morphological rules or translation dictionaries.
+- **Command**:
+  ```powershell
+  .\orx.ps1 create-experiment quanta --parent exp-011b --title "Neural Multilingual Transduction" --description "SLM-driven multilingual forward parsing with ConceptNet grounding"
+  ```
 
 ### Tasks
-- [ ] **Task 8.1: Multilingual S-Expression Transduction Prompts**
-  - Author prompt templates in `src/parser/multilingual_transducer.py` with demonstrations for Hungarian, German, Turkish, and Mandarin.
-  - Ground non-English verbs directly to universal NSM primes (Band 0) and ConceptNet multi-lingual concept IDs (`/c/hu/...`, `/c/de/...`, `/c/zh/...`, `/c/tr/...`).
-- [ ] **Task 8.2: Generalized Agglutinative Entity Alias Resolution**
-  - In `src/parser/entity_manifest.py`, extend `EntityMatcher` with boundary-relaxed subword/stem matching to handle agglutinative case declensions (Hungarian *-ban/-ben*, *-nak/-nek*, *-val/-vel*, *-t*; Turkish *-da/-de*, *-a/-e*) without brittle hardcoded morphological tables.
-- [ ] **Task 8.3: 🧪 Hungarian & Multilingual Cross-Lingual Pipeline Tests (`tests/test_hungarian_pipeline.py` & `tests/test_multilingual_pipeline.py`)**
-  - Test Hungarian $\to$ ASG $\to$ English cross-lingual translation.
-  - Test full Hungarian $\to$ ASG $\to$ Hungarian round-trip cycle consistency.
-  - Assert canonical slot preservation is $\ge 95\%$ and Hamming distance is 0 on core concept vectors ($d_H = 0$).
+- [ ] **Task 8.1: Multilingual System Prompt Extension**
+  - Extend `DEFAULT_UNSLOTH_SYSTEM_PROMPT` in `src/parser/unsloth_transducer.py` to accept discourse in any language (replace "from English discourse" with "from discourse in any language").
+  - Add 2–3 multilingual few-shot demonstrations: one agglutinative (Hungarian), one isolating (Mandarin), showing how non-English input maps to the same S-expression schema with **English pivot labels** (`:label "dog"` not `:label "kutya"`).
+  - Emit `:surface` fields preserving the original foreign surface form for provenance.
+- [ ] **Task 8.2: Neural Reverse Realization**
+  - Add `realize_multilingual(graph: QuantaGraph, target_lang: str) -> str` in `src/pipeline/translator_pipeline.py`.
+  - Serializes ASG to S-expression, sends to Unsloth SLM with realization prompt (e.g., *"Realize this semantic graph as fluent Hungarian text"*), returns target-language text.
+  - English continues to use the deterministic `EnglishRealizer` (no neural inference needed).
+- [ ] **Task 8.3: Language-Agnostic Fuzzy Entity Matching**
+  - In `src/parser/entity_manifest.py`, extend `EntityMatcher` with character n-gram overlap or Levenshtein distance matching (configurable threshold) to handle agglutinative surface forms without hardcoding language-specific morphological rules.
+  - The LLM handles the primary morphological normalization during transduction; fuzzy matching is a safety net for entity coreference.
+- [ ] **Task 8.4: Mock Fixtures for CI Determinism**
+  - Create deterministic `MockUnslothTransducer` fixtures for Hungarian, German, Turkish, and Mandarin test inputs in `tests/test_multilingual_pipeline.py`.
+  - Hardcoded translations exist **only** inside test fixture files — never in the live pipeline.
+  - Register fixtures via `mock.register_fixture(hungarian_text, hungarian_fixture)` following the existing pattern.
+- [ ] **Task 8.5: 🧪 End-to-End Cross-Lingual Test Suite**
+  - `tests/test_multilingual_pipeline.py`: Forward transduction (hu/de/tr/zh → ASG), cross-lingual translation (Hungarian → English), and cycle consistency.
+  - `tests/test_hungarian_pipeline.py`: Hungarian-specific entity matching, ASG structure verification, and narrative round-trip tests.
+  - Assert canonical slot preservation $\ge 95\%$ and Hamming distance $d_H = 0$ on core concept vectors.
   - Run: `pytest tests/test_hungarian_pipeline.py tests/test_multilingual_pipeline.py -v`.
+
+### Section 8 Verification Scorecard
+
+| Subsystem | Target Requirement | Status |
+|---|---|---|
+| **Multilingual Forward Parse** (hu/de/tr/zh → ASG) | Valid S-expression with correct entities & events | PENDING |
+| **Cross-Lingual Hamming Drift** | $d_H = 0$ on core propositions | PENDING |
+| **Slot Preservation Rate** | $\ge 95\%$ | PENDING |
+| **Neural Reverse Realization** | Fluent target-language output from ASG | PENDING |
+| **CI Mock Determinism** | All tests pass offline without GPU server | PENDING |
 
 ---
 
