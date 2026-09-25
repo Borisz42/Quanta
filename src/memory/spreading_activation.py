@@ -142,6 +142,11 @@ class SpreadingActivationRetriever:
         "can", "could", "would", "should", "will", "has", "have", "had",
         "the", "a", "an", "in", "at", "to", "for", "of", "on", "by", "from",
         "its", "her", "his", "their", "our", "my", "your", "this", "that", "these", "those",
+        # Hungarian question words & functional particles
+        "mi", "mit", "milyen", "melyik", "ki", "kit", "kinek", "kivel", "hol", "hová", "honnan",
+        "mikor", "miért", "hogyan", "volt", "voltak", "lett", "lettek", "van", "vannak",
+        "az", "egy", "és", "vagy", "hogy", "után", "alatt", "előtt", "által", "szerint",
+        "nem", "sem", "meg", "el", "fel", "le", "ki", "be", "át", "rá",
     }
 
     def __init__(
@@ -184,7 +189,7 @@ class SpreadingActivationRetriever:
             QuantaGraph with query targets and thematic valency structure.
         """
         clean_text = query_text.strip().rstrip("?.!")
-        words = re.findall(r"\b[A-Za-z0-9_'-]+\b", clean_text)
+        words = re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)
         words_lower = [w.lower() for w in words]
 
         # 1. Determine question type and target valency slot
@@ -193,19 +198,19 @@ class SpreadingActivationRetriever:
 
         if words_lower:
             first_word = words_lower[0]
-            if first_word == "who":
+            if first_word in ("who", "ki", "kit", "kinek"):
                 target_type = "who"
                 target_valency = "VAL_X1_AGENT"
-            elif first_word == "what":
+            elif first_word in ("what", "mi", "mit", "milyen", "melyik"):
                 target_type = "what"
                 target_valency = "VAL_X2_PATIENT"
-            elif first_word == "where":
+            elif first_word in ("where", "hol", "hová", "honnan"):
                 target_type = "where"
                 target_valency = "VAL_LOCATION_SLOT"
-            elif first_word == "why":
+            elif first_word in ("why", "miért"):
                 target_type = "why"
                 target_valency = "CAUSAL_MECHANISM_LINK"
-            elif first_word == "when":
+            elif first_word in ("when", "mikor"):
                 target_type = "when"
                 target_valency = "TEMP_ALLEN_MEETS"
             elif first_word in ("did", "does", "do", "was", "were", "is", "are", "has", "have", "had", "can", "could"):
@@ -214,19 +219,19 @@ class SpreadingActivationRetriever:
             else:
                 # Scan for interrogative pronouns within query
                 for w in words_lower:
-                    if w == "who":
+                    if w in ("who", "ki", "kit"):
                         target_type = "who"
                         target_valency = "VAL_X1_AGENT"
                         break
-                    elif w == "what":
+                    elif w in ("what", "mi", "mit", "milyen", "melyik"):
                         target_type = "what"
                         target_valency = "VAL_X2_PATIENT"
                         break
-                    elif w == "where":
+                    elif w in ("where", "hol", "hová", "honnan"):
                         target_type = "where"
                         target_valency = "VAL_LOCATION_SLOT"
                         break
-                    elif w == "why":
+                    elif w in ("why", "miért"):
                         target_type = "why"
                         target_valency = "CAUSAL_MECHANISM_LINK"
                         break
@@ -382,7 +387,7 @@ class SpreadingActivationRetriever:
             r"\bphase\s+transition\b",
             r"\bcompeting\s+tests\b",
             r"\bthe\s+hypothesis\b",
-            r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b",
+            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)*\b",
         ]
         for pat in known_patterns:
             matches = re.findall(pat, query_text, re.IGNORECASE)
@@ -395,7 +400,7 @@ class SpreadingActivationRetriever:
 
         # Salient noun chunks if still empty
         if not entities:
-            tokens = re.findall(r"\b[A-Za-z0-9_-]+\b", query_text)
+            tokens = re.findall(r"\b[\w'-]+\b", query_text, re.UNICODE)
             for tok in tokens:
                 t_lower = tok.lower()
                 if (
