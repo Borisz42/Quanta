@@ -1,5 +1,6 @@
-"""QUANTA Virtual Page-Table & Long-Horizon Memory Architecture (Phase 6)."""
+"""QUANTA Virtual Page-Table, Long-Horizon Memory & Global Knowledge Base Architecture (Phases 6 & 10)."""
 
+from memory.global_kb import GlobalKnowledgeBase
 from memory.node_interner import (
     CanonicalNodeInterner,
     get_global_interner,
@@ -26,6 +27,7 @@ __all__ = [
     "ActiveCanvas",
     "CanonicalNodeInterner",
     "EntityStateRecord",
+    "GlobalKnowledgeBase",
     "PageTable",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
@@ -39,4 +41,3 @@ __all__ = [
     "set_global_interner",
     "topk_hamming_search",
 ]
-
