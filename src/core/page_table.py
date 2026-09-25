@@ -204,7 +204,11 @@ class PageTableStorage(MutableMapping):
             self._sqlite_conn = None
 
 
-from memory.page_table import PageTable
+def __getattr__(name: str):
+    if name == "PageTable":
+        from memory.page_table import PageTable
+        return PageTable
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "PageTableStorage",
