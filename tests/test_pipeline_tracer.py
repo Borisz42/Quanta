@@ -82,3 +82,32 @@ class TestPipelineExecutionTracer:
             data = json.load(f)
         assert data["total_events"] == 2
         assert len(data["ablation_results"]) == 1
+
+    def test_record_comparative_eval(self, tracer: PipelineExecutionTracer, tmp_path: Path):
+        """Tests comparative baseline vs QUANTA recording and markdown output."""
+        tracer.record_comparative_eval(
+            task="JWST Exoplanet",
+            query="What did NIRCam observe on WASP-96b?",
+            baseline_prompt_tokens=420,
+            quanta_prompt_tokens=85,
+            baseline_latency_s=1.20,
+            quanta_latency_s=0.28,
+            baseline_tps=50.0,
+            quanta_tps=55.0,
+            baseline_answer="NIRCam observed water vapor absorption signatures.",
+            quanta_answer="Water vapor absorption was observed on WASP-96b.",
+            factual_token="water vapor",
+            is_baseline_correct=True,
+            is_quanta_correct=True,
+            retrieval_latency_ms=1.45,
+        )
+        assert len(tracer.events) == 1
+        assert len(tracer.comparative_results) == 1
+        assert tracer.comparative_results[0]["token_savings_pct"] > 70.0
+
+        md_path = tmp_path / "comp_trace.md"
+        content = tracer.export_markdown(md_path)
+        assert "## 4. Head-to-Head Comparative Evaluation: Baseline Raw Text vs. QUANTA Subgraph" in content
+        assert "JWST Exoplanet" in content
+        assert "water vapor" in content
+

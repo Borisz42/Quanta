@@ -547,6 +547,12 @@ ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: e
   - `scripts/demonstrate_context_expansion.py`: Added Workload C (4 Hungarian technical chapters covering synthesis, 77K TEM/FTIR spectroscopy, 100 GW ELI-ALPS laser testing, and OAH regulatory prohibitions).
   - Evaluated cross-lingual round-trip invariance ($d_H = 0$, meet invariance 100%, 0 contradictions).
   - Implemented PART 9: 2-hop, 3-hop, and 4-hop multi-step reasoning queries evaluated with sub-10ms spreading activation retrieval and live grounded synthesis on NVIDIA RTX 3070 GPU (51.1–59.1 tok/s).
+- [x] **Task 8.7: Comprehensive Head-to-Head Baseline Evaluation (Raw Text Stuffing vs. QUANTA Subgraphs)**
+  - Added raw document context stuffing baselines across all 7 evaluation queries in `scripts/demonstrate_context_expansion.py` (PART 6 English JWST/Java, PART 8 Java multi-hop synthesis, PART 9 Hungarian multi-step reasoning).
+  - Evaluated on local Unsloth GPU server (`unsloth/Qwen3.5-4B-MTP-GGUF` on NVIDIA RTX 3070 8GB).
+  - Measured prompt tokens, latency, generation throughput (tok/s), and factual ground truth verification.
+  - Implemented `record_comparative_eval` in `PipelineExecutionTracer`, exporting structured comparison tables to `output/pipeline_execution_trace.md` and Antigravity artifact.
+  - Formatted Head-to-Head Comparative Scorecard Table printed directly at run completion.
 
 ### Section 8 Verification Scorecard
 
@@ -556,10 +562,12 @@ ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: e
 | **Cross-Lingual Hamming Drift** | $d_H = 0$ on core propositions | **$d_H = 0$ across hu/de/tr/zh vs English** | **PASS** |
 | **Slot Preservation Rate** | $\ge 95\%$ | **$100.0\%$ slot preservation across languages** | **PASS** |
 | **Neural Reverse Realization** | Fluent target-language output from ASG | **Verified across Hungarian, German, Turkish, Mandarin** | **PASS** |
-| **Demonstrator Workload C Ingestion** | Ingest 4 Hungarian technical chapters | **107.5 w/s throughput, 127 active canvas nodes** | **PASS** |
-| **Hungarian Multi-Step Reasoning** | Sub-10ms retrieval & grounded synthesis | **9.781 ms mean latency, 3/3 queries grounded on RTX 3070** | **PASS** |
+| **Demonstrator Workload C Ingestion** | Ingest 4 Hungarian technical chapters | **114.3 w/s throughput, 127 active canvas nodes** | **PASS** |
+| **Hungarian Multi-Step Reasoning** | Sub-10ms retrieval & grounded synthesis | **9.584 ms mean latency, 3/3 queries grounded on RTX 3070** | **PASS** |
+| **Head-to-Head Baseline Token Savings** | $\ge 25\%$ prompt token reduction | **31.5% mean reduction (719 -> 493 tokens, up to 44.7%)** | **PASS** |
+| **Head-to-Head Factual Accuracy** | Match or exceed raw text baseline accuracy | **Baseline 7/7 (100%) vs QUANTA 7/7 (100%)** | **PASS** |
 | **CI Mock Determinism** | All tests pass offline without GPU server | **17/17 Section 8 tests passed in 9.31s** | **PASS** |
-| **Full Regression Integrity** | Zero regressions on existing test suites | **29/29 updated tests + 52/52 core + 19/19 manifest passed** | **PASS** |
+| **Full Regression Integrity** | Zero regressions on existing test suites | **38/38 unit tests passed in 16.25s** | **PASS** |
 
 ---
 

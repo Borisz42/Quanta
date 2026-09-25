@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 import json
 import logging
+import os
 from pathlib import Path
 import time
 from typing import Any, Dict, List, Optional, Union
@@ -41,6 +42,7 @@ class PipelineExecutionTracer:
             "architecture": "QUANTA 1024-D Quaternary ASG",
         }
         self.ablation_results: List[Dict[str, Any]] = []
+        self.comparative_results: List[Dict[str, Any]] = []
 
     @classmethod
     def get_instance(cls) -> "PipelineExecutionTracer":
@@ -54,6 +56,7 @@ class PipelineExecutionTracer:
         self.start_time = time.time()
         self.events.clear()
         self.ablation_results.clear()
+        self.comparative_results.clear()
 
     # -------------------------------------------------------------------------
     # Event Recorders
@@ -274,6 +277,65 @@ class PipelineExecutionTracer:
             )
         )
 
+    def record_comparative_eval(
+        self,
+        task: str,
+        query: str,
+        baseline_prompt_tokens: int,
+        quanta_prompt_tokens: int,
+        baseline_latency_s: float,
+        quanta_latency_s: float,
+        baseline_tps: float,
+        quanta_tps: float,
+        baseline_answer: str,
+        quanta_answer: str,
+        factual_token: str,
+        is_baseline_correct: bool,
+        is_quanta_correct: bool,
+        retrieval_latency_ms: float = 0.0,
+    ):
+        """Records a head-to-head comparison between raw text stuffing baseline and QUANTA subgraph."""
+        savings_pct = (1.0 - (quanta_prompt_tokens / max(1, baseline_prompt_tokens))) * 100.0
+        entry = {
+            "task": task,
+            "query": query,
+            "baseline_prompt_tokens": baseline_prompt_tokens,
+            "quanta_prompt_tokens": quanta_prompt_tokens,
+            "token_savings_pct": savings_pct,
+            "baseline_latency_s": baseline_latency_s,
+            "quanta_latency_s": quanta_latency_s,
+            "baseline_tps": baseline_tps,
+            "quanta_tps": quanta_tps,
+            "baseline_answer": baseline_answer,
+            "quanta_answer": quanta_answer,
+            "factual_token": factual_token,
+            "is_baseline_correct": is_baseline_correct,
+            "is_quanta_correct": is_quanta_correct,
+            "retrieval_latency_ms": retrieval_latency_ms,
+            "timestamp": time.time(),
+        }
+        self.comparative_results.append(entry)
+        self.events.append(
+            TraceEvent(
+                timestamp=time.time(),
+                stage="comparative_eval",
+                action=task,
+                metrics={
+                    "baseline_tokens": baseline_prompt_tokens,
+                    "quanta_tokens": quanta_prompt_tokens,
+                    "token_savings_pct": savings_pct,
+                    "baseline_latency_s": baseline_latency_s,
+                    "quanta_latency_s": quanta_latency_s,
+                    "baseline_tps": baseline_tps,
+                    "quanta_tps": quanta_tps,
+                    "is_baseline_correct": 1 if is_baseline_correct else 0,
+                    "is_quanta_correct": 1 if is_quanta_correct else 0,
+                    "retrieval_latency_ms": retrieval_latency_ms,
+                },
+                details=entry,
+            )
+        )
+
     # -------------------------------------------------------------------------
     # Mermaid Diagram Generators
     # -------------------------------------------------------------------------
@@ -392,6 +454,7 @@ flowchart LR
             "total_events": len(self.events),
             "events": [asdict(e) for e in self.events],
             "ablation_results": self.ablation_results,
+            "comparative_results": self.comparative_results,
         }
         with open(p, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -446,11 +509,47 @@ flowchart LR
             verdict = ab["grounding_verdict"]
             lines.append(f"| **{ab['probe_name']}** | `{q_clean}` | {w_out}... | **{w_in}...** | `{verdict}` |")
 
+        if self.comparative_results:
+            lines.extend([
+                "",
+                "---",
+                "",
+                "## 4. Head-to-Head Comparative Evaluation: Baseline Raw Text vs. QUANTA Subgraph",
+                "",
+                "The following table compares the performance of Qwen 3.5 4B when given raw uncompressed source texts versus QUANTA's verified neuro-symbolic sub-graphs across English and Hungarian tasks:",
+                "",
+                "| Domain / Task | Tested Query | Baseline Tokens | QUANTA Tokens | Token Reduction | Baseline Latency | QUANTA Latency | Baseline Result | QUANTA Result |",
+                "|---|---|---|---|---|---|---|---|---|",
+            ])
+            for cr in self.comparative_results:
+                q_short = cr["query"][:55].replace("|", "\\|")
+                base_acc = "PASS" if cr["is_baseline_correct"] else "FAIL"
+                quanta_acc = "PASS" if cr["is_quanta_correct"] else "FAIL"
+                lines.append(
+                    f"| **{cr['task']}** | {q_short}... | {cr['baseline_prompt_tokens']} tok | **{cr['quanta_prompt_tokens']} tok** | **{cr['token_savings_pct']:.1f}%** | {cr['baseline_latency_s']:.2f}s | **{cr['quanta_latency_s']:.2f}s** | `{base_acc}` | `{quanta_acc}` |"
+                )
+
+            lines.extend([
+                "",
+                "### Detailed Answer Comparison",
+                "",
+            ])
+            for cr in self.comparative_results:
+                b_ans = cr["baseline_answer"].replace("\n", " ")
+                q_ans = cr["quanta_answer"].replace("\n", " ")
+                lines.extend([
+                    f"#### {cr['task']}: \"{cr['query']}\"",
+                    f"- **Ground Truth Target Token**: `{cr['factual_token']}`",
+                    f"- **Raw Text Baseline ({cr['baseline_prompt_tokens']} tokens, {cr['baseline_latency_s']:.2f}s)**:\n  > {b_ans}",
+                    f"- **QUANTA Subgraph ({cr['quanta_prompt_tokens']} tokens, {cr['quanta_latency_s']:.2f}s, {cr['token_savings_pct']:.1f}% savings)**:\n  > {q_ans}",
+                    "",
+                ])
+
         lines.extend([
             "",
             "---",
             "",
-            "## 4. Pipeline Module Execution Summary",
+            "## 5. Pipeline Module Execution Summary",
             "",
             "| Stage | Action | Key Metric | Details / Context |",
             "|---|---|---|---|",
@@ -458,7 +557,7 @@ flowchart LR
 
         # Sample important events for table
         for ev in self.events:
-            if ev.stage in ("ablation_probe",):
+            if ev.stage in ("ablation_probe", "comparative_eval"):
                 continue
             metric_str = ", ".join(f"{k}={v}" for k, v in list(ev.metrics.items())[:3])
             det_summary = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(ev.details.items())[:2])
@@ -468,7 +567,7 @@ flowchart LR
             "",
             "---",
             "",
-            "## 5. Hardware Offload & GPU VRAM Safety Verification",
+            "## 6. Hardware Offload & GPU VRAM Safety Verification",
             "",
             "> [!NOTE]",
             "> All downstream neural generation executed against **llama-server CUDA backend** on the **NVIDIA GeForce RTX 3070** (8GB physical VRAM). Bounded ActiveCanvas maintained strict `M <= 512` nodes (`<= 128 KB` execution footprint), ensuring `O(1)` memory complexity regardless of dialogue scale.",
@@ -492,9 +591,10 @@ flowchart LR
         logger.info("Exported Markdown trace to %s", p)
         return content
 
-    def mirror_to_antigravity_artifact(self, conversation_id: str) -> Optional[str]:
+    def mirror_to_antigravity_artifact(self, conversation_id: Optional[str] = None) -> Optional[str]:
         """Mirrors the markdown report directly into the Antigravity conversation artifact directory."""
-        artifact_dir = Path(r"C:\Users\PC\.gemini\antigravity\brain") / conversation_id
+        cid = conversation_id or os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "e7762e06-bc2e-46b3-b3ce-8b69a115f40d")
+        artifact_dir = Path(r"C:\Users\PC\.gemini\antigravity\brain") / cid
         if artifact_dir.exists():
             target_file = artifact_dir / "pipeline_execution_trace.md"
             self.export_markdown(target_file)
