@@ -96,8 +96,11 @@ class CognitivePipeline:
         # 3. Neural Discourse Transducer
         if transducer is not None:
             self.transducer = transducer
-        elif transducer_backend in ("unsloth", "mock_unsloth", "qwen", "gemma"):
+        elif transducer_backend in ("unsloth", "qwen", "gemma"):
             self.transducer = UnslothTransducer(fallback_to_mock=True, **transducer_kwargs)
+        elif transducer_backend in ("mock_unsloth", "mock_sexpr", "sexpr_mock"):
+            from parser.unsloth_transducer import MockUnslothTransducer
+            self.transducer = MockUnslothTransducer(**transducer_kwargs)
         elif transducer_backend in ("mock", "mock_json"):
             self.transducer = create_transducer(backend="mock", **transducer_kwargs)
         elif transducer_backend in ("lmstudio", "gguf"):
@@ -664,17 +667,117 @@ class CognitivePipeline:
         logger.info("PageTable fallback query answered in %.2f ms: '%s' -> '%s'", elapsed_ms, query, ans)
         return ans
 
+    def process_and_answer_single_query(
+        self,
+        query_text: str,
+        context_document: Optional[str] = None,
+        cold_start: bool = True,
+        allow_fixtures: bool = False,
+        format: str = "english",
+        max_tokens: int = 500,
+        top_k: int = 5,
+        max_depth: int = 2,
+    ) -> Dict[str, Any]:
+        """Process a single query, ingesting context on-the-fly if needed (cold-start) without precompiled fixtures.
+
+        Args:
+            query_text: Raw query or combined single-turn prompt.
+            context_document: Optional pre-extracted context document. If None, decomposition is attempted.
+            cold_start: If True, resets working memory and PageTable before ingestion.
+            allow_fixtures: If False, enforces dynamic SLM extraction without precompiled fixture shortcuts.
+            format: Context format ('english' or 'sexpr').
+            max_tokens: Maximum tokens for retrieved context.
+            top_k: SIMD seeds for spreading activation.
+            max_depth: Depth for spreading activation traversal.
+
+        Returns:
+            Dict containing answer, retrieved context, timing metrics, and token statistics.
+        """
+        import re
+        t_start = time.perf_counter()
+
+        doc = context_document
+        isolated_query = query_text.strip()
+
+        # 1. Attempt decomposition if context_document is not explicitly provided
+        if doc is None:
+            from server.proxy import decompose_query_context
+            extracted_doc, candidate_q = decompose_query_context(query_text)
+            if extracted_doc:
+                doc = extracted_doc
+                isolated_query = candidate_q
+            elif not isolated_query:
+                isolated_query = query_text.strip()
+
+        # 2. Transducer fixture flag configuration
+        old_allow_fixtures = getattr(self.transducer, "allow_fixtures", None)
+        if hasattr(self.transducer, "allow_fixtures"):
+            self.transducer.allow_fixtures = allow_fixtures
+
+        t_ingest_ms = 0.0
+        graph = None
+        try:
+            # 3. Ingestion if cold_start or document provided
+            if cold_start:
+                self.reset(clear_page_table=True)
+
+            if doc and doc.strip():
+                t0_ingest = time.perf_counter()
+                graph = self.process(doc)
+                t_ingest_ms = (time.perf_counter() - t0_ingest) * 1000.0
+
+            # 4. Spreading Activation Retrieval using natural query without hints
+            t0_retrieval = time.perf_counter()
+            retrieved_context = self.retrieve_context(
+                query=isolated_query,
+                format=format,
+                max_tokens=max_tokens,
+                top_k=top_k,
+                max_depth=max_depth,
+            )
+            t_retrieval_ms = (time.perf_counter() - t0_retrieval) * 1000.0
+
+            # 5. Neuro-symbolic topological answer
+            t0_ans = time.perf_counter()
+            answer = self.answer_query(isolated_query, target_graph=graph)
+            t_ans_ms = (time.perf_counter() - t0_ans) * 1000.0
+
+            t_total_ms = (time.perf_counter() - t_start) * 1000.0
+
+            raw_chars = len(doc) if doc else len(query_text)
+            retrieved_chars = len(retrieved_context)
+
+            return {
+                "answer": answer,
+                "retrieved_context": retrieved_context,
+                "isolated_query": isolated_query,
+                "context_document": doc,
+                "ingest_latency_ms": t_ingest_ms,
+                "retrieval_latency_ms": t_retrieval_ms,
+                "answer_latency_ms": t_ans_ms,
+                "total_latency_ms": t_total_ms,
+                "raw_context_chars": raw_chars,
+                "retrieved_context_chars": retrieved_chars,
+                "cold_start": cold_start,
+                "allow_fixtures": allow_fixtures,
+            }
+        finally:
+            if old_allow_fixtures is not None and hasattr(self.transducer, "allow_fixtures"):
+                self.transducer.allow_fixtures = old_allow_fixtures
+
     def realize(self, graph: QuantaGraph) -> str:
         """Realize an ASG into compositional, honest English text."""
         return self.realizer.realize_graph(graph)
 
-    def reset(self):
-        """Reset working memory entity manifest, active canvas, stitcher, and Merkle book."""
+    def reset(self, clear_page_table: bool = False):
+        """Reset working memory entity manifest, active canvas, stitcher, Merkle book, and optionally page table."""
         self.entity_engine.reset()
         self.active_canvas.clear()
         if hasattr(self, "stitcher") and self.stitcher is not None:
             self.stitcher.reset()
         self.merkle_book = HierarchicalMerkleBook()
+        if clear_page_table and hasattr(self.page_table, "clear"):
+            self.page_table.clear()
 
     def close(self):
         """Release PageTable and EntityEngine resources."""

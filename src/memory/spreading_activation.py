@@ -465,15 +465,21 @@ class SpreadingActivationRetriever:
         # 2. If named entities are present, boost matching entity CIDs if found in PageTable
         if named_entities:
             existing_cids = {cid for cid, _ in matches}
-            generic_stop = {"polimer", "anyag", "substance", "compound", "specimen", "item", "order", "entity", "sample", "minta"}
-            for ent_text in named_entities:
+            generic_stop = {
+                "polimer", "anyag", "substance", "compound", "specimen", "item", "order",
+                "entity", "sample", "minta", "cooling", "system", "maintains"
+            }
+            # Prioritize longer, more specific multi-word entities
+            sorted_ents = sorted(named_entities, key=lambda x: len(x), reverse=True)
+            boosted: List[Tuple[str, int]] = []
+            for ent_text in sorted_ents:
                 if ent_text.lower() in generic_stop or len(ent_text) <= 3:
                     continue
                 if hasattr(page_table, "find_cids_by_literal"):
                     cids = page_table.find_cids_by_literal(ent_text, limit=2)
                     for ent_cid in cids:
                         if ent_cid not in existing_cids:
-                            matches.insert(0, (ent_cid, 0))
+                            boosted.append((ent_cid, 0))
                             existing_cids.add(ent_cid)
                 else:
                     cur = page_table._conn.cursor()
@@ -484,8 +490,9 @@ class SpreadingActivationRetriever:
                     rows = cur.fetchall()
                     for (ent_cid,) in rows:
                         if ent_cid not in existing_cids:
-                            matches.insert(0, (ent_cid, 0))
+                            boosted.append((ent_cid, 0))
                             existing_cids.add(ent_cid)
+            matches = boosted + matches
 
         return matches[:top_k]
 

@@ -790,11 +790,24 @@ class PageTable(MutableMapping):
             )
             return cur.fetchone() is not None
 
+    def clear(self):
+        """Clears all stored nodes, subgraphs, metadata, and resets in-memory indexes."""
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM nodes")
+            self._conn.execute("DELETE FROM subgraphs")
+            self._conn.execute("DELETE FROM metadata")
+            self._reverse_edges.clear()
+            self._literal_index.clear()
+            self.vector_index = SimdHammingIndex()
+
     def close(self):
         """Closes SQLite database connection."""
         with self._lock:
             if self._conn:
                 self._conn.close()
+
+
+VirtualPageTable = PageTable
 
 
 # -----------------------------------------------------------------------------

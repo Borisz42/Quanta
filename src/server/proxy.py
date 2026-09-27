@@ -21,6 +21,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
 import uuid
@@ -147,6 +148,69 @@ def _dump_model(obj: Any, **kwargs) -> Dict[str, Any]:
     return dict(obj)
 
 
+def decompose_query_context(text: Optional[str]) -> Tuple[Optional[str], str]:
+    """Decomposes a single bulky user query into (context_document, core_question).
+
+    Handles:
+    - Explicit section delimiters:
+      'Context:\n...\n\nQuestion: ...'
+      'Documentation:\n...\n\nQuery: ...'
+      'Source:\n...\n\nQuestion: ...'
+      'Eredeti forrásdokumentumok:\n...\n\nKérdés: ...'
+    - Text blocks where context precedes a terminal question sentence or paragraph.
+    """
+    if not text or not text.strip():
+        return None, ""
+
+    clean = text.strip()
+
+    # 1. Explicit delimiter patterns
+    explicit_patterns = [
+        r"(?:===+\s*)?(?:Context|Documentation|Background|Source|Forrás(?:dokumentumok)?|Szöveg|Eredeti forrásdokumentumok)\s*:\s*\n*([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
+        r"([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
+    ]
+    for pat in explicit_patterns:
+        m = re.search(pat, clean, re.IGNORECASE)
+        if m:
+            doc = m.group(1).strip()
+            q = m.group(2).strip()
+            if len(doc.split()) >= 15:
+                return doc, q
+
+    # 2. Paragraph split heuristic if text has context (> 20 words) and ends with interrogative sentence
+    paras = [p.strip() for p in clean.split("\n\n") if p.strip()]
+    if len(paras) >= 2 and len(clean.split()) >= 20:
+        last_para = paras[-1]
+        if "?" in last_para or any(last_para.lower().startswith(w) for w in ("what", "who", "where", "why", "when", "how", "compare", "mi", "mit", "milyen", "melyik", "hová", "hol")):
+            doc = "\n\n".join(paras[:-1]).strip()
+            return doc, last_para
+
+    # 3. Sentence split heuristic if ending sentence is an interrogative
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+    if len(sents) >= 3 and len(clean.split()) >= 20:
+        last_sent = sents[-1]
+        if last_sent.endswith("?") or any(last_sent.lower().startswith(w) for w in ("what", "who", "where", "why", "when", "how", "compare", "mi", "mit", "milyen", "melyik", "hová", "hol")):
+            doc = " ".join(sents[:-1]).strip()
+            return doc, last_sent
+
+    return None, clean
+
+
+def extract_context_from_system(messages: Sequence[ChatMessage]) -> Tuple[Optional[str], Optional[str]]:
+    """Extracts background context from a system message if present (e.g. 'Context:\n...')."""
+    for m in messages:
+        if m.role == "system" and m.content:
+            text = m.content.strip()
+            pat = r"(?:===+\s*)?(?:Context|Documentation|Source|Forrás(?:dokumentumok)?)\s*:\s*\n*([\s\S]*)"
+            match = re.search(pat, text, re.IGNORECASE)
+            if match:
+                doc = match.group(1).strip()
+                instruction = text[:match.start()].strip()
+                if len(doc.split()) >= 15:
+                    return doc, instruction
+    return None, None
+
+
 # -----------------------------------------------------------------------------
 # Proxy Application Factory
 # -----------------------------------------------------------------------------
@@ -264,28 +328,40 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             last_user_idx = len(raw_messages) - 1
 
         active_user_msg = raw_messages[last_user_idx]
-        user_query = active_user_msg.content or ""
+        raw_user_content = active_user_msg.content or ""
 
         # Historical messages are all messages prior to the active user turn
         prior_messages = raw_messages[:last_user_idx]
         system_messages = [m for m in prior_messages if m.role == "system"]
         dialogue_history = [m for m in prior_messages if m.role != "system"]
 
+        # Decompose single-turn bulky context if present
+        doc_from_user, isolated_question = decompose_query_context(raw_user_content)
+        doc_from_system, clean_sys_inst = extract_context_from_system(system_messages)
+
+        has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
+        user_query = isolated_question if doc_from_user else raw_user_content
+
         retrieved_context: str = ""
         compressed_messages: List[Dict[str, Any]] = []
+        is_cold_start = False
+        t_ingest_ms = 0.0
+        t_ret_ms = 0.0
 
-        if should_compress or force_enrich:
+        if should_compress or force_enrich or has_single_query_context:
             logger.info(
-                "Triggering QUANTA context compression: raw_tokens=%d, threshold=%d, prior_turns=%d",
+                "Triggering QUANTA context compression: raw_tokens=%d, threshold=%d, prior_turns=%d, has_single_ctx=%s",
                 raw_tokens,
                 threshold,
                 len(dialogue_history),
+                has_single_query_context,
             )
 
-            # Ingest dialogue history into CognitivePipeline if dialogue turns exist
+            import hashlib
+            t_ingest_start = time.perf_counter()
+
+            # 1. Ingest dialogue history into CognitivePipeline if dialogue turns exist
             if dialogue_history:
-                # Group dialogue into an ingested narrative, only ingesting turns not previously seen
-                import hashlib
                 history_text_blocks = []
                 for m in dialogue_history:
                     if m.content and m.content.strip():
@@ -300,13 +376,40 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     history_text = "\n\n".join(history_text_blocks)
                     if history_text.strip():
                         try:
-                            # Ingest into PageTable Merkle DAG
+                            is_cold_start = True
                             pipeline.process(history_text)
                             stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                         except Exception as e:
                             logger.warning("Error during dialogue history ASG ingestion: %s", e)
 
-            # Retrieve active context via spreading activation
+            # 2. Ingest single-query user context document (cold-start single query)
+            if doc_from_user:
+                doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
+                if doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                    try:
+                        is_cold_start = True
+                        pipeline.process(doc_from_user)
+                        app.state.ingested_turn_hashes.add(doc_hash)
+                        stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                    except Exception as e:
+                        logger.warning("Error during user context document ASG ingestion: %s", e)
+
+            # 3. Ingest system context document if present
+            if doc_from_system:
+                sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
+                if sys_doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                    try:
+                        is_cold_start = True
+                        pipeline.process(doc_from_system)
+                        app.state.ingested_turn_hashes.add(sys_doc_hash)
+                        stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                    except Exception as e:
+                        logger.warning("Error during system context document ASG ingestion: %s", e)
+
+            t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
+
+            # Retrieve active context via spreading activation (strictly from natural user_query)
+            t_ret_start = time.perf_counter()
             try:
                 retrieved_context = pipeline.retrieve_context(
                     query=user_query,
@@ -316,10 +419,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             except Exception as e:
                 logger.warning("Error retrieving context from PageTable: %s", e)
                 retrieved_context = ""
+            t_ret_ms = (time.perf_counter() - t_ret_start) * 1000.0
 
             # Build enriched system prompt
             system_content_parts = []
-            if system_messages:
+            if clean_sys_inst:
+                system_content_parts.append(clean_sys_inst)
+            elif system_messages:
                 system_content_parts.append(system_messages[-1].content or "")
 
             if retrieved_context and retrieved_context.strip():
@@ -338,10 +444,10 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     "content": merged_system_content,
                 })
 
-            # Add latest user message
+            # Add latest user message (using isolated user_query if context was stripped)
             compressed_messages.append({
                 "role": active_user_msg.role,
-                "content": active_user_msg.content,
+                "content": user_query,
             })
 
             # If there are trailing messages after the user message (rare), preserve them
@@ -355,11 +461,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             stats["tokens_saved"] += tokens_saved
 
             logger.info(
-                "Compression complete: %d -> %d tokens (saved %d tokens, context len=%d)",
+                "Compression complete: %d -> %d tokens (saved %d tokens, context len=%d, ingest=%.1fms, ret=%.1fms)",
                 raw_tokens,
                 compressed_tokens,
                 tokens_saved,
                 len(retrieved_context),
+                t_ingest_ms,
+                t_ret_ms,
             )
 
             tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
@@ -368,14 +476,31 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     raw_tokens=raw_tokens,
                     compressed_tokens=compressed_tokens,
                     latency_ms=(time.perf_counter() - t0) * 1000.0,
-                    turns_pruned=len(dialogue_history),
-                    details={"user_query": user_query[:100], "context_injected": bool(retrieved_context)},
+                    turns_pruned=len(dialogue_history) + (1 if doc_from_user else 0),
+                    details={
+                        "user_query": user_query[:100],
+                        "context_injected": bool(retrieved_context),
+                        "cold_start": is_cold_start,
+                        "ingest_latency_ms": t_ingest_ms,
+                        "retrieval_latency_ms": t_ret_ms,
+                    },
                 )
         else:
             # Under threshold and not force-enriched: preserve messages as-is
             compressed_messages = [
                 _dump_model(m) for m in raw_messages
             ]
+
+        # Metadata payload for response
+        quanta_meta = {
+            "context_injected": bool(retrieved_context),
+            "cold_start": is_cold_start,
+            "ingest_latency_ms": t_ingest_ms,
+            "retrieval_latency_ms": t_ret_ms,
+            "raw_tokens": raw_tokens,
+            "compressed_tokens": sum(estimate_tokens(m.get("content", "")) for m in compressed_messages),
+            "tokens_saved": max(0, raw_tokens - sum(estimate_tokens(m.get("content", "")) for m in compressed_messages)),
+        }
 
         # 3. Forward request to downstream backend or local neuro-symbolic fallback
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -425,6 +550,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 context=retrieved_context,
                 timeout=cfg.timeout_seconds,
                 tracer=tracer,
+                quanta_meta=quanta_meta,
             )
 
     return app
@@ -445,6 +571,7 @@ async def _handle_unary_response(
     context: str,
     timeout: float,
     tracer: Optional[PipelineExecutionTracer] = None,
+    quanta_meta: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
     """Forwards non-streaming request to backend or returns local neuro-symbolic completion."""
     t0 = time.perf_counter()
@@ -459,6 +586,8 @@ async def _handle_unary_response(
             if resp.status_code == 200:
                 data = resp.json()
                 usage = data.get("usage", {})
+                if quanta_meta:
+                    data["quanta_metadata"] = quanta_meta
                 if tracer is not None:
                     tracer.record_backend_call(
                         method="POST",
@@ -506,6 +635,7 @@ async def _handle_unary_response(
                 "total_tokens": prompt_toks + comp_toks,
             },
             "quanta_metadata": {
+                **(quanta_meta or {}),
                 "context_injected": bool(context),
                 "backend": "local_neuro_symbolic_fallback",
             },

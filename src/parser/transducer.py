@@ -657,8 +657,10 @@ class MockTransducer(BaseDiscourseTransducer):
         self,
         fixtures: Optional[Dict[str, DiscourseExtractionResult]] = None,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+        allow_fixtures: bool = True,
     ):
         super().__init__(system_prompt=system_prompt)
+        self.allow_fixtures = allow_fixtures
         self.fixtures: Dict[str, DiscourseExtractionResult] = {}
         # Pre-seed canonical Eleanor Vance fixture
         self.register_fixture("eleanor_vance", CANONICAL_ELEANOR_VANCE_FIXTURE)
@@ -691,28 +693,29 @@ class MockTransducer(BaseDiscourseTransducer):
         """Return fixture if matched, or generate synthetic extraction result."""
         norm_text = " ".join(chunk_text.split()).strip()
 
-        # 1. Exact match in fixtures
-        if chunk_text in self.fixtures:
-            return self._clone_result(self.fixtures[chunk_text], chunk_id)
-        if norm_text in self.fixtures:
-            return self._clone_result(self.fixtures[norm_text], chunk_id)
+        if getattr(self, "allow_fixtures", True):
+            # 1. Exact match in fixtures
+            if chunk_text in self.fixtures:
+                return self._clone_result(self.fixtures[chunk_text], chunk_id)
+            if norm_text in self.fixtures:
+                return self._clone_result(self.fixtures[norm_text], chunk_id)
 
-        # 2. Key/substring match
-        lower = chunk_text.lower()
-        if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
-            return self._clone_result(CANONICAL_ELEANOR_VANCE_FIXTURE, chunk_id)
-        if "alice" in lower and "auditor" in lower:
-            return self._clone_result(CANONICAL_STRESS_1_FIXTURE, chunk_id)
-        if "drone" in lower and "airspace" in lower:
-            return self._clone_result(CANONICAL_STRESS_2_FIXTURE, chunk_id)
-        if "investigator" in lower and "alibi" in lower:
-            return self._clone_result(CANONICAL_STRESS_3_FIXTURE, chunk_id)
-        if "decree" in lower and "commissioner" in lower:
-            return self._clone_result(CANONICAL_STRESS_4_FIXTURE, chunk_id)
+            # 2. Key/substring match
+            lower = chunk_text.lower()
+            if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
+                return self._clone_result(CANONICAL_ELEANOR_VANCE_FIXTURE, chunk_id)
+            if "alice" in lower and "auditor" in lower:
+                return self._clone_result(CANONICAL_STRESS_1_FIXTURE, chunk_id)
+            if "drone" in lower and "airspace" in lower:
+                return self._clone_result(CANONICAL_STRESS_2_FIXTURE, chunk_id)
+            if "investigator" in lower and "alibi" in lower:
+                return self._clone_result(CANONICAL_STRESS_3_FIXTURE, chunk_id)
+            if "decree" in lower and "commissioner" in lower:
+                return self._clone_result(CANONICAL_STRESS_4_FIXTURE, chunk_id)
 
-        for key, fix in self.fixtures.items():
-            if key.lower() in lower:
-                return self._clone_result(fix, chunk_id)
+            for key, fix in self.fixtures.items():
+                if key.lower() in lower:
+                    return self._clone_result(fix, chunk_id)
 
         # 3. Fallback heuristic extraction for arbitrary chunks
         return self._heuristic_fallback(chunk_text, chunk_id, active_manifest_prompt)

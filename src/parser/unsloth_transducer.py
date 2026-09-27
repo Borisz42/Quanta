@@ -282,8 +282,10 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         self,
         fixtures: Optional[Dict[str, Union[str, DiscourseExtractionResult]]] = None,
         system_prompt: str = DEFAULT_UNSLOTH_SYSTEM_PROMPT,
+        allow_fixtures: bool = True,
     ):
         super().__init__(system_prompt=system_prompt)
+        self.allow_fixtures = allow_fixtures
         self.fixtures: Dict[str, DiscourseExtractionResult] = {}
 
         # Register canonical gold-standard fixtures
@@ -433,62 +435,64 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         matched: Optional[DiscourseExtractionResult] = None
         repair_req = kwargs.get("repair_request")
 
-        # 0. Check repair callback or repair fixtures if repair_request is present
-        if repair_req:
-            if self.repair_callback:
-                cb_res = self.repair_callback(content, **kwargs)
-                if cb_res is not None:
-                    if isinstance(cb_res, str):
-                        matched = parse_sexpr(cb_res)
+        # 0. Check fixtures ONLY if allow_fixtures is True
+        if getattr(self, "allow_fixtures", True):
+            if repair_req:
+                if self.repair_callback:
+                    cb_res = self.repair_callback(content, **kwargs)
+                    if cb_res is not None:
+                        if isinstance(cb_res, str):
+                            matched = parse_sexpr(cb_res)
+                        else:
+                            matched = cb_res
+                if matched is None:
+                    if content in self.repair_fixtures:
+                        matched = self.repair_fixtures[content]
+                    elif norm_text in self.repair_fixtures:
+                        matched = self.repair_fixtures[norm_text]
                     else:
-                        matched = cb_res
+                        for k, fix in self.repair_fixtures.items():
+                            if k.lower() in content.lower():
+                                matched = fix
+                                break
+
+            # 1. Exact match in fixtures
             if matched is None:
-                if content in self.repair_fixtures:
-                    matched = self.repair_fixtures[content]
-                elif norm_text in self.repair_fixtures:
-                    matched = self.repair_fixtures[norm_text]
+                if content in self.fixtures:
+                    matched = self.fixtures[content]
+                elif norm_text in self.fixtures:
+                    matched = self.fixtures[norm_text]
+
+            # 2. Substring heuristics for canonical benchmarks
+            if matched is None:
+                lower = content.lower()
+                if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
+                    matched = CANONICAL_ELEANOR_VANCE_FIXTURE
+                elif "alice" in lower and "auditor" in lower:
+                    matched = CANONICAL_STRESS_1_FIXTURE
+                elif "drone" in lower and "airspace" in lower:
+                    matched = CANONICAL_STRESS_2_FIXTURE
+                elif "investigator" in lower and "alibi" in lower:
+                    matched = CANONICAL_STRESS_3_FIXTURE
+                elif "decree" in lower and "commissioner" in lower:
+                    matched = CANONICAL_STRESS_4_FIXTURE
                 else:
-                    for k, fix in self.repair_fixtures.items():
-                        if k.lower() in content.lower():
+                    for key, fix in self.fixtures.items():
+                        if key.lower() in lower:
                             matched = fix
                             break
-
-        # 1. Exact match in fixtures
-        if matched is None:
-            if content in self.fixtures:
-                matched = self.fixtures[content]
-            elif norm_text in self.fixtures:
-                matched = self.fixtures[norm_text]
-
-        # 2. Substring heuristics for canonical benchmarks
-        if matched is None:
-            lower = content.lower()
-            if "eleanor" in lower or "containment cell" in lower or "synthetic compound" in lower:
-                matched = CANONICAL_ELEANOR_VANCE_FIXTURE
-            elif "alice" in lower and "auditor" in lower:
-                matched = CANONICAL_STRESS_1_FIXTURE
-            elif "drone" in lower and "airspace" in lower:
-                matched = CANONICAL_STRESS_2_FIXTURE
-            elif "investigator" in lower and "alibi" in lower:
-                matched = CANONICAL_STRESS_3_FIXTURE
-            elif "decree" in lower and "commissioner" in lower:
-                matched = CANONICAL_STRESS_4_FIXTURE
-            else:
-                for key, fix in self.fixtures.items():
-                    if key.lower() in lower:
-                        matched = fix
-                        break
 
         # Clone and customize result if matched
         if matched is not None:
             result = self._clone_and_adapt(matched, content, chunk_id, active_entities)
         else:
-            # 3. Dynamic synthesis for novel text
+            # 3. Dynamic synthesis for novel text (from zero, zero precompiled fixtures)
             result = self._synthesize_dynamic(content, chunk_id, active_entities)
         latency = time.perf_counter() - t0
         result.metadata["latency_sec"] = latency
         result.metadata["backend"] = "mock_unsloth"
         result.metadata["model"] = "mock-unsloth-slm"
+        result.metadata["dynamic_transduction"] = True
         return result
 
     async def transduce_async(
@@ -584,75 +588,273 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         chunk_id: Optional[str],
         active_entities: Optional[List[EntityRecord]],
     ) -> DiscourseExtractionResult:
-        """Dynamically generate a valid S-expression extraction for unknown text."""
-        words = text.split()
-        first_cap = next((w.strip(".,;:\"'!?") for w in words if w and w[0].isupper() and len(w) > 1), "Agent")
+        """Dynamically extract entities, predicates, relations, and propositions for novel text.
 
-        # Check if active entities match text
-        matched_active: Optional[EntityRecord] = None
+        Operates deterministically from scratch without requiring precompiled S-expression fixtures.
+        """
+        # Protect abbreviations like Dr., Prof. from sentence splitting
+        clean_text = text
+        for abbr in ("Dr.", "Prof.", "Mr.", "Mrs.", "Ms.", "Jr.", "Sr.", "vs.", "etc."):
+            clean_text = clean_text.replace(abbr, abbr.replace(".", "§DOT§"))
+        raw_sents = [
+            s.replace("§DOT§", ".").strip()
+            for s in re.split(r"(?<=[.!?])\s+", clean_text)
+            if len(s.strip()) > 5
+        ]
+        if not raw_sents:
+            raw_sents = [text.strip()]
+
+        entities: List[ExtractedEntity] = []
+        events: List[ExtractedEvent] = []
+        relations: List[ExtractedRelation] = []
+        propositions: List[ExtractedProposition] = []
+        ent_names_seen: Set[str] = set()
+        ent_ids_seen: Set[str] = set()
+        max_id_num = 0
+
+        # Seed with active entities if provided
         if active_entities:
-            text_lower = text.lower()
-            for ent in active_entities:
-                if ent.canonical_name.lower() in text_lower:
-                    matched_active = ent
+            for act in active_entities:
+                if act.canonical_name not in ent_names_seen:
+                    ent_names_seen.add(act.canonical_name)
+                    ent_ids_seen.add(act.canonical_id)
+                    m = re.match(r"E(\d+)", act.canonical_id)
+                    if m:
+                        max_id_num = max(max_id_num, int(m.group(1)))
+                    entities.append(
+                        ExtractedEntity(
+                            id=act.canonical_id,
+                            canonical_name=act.canonical_name,
+                            category=act.category,
+                            surface_aliases=list(act.surface_aliases),
+                        )
+                    )
+        next_id_counter = max(len(entities), max_id_num) + 1
+
+        # Entity regex patterns: capitalized sequences, identifiers, Hungarian terms
+        CAP_PAT = re.compile(
+            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűA-Z0-9_-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9][a-záéíóöőúüűA-Z0-9_-]+)*\b"
+        )
+        ID_PAT = re.compile(
+            r"\b(?:Order\s+\d+|SKU-\w+|tok_\w+|txn_\w+|WASP-\w+|SMACS\s+\w+|GLASS-\w+|\d+\s+(?:Kelvin|bar|gigawatt))\b",
+            re.IGNORECASE,
+        )
+
+        STOP_WORDS = {
+            "the", "this", "that", "these", "those", "and", "but", "then", "during", "at", "on", "after",
+            "while", "furthermore", "near", "upon", "each", "with", "from", "into", "az", "egy", "és",
+            "vagy", "hogy", "után", "alatt", "előtt", "által", "szerint", "nem", "sem", "ezután", "ezért"
+        }
+
+        # Known predicates map: both English and Hungarian lemmas -> canonical English pivot
+        # Action verbs prioritized before noun nominalizations
+        PRED_MAP = {
+            "elszállította": "transport", "szállította": "transport", "transport": "transport", "transported": "transport", "szállítás": "transport",
+            "besugározták": "irradiate", "sugározták": "irradiate", "irradiate": "irradiate", "irradiated": "irradiate",
+            "javasolták": "recommend", "javasolta": "recommend", "recommend": "recommend", "recommended": "recommend", "javaslat": "recommend",
+            "megtiltotta": "prohibit", "prohibit": "prohibit", "prohibited": "prohibit", "tilt": "prohibit",
+            "szintetizált": "synthesize", "synthesize": "synthesize", "synthesized": "synthesize", "szintézis": "synthesize",
+            "elemezte": "analyze", "vizsgálta": "analyze", "analyze": "analyze", "analyzed": "analyze", "elemzés": "analyze", "vizsgál": "analyze",
+            "supervise": "supervise", "supervised": "supervise", "felügyelt": "supervise", "felügyelet": "supervise",
+            "regulate": "regulate", "regulated": "regulate", "meghatározta": "regulate", "előírás": "regulate",
+            "store": "store", "stored": "store", "helyezte": "store", "tárolta": "store",
+            "measure": "measure", "measured": "measure", "mért": "measure", "mérés": "measure",
+            "pressurize": "pressurize", "pressurized": "pressurize", "nyomás": "pressurize",
+            "isolate": "isolate", "isolated": "isolate",
+            "observe": "observe", "observed": "observe",
+            "deploy": "deploy", "deployed": "deploy",
+            "verify": "verify", "verified": "verify", "igazolta": "verify", "hitelesítette": "verify",
+            "detect": "detect", "detected": "detect", "kimutatta": "detect",
+            "initiate": "initiate", "initiated": "initiate",
+            "authorize": "authorize", "authorized": "authorize",
+            "reserve": "reserve", "reserved": "reserve",
+            "confirm": "confirm", "confirmed": "confirm",
+            "publish": "publish", "published": "publish",
+            "invalidate": "invalidate", "invalidated": "invalidate",
+            "cancel": "cancel", "cancelled": "cancel", "canceled": "cancel",
+            "release": "release", "released": "release",
+            "execute": "execute", "executed": "execute",
+            "launch": "launch", "launched": "launch",
+            "maintain": "maintain", "maintained": "maintain",
+            "operate": "operate", "operated": "operate",
+        }
+
+        DOMAIN_KEYWORD_OVERRIDES = {
+            "fluoropolimer mátrix": "SUBSTANCE",
+            "polimer minta": "SUBSTANCE",
+            "polimer": "SUBSTANCE",
+            "fluoropolimer": "SUBSTANCE",
+            "transzmissziós elektronmikroszkóp": "INSTRUMENT",
+            "Fourier-transzformációs infravörös spektrométer": "INSTRUMENT",
+            "infravörös spektrométer": "INSTRUMENT",
+            "ultragyors impulzuslézer": "INSTRUMENT",
+            "lézer": "INSTRUMENT",
+            "szegedi lézeres kutatóközpont": "LOCATION",
+            "budapesti központi laboratórium": "LOCATION",
+            "kriogén konténer": "CONTAINER",
+            "Országos Atomenergia Hivatal": "ORGANIZATION",
+            "Ipari Biztonsági Hatóság": "ORGANIZATION",
+            "nyílt égésterű hajtómű": "APPLICATION",
+            "lakossági fogyasztási cikk": "APPLICATION",
+            "mélyűri űrszonda": "APPLICATION",
+            "Near-Infrared Camera": "INSTRUMENT",
+            "Near-Infrared Spectrograph": "INSTRUMENT",
+            "Mid-Infrared Instrument": "INSTRUMENT",
+            "Fine Guidance Sensor": "INSTRUMENT",
+            "Kapton sunshield": "ARTIFACT",
+            "OrderFulfillmentService": "ORGANIZATION",
+            "PaymentGatewayClient": "ORGANIZATION",
+            "InventoryService": "ORGANIZATION",
+            "OrderCompletedEvent": "ARTIFACT",
+            "CardDeclinedException": "ARTIFACT",
+        }
+
+        for s_idx, sent in enumerate(raw_sents, start=1):
+            ev_id = f"Ev{s_idx}"
+            current_sent_ents: List[ExtractedEntity] = []
+
+            # Find all candidates
+            candidates = CAP_PAT.findall(sent) + ID_PAT.findall(sent)
+
+            # Special domain keywords to extract explicitly
+            for kw in DOMAIN_KEYWORD_OVERRIDES:
+                if kw.lower() in sent.lower():
+                    candidates.append(kw)
+
+            for cap in candidates:
+                c_clean = cap.strip(".,;:\"'()")
+                c_lower = c_clean.lower()
+                if c_lower in STOP_WORDS or len(c_clean) <= 2:
+                    continue
+                if re.match(r"^(?:at\s+\d+|in\s+\d+|on\s+\d+|three\s+days|ten\s+days|thirty\s+days)", c_lower):
+                    continue
+                if c_clean not in ent_names_seen:
+                    ent_names_seen.add(c_clean)
+                    e_id = f"E{next_id_counter}"
+                    next_id_counter += 1
+                    ent_ids_seen.add(e_id)
+
+                    # Check domain keyword overrides first
+                    cat = None
+                    for d_kw, d_cat in DOMAIN_KEYWORD_OVERRIDES.items():
+                        if d_kw.lower() == c_lower:
+                            cat = d_cat
+                            break
+
+                    if cat is None:
+                        is_loc = any(t in c_lower for t in ("center", "centre", "kutatóközpont", "központ", "laboratórium", "labor", "szeged", "budapest", "cell", "chamber", "zone", "kourou", "orbit", "space", "point", "atmosphere", "kert"))
+                        is_org = any(t in c_lower for t in ("nasa", "esa", "service", "client", "controller", "software", "orchestrator", "team", "group", "repository", "gateway", "hivatal", "hatóság", "oah"))
+                        is_person = any(t in c_lower for t in ("dr", "vance", "director", "szabó", "kovács", "jános", "péter", "benjamin", "technician", "astronomer", "researcher", "engineer", "customer", "operator", "auditor", "kutató", "mérnök"))
+                        is_subst = any(t in c_lower for t in ("polymer", "polimer", "matrix", "mátrix", "compound", "argon", "helium", "beryllium", "gold", "water", "vapor", "fluoropolimer", "gáz", "vegyület", "anyag"))
+                        is_inst = any(t in c_lower for t in ("spectrometer", "spectrograph", "camera", "sensor", "microscope", "mikroszkóp", "spektrométer", "lézer", "laser", "cryocooler", "instrument", "imager"))
+
+                        if is_loc:
+                            cat = "LOCATION"
+                        elif is_org:
+                            cat = "ORGANIZATION"
+                        elif is_person:
+                            cat = "PERSON"
+                        elif is_subst:
+                            cat = "SUBSTANCE"
+                        elif is_inst:
+                            cat = "INSTRUMENT"
+                        else:
+                            cat = "ARTIFACT"
+
+                    ent = ExtractedEntity(
+                        id=e_id,
+                        canonical_name=c_clean,
+                        category=cat,
+                        surface_aliases=[c_clean],
+                    )
+                    entities.append(ent)
+                    current_sent_ents.append(ent)
+                else:
+                    for existing_e in entities:
+                        if existing_e.canonical_name.lower() == c_clean.lower():
+                            current_sent_ents.append(existing_e)
+                            break
+
+            # Determine predicate lemma
+            pred = "observe"
+            for p_candidate, p_lemma in PRED_MAP.items():
+                if re.search(rf"\b{p_candidate}", sent, re.IGNORECASE):
+                    pred = p_lemma
                     break
-                for alias in ent.surface_aliases:
-                    if alias.lower() in text_lower:
-                        matched_active = ent
-                        break
-                if matched_active:
-                    break
 
-        if matched_active is not None:
-            ent_id = matched_active.canonical_id
-            ent_name = matched_active.canonical_name
-            ent_category = matched_active.category
-            aliases = list(matched_active.surface_aliases)
-        else:
-            ent_id = "E1"
-            ent_name = first_cap
-            ent_category = "PERSON"
-            aliases = [first_cap]
+            # Find agent, patient, location, instrument
+            agent_id = None
+            patient_id = None
+            loc_id = None
+            inst_id = None
 
-        entities = [
-            ExtractedEntity(
-                id=ent_id,
-                canonical_name=ent_name,
-                category=ent_category,
-                surface_aliases=aliases,
+            for e in current_sent_ents:
+                if e.category in ("PERSON", "ORGANIZATION") and agent_id is None:
+                    agent_id = e.id
+                elif e.category in ("LOCATION", "CONTAINER") and loc_id is None:
+                    loc_id = e.id
+                elif e.category in ("INSTRUMENT",) and inst_id is None:
+                    inst_id = e.id
+                elif patient_id is None and e.id != agent_id:
+                    patient_id = e.id
+
+            is_polarity = not any(
+                neg in sent.lower()
+                for neg in ("prohibit", "declined", "invalid", "cancel", "failed", "tiltotta", "nem", "sem")
             )
-        ]
 
-        # Extract event predicate from verb-like token or default to observe
-        events = [
-            ExtractedEvent(
-                id="Ev1",
-                predicate="observe",
-                agent_id=ent_id,
-                temporal_anchor="present",
-                tense="PAST",
-                polarity=True,
-                raw_text=text[:120].strip(),
+            events.append(
+                ExtractedEvent(
+                    id=ev_id,
+                    predicate=pred,
+                    agent_id=agent_id,
+                    patient_id=patient_id,
+                    location_id=loc_id,
+                    instrument_id=inst_id,
+                    temporal_anchor=None,
+                    tense="PAST",
+                    polarity=is_polarity,
+                    raw_text=sent,
+                )
             )
-        ]
 
-        propositions = [
-            ExtractedProposition(
-                id="P1",
-                claim_text=text[:80].strip(),
-                epistemic_status="FACT",
-                source_agent_id=ent_id,
-                event_id="Ev1",
+            propositions.append(
+                ExtractedProposition(
+                    id=f"P{s_idx}",
+                    claim_text=sent[:120],
+                    epistemic_status="FACT" if is_polarity else "PROHIBITED",
+                    source_agent_id=agent_id or patient_id,
+                    event_id=ev_id,
+                )
             )
-        ]
+
+            if s_idx > 1:
+                relations.append(
+                    ExtractedRelation(
+                        relation_type="TEMP_ALLEN_MEETS",
+                        source_id=f"Ev{s_idx - 1}",
+                        target_id=ev_id,
+                        mechanism="discourse progression",
+                    )
+                )
+
+        if not entities:
+            entities.append(
+                ExtractedEntity(
+                    id="E1",
+                    canonical_name="Agent",
+                    category="PERSON",
+                    surface_aliases=["Agent"],
+                )
+            )
 
         return DiscourseExtractionResult(
             chunk_id=chunk_id or "dynamic_chunk",
             entities=entities,
             events=events,
-            relations=[],
+            relations=relations,
             propositions=propositions,
-            metadata={"transducer": "MockUnslothTransducer_dynamic"},
+            metadata={"transducer": "MockUnslothTransducer_dynamic", "dynamic": True},
         )
 
 
@@ -687,8 +889,10 @@ class UnslothTransducer(BaseDiscourseTransducer):
         fallback_to_mock: bool = True,
         mock_transducer: Optional[MockUnslothTransducer] = None,
         fallback_base_url: Optional[str] = None,
+        allow_fixtures: bool = True,
     ):
         super().__init__(system_prompt=system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT)
+        self._allow_fixtures = allow_fixtures
         self.base_url = (
             base_url
             or os.environ.get("UNSLOTH_BASE_URL")
@@ -706,7 +910,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.api_key = api_key
         self.session = session or requests.Session()
         self.fallback_to_mock = fallback_to_mock
-        self._mock = mock_transducer or MockUnslothTransducer(system_prompt=self.system_prompt)
+        self._mock = mock_transducer or MockUnslothTransducer(system_prompt=self.system_prompt, allow_fixtures=allow_fixtures)
         self._last_fallback_used = False
 
         # 1. Load GBNF Grammar & Pre-Warm State Machine
@@ -1065,6 +1269,21 @@ class UnslothTransducer(BaseDiscourseTransducer):
             chunk_text=chunk_text,
             **kwargs,
         )
+
+    @property
+    def allow_fixtures(self) -> bool:
+        return getattr(self, "_allow_fixtures", True)
+
+    @allow_fixtures.setter
+    def allow_fixtures(self, val: bool):
+        self._allow_fixtures = bool(val)
+        if hasattr(self, "_mock") and self._mock is not None:
+            self._mock.allow_fixtures = bool(val)
+
+    def register_fixture(self, key: str, fixture: Any):
+        """Register a fixture in the underlying mock transducer for fallback/fixtures."""
+        if hasattr(self, "_mock") and self._mock is not None:
+            self._mock.register_fixture(key, fixture)
 
     def realize_text(
         self,

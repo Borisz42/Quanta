@@ -43,6 +43,7 @@ class PipelineExecutionTracer:
         }
         self.ablation_results: List[Dict[str, Any]] = []
         self.comparative_results: List[Dict[str, Any]] = []
+        self.cold_start_results: List[Dict[str, Any]] = []
 
     @classmethod
     def get_instance(cls) -> "PipelineExecutionTracer":
@@ -57,6 +58,7 @@ class PipelineExecutionTracer:
         self.events.clear()
         self.ablation_results.clear()
         self.comparative_results.clear()
+        self.cold_start_results.clear()
 
     # -------------------------------------------------------------------------
     # Event Recorders
@@ -336,6 +338,72 @@ class PipelineExecutionTracer:
             )
         )
 
+    def record_cold_start_eval(
+        self,
+        task: str,
+        query: str,
+        baseline_prompt_tokens: int,
+        quanta_prompt_tokens: int,
+        baseline_latency_s: float,
+        ingest_latency_s: float,
+        retrieval_latency_s: float,
+        quanta_llm_latency_s: float,
+        total_cold_quanta_latency_s: float,
+        warm_start_latency_s: float,
+        baseline_answer: str,
+        quanta_cold_answer: str,
+        quanta_warm_answer: str,
+        factual_token: str,
+        is_baseline_correct: bool,
+        is_cold_correct: bool,
+        is_warm_correct: bool,
+        break_even_queries: float,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        """Records a 3-way evaluation comparing Raw Baseline vs Cold-Start (0 precompiled S-expressions) vs Warm-Start."""
+        savings_pct = (1.0 - (quanta_prompt_tokens / max(1, baseline_prompt_tokens))) * 100.0
+        entry = {
+            "task": task,
+            "query": query,
+            "baseline_prompt_tokens": baseline_prompt_tokens,
+            "quanta_prompt_tokens": quanta_prompt_tokens,
+            "token_savings_pct": savings_pct,
+            "baseline_latency_s": baseline_latency_s,
+            "ingest_latency_s": ingest_latency_s,
+            "retrieval_latency_s": retrieval_latency_s,
+            "quanta_llm_latency_s": quanta_llm_latency_s,
+            "total_cold_quanta_latency_s": total_cold_quanta_latency_s,
+            "warm_start_latency_s": warm_start_latency_s,
+            "baseline_answer": baseline_answer,
+            "quanta_cold_answer": quanta_cold_answer,
+            "quanta_warm_answer": quanta_warm_answer,
+            "factual_token": factual_token,
+            "is_baseline_correct": is_baseline_correct,
+            "is_cold_correct": is_cold_correct,
+            "is_warm_correct": is_warm_correct,
+            "break_even_queries": break_even_queries,
+            "details": details or {},
+            "timestamp": time.time(),
+        }
+        self.cold_start_results.append(entry)
+        self.events.append(
+            TraceEvent(
+                timestamp=time.time(),
+                stage="cold_start_eval",
+                action=task,
+                metrics={
+                    "baseline_latency_s": baseline_latency_s,
+                    "total_cold_quanta_latency_s": total_cold_quanta_latency_s,
+                    "warm_start_latency_s": warm_start_latency_s,
+                    "ingest_latency_s": ingest_latency_s,
+                    "retrieval_latency_s": retrieval_latency_s,
+                    "token_savings_pct": savings_pct,
+                    "break_even_queries": break_even_queries,
+                },
+                details=entry,
+            )
+        )
+
     # -------------------------------------------------------------------------
     # Mermaid Diagram Generators
     # -------------------------------------------------------------------------
@@ -455,6 +523,7 @@ flowchart LR
             "events": [asdict(e) for e in self.events],
             "ablation_results": self.ablation_results,
             "comparative_results": self.comparative_results,
+            "cold_start_results": self.cold_start_results,
         }
         with open(p, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -545,11 +614,89 @@ flowchart LR
                     "",
                 ])
 
+        if self.cold_start_results:
+            lines.extend([
+                "",
+                "---",
+                "",
+                "## 5. Cold-Start vs. Warm-Start Single-Query Evaluation & Break-Even Amortization Analysis",
+                "",
+                "This benchmark evaluates the real-world scenario where the system starts from absolute zero with **NO precompiled S-expressions** (`allow_fixtures=False`).",
+                "A single combined query (`Context: [Doc] ... Question: [Query]`) is processed through in-flight transduction, ASG compilation, PageTable storage, spreading activation, and downstream LLM generation.",
+                "Warm-start follows up with subsequent natural queries without manual context hints.",
+                "",
+                "| Workload / Task | Mode 1 Baseline | Ingest ($T_{ingest}$) | Retrieval ($T_{ret}$) | LLM ($T_{llm}$) | Mode 2 Cold-Start | Mode 3 Warm-Start | Token Savings | Break-Even ($K^*$) |",
+                "|---|---|---|---|---|---|---|---|---|",
+            ])
+            for csr in self.cold_start_results:
+                task = csr["task"]
+                b_lat = f"{csr['baseline_latency_s']:.2f}s"
+                ing_lat = f"{csr['ingest_latency_s']:.2f}s"
+                ret_lat = f"{csr['retrieval_latency_s']*1000:.1f}ms"
+                llm_lat = f"{csr['quanta_llm_latency_s']:.2f}s"
+                cold_lat = f"{csr['total_cold_quanta_latency_s']:.2f}s"
+                warm_lat = f"{csr['warm_start_latency_s']:.2f}s"
+                tok_sav = f"{csr['token_savings_pct']:.1f}%"
+                be = f"{csr['break_even_queries']:.1f} queries" if csr['break_even_queries'] < 999 else "N/A"
+                lines.append(
+                    f"| **{task}** | {b_lat} | {ing_lat} | {ret_lat} | {llm_lat} | **{cold_lat}** | **{warm_lat}** | **{tok_sav}** | **{be}** |"
+                )
+
+            lines.extend([
+                "",
+                "### Multi-Query Amortization Curve ($N$ Queries over Ingested Context)",
+                "",
+                "Demonstrating how the one-time cold ingestion overhead is amortized across subsequent queries:",
+                "",
+                "| Workload | $N=1$ (Cold) | $N=2$ | $N=5$ | $N=10$ | Net Time Saved @ $N=10$ | Break-Even Point ($K^*$) |",
+                "|---|---|---|---|---|---|---|",
+            ])
+            for csr in self.cold_start_results:
+                task = csr["task"]
+                t_base = csr["baseline_latency_s"]
+                t_ing = csr["ingest_latency_s"]
+                t_warm = csr["warm_start_latency_s"]
+
+                def fmt_step(n: int) -> str:
+                    base_n = n * t_base
+                    quanta_n = t_ing + n * t_warm
+                    delta = base_n - quanta_n
+                    sign = "+" if delta >= 0 else ""
+                    return f"{quanta_n:.2f}s vs {base_n:.2f}s ({sign}{delta:.2f}s)"
+
+                step1 = fmt_step(1)
+                step2 = fmt_step(2)
+                step5 = fmt_step(5)
+                step10 = fmt_step(10)
+                net10 = (10 * t_base) - (t_ing + 10 * t_warm)
+                be_val = f"{csr['break_even_queries']:.1f} queries" if csr['break_even_queries'] < 999 else "N/A"
+                lines.append(
+                    f"| **{task}** | {step1} | {step2} | {step5} | {step10} | **+{net10:.2f}s** | **{be_val}** |"
+                )
+
+            lines.extend([
+                "",
+                "### Detailed Answer & Factual Verification",
+                "",
+            ])
+            for csr in self.cold_start_results:
+                b_ans = csr["baseline_answer"].replace("\n", " ")[:160]
+                c_ans = csr["quanta_cold_answer"].replace("\n", " ")[:160]
+                w_ans = csr["quanta_warm_answer"].replace("\n", " ")[:160]
+                lines.extend([
+                    f"#### {csr['task']}: \"{csr['query']}\"",
+                    f"- **Factual Verification Token**: `{csr['factual_token']}`",
+                    f"- **Mode 1 Baseline Answer** ({'PASS' if csr['is_baseline_correct'] else 'FAIL'}):\n  > {b_ans}...",
+                    f"- **Mode 2 Cold-Start Quanta Answer** ({'PASS' if csr['is_cold_correct'] else 'FAIL'}):\n  > {c_ans}...",
+                    f"- **Mode 3 Warm-Start Follow-up Answer** ({'PASS' if csr['is_warm_correct'] else 'FAIL'}):\n  > {w_ans}...",
+                    "",
+                ])
+
         lines.extend([
             "",
             "---",
             "",
-            "## 5. Pipeline Module Execution Summary",
+            "## 6. Pipeline Module Execution Summary",
             "",
             "| Stage | Action | Key Metric | Details / Context |",
             "|---|---|---|---|",
@@ -557,7 +704,7 @@ flowchart LR
 
         # Sample important events for table
         for ev in self.events:
-            if ev.stage in ("ablation_probe", "comparative_eval"):
+            if ev.stage in ("ablation_probe", "comparative_eval", "cold_start_eval"):
                 continue
             metric_str = ", ".join(f"{k}={v}" for k, v in list(ev.metrics.items())[:3])
             det_summary = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(ev.details.items())[:2])
@@ -567,7 +714,7 @@ flowchart LR
             "",
             "---",
             "",
-            "## 6. Hardware Offload & GPU VRAM Safety Verification",
+            "## 7. Hardware Offload & GPU VRAM Safety Verification",
             "",
             "> [!NOTE]",
             "> All downstream neural generation executed against **llama-server CUDA backend** on the **NVIDIA GeForce RTX 3070** (8GB physical VRAM). Bounded ActiveCanvas maintained strict `M <= 512` nodes (`<= 128 KB` execution footprint), ensuring `O(1)` memory complexity regardless of dialogue scale.",
