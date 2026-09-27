@@ -1127,7 +1127,7 @@ quanta/
 
 ## 11. Implementation Roadmap & Master Milestones
 
-The operational master roadmap is governed by [`CONTEXT_EXPANSION_ROADMAP.md`](CONTEXT_EXPANSION_ROADMAP.md):
+The operational master roadmap:
 
 * **Section 1: Canonical Node Interning & Global Hash-Consing [Completed]**
   * Decoupled Band 2 registers from node CIDs; global `CanonicalNodeInterner` achieving > 57%–73% node reuse across chunks.
