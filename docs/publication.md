@@ -608,6 +608,13 @@ $$d_H\big(\mathbf{v}(\mathcal{P}_{\mathcal{L}_1}), \mathbf{v}(\mathcal{P}_{\math
 
 This invariance holds because the ASG representation is language-invariant: the same proposition parsed from Hungarian, German, or Mandarin produces identical quaternary vectors and content-addressed node identifiers.
 
+### 7.6 Polyglot Formal Code & Program AST Transduction
+
+Code is treated as another modality of discourse. Rather than building hand-coded parsing logic for every programming language, QUANTA delegates code comprehension to the neural transducer. This follows the exact same pattern as the Mentalese pivot for natural language, but directed at programming languages (e.g., Python, Java).
+
+The `UnslothTransducer` parses source code into the canonical $\Sigma^{1024}$ ASG format using the same GBNF grammar constraints as natural language. Code constructs such as function definitions (`GRAPH_FUNCTION_DEF`), call sites (`GRAPH_CALL_SITE`), variable bindings (`GRAPH_VARIABLE_BIND`), and control flow elements (`GRAPH_CONTROL_LOOP`, `GRAPH_BRANCH_COND`) are structurally mapped into the universal Band 1 and Band 7 ontologies without any language-specific AST tools. Reverse realization from ASGs back into valid target-language code is also handled by the same SLM capability, providing bidirectional language-agnostic code synthesis.
+
+
 ---
 
 ## 8. Empirical Evaluation, Benchmarks, and Verification
