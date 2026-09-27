@@ -1153,7 +1153,7 @@ The operational master roadmap is governed by [`CONTEXT_EXPANSION_ROADMAP.md`](C
   * Memory-mapped encyclopedic database compiler and read-only mount interface (`src/data/wikidata_ingester.py`, `src/memory/global_kb.py`). Ingests 4.6M English Wikipedia entities and 21M triples into SQLite (`data/wikipedia_quanta.db`) at > 2,700 nodes/sec. Executes multi-hop queries in sub-0.06 ms (0.056 ms mean for 4 hops vs 10ms target, 178× speedup) with 0.000000% hallucination. Mounts seamlessly via `PageTable.mount_global_kb()` with bounded `ActiveCanvas` LRU cache ($M \le 512$ nodes). Synchronized to Hugging Face model repository `Borisz42/QUANTA`.
 * **Section 8: Cross-Lingual Multilingual Forward Transduction Adapters [Completed]**
   * Universal non-English ingestion (Hungarian, German, Turkish, Mandarin) compiling into canonical $\Sigma^{1024}$ ASG ($d_H = 0$), fluent neural target realization, hub-node degree penalization to eliminate cross-chapter explosion, and full head-to-head baseline demonstration on NVIDIA RTX 3070 with 50.6% aggregate prompt token reduction and 100% factual grounding accuracy (7/7 PASS).
-* **Section 9: Polyglot Formal Code & Program AST Transduction [Planned]**
+* **Section 9: Polyglot Formal Code & Program AST Transduction [Completed]**
   * Universal code graph coprocessor for Python and Java: AST-to-ASG semantic extraction, call graph and type hierarchy indexing, sub-5ms spreading activation context retrieval for Host LLMs, and bidirectional code generation (Code $\to$ ASG $\to$ Code).
 
 ---
