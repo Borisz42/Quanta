@@ -295,6 +295,7 @@ class PipelineExecutionTracer:
         is_baseline_correct: bool,
         is_quanta_correct: bool,
         retrieval_latency_ms: float = 0.0,
+        retrieved_context: str = "",
     ):
         """Records a head-to-head comparison between raw text stuffing baseline and QUANTA subgraph."""
         savings_pct = (1.0 - (quanta_prompt_tokens / max(1, baseline_prompt_tokens))) * 100.0
@@ -314,6 +315,7 @@ class PipelineExecutionTracer:
             "is_baseline_correct": is_baseline_correct,
             "is_quanta_correct": is_quanta_correct,
             "retrieval_latency_ms": retrieval_latency_ms,
+            "retrieved_context": retrieved_context,
             "timestamp": time.time(),
         }
         self.comparative_results.append(entry)

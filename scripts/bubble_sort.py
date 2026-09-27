@@ -1,27 +1,9 @@
-"""Bubble Sort Algorithm Implementation in Python.
-
-Provides an optimized bubble sort implementation with early-termination flag
-that sorts a list of comparable elements in ascending order.
-"""
-
 from typing import List, TypeVar
 
 T = TypeVar("T")
 
 
 def bubble_sort(arr: List[T]) -> List[T]:
-    """Sorts a list of elements in ascending order using the bubble sort algorithm.
-
-    Iterates through the list, comparing adjacent elements and swapping them if
-    they are in the wrong order. Terminates early if an entire pass completes
-    without performing any swaps, indicating the list is already sorted.
-
-    Args:
-        arr: Input list of comparable elements.
-
-    Returns:
-        The sorted list in ascending order.
-    """
     n = len(arr)
     for i in range(n):
         swapped = False

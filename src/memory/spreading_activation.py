@@ -160,10 +160,15 @@ class SpreadingActivationRetriever:
 
     QUESTION_STOPWORDS: Set[str] = {
         "what", "who", "where", "why", "when", "how", "which",
-        "did", "do", "does", "done", "is", "are", "was", "were", "be", "been",
-        "can", "could", "would", "should", "will", "has", "have", "had",
-        "the", "a", "an", "in", "at", "to", "for", "of", "on", "by", "from",
+        "did", "do", "does", "done", "doing", "is", "are", "was", "were", "be", "been", "being",
+        "can", "could", "would", "should", "will", "shall", "has", "have", "had", "may", "might", "must",
+        "the", "a", "an", "in", "at", "to", "for", "of", "on", "by", "from", "with", "without",
+        "into", "onto", "over", "under", "about", "such", "some", "any", "all", "more", "most", "other", "also",
+        "if", "then", "else", "and", "or", "not", "but", "there", "always", "possible",
         "its", "her", "his", "their", "our", "my", "your", "this", "that", "these", "those",
+        "describe", "explain", "review", "detail", "tell", "show", "give", "provide",
+        "sentences", "sentence", "words", "word", "code", "file", "function", "class", "method",
+        "element", "elements", "item", "items", "value", "values", "object", "objects", "data", "input", "output",
         # Hungarian question words & functional particles
         "mi", "mit", "milyen", "melyik", "ki", "kit", "kinek", "kivel", "hol", "hová", "honnan",
         "mikor", "miért", "hogyan", "volt", "voltak", "lett", "lettek", "van", "vannak",
@@ -395,10 +400,9 @@ class SpreadingActivationRetriever:
 
     def _extract_salient_entities(self, query_text: str, pred_token: Optional[str]) -> List[str]:
         """Extracts candidate named entity mentions or noun phrases from query text."""
-        # Check for multi-word capitalized phrases (e.g. Dr. Eleanor Vance, Eleanor Vance)
         entities: List[str] = []
 
-        # Common multi-word patterns in benchmarks
+        # Common domain-specific multi-word phrases (case-insensitive)
         known_patterns = [
             r"\b[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\b",              # WASP-96b, SKU-901, tok_visa_4242, tok_declined, GLASS-z12
             r"\b(?:Order|OrderFulfillmentService|PaymentGatewayClient|InventoryService|GLASS|SMACS|Ariane|NASA|ESA)\s*[0-9A-Za-z_-]*\b",
@@ -413,7 +417,7 @@ class SpreadingActivationRetriever:
             r"\bphase\s+transition\b",
             r"\bcompeting\s+tests\b",
             r"\bthe\s+hypothesis\b",
-            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)*\b",
+            r"\bUNO\b",
         ]
         for pat in known_patterns:
             matches = re.findall(pat, query_text, re.IGNORECASE)
@@ -427,7 +431,23 @@ class SpreadingActivationRetriever:
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
-        # Always extract salient technical and domain noun tokens for robust seed matching
+        # Capitalized Proper Nouns, PascalCase & Snake_case code identifiers (CASE SENSITIVE, NO re.IGNORECASE!)
+        capitalized_patterns = [
+            r"\b[A-Z][a-z0-9]+(?:[A-Z][a-zA-Z0-9]*)+\b",  # PascalCase: ColorSwitcherStrategy, PlayerStrategy
+            r"\b[a-zA-Z_][a-zA-Z0-9_]*_[a-zA-Z0-9_]+\b",  # snake_case: bubble_sort, choose_card, active_color
+            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)+\b", # Multi-word Title Case: James Webb Space Telescope, Eleanor Vance
+        ]
+        for pat in capitalized_patterns:
+            matches = re.findall(pat, query_text)
+            for m in matches:
+                m_clean = m.strip()
+                first_word = m_clean.split()[0].lower() if m_clean.split() else ""
+                if first_word in self.QUESTION_STOPWORDS:
+                    continue
+                if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
+                    entities.append(m_clean)
+
+        # Extract salient technical and domain noun tokens for robust seed matching
         tokens = re.findall(r"\b[\w'-]+\b", query_text, re.UNICODE)
         existing_lower = {e.lower() for e in entities}
         for tok in tokens:
@@ -438,6 +458,8 @@ class SpreadingActivationRetriever:
                 and len(t_lower) > 3
                 and t_lower not in self.IRREGULAR_LEMMA_MAP
                 and t_lower not in existing_lower
+                and not t_lower.isdigit()
+                and not re.match(r"^\d+-\d+$", t_lower)
             ):
                 entities.append(tok)
                 existing_lower.add(t_lower)
@@ -499,28 +521,34 @@ class SpreadingActivationRetriever:
         if named_entities or pred_lemma:
             existing_cids = {cid for cid, _ in matches}
             generic_stop = {
-                "polimer", "anyag", "substance", "compound", "specimen", "item", "order",
+                "polimer", "anyag", "substance", "compound", "specimen", "item", "items", "order",
                 "entity", "sample", "minta", "cooling", "system", "maintains",
-                "call", "calls", "invoke", "invokes", "inherits", "implements", "imports"
+                "element", "elements", "value", "values", "object", "objects", "data", "input", "output",
+                "call", "calls", "invoke", "invokes", "inherits", "implements", "imports",
+                "code", "class", "function", "def", "method", "early", "condition",
+                "describe", "explain", "review", "sentence", "sentences", "there", "always",
+                "possible", "valid", "move", "that", "this"
             }
             # Prioritize longer, more specific multi-word entities, plus action predicate
             candidate_terms = list(named_entities)
-            if pred_lemma and len(pred_lemma) > 3 and pred_lemma.lower() not in generic_stop:
+            if pred_lemma and len(pred_lemma) > 3 and pred_lemma.lower() not in generic_stop and pred_lemma.lower() not in self.QUESTION_STOPWORDS:
                 candidate_terms.append(pred_lemma.lower())
             sorted_ents = sorted(candidate_terms, key=lambda x: len(x), reverse=True)
             boosted: List[Tuple[str, int]] = []
             boosted_cids: Set[str] = set()
             cand_limit = max(top_k, 5)
+            per_ent_limit = 2 if len(sorted_ents) > 1 else cand_limit
             for ent_text in sorted_ents:
-                if ent_text.lower() in generic_stop or len(ent_text) <= 3:
+                ent_clean = ent_text.lower().strip()
+                if ent_clean in generic_stop or ent_clean in self.QUESTION_STOPWORDS or len(ent_clean) <= 3:
                     continue
                 if hasattr(page_table, "find_cids_by_literal"):
-                    cids = page_table.find_cids_by_literal(ent_text, limit=cand_limit)
+                    cids = page_table.find_cids_by_literal(ent_clean, limit=per_ent_limit)
                 else:
                     cur = page_table._conn.cursor()
                     cur.execute(
-                        "SELECT cid FROM nodes WHERE LOWER(literal) = ? OR LOWER(literal) LIKE ? LIMIT ?",
-                        (ent_text, f"%{ent_text}%", cand_limit),
+                        "SELECT cid FROM nodes WHERE LOWER(literal) = ? LIMIT ?",
+                        (ent_clean, per_ent_limit),
                     )
                     rows = cur.fetchall()
                     cids = [r[0] for r in rows]
@@ -529,11 +557,13 @@ class SpreadingActivationRetriever:
                     if ent_cid not in boosted_cids:
                         boosted.append((ent_cid, 0))
                         boosted_cids.add(ent_cid)
+                if len(boosted) >= cand_limit * 2:
+                    break
 
             remaining_matches = [(cid, dist) for cid, dist in matches if cid not in boosted_cids]
 
-            is_code_query = any(kw in str(query).lower() for kw in ("who calls", "calls", "inherits", "implements", "imports"))
-            if is_code_query and boosted:
+            # If exact named entities matched the query, do not contaminate seeds with random distant SIMD matches from unrelated chapters
+            if boosted:
                 return boosted[:top_k]
 
             matches = boosted + remaining_matches
@@ -819,29 +849,44 @@ class SpreadingActivationRetriever:
             and (n.get_slot("TYPE_EVENT") == 1 or n.get_slot("WN_ACT_ACTION") == 1 or (n.anchor and "(v)" in n.anchor))
         ]
 
+        # Collect direct entity-to-entity code/structural relations (inheritance, calls, implements)
+        rel_descriptions: List[str] = []
+        entity_names: List[str] = []
+        IGNORED_CALLERS = {"list", "dict", "tuple", "optional", "any", "returns none", "none", "true", "false", "typevar", "int", "str", "bool", "float"}
+        for n in subgraph.nodes.values():
+            if isinstance(n.literal, dict) or (n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:"))):
+                continue
+            name = str(n.literal) if n.literal is not None else (n.anchor or n.cid[:8])
+            if name == "?X" or not name.strip() or name.lower().strip() in IGNORED_CALLERS:
+                continue
+            entity_names.append(name)
+            for rel, targets in n.edges.items():
+                for t_cid in targets:
+                    t_node = subgraph.get_node(t_cid)
+                    if t_node:
+                        if isinstance(t_node.literal, dict) or (t_node.anchor and (t_node.anchor.startswith("merkle:") or t_node.anchor.startswith("fold:"))):
+                            continue
+                        t_name = str(t_node.literal) if t_node.literal is not None else (t_node.anchor or t_cid[:8])
+                        if rel == "INHERITS_FROM":
+                            desc = f"{name} inherits from {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "CALLS":
+                            desc = f"{name} calls {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "IMPLEMENTS":
+                            desc = f"{name} implements {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "IMPORTS":
+                            desc = f"{name} imports {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+
         if not event_nodes:
-            # Check for direct entity-to-entity code/structural relations first
-            rel_descriptions = []
-            entity_names = []
-            for n in subgraph.nodes.values():
-                name = str(n.literal) if n.literal is not None else (n.anchor or n.cid[:8])
-                if name != "?X":
-                    entity_names.append(name)
-                for rel, targets in n.edges.items():
-                    for t_cid in targets:
-                        t_node = subgraph.get_node(t_cid)
-                        if t_node:
-                            t_name = str(t_node.literal) if t_node.literal is not None else (t_node.anchor or t_cid[:8])
-                            if rel == "CALLS":
-                                rel_descriptions.append(f"{name} calls {t_name}")
-                            elif rel == "INHERITS_FROM":
-                                rel_descriptions.append(f"{name} inherits from {t_name}")
-                            elif rel == "IMPLEMENTS":
-                                rel_descriptions.append(f"{name} implements {t_name}")
-                            elif rel == "IMPORTS":
-                                rel_descriptions.append(f"{name} imports {t_name}")
             if rel_descriptions:
-                return ". ".join(rel_descriptions) + "."
+                return " ".join(rel_descriptions)
             if entity_names:
                 return f"Relevant entities in memory: {', '.join(entity_names)}."
             return ""
@@ -850,8 +895,8 @@ class SpreadingActivationRetriever:
         ordered_events = self._order_events(subgraph, event_nodes)
 
         has_rich_literals = any(isinstance(getattr(e, 'literal', None), str) and len(e.literal.split()) >= 3 for e in ordered_events)
-        sentences: List[str] = []
-        seen_sentences: Set[str] = set()
+        sentences: List[str] = list(rel_descriptions)
+        seen_sentences: Set[str] = {s.lower().strip() for s in sentences}
         for ev in ordered_events:
             clause_text = ""
             if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:

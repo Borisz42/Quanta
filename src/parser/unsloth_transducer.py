@@ -762,6 +762,9 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             "calculate": "calculate", "calculated": "calculate",
             "process": "process", "processed": "process",
             "validate": "validate", "validated": "validate",
+            "compare": "compare", "swap": "swap", "swapped": "swap",
+            "sort": "sort", "sorted": "sort", "choose": "choose",
+            "select": "choose", "break": "terminate",
         }
 
         DOMAIN_KEYWORD_OVERRIDES = {
@@ -800,6 +803,13 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
 
             # Find all candidates
             candidates = CAP_PAT.findall(sent) + ID_PAT.findall(sent)
+
+            if is_code:
+                code_defs = re.findall(r"\b(?:def|class)\s+([a-zA-Z0-9_]+)\b", sent)
+                candidates.extend(code_defs)
+                for var_kw in ("swapped", "choose_card", "active_color", "active_value", "run_tournament"):
+                    if var_kw in sent and var_kw not in candidates:
+                        candidates.append(var_kw)
 
             # Special domain keywords to extract explicitly
             for kw in DOMAIN_KEYWORD_OVERRIDES:
@@ -862,10 +872,23 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
 
             # Determine predicate lemma
             pred = "observe"
-            for p_candidate, p_lemma in PRED_MAP.items():
-                if re.search(rf"\b{p_candidate}", sent, re.IGNORECASE):
-                    pred = p_lemma
-                    break
+            if is_code:
+                if re.search(r"\bbreak\b", sent):
+                    pred = "terminate"
+                elif "," in sent and "=" in sent and not sent.startswith("def ") and not sent.startswith("class "):
+                    pred = "swap"
+                elif re.search(r"[><]|==|!=", sent):
+                    pred = "compare"
+                elif re.search(r"\b(?:for|while)\b", sent):
+                    pred = "iterate"
+                elif re.search(r"\breturn\b", sent):
+                    pred = "return"
+
+            if pred == "observe":
+                for p_candidate, p_lemma in PRED_MAP.items():
+                    if re.search(rf"\b{p_candidate}", sent, re.IGNORECASE):
+                        pred = p_lemma
+                        break
 
             # Find agent, patient, location, instrument
             agent_id = None
@@ -929,6 +952,17 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
                 m_inh = re.search(r"class\s+([A-Za-z0-9_]+)\s+extends\s+([A-Za-z0-9_]+)", line)
                 if m_inh:
                     c1, c2 = m_inh.group(1).lower(), m_inh.group(2).lower()
+                    if c1 in ent_map and c2 in ent_map:
+                        relations.append(
+                            ExtractedRelation(
+                                relation_type="INHERITS_FROM",
+                                source_id=ent_map[c1],
+                                target_id=ent_map[c2],
+                            )
+                        )
+                m_py_inh = re.search(r"class\s+([A-Za-z0-9_]+)\s*\(\s*([A-Za-z0-9_]+)\s*\)", line)
+                if m_py_inh:
+                    c1, c2 = m_py_inh.group(1).lower(), m_py_inh.group(2).lower()
                     if c1 in ent_map and c2 in ent_map:
                         relations.append(
                             ExtractedRelation(

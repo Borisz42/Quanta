@@ -417,12 +417,23 @@ class PageTable(MutableMapping):
                 """
             )
 
+    INDEX_STOPWORDS = {
+        "the", "a", "an", "in", "on", "at", "by", "for", "with", "from", "that", "this",
+        "these", "those", "it", "its", "is", "was", "are", "were", "to", "of", "and",
+        "or", "not", "but", "all", "any", "can", "could", "would", "should", "what",
+        "which", "who", "when", "where", "why", "how", "they", "them", "their", "there",
+        "then", "into", "also", "some", "such", "than", "more", "most", "been", "being",
+        "does", "done", "doing", "did", "out", "about", "over", "other", "each", "both",
+        "if", "else", "then", "have", "has", "had", "will", "shall", "may", "might",
+        "element", "elements", "item", "items", "value", "values", "object", "objects", "data"
+    }
+
     def _index_literal(self, text: str, cid: str) -> None:
         import re
-        lit_lower = text.lower().strip('"')
+        lit_lower = text.lower().strip('"\'')
         self._literal_index[lit_lower].add(cid)
         for word in re.findall(r"\b[a-zA-Z0-9_-]+\b", lit_lower):
-            if len(word) > 2:
+            if len(word) >= 4 and word not in self.INDEX_STOPWORDS and not word.isdigit() and not re.match(r"^\d+-\d+$", word):
                 self._literal_index[word].add(cid)
 
     def _warmup_index(self):
@@ -461,11 +472,14 @@ class PageTable(MutableMapping):
 
     def find_cids_by_literal(self, term: str, limit: int = 5) -> List[str]:
         """Finds node CIDs matching term in O(1) time."""
-        t = term.lower().strip()
+        t = term.lower().strip().strip('"\'')
+        if not t or t in self.INDEX_STOPWORDS:
+            return []
         matched = set(self._literal_index.get(t, ()))
-        if not matched:
+        if not matched and len(t) >= 4:
+            # Prefix matching for technical terms, never substring matching where short keys match
             for k, cids in self._literal_index.items():
-                if t in k or k in t:
+                if k.startswith(t) or (len(k) >= 4 and (t == k + "s" or t == k + "es" or k == t + "s" or k == t + "es")):
                     matched.update(cids)
                     if len(matched) >= limit:
                         break
