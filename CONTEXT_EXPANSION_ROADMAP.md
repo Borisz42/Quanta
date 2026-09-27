@@ -80,7 +80,7 @@ Each section provides:
 - [Section 6: OpenAI-Compatible Reverse Proxy & Model Context Protocol (MCP) Server](#section-6-openai-compatible-reverse-proxy--model-context-protocol-mcp-server-llm-integration) *(Host LLM Middleware)*
 - [Section 7: Phase 10 Global Knowledge Base Mount (Wikipedia & Wikidata Pre-Compilation)](#section-7-phase-10-global-knowledge-base-mount-wikipedia--wikidata-pre-compilation-world-knowledge) *(Encyclopedic Grounding)*
 - [Section 8: Cross-Lingual Multilingual Forward Transduction Adapters](#section-8-cross-lingual-multilingual-forward-transduction-adapters-universal-pivot) *(Universal Non-English & Hungarian Parsing)*
-- [Section 9: Polyglot Formal Code & Program AST Transduction (Python & Java Semantics)](#section-9-polyglot-formal-code--program-ast-transduction-python--java-semantics) *(Universal Code Graph Coprocessor)*
+- [Section 9: Neural Code Discourse Transduction via Unified SLM Pipeline](#section-9-neural-code-discourse-transduction-via-unified-slm-pipeline) *(Neural Code Understanding)*
 
 ---
 
@@ -578,69 +578,76 @@ ConceptNet 5.7.0 (mmap-backed) provides native multilingual concept grounding: e
 
 ---
 
-## Section 9: Polyglot Formal Code & Program AST Transduction (Python & Java Semantics)
+## Section 9: Neural Code Discourse Transduction via Unified SLM Pipeline
 
 ### Context & Architectural Rationale
 Software repositories contain thousands of source files where LLM context windows quickly saturate. Furthermore, flat token sequences fail to preserve lexical scopes, call hierarchies, inheritance trees, type signatures, and control-flow graphs (CFGs).
 
-Section 9 establishes a memory-bound, polyglot code transduction coprocessor:
-1. Ingests source code in **Python** (dynamic, functional/OOP, indentation-scoped) and **Java** (static, strictly typed, class/interface-scoped) into content-addressed $\Sigma^{1024}$ ASGs.
-2. Represents code semantics across QUANTA's 8 quaternary bands:
-   - Band 0: Computational NSM Primitives (Execution, State Mutation, Branching, Returns).
-   - Band 1: Structural AST roles (`GRAPH_FUNCTION_DEF`, `GRAPH_CLASS_DEF`, `GRAPH_INTERFACE_DEF`, `GRAPH_CALL_SITE`, `GRAPH_VARIABLE_BIND`, `GRAPH_CONTROL_LOOP`, `GRAPH_BRANCH_COND`, `GRAPH_EXCEPTION_HANDLE`).
-   - Band 2: Formal execution registers & local variable bindings.
-   - Band 5: Lexical scoping & package/class containment (`CONTAINED_IN`, `MEMBER_OF`).
-   - Band 6: Static type signatures (primitives, reference types, generics).
-   - Band 7: Formal CFG transitions, def-use data dependencies, and cross-file call links (`CALLS`, `INHERITS_FROM`, `IMPLEMENTS`, `IMPORTS`, `CFG_NEXT`, `DATA_FLOW_DEF_USE`).
+**Design Principle (inherited from Section 8):** Language-specific and domain-specific hardcoded parsers belong **only** in deterministic test fixture mocks (for CI offline determinism). The **live pipeline delegates all code understanding** — lexical scoping, call graph extraction, type signature resolution, control-flow analysis, and inheritance hierarchy mapping — to the **neural transducer** (`UnslothTransducer` with GBNF grammar-constrained decoding). No `ast.parse()` calls, no hand-written Java parsers, no `CodeLanguageAdapter` ABC hierarchies, no file-extension dispatch tables. Code is treated as **another modality of discourse** that the SLM reads and transduces into the same canonical S-expression schema used for natural language.
+
+This mirrors the Section 8 multilingual precedent exactly:
+- **Section 8 pattern:** Hungarian/German/Turkish/Mandarin text → SLM reads foreign discourse → emits English-pivot S-expressions via GBNF grammar → identical downstream pipeline (ASG compiler, grounder, interner, page table).
+- **Section 9 pattern:** Python/Java/Rust/Go/any-language source code → SLM reads code discourse → emits computational S-expressions via the same GBNF grammar → identical downstream pipeline.
+
+The SLM (Qwen 3.5 4B) natively understands dozens of programming languages from pre-training. Extending the system prompt with code-domain few-shot demonstrations teaches it to map code constructs (functions, classes, calls, imports, control flow, exceptions) to the existing S-expression schema with appropriate computational primitives — no per-language parser engineering required.
+
+Section 9 establishes a memory-bound, language-agnostic code transduction coprocessor:
+1. Ingests source code in **any programming language** into content-addressed $\Sigma^{1024}$ ASGs via the neural transducer — the same pipeline path used for natural language and multilingual discourse.
+2. Extends the existing band vocabulary with computational semantic slots (not new bands, not new parsers):
+   - Band 0: Computational NSM Primitives (`NSM_DO` for execution, `NSM_HAPPEN` for state mutation, branching as deontic modality).
+   - Band 1: Structural roles reused from existing schema (`GRAPH_FUNCTION_DEF`, `GRAPH_CLASS_DEF`, `GRAPH_CALL_SITE`, `GRAPH_SCOPED_CONTEXT`), with new vocabulary entries for code-specific constructs registered in `src/core/types.py`.
+   - Band 5: Containment and scoping (`CONTAINED_IN`, `MEMBER_OF`) — already in the schema.
+   - Band 7: Relational edges (`CALLS`, `INHERITS_FROM`, `IMPLEMENTS`, `IMPORTS`, `CFG_NEXT`) — registered as new edge types in the existing edge vocabulary.
 3. Intersects with `SpreadingActivationRetriever` (Section 4) to allow Host LLMs to query code topologies (e.g. *"Show all callers of processOrder and their exception handlers"*) in $< 5\text{ ms}$ over 100k+ lines of code, compressing prompt token footprint by $> 75\%$.
-4. Provides **bidirectional code realization**: reconstructs valid, executable Python and Java source code from ASG subgraphs via `PolyglotCodeEmitter`.
+4. **Bidirectional code realization** is handled by the neural transducer in reverse mode (ASG S-expression → SLM generates target-language code), following the same pattern as Section 8's `realize_multilingual()`. No per-language `CodeEmitter` classes.
 
 ### Target Files
-- **[NEW]** `src/parser/code_parser_base.py`: Abstract `CodeLanguageAdapter` and AST symbol extraction interfaces.
-- **[MODIFY]** `src/parser/ast_parser.py`: Upgrade Python parser with call-site resolution, type annotations, and module imports.
-- **[NEW]** `src/parser/java_parser.py`: Dedicated Java AST parser (classes, interfaces, methods, static types, fields, control-flow, calls).
-- **[NEW]** `src/parser/polyglot_code_transducer.py`: Unified multi-language entry point dispatching by file extension (`.py`, `.java`).
-- **[MODIFY]** `src/realizer/code_emitter.py`: Expand emitter to support bidirectional code generation for both Python and Java.
-- **[NEW]** `tests/test_polyglot_code_transduction.py`: Comprehensive test suite for Python and Java code understanding and round-trip execution.
+- **[MODIFY]** [`src/parser/unsloth_transducer.py`](src/parser/unsloth_transducer.py): Extend system prompt with code-domain few-shot demonstrations; accept source code input as discourse.
+- **[MODIFY]** [`src/core/types.py`](src/core/types.py): Register code-domain structural slot vocabulary entries (`GRAPH_INTERFACE_DEF`, `GRAPH_CALL_SITE`, `GRAPH_VARIABLE_BIND`, `GRAPH_CONTROL_LOOP`, `GRAPH_BRANCH_COND`, `GRAPH_EXCEPTION_HANDLE`) and edge types (`CALLS`, `INHERITS_FROM`, `IMPLEMENTS`, `IMPORTS`, `CFG_NEXT`, `DATA_FLOW_DEF_USE`) in the existing band schema.
+- **[MODIFY]** [`src/pipeline/cognitive_pipeline.py`](src/pipeline/cognitive_pipeline.py): Accept code-as-discourse input; route through the same `UnslothTransducer` → `ASGCompiler` → `PageTable` pipeline used for natural language.
+- **[NEW]** `tests/test_code_transduction.py`: End-to-end code transduction tests using the neural transducer (with mock fixtures for offline CI).
 
 ### OpenResearch Experiment Definition
 - **Experiment ID**: `exp-009a`
-- **Title**: *Polyglot Formal Code AST Transduction & Spreading-Activation Retrieval*
-- **Hypothesis**: Mapping multi-file Python and Java ASTs to 1024-D quaternary ASG topologies will allow sub-5ms spreading-activation retrieval of callers and type hierarchies while enabling bidirectional round-trip code generation with zero AST syntax loss.
+- **Title**: *Neural Code Discourse Transduction via Unified SLM Pipeline*
+- **Hypothesis**: Extending the Unsloth transducer's system prompt with code-domain few-shot demonstrations will enable direct forward parsing of Python, Java, and arbitrary programming language source code into canonical $\Sigma^{1024}$ ASGs with correct structural roles, call/inheritance edges, and scoping — using the same grammar-constrained decoding pipeline as natural language, with zero language-specific hardcoded parsers.
 - **Command**:
   ```powershell
-  .\orx.ps1 create-experiment quanta --parent exp-006a --title "Polyglot Code Transduction" --description "Python and Java AST-to-ASG coprocessor with call graph retrieval and code emitter"
+  .\orx.ps1 create-experiment quanta --parent exp-012a --title "Neural Code Discourse Transduction" --description "SLM-driven code understanding via grammar-constrained transduction with zero hardcoded parsers"
   ```
 
 ### Tasks
-- [ ] **Task 9.1: Universal Code AST Schema & Abstract Adapter (`src/parser/code_parser_base.py`)**
-  - Define `CodeSymbol`, `CodeScope`, `TypeSignature`, and `ControlFlowEdge` dataclasses.
-  - Implement `CodeLanguageAdapter` ABC with `parse_source()`, `build_call_graph()`, and `extract_type_signatures()`.
-  - Map formal AST constructs to 1024-D slot vectors (Band 1 AST roles, Band 5 scoping, Band 6 type signatures, Band 7 CFG/call relations).
-- [ ] **Task 9.2: Enhanced Python Semantic Parser (`src/parser/ast_parser.py`)**
-  - Extend Python parser to resolve `ast.Call` sites into explicit `CALLS` edges linking caller and callee nodes.
-  - Extract PEP 484 type annotations into Band 6 type slots.
-  - Map `import` and `from ... import` statements into Band 7 `IMPORTS` dependency edges.
-  - Track lexical variable scoping and def-use data-flow chains.
-- [ ] **Task 9.3: Dedicated Java Semantic AST Parser (`src/parser/java_parser.py`)**
-  - Implement lightweight, zero-dependency Java AST parser:
-    - Package and import statements (`IMPORTS`).
-    - Class and Interface declarations (`GRAPH_CLASS_DEF`, `GRAPH_INTERFACE_DEF`).
-    - Modifiers: `public`, `private`, `protected`, `static`, `final`, `abstract`.
-    - Inheritance (`extends` -> `INHERITS_FROM`) and interface implementation (`implements` -> `IMPLEMENTS`).
-    - Method declarations with explicit parameter types, return types, and `throws` exception signatures.
-    - Method invocation sites (`GRAPH_CALL_SITE` -> `CALLS`).
-    - Try-catch-finally exception structures (`GRAPH_EXCEPTION_HANDLE`).
-- [ ] **Task 9.4: Bidirectional Code Generation (`src/realizer/code_emitter.py`)**
-  - Expand `CodeEmitter` into `PolyglotCodeEmitter` supporting both Python and Java.
-  - `PythonCodeEmitter`: Emits idiomatic, executable Python functions, classes, loops, and async defs.
-  - `JavaCodeEmitter`: Emits valid Java classes, interfaces, method headers, typed parameters, and control-flow blocks from ASG topologies.
-  - Implement `format_code_context_for_llm()` to inject compact code signatures and dependency skeletons into Host LLM prompts.
-- [ ] **Task 9.5: 🧪 Polyglot Code Understanding & Round-Trip Tests (`tests/test_polyglot_code_transduction.py`)**
-  - Ingest Python programs $\to$ parse to ASG $\to$ regenerate Python code $\to$ verify execution (e.g. `factorial(5) == 120`).
-  - Ingest Java OOP programs (e.g. `OrderService` with interfaces, dependencies, and exceptions) $\to$ parse to ASG $\to$ regenerate Java code $\to$ assert syntactically valid Java class structure.
-  - Run `SpreadingActivationRetriever` on code graphs: assert sub-5ms retrieval of exact caller-callee and inheritance subgraphs.
-  - Run: `pytest tests/test_polyglot_code_transduction.py -v`.
+- [ ] **Task 9.1: Code-Domain System Prompt Extension (`src/parser/unsloth_transducer.py`)**
+  - Extend `DEFAULT_UNSLOTH_SYSTEM_PROMPT` to accept source code as discourse input (replace domain restriction with "from discourse in any language or programming language source code").
+  - Add 2–3 code-domain few-shot demonstrations showing how the SLM maps code constructs to the same S-expression schema:
+    - **Python function** → entities for function/parameters, events for calls/returns, relations for scoping/containment.
+    - **Java class with inheritance** → entities for class/interface/methods, events for method invocations, relations for `INHERITS_FROM`/`IMPLEMENTS`/`CALLS`.
+  - Emit `:surface` fields preserving the original source token for provenance (e.g. `:surface "def process_order(self, order_id)"`).
+  - The transducer emits **semantic intent**, not syntactic tokens — the same `(entity ...)` / `(event ...)` / `(relation ...)` schema used for natural language.
+- [ ] **Task 9.2: Code-Domain Slot Vocabulary Registration (`src/core/types.py`)**
+  - Register new `StructuralValue` entries for code constructs not yet in the schema: `GRAPH_INTERFACE_DEF`, `GRAPH_CALL_SITE`, `GRAPH_VARIABLE_BIND`, `GRAPH_CONTROL_LOOP`, `GRAPH_BRANCH_COND`, `GRAPH_EXCEPTION_HANDLE`.
+  - Register new edge type constants: `CALLS`, `INHERITS_FROM`, `IMPLEMENTS`, `IMPORTS`, `CFG_NEXT`, `DATA_FLOW_DEF_USE`.
+  - These are vocabulary entries in the existing band schema, not new parser infrastructure.
+- [ ] **Task 9.3: Code-as-Discourse Pipeline Integration (`src/pipeline/cognitive_pipeline.py`)**
+  - Add `ingest_code(source_text: str, language_hint: Optional[str] = None)` method that routes source code through the standard `UnslothTransducer` → `ASGCompiler` → `PageTable` pipeline.
+  - The `language_hint` is an **optional metadata annotation** passed to the transducer system prompt (e.g. "This is Python source code") — it is **not** used for parser dispatch or conditional logic.
+  - Chunking uses the existing discourse chunker with code-aware sentence boundaries (blank lines, function/class boundaries detected by the SLM, not by regex or `ast.parse()`).
+- [ ] **Task 9.4: Neural Reverse Code Realization**
+  - Add `realize_code(graph: QuantaGraph, target_lang: str) -> str` in `src/pipeline/translator_pipeline.py`, following the exact same pattern as Section 8's `realize_multilingual()`.
+  - Serializes ASG to S-expression, sends to Unsloth SLM with realization prompt (e.g. *"Realize this semantic graph as valid Python source code"*), returns target-language code.
+  - No per-language `CodeEmitter` classes — the SLM handles syntax, indentation, typing, and idioms natively.
+- [ ] **Task 9.5: Mock Fixtures for CI Determinism**
+  - Create deterministic `MockUnslothTransducer` fixtures for Python and Java code inputs in `tests/test_code_transduction.py`.
+  - Hardcoded code-to-S-expression mappings exist **only** inside test fixture files — never in the live pipeline.
+  - Register fixtures via `mock.register_fixture(python_code_text, python_code_fixture)` following the existing Section 8 pattern.
+- [ ] **Task 9.6: 🧪 End-to-End Code Transduction Test Suite (`tests/test_code_transduction.py`)**
+  - Forward transduction: Python function → ASG (assert correct entities, events, `CALLS` edges, scoping).
+  - Forward transduction: Java class with interface → ASG (assert `INHERITS_FROM`, `IMPLEMENTS`, method call sites).
+  - Cross-language structural equivalence: Python `factorial` and Java `factorial` → assert shared semantic core (identical NSM primitives, compatible structural roles).
+  - Spreading activation retrieval: Ingest multi-file code corpus → query "callers of processOrder" → assert sub-5ms retrieval of exact caller subgraph.
+  - Round-trip realization: Code → ASG → neural code generation → assert syntactically plausible output.
+  - Assert code transduction uses zero language-specific parser imports (no `import ast`, no `java_parser`, no `CodeLanguageAdapter`).
+  - Run: `pytest tests/test_code_transduction.py -v`.
 
 ---
 
@@ -682,6 +689,6 @@ python scripts/run_multihop_benchmark.py --mode offline --samples 50
 # Section 8: Hungarian & Multilingual Pipeline
 pytest tests/test_hungarian_pipeline.py tests/test_multilingual_pipeline.py -v
 
-# Section 9: Polyglot Code Transduction (Python & Java)
-pytest tests/test_ast_parser.py tests/test_polyglot_code_transduction.py -v
+# Section 9: Neural Code Discourse Transduction
+pytest tests/test_code_transduction.py -v
 ```
