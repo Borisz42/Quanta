@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "quanta-memory": {
+      "command": "python",
+      "args": ["${workspaceFolder}/src/server/mcp_server.py"],
+      "env": {
+        "QUANTA_ALLOW_CPU_OFFLOAD": "1",
+        "QUANTA_TRANSDUCER_BACKEND": "mock"
+      }
+    }
+  }
+}
