@@ -739,14 +739,30 @@ class MockTransducer(BaseDiscourseTransducer):
     ) -> DiscourseExtractionResult:
         """Generate a valid, rich deterministic extraction result for arbitrary text."""
         raw_sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", chunk_text) if len(s.strip()) > 5]
-        if not raw_sents:
-            raw_sents = [chunk_text.strip()]
+        seen_sents: Set[str] = set()
+        deduped_sents: List[str] = []
+        for s in raw_sents:
+            s_clean = s.strip()
+            if s_clean and s_clean not in seen_sents:
+                seen_sents.add(s_clean)
+                deduped_sents.append(s_clean)
+        raw_sents = deduped_sents or [chunk_text.strip()]
 
         entities: List[ExtractedEntity] = []
         events: List[ExtractedEvent] = []
         relations: List[ExtractedRelation] = []
         propositions: List[ExtractedProposition] = []
         ent_names_seen: Set[str] = set()
+
+        # Seed fallback entity in case no capitalized entities exist
+        default_ent = ExtractedEntity(
+            id="E1",
+            canonical_name="FacilitySystem",
+            category="ORGANIZATION",
+            surface_aliases=["FacilitySystem", "System"],
+        )
+        entities.append(default_ent)
+        ent_names_seen.add("FacilitySystem")
 
         for s_idx, sent in enumerate(raw_sents, start=1):
             ev_id = f"Ev{s_idx}"
@@ -792,6 +808,9 @@ class MockTransducer(BaseDiscourseTransducer):
                 elif event_patient_id is None:
                     event_patient_id = e.id
 
+            if not event_agent_id and not event_patient_id:
+                event_agent_id = default_ent.id
+
             events.append(
                 ExtractedEvent(
                     id=ev_id,
@@ -822,16 +841,6 @@ class MockTransducer(BaseDiscourseTransducer):
                         mechanism="discourse progression",
                     )
                 )
-
-        if not entities:
-            entities.append(
-                ExtractedEntity(
-                    id="E1",
-                    canonical_name="Agent",
-                    category="PERSON",
-                    surface_aliases=["Agent"],
-                )
-            )
 
         return DiscourseExtractionResult(
             chunk_id=chunk_id or "heuristic_chunk",

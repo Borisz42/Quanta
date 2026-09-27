@@ -598,7 +598,19 @@ class ConceptNetLexicalGrounder:
         else:
             pos_norm = "n"
             anchor = f"cn:en:{w_clean} (n)"
-            active_slots["TYPE_INANIMATE_PHYSICAL"] = 1
+            HUMAN_NOUNS = {
+                "person", "human", "man", "woman", "boy", "girl", "child", "baby",
+                "mailman", "postman", "doctor", "nurse", "teacher", "student",
+                "worker", "driver", "engineer", "scientist", "officer", "policeman",
+                "technician", "director", "manager", "auditor", "supervisor"
+            }
+            if w_clean in HUMAN_NOUNS:
+                active_slots["TYPE_HUMAN"] = 1
+                active_slots["TYPE_ANIMATE"] = 1
+                active_slots["ROLE_AGENT_CAPABLE"] = 1
+                active_slots["ROLE_SENTIENT"] = 1
+            else:
+                active_slots["TYPE_INANIMATE_PHYSICAL"] = 1
 
         vec = QuantaVector(active_slots)
         return GroundedLexicalConcept(

@@ -94,7 +94,7 @@ def resolve_model_name(model_name_or_alias: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 
 DEFAULT_UNSLOTH_SYSTEM_PROMPT = """You are the QUANTA Neural Discourse Transducer, a high-precision neuro-symbolic semantic extractor.
-Your task is to extract an Entity-Event Directed Acyclic Graph (DAG) from discourse in any language into a strict S-expression conforming to the formal GBNF grammar.
+Your task is to extract an Entity-Event Directed Acyclic Graph (DAG) from discourse in any language or programming language source code into a strict S-expression conforming to the formal GBNF grammar.
 
 RULES & SCHEMA CONSTRAINTS:
 1. OUTPUT FORMAT:
@@ -110,7 +110,7 @@ RULES & SCHEMA CONSTRAINTS:
    - Link arguments directly to entity IDs. When an event takes another event as a clausal complement (e.g., pretend, know, believe, suspect, prove, want, obligate), set :theme <event_id> or :patient <event_id>.
 4. SPATIO-TEMPORAL & CAUSAL RELATIONS:
    - Format: `(relation :type <rel_type> :source <id> :target <id> [:mechanism "<mech>"] [:confidence <num>])`
-   - Permitted types: TEMP_ALLEN_MEETS, TEMP_ALLEN_BEFORE, TEMP_ALLEN_DURING, CAUSAL_MECHANISM_LINK, CAUSAL_PREVENTIVE_BLOCK.
+   - Permitted types: TEMP_ALLEN_MEETS, TEMP_ALLEN_BEFORE, TEMP_ALLEN_DURING, CAUSAL_MECHANISM_LINK, CAUSAL_PREVENTIVE_BLOCK, CALLS, INHERITS_FROM, IMPLEMENTS, IMPORTS, CFG_NEXT, DATA_FLOW_DEF_USE.
 5. EPISTEMIC PROPOSITIONS:
    - Format: `(proposition :id <id> :claim "<claim_text>" [:subject <id>] [:status <epistemic_status>] [:source <id>] [:event <id>])`
    - Permitted statuses: FACT, HYPOTHESIS, OBSERVATION, DOUBTED, PROHIBITED, BELIEF, KNOWLEDGE, UNVERIFIED.
@@ -118,6 +118,11 @@ RULES & SCHEMA CONSTRAINTS:
    - Accept input in any human language (e.g., Hungarian, German, Turkish, Mandarin, English).
    - Universal English Pivot: Always map entity :label and event :pred to canonical English pivot words (e.g., :label "dog" for "kutya" or "狗", :pred bark for "ugat" or "吠").
    - Surface Retention: In the :surface field, always preserve the exact inflected surface word or phrase as it appeared in the source text (e.g., :surface "A kutya", :surface "a postást", :surface "die Probe").
+7. CODE & COMPUTATIONAL DISCOURSE:
+   - Accept input in any programming language (e.g., Python, Java, Rust, Go, C++, TypeScript).
+   - Code Constructs as Entities: Map functions, methods, classes, interfaces, modules, variables, and parameters to `(entity ...)` with canonical identifier labels and preserve the exact syntax snippet in `:surface` (e.g., `:surface "def process_order(self, order_id)"`).
+   - Invocations & Control Flow as Events: Map execution steps, function calls, method invocations, returns, and loop iterations to `(event ...)` with canonical predicates (e.g., `:pred call`, `:pred invoke`, `:pred return`, `:pred branch`).
+   - Code Topology Relations: Use `:type CALLS` for invocation edges, `:type INHERITS_FROM` for class inheritance, `:type IMPLEMENTS` for interface conformance, `:type CFG_NEXT` for sequential control-flow transitions, `:type DATA_FLOW_DEF_USE` for definition-to-use variable flows, and `:type IMPORTS` for module dependencies.
 
 DEMONSTRATION 1 (SIMPLE SVO & TIME):
 [USER INPUT]
@@ -197,6 +202,49 @@ Der Forscher untersuchte die Probe im Laboratorium.
   (entity :id E2 :type OBJECT :label "sample" :surface "die Probe")
   (entity :id E3 :type LOCATION :label "laboratory" :surface "im Laboratorium")
   (event :id Ev1 :pred examine :agent E1 :patient E2 :location E3 :time "in the past" :tense PAST :polarity TRUE :raw-text "Der Forscher untersuchte die Probe im Laboratorium.")
+)
+
+DEMONSTRATION 6 (PYTHON FUNCTION & CALL GRAPH):
+[USER INPUT]
+CHUNK TEXT:
+def calculate_tax(subtotal: float) -> float:
+    rate = get_tax_rate()
+    return subtotal * rate
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "demo_code_py"
+  (entity :id E1 :type ARTIFACT :label "calculate_tax" :surface "def calculate_tax(subtotal: float) -> float:")
+  (entity :id E2 :type ARTIFACT :label "subtotal" :surface "subtotal")
+  (entity :id E3 :type ARTIFACT :label "rate" :surface "rate")
+  (entity :id E4 :type ARTIFACT :label "get_tax_rate" :surface "get_tax_rate()")
+  (event :id Ev1 :pred call :agent E1 :patient E4 :time "during execution" :tense PRESENT :polarity TRUE :raw-text "rate = get_tax_rate()")
+  (event :id Ev2 :pred return :agent E1 :patient E3 :time "after call" :tense PRESENT :polarity TRUE :raw-text "return subtotal * rate")
+  (relation :type CALLS :source E1 :target E4)
+  (relation :type CFG_NEXT :source Ev1 :target Ev2)
+  (relation :type DATA_FLOW_DEF_USE :source E3 :target Ev2)
+)
+
+DEMONSTRATION 7 (JAVA CLASS WITH INHERITANCE & INTERFACE):
+[USER INPUT]
+CHUNK TEXT:
+public class OrderProcessor extends BaseProcessor implements IProcessor {
+    public void processOrder(Order order) {
+        validate(order);
+    }
+}
+
+[ASSISTANT RESPONSE]
+(graph :chunk-id "demo_code_java"
+  (entity :id E1 :type ARTIFACT :label "OrderProcessor" :surface "public class OrderProcessor")
+  (entity :id E2 :type ARTIFACT :label "BaseProcessor" :surface "BaseProcessor")
+  (entity :id E3 :type ARTIFACT :label "IProcessor" :surface "IProcessor")
+  (entity :id E4 :type ARTIFACT :label "processOrder" :surface "public void processOrder(Order order)")
+  (entity :id E5 :type ARTIFACT :label "order" :surface "Order order")
+  (entity :id E6 :type ARTIFACT :label "validate" :surface "validate(order)")
+  (event :id Ev1 :pred invoke :agent E4 :patient E6 :time "during execution" :tense PRESENT :polarity TRUE :raw-text "validate(order);")
+  (relation :type INHERITS_FROM :source E1 :target E2)
+  (relation :type IMPLEMENTS :source E1 :target E3)
+  (relation :type CALLS :source E4 :target E6)
 )
 """
 
@@ -383,6 +431,24 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             return "实验在实验室中成功完成。"
         elif lang in ("en", "english"):
             return "The experiment was successful in the laboratory."
+        elif lang in ("python", "py"):
+            if "calculate_tax" in sexpr or "get_tax_rate" in sexpr:
+                return "def calculate_tax(subtotal: float) -> float:\n    rate = get_tax_rate()\n    return subtotal * rate"
+            if "factorial" in sexpr:
+                return "def factorial(n: int) -> int:\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)"
+            if "processorder" in sexpr.lower() or "orderprocessor" in sexpr.lower():
+                return "def process_order(order):\n    validate(order)"
+            return "# Realized Python code\ndef execute():\n    pass"
+        elif lang in ("java",):
+            if "orderprocessor" in sexpr.lower() or "baseprocessor" in sexpr.lower():
+                return "public class OrderProcessor extends BaseProcessor implements IProcessor {\n    public void processOrder(Order order) {\n        validate(order);\n    }\n}"
+            if "factorial" in sexpr:
+                return "public class MathUtils {\n    public static int factorial(int n) {\n        if (n <= 1) return 1;\n        return n * factorial(n - 1);\n    }\n}"
+            return "// Realized Java code\npublic class GeneratedClass {\n    public void run() {}\n}"
+        elif lang in ("rust", "rs"):
+            return "// Realized Rust code\npub fn run() {}"
+        elif lang in ("go", "golang"):
+            return "// Realized Go code\npackage main\nfunc main() {}"
 
         return f"[{target_lang.capitalize()} realization]: {norm_sexpr[:100]}"
 
@@ -478,7 +544,7 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
                     matched = CANONICAL_STRESS_4_FIXTURE
                 else:
                     for key, fix in self.fixtures.items():
-                        if key.lower() in lower:
+                        if key.lower() in lower or (len(lower) >= 30 and lower in key.lower()):
                             matched = fix
                             break
 
@@ -596,13 +662,26 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         clean_text = text
         for abbr in ("Dr.", "Prof.", "Mr.", "Mrs.", "Ms.", "Jr.", "Sr.", "vs.", "etc."):
             clean_text = clean_text.replace(abbr, abbr.replace(".", "§DOT§"))
-        raw_sents = [
-            s.replace("§DOT§", ".").strip()
-            for s in re.split(r"(?<=[.!?])\s+", clean_text)
-            if len(s.strip()) > 5
-        ]
+        is_code = any(kw in text for kw in ("def ", "class ", "public ", "return ", "function ", "import ", "extends ", "implements "))
+        if is_code:
+            raw_sents = [line.strip() for line in clean_text.splitlines() if len(line.strip()) > 3]
+        else:
+            raw_sents = [
+                s.replace("§DOT§", ".").strip()
+                for s in re.split(r"(?<=[.!?])\s+", clean_text)
+                if len(s.strip()) > 5
+            ]
         if not raw_sents:
             raw_sents = [text.strip()]
+
+        seen_sents: Set[str] = set()
+        deduped_sents: List[str] = []
+        for s in raw_sents:
+            s_clean = s.strip()
+            if s_clean and s_clean not in seen_sents:
+                seen_sents.add(s_clean)
+                deduped_sents.append(s_clean)
+        raw_sents = deduped_sents
 
         entities: List[ExtractedEntity] = []
         events: List[ExtractedEvent] = []
@@ -677,6 +756,12 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             "launch": "launch", "launched": "launch",
             "maintain": "maintain", "maintained": "maintain",
             "operate": "operate", "operated": "operate",
+            "call": "call", "calls": "call", "called": "call",
+            "invoke": "invoke", "invokes": "invoke", "invoked": "invoke",
+            "return": "return", "returns": "return", "returned": "return",
+            "calculate": "calculate", "calculated": "calculate",
+            "process": "process", "processed": "process",
+            "validate": "validate", "validated": "validate",
         }
 
         DOMAIN_KEYWORD_OVERRIDES = {
@@ -838,6 +923,46 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
                     )
                 )
 
+        if is_code:
+            ent_map = {e.canonical_name.lower(): e.id for e in entities}
+            for line in text.splitlines():
+                m_inh = re.search(r"class\s+([A-Za-z0-9_]+)\s+extends\s+([A-Za-z0-9_]+)", line)
+                if m_inh:
+                    c1, c2 = m_inh.group(1).lower(), m_inh.group(2).lower()
+                    if c1 in ent_map and c2 in ent_map:
+                        relations.append(
+                            ExtractedRelation(
+                                relation_type="INHERITS_FROM",
+                                source_id=ent_map[c1],
+                                target_id=ent_map[c2],
+                            )
+                        )
+                m_impl = re.search(r"implements\s+([A-Za-z0-9_]+)", line)
+                if m_impl:
+                    cls_match = re.search(r"class\s+([A-Za-z0-9_]+)", line)
+                    if cls_match:
+                        c1, i1 = cls_match.group(1).lower(), m_impl.group(1).lower()
+                        if c1 in ent_map and i1 in ent_map:
+                            relations.append(
+                                ExtractedRelation(
+                                    relation_type="IMPLEMENTS",
+                                    source_id=ent_map[c1],
+                                    target_id=ent_map[i1],
+                                )
+                            )
+                for callee_name, callee_id in ent_map.items():
+                    if f"{callee_name}(" in line.lower() and not line.strip().lower().startswith(f"def {callee_name}"):
+                        for caller in entities:
+                            if caller.id != callee_id and caller.canonical_name.lower() in text.lower():
+                                relations.append(
+                                    ExtractedRelation(
+                                        relation_type="CALLS",
+                                        source_id=caller.id,
+                                        target_id=callee_id,
+                                    )
+                                )
+                                break
+
         if not entities:
             entities.append(
                 ExtractedEntity(
@@ -847,6 +972,9 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
                     surface_aliases=["Agent"],
                 )
             )
+            for ev in events:
+                if ev.agent_id is None:
+                    ev.agent_id = "E1"
 
         return DiscourseExtractionResult(
             chunk_id=chunk_id or "dynamic_chunk",
@@ -1302,12 +1430,14 @@ class UnslothTransducer(BaseDiscourseTransducer):
                 sexpr = str(sexpr_or_graph)
 
         lang_title = target_lang.strip().capitalize()
+        is_code = target_lang.lower().strip() in ("python", "py", "java", "rust", "rs", "go", "golang", "c++", "cpp", "typescript", "ts", "javascript", "js", "code")
+        output_desc = f"valid {lang_title} source code" if is_code else f"fluent, natural {lang_title} text"
         system_content = (
             "You are the QUANTA Neural Realizer. Your task is to realize formal Mentalese "
-            f"S-expressions into fluent, natural {lang_title} text. "
-            "Output ONLY the realized sentence without explanations, quotes, or markdown."
+            f"S-expressions into {output_desc}. "
+            "Output ONLY the realized result without explanations, quotes, or markdown."
         )
-        user_content = f"Realize this semantic graph as fluent {lang_title} text:\n\n{sexpr}"
+        user_content = f"Realize this semantic graph as {output_desc}:\n\n{sexpr}"
         target_model = resolve_model_name(kwargs.get("model") or self.model)
         headers = self._get_headers()
         payload = {

@@ -217,10 +217,28 @@ class TwoWayTranslationPipeline:
         sexpr = serialize_to_sexpr(graph, pretty=True)
         return active_transducer.realize_text(sexpr, target_lang=target_lang)
 
+    def realize_code(
+        self,
+        graph: QuantaGraph,
+        target_lang: str = "python",
+        transducer: Optional[Any] = None,
+    ) -> str:
+        """Serializes QuantaGraph ASG to S-expression and realizes into valid code via neural SLM."""
+        from parser.sexpr_parser import serialize_to_sexpr
+        active_transducer = transducer or self.transducer
+        if active_transducer is None:
+            from parser.unsloth_transducer import UnslothTransducer
+            active_transducer = UnslothTransducer()
+            self.transducer = active_transducer
+
+        sexpr = serialize_to_sexpr(graph, pretty=True)
+        return active_transducer.realize_text(sexpr, target_lang=target_lang)
+
     def translate_reverse(
         self,
         graph: QuantaGraph,
         target_modality: str = "english",
+        use_neural_code: bool = True,
     ) -> str:
         """Reconstructs text, logic, or code from a QuantaGraph ASG."""
         mod = target_modality.lower().strip()
@@ -228,7 +246,9 @@ class TwoWayTranslationPipeline:
             return self.english_realizer.realize_graph(graph)
         elif mod in ("fol", "logic"):
             return self.fol_emitter.emit_formula(graph)
-        elif mod in ("python", "code", "py"):
+        elif mod in ("python", "code", "py", "java", "rust", "go"):
+            if use_neural_code and self.transducer is not None:
+                return self.realize_code(graph, target_lang=mod)
             return self.code_emitter.emit_code(graph)
         else:
             return self.realize_multilingual(graph, target_lang=mod)

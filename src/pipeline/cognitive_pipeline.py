@@ -154,8 +154,9 @@ class CognitivePipeline:
         text: str,
         validate: bool = True,
         chapter_id: str = "ch_01",
+        language_hint: Optional[str] = None,
     ) -> QuantaGraph:
-        """Process raw English text end-to-end into a verified QuantaGraph ASG.
+        """Process raw discourse text (English or code) end-to-end into a verified QuantaGraph ASG.
 
         Workflow:
         1. Segments text into DiscourseChunk objects via DiscourseChunker.
@@ -168,9 +169,10 @@ class CognitivePipeline:
         6. Folds into Merkle episode structure.
 
         Args:
-            text: Arbitrary English text (single sentence, paragraph, or document).
+            text: Arbitrary discourse text (natural language or source code).
             validate: Whether to run formal Clingo ASP verification.
             chapter_id: Identifier for Merkle folding namespace.
+            language_hint: Optional metadata annotation passed to transducer prompt.
 
         Returns:
             Fully compiled, verified, content-addressed QuantaGraph.
@@ -197,6 +199,8 @@ class CognitivePipeline:
         for chk in chunks:
             self.entity_engine.pre_scan_and_page(chk.text)
             manifest_prompt = self.entity_engine.format_prompt_block()
+            if language_hint:
+                manifest_prompt = f"{language_hint}\n{manifest_prompt}" if manifest_prompt else language_hint
             active_entities = (
                 self.entity_engine.manifest.all_active()
                 if hasattr(self.entity_engine, "manifest")
@@ -205,7 +209,7 @@ class CognitivePipeline:
 
             extraction: Optional[DiscourseExtractionResult] = None
 
-            if self.repair_manager is not None:
+            if self.repair_manager is not None and validate:
                 repair_res = self.repair_manager.repair_chunk(
                     text=chk.text,
                     transducer=self.transducer,
@@ -276,8 +280,15 @@ class CognitivePipeline:
         """Reconstruct First-Order Logic formula from graph."""
         return self.fol_emitter.emit_formula(graph)
 
-    def to_code(self, graph: QuantaGraph) -> str:
-        """Reconstruct executable Python code from graph."""
+    def to_code(self, graph: QuantaGraph, target_lang: str = "python", neural: bool = True) -> str:
+        """Reconstruct source code in target_lang from graph via neural transducer or emitter."""
+        if neural and hasattr(self.transducer, "realize_text"):
+            from parser.sexpr_parser import serialize_to_sexpr
+            try:
+                sexpr = serialize_to_sexpr(graph, pretty=True)
+                return self.transducer.realize_text(sexpr, target_lang=target_lang)
+            except Exception:
+                pass
         return self.code_emitter.emit_code(graph)
 
     def to_sexpr(self, graph: QuantaGraph) -> str:
@@ -306,7 +317,7 @@ class CognitivePipeline:
         )
 
         # 2. Neural Transduction & Closed-Loop Repair
-        if self.repair_manager is not None:
+        if self.repair_manager is not None and validate:
             repair_res = self.repair_manager.repair_chunk(
                 text=chunk_text,
                 transducer=self.transducer,
@@ -432,7 +443,7 @@ class CognitivePipeline:
                 chk, active_ents, manifest_prompt = item
                 extraction: Optional[DiscourseExtractionResult] = None
 
-                if self.repair_manager is not None:
+                if self.repair_manager is not None and validate:
                     repair_res = await asyncio.to_thread(
                         self.repair_manager.repair_chunk,
                         text=chk.text,
@@ -577,6 +588,41 @@ class CognitivePipeline:
         self.active_canvas.put(book_root_node)
 
         return self.merkle_book, book_root_node.cid
+
+    def ingest_code(
+        self,
+        source_text: str,
+        language_hint: Optional[str] = None,
+        chapter_id: str = "code_01",
+        validate: bool = False,
+    ) -> QuantaGraph:
+        """Route source code through the unified neural discourse transduction pipeline.
+
+        Treats programming language source code as another modality of discourse without
+        language-specific AST parsers. The optional language_hint is provided as metadata
+        annotation to the transducer prompt.
+
+        Args:
+            source_text: Source code in any programming language (Python, Java, Rust, etc.).
+            language_hint: Optional language name annotation (e.g., "Python", "Java").
+            chapter_id: Chapter / module identifier for Merkle grouping.
+            validate: Whether to run formal verification on the compiled graph.
+
+        Returns:
+            Fully compiled, verified, content-addressed QuantaGraph.
+        """
+        if not source_text or not source_text.strip():
+            empty_graph = QuantaGraph()
+            setattr(empty_graph, "extraction_result", DiscourseExtractionResult())
+            return empty_graph
+
+        manifest_hint = f"SOURCE LANGUAGE: {language_hint}" if language_hint else None
+        return self.process(
+            text=source_text,
+            validate=validate,
+            chapter_id=chapter_id,
+            language_hint=manifest_hint,
+        )
 
     def retrieve_context(
         self,

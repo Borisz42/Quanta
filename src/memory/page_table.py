@@ -342,6 +342,10 @@ class StringInternTable:
                 return text
             return None
 
+    def get(self, str_id: Optional[int]) -> Optional[str]:
+        """Alias for resolve."""
+        return self.resolve(str_id)
+
     def bulk_intern(self, texts: Iterable[str]) -> List[int]:
         """Interns multiple strings within a single transaction."""
         results = []

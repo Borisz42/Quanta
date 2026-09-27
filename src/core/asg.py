@@ -435,7 +435,7 @@ class QuantaGraph:
                 for rel, targets in list(node.edges.items()):
                     new_targets = []
                     for t in targets:
-                        if t in replacements:
+                        if t in replacements and t != node.cid:
                             new_targets.append(replacements[t])
                             node_modified = True
                         else:
@@ -444,6 +444,7 @@ class QuantaGraph:
 
                 if node_modified:
                     old_cid = node._cid_cache or node.cid
+                    node.invalidate_cache()
                     new_cid = node.compute_cid()
                     if old_cid != new_cid:
                         new_replacements[old_cid] = new_cid
@@ -487,6 +488,14 @@ class QuantaGraph:
             dst_node = self.get_node(target_cid_or_node)
             if dst_node is None:
                 raise KeyError(f"Target node CID '{target_cid_or_node}' not found in graph")
+
+        if src_node == dst_node:
+            if relation not in src_node.edges:
+                src_node.edges[relation] = []
+            if src_node.cid not in src_node.edges[relation]:
+                src_node.edges[relation].append(src_node.cid)
+            self._cid_to_node[src_node.cid] = src_node
+            return src_node.cid
 
         old_src_cid = src_node.cid
         src_node.add_edge(relation, dst_node.cid)
@@ -693,7 +702,7 @@ class QuantaGraph:
                     if target_node is None:
                         errors.append(f"Dangling edge in {cid}: relation '{rel}' points to missing CID {target_cid}")
                     elif target_node.compute_cid() != target_cid:
-                        if rel not in ("GRAPH_RECURSIVE_REF", "GRAPH_CYCLIC_BACKLINK", "GRAPH_MERKLE_FOLD_POINT"):
+                        if rel not in ("GRAPH_RECURSIVE_REF", "GRAPH_CYCLIC_BACKLINK", "GRAPH_MERKLE_FOLD_POINT", "CALLS") and cid != target_cid:
                             errors.append(
                                 f"Tampered target node or CID mismatch: edge '{rel}' in {cid} expects CID {target_cid}, but target payload hashes to {target_node.compute_cid()}"
                             )

@@ -350,10 +350,15 @@ class GraphStitcher:
 
         # 5. Token overlap / Substring matching
         inc_tokens = _extract_name_tokens(incoming.canonical_name)
+        exist_tokens = _extract_name_tokens(existing.canonical_name)
+
+        # Canonical names must share at least one token for token-overlap merging
+        if not (inc_tokens & exist_tokens):
+            return 0.0
+
         for a in incoming.surface_aliases:
             inc_tokens |= _extract_name_tokens(a)
 
-        exist_tokens = _extract_name_tokens(existing.canonical_name)
         for a in existing.surface_aliases:
             exist_tokens |= _extract_name_tokens(a)
 

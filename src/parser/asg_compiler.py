@@ -345,8 +345,7 @@ class ASGCompiler:
 
         # 6. Spatio-temporal & causal edge wiring (Phase 4.4)
         for rel in extraction_result.relations:
-            if rel.source_id != rel.target_id:
-                self._wire_relation(rel, graph, entity_nodes, event_nodes)
+            self._wire_relation(rel, graph, entity_nodes, event_nodes)
 
         # 7. Designate Root Event Node
         if extraction_result.events:
@@ -820,6 +819,11 @@ class ASGCompiler:
 
         # Case A: Self-relation (handled during event compilation)
         if src_id == tgt_id:
+            # Code self-relations (e.g. recursive calls) need an explicit graph self-edge
+            if rel_type in ("CALLS", "GRAPH_RECURSIVE_REF"):
+                node = event_nodes.get(src_id) or entity_nodes.get(src_id)
+                if node:
+                    graph.add_edge(node.cid, edge_type, node.cid)
             return
 
         # Case B: Directed edge between distinct nodes

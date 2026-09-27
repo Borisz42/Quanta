@@ -333,6 +333,19 @@ class NLPForwardParser:
 
         node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=text)
 
+        HUMAN_NOUNS = {
+            "person", "human", "man", "woman", "boy", "girl", "child", "baby",
+            "mailman", "postman", "doctor", "nurse", "teacher", "student",
+            "worker", "driver", "engineer", "scientist", "officer", "policeman",
+            "technician", "director", "manager", "auditor", "supervisor", "someone", "somebody"
+        }
+        if ent_type == "PERSON" or lemma.lower() in HUMAN_NOUNS or text.lower() in HUMAN_NOUNS:
+            node.set_slot("TYPE_HUMAN", 1)
+            node.set_slot("TYPE_ANIMATE", 1)
+            node.set_slot("ROLE_AGENT_CAPABLE", 1)
+            node.set_slot("ROLE_SENTIENT", 1)
+            node.set_slot("WN_PERSON_HUMAN", 1)
+
         # Apply specific token-level enrichments
         if token.dep_ == "neg" or lemma in ("not", "n't", "never", "no") or text.lower() == "n't":
             node.set_slot("LJB_NA_NEGATION", 2)
@@ -1231,13 +1244,19 @@ class NLPForwardParser:
             node.anchor = "cn:en:person (n)"
             return node
 
+        HUMAN_NOUNS = {
+            "person", "human", "man", "woman", "boy", "girl", "child", "baby",
+            "mailman", "postman", "doctor", "nurse", "teacher", "student",
+            "worker", "driver", "engineer", "scientist", "officer", "policeman",
+            "technician", "director", "manager", "auditor", "supervisor", "someone", "somebody"
+        }
         try:
             concept = self.grounder.ground_synset(lemma)
             node = QuantaNode(vector=concept.vector, anchor=concept.synset_name, literal=token.text)
         except Exception:
             # Fallback when not found in offline DB
             node = QuantaNode(literal=token.text)
-            if token.ent_type_ == "PERSON" or token.text.istitle():
+            if token.ent_type_ == "PERSON" or token.text.istitle() or lemma.lower() in HUMAN_NOUNS or token.text.lower() in HUMAN_NOUNS:
                 node.set_slot("TYPE_HUMAN", 1)
                 node.set_slot("TYPE_ANIMATE", 1)
                 node.set_slot("ROLE_AGENT_CAPABLE", 1)
@@ -1246,6 +1265,13 @@ class NLPForwardParser:
             else:
                 node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
                 node.anchor = f"cn:en:{lemma} (n)"
+
+        if token.ent_type_ == "PERSON" or lemma.lower() in HUMAN_NOUNS or token.text.lower() in HUMAN_NOUNS:
+            node.set_slot("TYPE_HUMAN", 1)
+            node.set_slot("TYPE_ANIMATE", 1)
+            node.set_slot("ROLE_AGENT_CAPABLE", 1)
+            node.set_slot("ROLE_SENTIENT", 1)
+            node.set_slot("WN_PERSON_HUMAN", 1)
 
         return node
 

@@ -63,6 +63,12 @@ class SpreadingActivationRetriever:
         "VAL_LOCATION_SLOT",
         "CAUSAL_MECHANISM_LINK",
         "TEMP_ALLEN_MEETS",
+        "CALLS",
+        "INHERITS_FROM",
+        "IMPLEMENTS",
+        "IMPORTS",
+        "CFG_NEXT",
+        "DATA_FLOW_DEF_USE",
     }
 
     IRREGULAR_LEMMA_MAP: Dict[str, str] = {
@@ -134,6 +140,22 @@ class SpreadingActivationRetriever:
         "containing": "contain",
         "contains": "contain",
         "contain": "contain",
+        "calls": "call",
+        "calling": "call",
+        "called": "call",
+        "call": "call",
+        "invokes": "invoke",
+        "invoking": "invoke",
+        "invoked": "invoke",
+        "invoke": "invoke",
+        "inherits": "inherit",
+        "inheriting": "inherit",
+        "inherited": "inherit",
+        "inherit": "inherit",
+        "implements": "implement",
+        "implementing": "implement",
+        "implemented": "implement",
+        "implement": "implement",
     }
 
     QUESTION_STOPWORDS: Set[str] = {
@@ -258,6 +280,10 @@ class SpreadingActivationRetriever:
             "reserve": "reserve", "reserved": "reserve",
             "execute": "execute", "executed": "execute",
             "launch": "launch", "launched": "launch",
+            "call": "call", "calls": "call", "calling": "call", "called": "call",
+            "invoke": "invoke", "invokes": "invoke", "invoking": "invoke", "invoked": "invoke",
+            "inherit": "inherit", "inherits": "inherit", "inheriting": "inherit", "inherited": "inherit",
+            "implement": "implement", "implements": "implement", "implementing": "implement", "implemented": "implement",
         }
         for w in words_lower:
             if w in KNOWN_QUERY_VERBS:
@@ -395,6 +421,9 @@ class SpreadingActivationRetriever:
                 m_clean = m.strip()
                 if m_clean.lower().startswith("the "):
                     m_clean = m_clean[4:]
+                first_word = m_clean.split()[0].lower() if m_clean.split() else ""
+                if first_word in self.QUESTION_STOPWORDS:
+                    continue
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
@@ -448,51 +477,66 @@ class SpreadingActivationRetriever:
             query_vec = q_graph.root.vector if q_graph.root else QuantaVector.zeros()
             for n in q_graph.nodes.values():
                 if n.literal and n.literal != "?X" and isinstance(n.literal, str):
-                    named_entities.append(n.literal.lower())
+                    if n.get_slot("TYPE_EVENT") != 1 and not (n.anchor and "(v)" in n.anchor):
+                        named_entities.append(n.literal.lower())
         elif isinstance(query, QuantaGraph):
             query_vec = query.root.vector if query.root else QuantaVector.zeros()
             for n in query.nodes.values():
                 if n.literal and n.literal != "?X" and isinstance(n.literal, str):
-                    named_entities.append(n.literal.lower())
+                    if n.get_slot("TYPE_EVENT") != 1 and not (n.anchor and "(v)" in n.anchor):
+                        named_entities.append(n.literal.lower())
         elif isinstance(query, (QuantaVector, bytes, np.ndarray)):
             query_vec = query
         else:
             raise TypeError(f"Unsupported query type: {type(query)}")
 
+        pred_lemma = q_graph.root.literal if (isinstance(query, (str, QuantaGraph)) and q_graph.root and isinstance(q_graph.root.literal, str)) else None
+
         # 1. Execute fast SIMD bitwise Hamming search
         matches = page_table.vector_index.search(query_vec, top_k=top_k)
 
         # 2. If named entities are present, boost matching entity CIDs if found in PageTable
-        if named_entities:
+        if named_entities or pred_lemma:
             existing_cids = {cid for cid, _ in matches}
             generic_stop = {
                 "polimer", "anyag", "substance", "compound", "specimen", "item", "order",
-                "entity", "sample", "minta", "cooling", "system", "maintains"
+                "entity", "sample", "minta", "cooling", "system", "maintains",
+                "call", "calls", "invoke", "invokes", "inherits", "implements", "imports"
             }
-            # Prioritize longer, more specific multi-word entities
-            sorted_ents = sorted(named_entities, key=lambda x: len(x), reverse=True)
+            # Prioritize longer, more specific multi-word entities, plus action predicate
+            candidate_terms = list(named_entities)
+            if pred_lemma and len(pred_lemma) > 3 and pred_lemma.lower() not in generic_stop:
+                candidate_terms.append(pred_lemma.lower())
+            sorted_ents = sorted(candidate_terms, key=lambda x: len(x), reverse=True)
             boosted: List[Tuple[str, int]] = []
+            boosted_cids: Set[str] = set()
+            cand_limit = max(top_k, 5)
             for ent_text in sorted_ents:
                 if ent_text.lower() in generic_stop or len(ent_text) <= 3:
                     continue
                 if hasattr(page_table, "find_cids_by_literal"):
-                    cids = page_table.find_cids_by_literal(ent_text, limit=2)
-                    for ent_cid in cids:
-                        if ent_cid not in existing_cids:
-                            boosted.append((ent_cid, 0))
-                            existing_cids.add(ent_cid)
+                    cids = page_table.find_cids_by_literal(ent_text, limit=cand_limit)
                 else:
                     cur = page_table._conn.cursor()
                     cur.execute(
-                        "SELECT cid FROM nodes WHERE LOWER(literal) = ? OR LOWER(literal) LIKE ? LIMIT 2",
-                        (ent_text, f"%{ent_text}%"),
+                        "SELECT cid FROM nodes WHERE LOWER(literal) = ? OR LOWER(literal) LIKE ? LIMIT ?",
+                        (ent_text, f"%{ent_text}%", cand_limit),
                     )
                     rows = cur.fetchall()
-                    for (ent_cid,) in rows:
-                        if ent_cid not in existing_cids:
-                            boosted.append((ent_cid, 0))
-                            existing_cids.add(ent_cid)
-            matches = boosted + matches
+                    cids = [r[0] for r in rows]
+
+                for ent_cid in cids:
+                    if ent_cid not in boosted_cids:
+                        boosted.append((ent_cid, 0))
+                        boosted_cids.add(ent_cid)
+
+            remaining_matches = [(cid, dist) for cid, dist in matches if cid not in boosted_cids]
+
+            is_code_query = any(kw in str(query).lower() for kw in ("who calls", "calls", "inherits", "implements", "imports"))
+            if is_code_query and boosted:
+                return boosted[:top_k]
+
+            matches = boosted + remaining_matches
 
         return matches[:top_k]
 
@@ -614,7 +658,8 @@ class SpreadingActivationRetriever:
                         if p_cid != cid and (allow_all or rel in relations):
                             # Direct narrative chains (causal/temporal) are preserved; generic thematic valencies are penalized
                             is_structural_chain = rel in (
-                                "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE"
+                                "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
+                                "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE"
                             )
                             step_decay = decay if is_structural_chain else (decay / degree_penalty)
                             rev_act = curr_act * step_decay
@@ -656,7 +701,10 @@ class SpreadingActivationRetriever:
                         for rel, targets in p_edges.items():
                             if (allow_all or rel in relations) and cid in targets:
                                 matched_incoming = True
-                                if rel in ("CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE"):
+                                if rel in (
+                                    "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
+                                    "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE"
+                                ):
                                     is_structural_chain = True
                                 break
 
@@ -772,12 +820,28 @@ class SpreadingActivationRetriever:
         ]
 
         if not event_nodes:
-            # Only entity nodes present
+            # Check for direct entity-to-entity code/structural relations first
+            rel_descriptions = []
             entity_names = []
             for n in subgraph.nodes.values():
                 name = str(n.literal) if n.literal is not None else (n.anchor or n.cid[:8])
                 if name != "?X":
                     entity_names.append(name)
+                for rel, targets in n.edges.items():
+                    for t_cid in targets:
+                        t_node = subgraph.get_node(t_cid)
+                        if t_node:
+                            t_name = str(t_node.literal) if t_node.literal is not None else (t_node.anchor or t_cid[:8])
+                            if rel == "CALLS":
+                                rel_descriptions.append(f"{name} calls {t_name}")
+                            elif rel == "INHERITS_FROM":
+                                rel_descriptions.append(f"{name} inherits from {t_name}")
+                            elif rel == "IMPLEMENTS":
+                                rel_descriptions.append(f"{name} implements {t_name}")
+                            elif rel == "IMPORTS":
+                                rel_descriptions.append(f"{name} imports {t_name}")
+            if rel_descriptions:
+                return ". ".join(rel_descriptions) + "."
             if entity_names:
                 return f"Relevant entities in memory: {', '.join(entity_names)}."
             return ""
@@ -826,6 +890,8 @@ class SpreadingActivationRetriever:
         ev_counter = 1
 
         for cid, node in subgraph.nodes.items():
+            if node.anchor and node.anchor.startswith("merkle:"):
+                continue
             if node.get_slot("TYPE_EVENT") == 1 or (node.anchor and "(v)" in node.anchor):
                 ev_id = f"Ev{ev_counter}"
                 ev_counter += 1
@@ -884,18 +950,33 @@ class SpreadingActivationRetriever:
                 )
             )
 
-        # Wire relations between events
-        for cid, ev_id in cid_to_ev_id.items():
+        # Wire relations between events and entities
+        code_and_causal_rels = (
+            "TEMP_ALLEN_MEETS",
+            "TEMP_ALLEN_BEFORE",
+            "CAUSAL_MECHANISM_LINK",
+            "CALLS",
+            "INHERITS_FROM",
+            "IMPLEMENTS",
+            "IMPORTS",
+            "CFG_NEXT",
+            "DATA_FLOW_DEF_USE",
+        )
+        all_cid_map = {**cid_to_ev_id, **cid_to_ent_id}
+        for cid, src_id in all_cid_map.items():
             node = subgraph.get_node(cid)
-            for rel_name in ("TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE", "CAUSAL_MECHANISM_LINK"):
+            if not node:
+                continue
+            for rel_name in code_and_causal_rels:
                 if rel_name in node.edges:
                     for target_cid in node.edges[rel_name]:
-                        if target_cid in cid_to_ev_id:
+                        tgt_id = all_cid_map.get(target_cid)
+                        if tgt_id:
                             relations.append(
                                 ExtractedRelation(
                                     relation_type=rel_name,
-                                    source_id=ev_id,
-                                    target_id=cid_to_ev_id[target_cid],
+                                    source_id=src_id,
+                                    target_id=tgt_id,
                                 )
                             )
 

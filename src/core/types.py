@@ -151,6 +151,43 @@ class StructuralValue(enum.IntEnum):
 # Alias for routing clarity
 RoutingValue = StructuralValue
 
+# ---------------------------------------------------------------------------
+# Code-Domain Structural Slots & Edge Types (Section 9 / Task 9.2)
+# ---------------------------------------------------------------------------
+
+# Edge types for code relational topologies (Band 7)
+CALLS = "CALLS"
+INHERITS_FROM = "INHERITS_FROM"
+IMPLEMENTS = "IMPLEMENTS"
+IMPORTS = "IMPORTS"
+CFG_NEXT = "CFG_NEXT"
+DATA_FLOW_DEF_USE = "DATA_FLOW_DEF_USE"
+
+# Code-domain structural slots (Band 1)
+GRAPH_INTERFACE_DEF = "GRAPH_INTERFACE_DEF"
+GRAPH_CALL_SITE = "GRAPH_CALL_SITE"
+GRAPH_VARIABLE_BIND = "GRAPH_VARIABLE_BIND"
+GRAPH_CONTROL_LOOP = "GRAPH_CONTROL_LOOP"
+GRAPH_BRANCH_COND = "GRAPH_BRANCH_COND"
+GRAPH_EXCEPTION_HANDLE = "GRAPH_EXCEPTION_HANDLE"
+GRAPH_FUNCTION_DEF = "GRAPH_FUNCTION_DEF"
+GRAPH_CLASS_DEF = "GRAPH_CLASS_STRUCT_DEF"
+GRAPH_SCOPED_CONTEXT = "GRAPH_SCOPED_CONTEXT"
+
+# Register code constructs onto StructuralValue for seamless attribute access
+for _slot_attr in (
+    "GRAPH_INTERFACE_DEF",
+    "GRAPH_CALL_SITE",
+    "GRAPH_VARIABLE_BIND",
+    "GRAPH_CONTROL_LOOP",
+    "GRAPH_BRANCH_COND",
+    "GRAPH_EXCEPTION_HANDLE",
+    "GRAPH_FUNCTION_DEF",
+    "GRAPH_CLASS_DEF",
+    "GRAPH_SCOPED_CONTEXT",
+):
+    setattr(StructuralValue, _slot_attr, _slot_attr)
+
 
 class RegisterValue(enum.IntEnum):
     r"""Register and scoping 4-valued states (For Logic Quantifiers and Variable Binding Bands).
@@ -561,4 +598,19 @@ __all__ = [
     "QuantaVector",
     "pack_quaternary_array",
     "unpack_quaternary_bytes",
+    "CALLS",
+    "INHERITS_FROM",
+    "IMPLEMENTS",
+    "IMPORTS",
+    "CFG_NEXT",
+    "DATA_FLOW_DEF_USE",
+    "GRAPH_INTERFACE_DEF",
+    "GRAPH_CALL_SITE",
+    "GRAPH_VARIABLE_BIND",
+    "GRAPH_CONTROL_LOOP",
+    "GRAPH_BRANCH_COND",
+    "GRAPH_EXCEPTION_HANDLE",
+    "GRAPH_FUNCTION_DEF",
+    "GRAPH_CLASS_DEF",
+    "GRAPH_SCOPED_CONTEXT",
 ]
