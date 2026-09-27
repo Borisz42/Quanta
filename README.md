@@ -1,14 +1,6 @@
 # QUANTA (Quaternary Universal Abstract Natural Topology Architecture)
 ## The Mentalese Paradigm: Architectural Blueprint for Verifiable, Memory-Bound Neuro-Symbolic Artificial Intelligence
 
----
-
-> [!TIP]
-> **Active Implementation Roadmap & Action Plan**:
-> For the actionable, task-by-task engineering roadmap detailing how QUANTA functions as an external LLM context expansion solution (including canonical node interning, SIMD spreading activation retrieval, dynamic world-state tracking, and OpenAI/MCP proxy serving), see **[`CONTEXT_EXPANSION_ROADMAP.md`](CONTEXT_EXPANSION_ROADMAP.md)**.
-
----
-
 ### Executive Summary: External Context Expansion Coprocessor
 
 The **QUANTA Mentalese Architecture** functions as an **External Neuro-Symbolic Context Expansion Coprocessor** for host LLMs (Claude, GPT-4, Cursor, Antigravity). Instead of expanding context through continuous autoregressive generation—which hits the linear $\mathcal{O}(N)$ Key-Value (KV) cache physical VRAM wall and suffers from progressive representation drift—QUANTA externalizes long-term episodic, encyclopedic, and transactional memory into an immutable, hardware-aligned 1024-dimension Quaternary Abstract Syntax Graph (ASG) in host memory.
