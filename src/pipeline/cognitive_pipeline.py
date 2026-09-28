@@ -643,7 +643,7 @@ class CognitivePipeline:
         query: str,
         format: str = "english",
         max_tokens: int = 500,
-        top_k: int = 5,
+        top_k: int = 10,
         max_depth: int = 2,
     ) -> str:
         """Retrieves minimal relevant verified ASG context for external LLMs via spreading activation.

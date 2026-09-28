@@ -425,6 +425,8 @@ class PageTable(MutableMapping):
         "then", "into", "also", "some", "such", "than", "more", "most", "been", "being",
         "does", "done", "doing", "did", "out", "about", "over", "other", "each", "both",
         "if", "else", "then", "have", "has", "had", "will", "shall", "may", "might",
+        "one", "two", "our", "him", "her", "his", "she", "you", "too", "off", "now",
+        "per", "via", "own", "say", "use", "get", "set", "see", "new",
         "element", "elements", "item", "items", "value", "values", "object", "objects", "data"
     }
 
@@ -433,7 +435,7 @@ class PageTable(MutableMapping):
         lit_lower = text.lower().strip('"\'')
         self._literal_index[lit_lower].add(cid)
         for word in re.findall(r"\b[a-zA-Z0-9_-]+\b", lit_lower):
-            if len(word) >= 4 and word not in self.INDEX_STOPWORDS and not word.isdigit() and not re.match(r"^\d+-\d+$", word):
+            if len(word) >= 3 and word not in self.INDEX_STOPWORDS and not word.isdigit() and not re.match(r"^\d+-\d+$", word):
                 self._literal_index[word].add(cid)
 
     def _warmup_index(self):

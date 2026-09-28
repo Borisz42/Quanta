@@ -455,7 +455,7 @@ class SpreadingActivationRetriever:
             if (
                 t_lower not in self.QUESTION_STOPWORDS
                 and t_lower != pred_token
-                and len(t_lower) > 3
+                and len(t_lower) >= 3
                 and t_lower not in self.IRREGULAR_LEMMA_MAP
                 and t_lower not in existing_lower
                 and not t_lower.isdigit()
@@ -531,16 +531,16 @@ class SpreadingActivationRetriever:
             }
             # Prioritize longer, more specific multi-word entities, plus action predicate
             candidate_terms = list(named_entities)
-            if pred_lemma and len(pred_lemma) > 3 and pred_lemma.lower() not in generic_stop and pred_lemma.lower() not in self.QUESTION_STOPWORDS:
+            if pred_lemma and len(pred_lemma) >= 3 and pred_lemma.lower() not in generic_stop and pred_lemma.lower() not in self.QUESTION_STOPWORDS:
                 candidate_terms.append(pred_lemma.lower())
             sorted_ents = sorted(candidate_terms, key=lambda x: len(x), reverse=True)
             boosted: List[Tuple[str, int]] = []
             boosted_cids: Set[str] = set()
-            cand_limit = max(top_k, 5)
-            per_ent_limit = 2 if len(sorted_ents) > 1 else cand_limit
+            cand_limit = max(top_k * 2, 10)
+            per_ent_limit = max(10, cand_limit)
             for ent_text in sorted_ents:
                 ent_clean = ent_text.lower().strip()
-                if ent_clean in generic_stop or ent_clean in self.QUESTION_STOPWORDS or len(ent_clean) <= 3:
+                if ent_clean in generic_stop or ent_clean in self.QUESTION_STOPWORDS or len(ent_clean) < 3:
                     continue
                 if hasattr(page_table, "find_cids_by_literal"):
                     cids = page_table.find_cids_by_literal(ent_clean, limit=per_ent_limit)
@@ -564,7 +564,7 @@ class SpreadingActivationRetriever:
 
             # If exact named entities matched the query, do not contaminate seeds with random distant SIMD matches from unrelated chapters
             if boosted:
-                return boosted[:top_k]
+                return boosted[:max(top_k, min(len(boosted), 20))]
 
             matches = boosted + remaining_matches
 
@@ -1129,7 +1129,7 @@ class SpreadingActivationRetriever:
         page_table: PageTable,
         format: str = "english",
         max_tokens: int = 500,
-        top_k: int = 5,
+        top_k: int = 10,
         max_depth: int = 2,
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""

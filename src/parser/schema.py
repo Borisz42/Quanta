@@ -425,6 +425,12 @@ class DiscourseExtractionResult:
                     entity_ids.add(new_id)
                     all_ids.add(new_id)
 
+        # Prune dangling relations whose endpoints do not exist
+        self.relations = [
+            r for r in self.relations
+            if (not r.source_id or r.source_id in all_ids) and (not r.target_id or r.target_id in all_ids)
+        ]
+
     def validate_foreign_keys(self) -> List[str]:
         """Validate all foreign-key cross-references across entities, events, and relations.
 
