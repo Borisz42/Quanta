@@ -46,17 +46,17 @@ logger = logging.getLogger("quanta.server.proxy")
 @dataclass
 class QuantaProxyConfig:
     """Runtime configuration for QUANTA OpenAI Reverse Proxy."""
-    backend_url: str = "http://localhost:8888/v1"
-    compression_threshold: int = 2000
+    backend_url: str = field(default_factory=lambda: os.getenv("QUANTA_BACKEND_URL", "http://localhost:8888/v1"))
+    compression_threshold: int = field(default_factory=lambda: int(os.getenv("QUANTA_COMPRESSION_THRESHOLD", "2000")))
     max_context_tokens: int = 500
     context_format: str = "english"  # 'english' or 'sexpr'
     always_enrich: bool = False
-    page_table_path: Optional[Union[str, Path]] = None
+    page_table_path: Optional[Union[str, Path]] = field(default_factory=lambda: os.getenv("QUANTA_PAGE_TABLE_PATH", None))
     pipeline: Optional[CognitivePipeline] = None
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = field(default_factory=lambda: float(os.getenv("QUANTA_TIMEOUT_SECONDS", "180.0")))
     fallback_to_local: bool = True
     target_model: Optional[str] = None
-    transducer_backend: str = "mock"
+    transducer_backend: str = field(default_factory=lambda: os.getenv("QUANTA_TRANSDUCER_BACKEND", "mock"))
     tracer: Optional[PipelineExecutionTracer] = None
     unsloth_manager: Optional[UnslothServerManager] = None
 

@@ -82,6 +82,20 @@ def test_suite_loaders_schema():
     assert len(niah_samples) == 2
     assert niah_samples[0].token_count >= 2000
 
+    # 8. BABILong Multi-Hop State Tracking
+    babilong_samples = loader.load_babilong(limit=2)
+    assert len(babilong_samples) == 2
+    assert babilong_samples[0].suite == "babilong"
+    assert babilong_samples[0].gold_answer in ("bedroom", "cellar", "library", "observatory", "attic")
+    assert babilong_samples[0].token_count >= 2000
+
+    # 9. Long Variable Tracking & Aggregation
+    var_samples = loader.load_variable_tracking(limit=2)
+    assert len(var_samples) == 2
+    assert var_samples[0].suite == "long_variable_tracking"
+    assert len(var_samples[0].gold_answer) > 0
+    assert var_samples[0].token_count >= 2000
+
 
 def test_latency_profiler_and_extrapolation():
     """Verifies that LatencyProfiler computes regressions and forecasts up to 1M tokens."""

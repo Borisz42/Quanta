@@ -81,7 +81,9 @@ AVAILABLE_SUITES = {
     "proofwriter": ("ProofWriter (Formal Deductive Logic & Negation)", 20),
     "babi": ("bAbI Tasks (Dynamic World-State Tracking)", 20),
     "squad_overhead": ("SQuAD Short Context (Baseline Ingestion Overhead)", 20),
-    "niah_long_context": ("1M+ Extreme Context Horizon Scaling", 5),
+    "niah_long_context": ("1M+ Extreme Context Horizon Scaling (Single Needle)", 5),
+    "babilong": ("BABILong (Multi-Hop State Tracking in Extreme Context)", 5),
+    "long_variable_tracking": ("Long-Horizon Variable Tracking & Aggregation (Multi-Needle)", 5),
 }
 
 
@@ -301,6 +303,12 @@ def main():
         elif suite_name == "niah_long_context":
             lengths = [4000, 16000, 64000, 128000, 256000][:sample_cnt]
             samples = loader.generate_niah_samples(target_token_lengths=lengths)
+        elif suite_name == "babilong":
+            lengths = [4000, 16000, 64000, 128000, 256000][:sample_cnt]
+            samples = loader.generate_babilong_samples(target_token_lengths=lengths)
+        elif suite_name == "long_variable_tracking":
+            lengths = [4000, 16000, 64000, 128000, 256000][:sample_cnt]
+            samples = loader.generate_variable_tracking_samples(target_token_lengths=lengths)
         else:
             logger.warning("Skipping unknown suite: %s", suite_name)
             continue

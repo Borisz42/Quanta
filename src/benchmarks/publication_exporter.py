@@ -194,6 +194,20 @@ class PublicationExporter:
   journal={Association for Computational Linguistics (ACL)},
   year={2018}
 }
+
+@article{kuratov2024babilong,
+  title={BABILong: Testing the Limits of Large Language Models on Long Contexts},
+  author={Yuri Kuratov and Aydar Bulatov and Petr Anokhin and Dmitry Sorokin and Artyom Sorokin and Mikhail Burtsev},
+  journal={arXiv preprint arXiv:2406.10149},
+  year={2024}
+}
+
+@article{bai2023longbench,
+  title={LongBench: A Bilingual, Multitask Benchmark for Long Context Understanding},
+  author={Yuxiang Bai and Xin Lv and Jiajie Zhang and Hongchang Lyu and Jiankai Tang and Zihang Huang and Zhengxiao Du and Xiao Liu and Aohan Zeng and Lei Hou and Yuxiao Dong and Jie Tang and Juanzi Li},
+  journal={arXiv preprint arXiv:2308.14508},
+  year={2023}
+}
 """
         bib_file.write_text(bib_entries.strip() + "\n", encoding="utf-8")
         logger.info("Exported BibTeX citations to %s", bib_file)

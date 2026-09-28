@@ -506,22 +506,38 @@ class BenchmarkSuiteLoader:
     # 7. Extreme Long-Context Scaling: 1M+ Needle-in-a-Haystack (NIAH)
     # -------------------------------------------------------------------------
 
+    # Realistic, non-trivial multi-domain background discourse corpus (literature, astronomy, systems, history)
+    DIVERSE_DISTRACTOR_PARAGRAPHS: List[str] = [
+        "The celestial dynamics of the outer Magellanic Cloud exhibit intricate gravitational tidal perturbations induced by interaction with the Milky Way halo. Deep spectroscopic surveys reveal anomalous stellar kinematics across the leading arm, indicating that ancient dwarf galaxy mergers deposited substantial metal-poor globular clusters in the galactic periphery.",
+        "Cryogenic engineering in superconducting magnetic resonance systems mandates rigorous thermal boundary management. Beryllium primary shield segments maintained at 4.2 Kelvin effectively mitigate ambient radiative heat leaks, while closed-cycle pulse-tube cryocoolers sustain ultra-stable operating states without continuous liquid helium replenishment.",
+        "In distributed consensus protocols, Byzantine fault tolerance requires two-thirds supermajority quorum agreement across all active validator nodes. State machine replication under high network partitions relies on monotonic view-change counters and cryptographic threshold signatures to prevent double-spending and state bifurcation.",
+        "The architecture of modern transactional databases guarantees serializable isolation through multi-version concurrency control paired with two-phase locking. Write-ahead logging ensures atomicity by persisting deterministic redo-undo records before physical memory pages are synchronized to solid-state storage arrays.",
+        "Polymer matrix crystallization under high hydrostatic pressure demonstrates marked variations in lamellar thickness and spherulite growth rates. Molecular dynamics simulations show that cross-linking density at the amorphous-crystalline interface governs macroscopic tensile modulus and fracture resistance.",
+        "Axiomatic formal verification employs first-order resolution refutation and satisfiability modulo theories to guarantee software invariant correctness. Inductive loop assertions and Hoare triple precondition checks eliminate buffer overrun vulnerabilities prior to compiler code generation.",
+        "During the late Victorian maritime expedition of 1888, the survey vessel St. Jude documented uncharted archipelago bathymetry across the southern meridian. The naval logbooks recorded persistent prevailing westerlies, barometric fluctuations, and magnetic compass deviations near subterranean basaltic ridges.",
+        "Autonomous swarm agents coordinate decentralized exploration via non-blocking gossip dissemination. Each localized peer maintains a compact Merkle state summary, exchanging peer digest vectors across gossip gossip rounds to achieve eventual consistency across unstable mesh topology.",
+        "The thermodynamic efficiency of combined-cycle gas turbine systems approaches sixty-two percent under advanced aerodynamic turbine blade cooling. Ceramic thermal barrier coatings shield single-crystal superalloy substrates against combustion chamber gas temperatures exceeding sixteen hundred degrees Celsius.",
+        "Cellular signal transduction through receptor tyrosine kinases regulates transcriptional activation and mitotic progression. Ligand-induced dimerization triggers intracellular autophosphorylation, initiating downstream kinase cascades that orchestrate chromatin remodeling and gene expression programs.",
+    ]
+
+    def _assemble_distractor_context(self, needed_words: int) -> List[str]:
+        """Assembles authentic, non-trivial discourse background paragraphs to reach word target."""
+        parts: List[str] = []
+        cur_words = 0
+        pool = self.DIVERSE_DISTRACTOR_PARAGRAPHS
+        p_idx = 0
+        while cur_words < needed_words:
+            para = pool[p_idx % len(pool)]
+            parts.append(para)
+            cur_words += len(para.split())
+            p_idx += 1
+        return parts
+
     def generate_niah_samples(
         self,
         target_token_lengths: Sequence[int] = (4000, 16000, 64000, 128000, 256000, 1000000),
     ) -> List[BenchmarkSample]:
         """Generates synthetic needle-in-a-haystack documents spanning 4k to 1M+ tokens."""
-        filler_sentences = [
-            "The optical spectrum of the deep-space cluster displays intense infrared dispersion.",
-            "Cryogenic cooling ensures the thermal stability of beryllium primary mirror segments.",
-            "The microservice architecture employs asynchronous Kafka event streaming across availability zones.",
-            "Database transactions follow strict serializable isolation under two-phase commit protocol.",
-            "Polymer matrix crystallization at 77 Kelvin exhibits distinct cross-linking density.",
-            "Axiomatic verification proves the consistency of first-order propositional clauses.",
-            "The celestial coordinates of exoplanet WASP-96b were cross-referenced with spectroscopic surveys.",
-            "Autonomous agents coordinate consensus through non-blocking gossip protocols.",
-        ]
-
         needles = [
             ("The designated mission access code for Vault 81 is PHANTOM-9092.", "What is the designated mission access code for Vault 81?", "PHANTOM-9092"),
             ("The experimental superconducting quantum core operates at exact frequency 4.8872 GHz.", "What frequency does the experimental superconducting quantum core operate at?", "4.8872 GHz"),
@@ -533,19 +549,14 @@ class BenchmarkSuiteLoader:
             needle_idx = idx % len(needles)
             needle_text, q, ans = needles[needle_idx]
 
-            # Approximate words needed: tokens / 1.33
             needed_words = int(target_tokens / 1.33)
-            # Repeat filler sentences to achieve word budget
-            filler_block = " ".join(filler_sentences)
-            filler_words = len(filler_block.split())
-            repeats = max(1, needed_words // filler_words)
+            distractor_paras = self._assemble_distractor_context(needed_words)
 
-            haystack_parts = [filler_block] * repeats
             # Insert needle at ~60% depth ("lost-in-the-middle" test)
-            insert_pos = int(len(haystack_parts) * 0.60)
-            haystack_parts.insert(insert_pos, f"\n\nCRITICAL RECORD: {needle_text}\n\n")
+            insert_pos = max(1, int(len(distractor_paras) * 0.60))
+            distractor_paras.insert(insert_pos, f"CRITICAL RECORD: {needle_text}")
 
-            full_haystack = " ".join(haystack_parts)
+            full_haystack = "\n\n".join(distractor_paras)
             actual_tokens = self.estimate_token_count(full_haystack)
 
             samples.append(
@@ -561,3 +572,248 @@ class BenchmarkSuiteLoader:
                 )
             )
         return samples
+
+    # -------------------------------------------------------------------------
+    # 8. Meta BABILong: Multi-Hop Dynamic World-State Tracking in 256k+ Context
+    # -------------------------------------------------------------------------
+
+    def generate_babilong_samples(
+        self,
+        target_token_lengths: Sequence[int] = (4000, 16000, 64000, 128000, 256000),
+    ) -> List[BenchmarkSample]:
+        """Generates BABILong multi-hop state tracking tasks embedded in extreme long context.
+
+        Conforms to BABILong benchmark methodology (Kuratov et al., arXiv:2406.10149):
+        Inserts chained 2-hop and 3-hop state transitions (movement, item possession, transfers, drops)
+        at distributed percentage depths across extensive authentic background distractor text.
+        """
+        # Scenarios with multi-hop temporal state updates
+        scenarios = [
+            {
+                "facts": [
+                    "Sandra journeyed to the garden.",
+                    "Daniel travelled to the kitchen.",
+                    "Sandra picked up the apple in the garden.",
+                    "Sandra journeyed to the bedroom.",
+                    "Sandra dropped the apple in the bedroom.",
+                    "Sandra walked to the office.",
+                ],
+                "question": "Where is the apple?",
+                "answer": "bedroom",
+            },
+            {
+                "facts": [
+                    "John travelled to the hallway.",
+                    "Mary moved to the office.",
+                    "John picked up the key in the hallway.",
+                    "John gave the key to Mary in the office.",
+                    "Mary travelled to the cellar.",
+                    "Mary put down the key in the cellar.",
+                    "Mary travelled to the garden.",
+                ],
+                "question": "Where is the key?",
+                "answer": "cellar",
+            },
+            {
+                "facts": [
+                    "Arthur placed the green container in the workshop.",
+                    "Arthur put the silver key inside the green container.",
+                    "Arthur carried the green container to the library.",
+                    "Arthur removed the silver key from the green container.",
+                    "Arthur left the silver key on the desk in the library.",
+                    "Arthur walked to the terrace.",
+                ],
+                "question": "Where is the silver key?",
+                "answer": "library",
+            },
+            {
+                "facts": [
+                    "The laboratory is north of the command center.",
+                    "The observatory is east of the laboratory.",
+                    "The hangar is south of the observatory.",
+                    "Dr. Chen walked from the command center into the laboratory.",
+                    "Dr. Chen then proceeded eastward into the observatory.",
+                ],
+                "question": "Which room is east of the laboratory?",
+                "answer": "observatory",
+            },
+            {
+                "facts": [
+                    "Bill travelled to the pantry.",
+                    "Bill acquired the lantern in the pantry.",
+                    "Bill journeyed to the attic.",
+                    "Bill dropped the lantern in the attic.",
+                    "Bill went back to the garden.",
+                ],
+                "question": "Where is the lantern?",
+                "answer": "attic",
+            },
+        ]
+
+        samples: List[BenchmarkSample] = []
+        for idx, target_tokens in enumerate(target_token_lengths):
+            scen = scenarios[idx % len(scenarios)]
+            facts = scen["facts"]
+            q = scen["question"]
+            ans = scen["answer"]
+
+            needed_words = int(target_tokens / 1.33)
+            distractor_paras = self._assemble_distractor_context(needed_words)
+
+            # Distribute facts across progressive depths (e.g. 10%, 25%, 45%, 65%, 85%)
+            n_paras = len(distractor_paras)
+            step_size = max(1, n_paras // (len(facts) + 1))
+            for f_idx, fact_text in enumerate(facts):
+                pos = min(n_paras - 1, max(0, (f_idx + 1) * step_size))
+                distractor_paras.insert(pos, f"NARRATIVE UPDATE: {fact_text}")
+                n_paras += 1
+
+            full_haystack = "\n\n".join(distractor_paras)
+            actual_tokens = self.estimate_token_count(full_haystack)
+
+            samples.append(
+                BenchmarkSample(
+                    id=f"babilong_{target_tokens // 1000}k",
+                    suite="babilong",
+                    prompt=q,
+                    context=full_haystack,
+                    gold_answer=ans,
+                    expected_tokens=[ans.lower()],
+                    token_count=actual_tokens,
+                    metadata={
+                        "target_tokens": target_tokens,
+                        "actual_tokens": actual_tokens,
+                        "facts_count": len(facts),
+                        "task_type": "babilong_multihop_state_tracking",
+                    },
+                )
+            )
+        return samples
+
+    def load_babilong(self, limit: int = 5) -> List[BenchmarkSample]:
+        """Loads BABILong multi-hop benchmark samples across standard context horizons."""
+        lengths = [4000, 16000, 64000, 128000, 256000][:limit]
+        return self.generate_babilong_samples(target_token_lengths=lengths)
+
+    # -------------------------------------------------------------------------
+    # 9. Complex Long-Context: Multi-Needle Variable Tracking & Aggregation
+    # -------------------------------------------------------------------------
+
+    def generate_variable_tracking_samples(
+        self,
+        target_token_lengths: Sequence[int] = (4000, 16000, 64000, 128000, 256000),
+    ) -> List[BenchmarkSample]:
+        """Generates Multi-Needle Variable Tracking & Aggregation tasks (LongBench / BAMBOO style).
+
+        Requires synthesizing multiple distinct state mutations or numeric updates for a target entity
+        scattered across extreme document horizons, defeating single-needle shallow retrieval.
+        """
+        scenarios = [
+            {
+                "target_entity": "Account ACC-9042",
+                "events": [
+                    "Audit Record: Account ACC-9042 recorded a credit deposit of 1500 credits.",
+                    "Audit Record: Account ACC-3110 recorded a debit payment of 400 credits.",
+                    "Audit Record: Account ACC-9042 recorded a debit transfer of 350 credits.",
+                    "Audit Record: Account ACC-7801 recorded a credit deposit of 900 credits.",
+                    "Audit Record: Account ACC-9042 recorded a credit deposit of 600 credits.",
+                    "Audit Record: Account ACC-9042 recorded a debit fee of 50 credits.",
+                ],
+                "question": "What is the net balance change for Account ACC-9042 across all recorded transactions?",
+                "answer": "1700 credits",
+            },
+            {
+                "target_entity": "Server SRV-ALPHA",
+                "events": [
+                    "Security Log: Server SRV-ALPHA detected 14 unauthorized SSH attempts.",
+                    "Security Log: Server SRV-BETA detected 22 unauthorized SSH attempts.",
+                    "Security Log: Server SRV-ALPHA detected 8 unauthorized SSH attempts.",
+                    "Security Log: Server SRV-GAMMA detected 5 unauthorized SSH attempts.",
+                    "Security Log: Server SRV-ALPHA detected 11 unauthorized SSH attempts.",
+                ],
+                "question": "What is the total number of unauthorized SSH attempts detected on Server SRV-ALPHA across all security incidents?",
+                "answer": "33",
+            },
+            {
+                "target_entity": "Node-07",
+                "events": [
+                    "Cluster Maintenance: Node-07 experienced 45 minutes of scheduled downtime.",
+                    "Cluster Maintenance: Node-02 experienced 90 minutes of scheduled downtime.",
+                    "Cluster Maintenance: Node-07 experienced 30 minutes of scheduled downtime.",
+                    "Cluster Maintenance: Node-05 experienced 60 minutes of scheduled downtime.",
+                    "Cluster Maintenance: Node-07 experienced 15 minutes of scheduled downtime.",
+                ],
+                "question": "What is the total downtime in minutes experienced by Node-07 across all cluster maintenance events?",
+                "answer": "90 minutes",
+            },
+            {
+                "target_entity": "Patient P-4412",
+                "events": [
+                    "Clinical Log: Patient P-4412 was administered 20 mg of compound Med-A.",
+                    "Clinical Log: Patient P-1099 was administered 50 mg of compound Med-B.",
+                    "Clinical Log: Patient P-4412 was administered 15 mg of compound Med-A.",
+                    "Clinical Log: Patient P-3301 was administered 25 mg of compound Med-A.",
+                    "Clinical Log: Patient P-4412 was administered 10 mg of compound Med-A.",
+                ],
+                "question": "What is the cumulative dosage of compound Med-A administered to Patient P-4412 across all clinical logs?",
+                "answer": "45 mg",
+            },
+            {
+                "target_entity": "Warehouse WH-WEST",
+                "events": [
+                    "Inventory Log: Warehouse WH-WEST received a shipment of 500 microprocessors.",
+                    "Inventory Log: Warehouse WH-EAST received a shipment of 300 microprocessors.",
+                    "Inventory Log: Warehouse WH-WEST dispatched an order of 120 microprocessors.",
+                    "Inventory Log: Warehouse WH-CENTRAL received a shipment of 200 microprocessors.",
+                    "Inventory Log: Warehouse WH-WEST received a shipment of 250 microprocessors.",
+                ],
+                "question": "What is the net change in microprocessor inventory at Warehouse WH-WEST across all logged events?",
+                "answer": "630 microprocessors",
+            },
+        ]
+
+        samples: List[BenchmarkSample] = []
+        for idx, target_tokens in enumerate(target_token_lengths):
+            scen = scenarios[idx % len(scenarios)]
+            events = scen["events"]
+            q = scen["question"]
+            ans = scen["answer"]
+
+            needed_words = int(target_tokens / 1.33)
+            distractor_paras = self._assemble_distractor_context(needed_words)
+
+            # Distribute multi-needle events across the document
+            n_paras = len(distractor_paras)
+            step_size = max(1, n_paras // (len(events) + 1))
+            for e_idx, ev_text in enumerate(events):
+                pos = min(n_paras - 1, max(0, (e_idx + 1) * step_size))
+                distractor_paras.insert(pos, f"ENTERPRISE TELEMETRY EVENT: {ev_text}")
+                n_paras += 1
+
+            full_haystack = "\n\n".join(distractor_paras)
+            actual_tokens = self.estimate_token_count(full_haystack)
+
+            samples.append(
+                BenchmarkSample(
+                    id=f"var_track_{target_tokens // 1000}k",
+                    suite="long_variable_tracking",
+                    prompt=q,
+                    context=full_haystack,
+                    gold_answer=ans,
+                    expected_tokens=[ans.lower()],
+                    token_count=actual_tokens,
+                    metadata={
+                        "target_tokens": target_tokens,
+                        "actual_tokens": actual_tokens,
+                        "events_count": len(events),
+                        "task_type": "multi_needle_variable_tracking",
+                    },
+                )
+            )
+        return samples
+
+    def load_variable_tracking(self, limit: int = 5) -> List[BenchmarkSample]:
+        """Loads Multi-Needle Variable Tracking benchmark samples across standard context horizons."""
+        lengths = [4000, 16000, 64000, 128000, 256000][:limit]
+        return self.generate_variable_tracking_samples(target_token_lengths=lengths)
+
