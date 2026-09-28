@@ -141,7 +141,8 @@ class PairedEvaluator:
         }
 
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            req_timeout = max(self.timeout_seconds, 180.0)
+            with httpx.Client(timeout=req_timeout) as client:
                 resp = client.post(
                     f"{endpoint_url}/chat/completions",
                     json=req_payload,

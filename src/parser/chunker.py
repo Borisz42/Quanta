@@ -205,12 +205,14 @@ class DiscourseChunker:
                 # Fast sentencizer pipeline: 69x faster than full tagger/parser/NER model
                 self._nlp = spacy.blank("en")
                 self._nlp.add_pipe("sentencizer")
+                self._nlp.max_length = 100_000_000
             except Exception:
                 try:
                     if spacy_model:
                         self._nlp = spacy.load(spacy_model, disable=["tagger", "parser", "ner", "lemmatizer", "attribute_ruler"])
                         if "senter" not in self._nlp.pipe_names:
                             self._nlp.add_pipe("sentencizer")
+                        self._nlp.max_length = 100_000_000
                 except Exception:
                     self._nlp = None
                     self.use_spacy = False
