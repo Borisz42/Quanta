@@ -62,6 +62,8 @@ class MCPServer:
             "quanta_ingest_document": self._tool_ingest_document,
             "quanta_query_memory": self._tool_query_memory,
             "quanta_get_entity_details": self._tool_get_entity_details,
+            "quanta_reset_memory": self._tool_reset_memory,
+            "quanta_get_memory_stats": self._tool_get_memory_stats,
         }
 
     # -------------------------------------------------------------------------
@@ -227,6 +229,22 @@ class MCPServer:
                     "required": ["name_or_cid"],
                 },
             },
+            {
+                "name": "quanta_reset_memory",
+                "description": "Flushes ephemeral working memory, resetting ActiveCanvas and clearing PageTable session nodes.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "name": "quanta_get_memory_stats",
+                "description": "Returns current QUANTA memory metrics including interned node count, canvas utilization, and Merkle episodes.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
         ]
 
     # -------------------------------------------------------------------------
@@ -242,19 +260,65 @@ class MCPServer:
             return "Error: Document content cannot be empty."
 
         t0 = time.perf_counter()
-        # Ingest through cognitive pipeline with Merkle folding
-        graph = self.pipeline.process(content, chapter_id=doc_id)
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        try:
+            # Ingest through cognitive pipeline with streaming Merkle folding
+            graph = self.pipeline.process(content, chapter_id=doc_id)
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
-        node_count = self.pipeline.page_table.count_nodes() if hasattr(self.pipeline.page_table, "count_nodes") else len(self.pipeline.page_table)
-        root_cid = graph.root.compute_cid() if graph.root else "none"
+            node_count = self.pipeline.page_table.count_nodes() if hasattr(self.pipeline.page_table, "count_nodes") else len(self.pipeline.page_table)
+            root_cid = graph.root.compute_cid() if (graph and graph.root) else "none"
 
-        return (
-            f"Successfully ingested document '{doc_id}' into QUANTA memory in {elapsed_ms:.2f} ms.\n"
-            f"- Graph Nodes Created: {len(graph.nodes)}\n"
-            f"- Graph Merkle Root CID: {root_cid}\n"
-            f"- Total PageTable Interned Nodes: {node_count}"
-        )
+            if node_count == 0:
+                return (
+                    f"Warning: Ingestion of document '{doc_id}' completed in {elapsed_ms:.2f} ms "
+                    f"but 0 nodes were stored in PageTable. Please check document syntax or transducer."
+                )
+
+            return (
+                f"Successfully ingested document '{doc_id}' into QUANTA memory in {elapsed_ms:.2f} ms.\n"
+                f"- Graph Nodes Created: {len(graph.nodes) if graph else 0}\n"
+                f"- Graph Merkle Root CID: {root_cid}\n"
+                f"- Total PageTable Interned Nodes: {node_count}"
+            )
+        except Exception as e:
+            logger.exception("Error ingesting document '%s' in MCP: %s", doc_id, e)
+            return f"Error ingesting document '{doc_id}': {str(e)}"
+
+    def _tool_reset_memory(self, arguments: Optional[Dict[str, Any]] = None) -> str:
+        """Executes quanta_reset_memory tool."""
+        if hasattr(self.pipeline, "active_canvas"):
+            self.pipeline.active_canvas.clear()
+        if hasattr(self.pipeline, "entity_engine") and hasattr(self.pipeline.entity_engine, "manifest"):
+            self.pipeline.entity_engine.manifest.reset()
+        if hasattr(self.pipeline, "stitcher"):
+            self.pipeline.stitcher.reset()
+        if hasattr(self.pipeline, "merkle_book"):
+            from core.asg import HierarchicalMerkleBook
+            self.pipeline.merkle_book = HierarchicalMerkleBook()
+
+        # Reset SQLite PageTable if in-memory
+        if hasattr(self.pipeline, "page_table") and getattr(self.pipeline.page_table, "db_path", None) == ":memory:":
+            from memory.page_table import PageTable
+            self.pipeline.page_table = PageTable(db_path=":memory:")
+
+        return "Successfully reset QUANTA memory state."
+
+    def _tool_get_memory_stats(self, arguments: Optional[Dict[str, Any]] = None) -> str:
+        """Executes quanta_get_memory_stats tool."""
+        pt = self.pipeline.page_table
+        node_count = pt.count_nodes() if hasattr(pt, "count_nodes") else len(pt)
+        canvas_len = len(self.pipeline.active_canvas) if hasattr(self.pipeline, "active_canvas") else 0
+        canvas_cap = self.pipeline.active_canvas.capacity if hasattr(self.pipeline, "active_canvas") else 512
+        vector_count = len(pt.vector_index) if hasattr(pt, "vector_index") else 0
+
+        stats = {
+            "total_page_table_nodes": node_count,
+            "vector_index_size": vector_count,
+            "active_canvas_usage": f"{canvas_len}/{canvas_cap} nodes",
+            "global_kb_mounted": self.global_kb is not None,
+            "has_merkle_book": hasattr(self.pipeline, "merkle_book"),
+        }
+        return json.dumps(stats, indent=2)
 
     def _tool_query_memory(self, arguments: Dict[str, Any]) -> str:
         """Executes quanta_query_memory tool."""

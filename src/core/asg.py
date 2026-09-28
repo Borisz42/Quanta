@@ -702,7 +702,25 @@ class QuantaGraph:
                     if target_node is None:
                         errors.append(f"Dangling edge in {cid}: relation '{rel}' points to missing CID {target_cid}")
                     elif target_node.compute_cid() != target_cid:
-                        if rel not in ("GRAPH_RECURSIVE_REF", "GRAPH_CYCLIC_BACKLINK", "GRAPH_MERKLE_FOLD_POINT", "CALLS") and cid != target_cid:
+                        # Exclude recursive backlinks, Merkle fold points, and narrative/discourse sequence transitions
+                        # which connect independent events in time without constituting ontological Merkle child containment.
+                        NARRATIVE_SEQUENCE_RELS = (
+                            "GRAPH_RECURSIVE_REF",
+                            "GRAPH_CYCLIC_BACKLINK",
+                            "GRAPH_MERKLE_FOLD_POINT",
+                            "CALLS",
+                            "TEMP_ALLEN_MEETS",
+                            "TEMP_ALLEN_BEFORE",
+                            "TEMP_ALLEN_AFTER",
+                            "TEMP_ALLEN_DURING",
+                            "TEMP_ALLEN_FINISHES",
+                            "TEMP_ALLEN_OVERLAPS",
+                            "TEMP_ALLEN_STARTS",
+                            "TEMP_ALLEN_EQUALS",
+                            "CFG_NEXT",
+                            "DATA_FLOW_DEF_USE",
+                        )
+                        if rel not in NARRATIVE_SEQUENCE_RELS and cid != target_cid:
                             errors.append(
                                 f"Tampered target node or CID mismatch: edge '{rel}' in {cid} expects CID {target_cid}, but target payload hashes to {target_node.compute_cid()}"
                             )

@@ -289,6 +289,24 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             ]
         )
 
+    @app.post("/v1/quanta/reset")
+    async def reset_quanta_memory():
+        """Flushes ephemeral working memory, resets ActiveCanvas and clears ingested hashes."""
+        if hasattr(pipeline, "active_canvas"):
+            pipeline.active_canvas.clear()
+        if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
+            pipeline.entity_engine.manifest.reset()
+        if hasattr(pipeline, "stitcher"):
+            pipeline.stitcher.reset()
+        if hasattr(pipeline, "merkle_book"):
+            from core.asg import HierarchicalMerkleBook
+            pipeline.merkle_book = HierarchicalMerkleBook()
+        if hasattr(pipeline, "page_table") and getattr(pipeline.page_table, "db_path", None) == ":memory:":
+            from memory.page_table import PageTable
+            pipeline.page_table = PageTable(db_path=":memory:")
+        app.state.ingested_turn_hashes = set()
+        return {"status": "ok", "message": "QUANTA memory and session hashes reset successfully"}
+
     # -------------------------------------------------------------------------
     # Chat Completions Endpoint
     # -------------------------------------------------------------------------
@@ -300,9 +318,42 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_threshold: Optional[int] = Header(None, alias="X-Quanta-Threshold"),
         x_quanta_format: Optional[str] = Header(None, alias="X-Quanta-Format"),
         x_quanta_force_enrich: Optional[bool] = Header(None, alias="X-Quanta-Enrich"),
+        x_quanta_global_kb: Optional[bool] = Header(None, alias="X-Quanta-Global-KB"),
+        x_quanta_no_global_kb: Optional[bool] = Header(None, alias="X-Quanta-No-Global-KB"),
+        x_quanta_reset: Optional[bool] = Header(None, alias="X-Quanta-Reset"),
+        x_quanta_validate: Optional[bool] = Header(False, alias="X-Quanta-Validate"),
     ):
         t0 = time.perf_counter()
         stats["total_requests"] += 1
+
+        if x_quanta_reset:
+            if hasattr(pipeline, "active_canvas"):
+                pipeline.active_canvas.clear()
+            if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
+                pipeline.entity_engine.manifest.reset()
+            if hasattr(pipeline, "stitcher"):
+                pipeline.stitcher.reset()
+            if hasattr(pipeline, "merkle_book"):
+                from core.asg import HierarchicalMerkleBook
+                pipeline.merkle_book = HierarchicalMerkleBook()
+            if hasattr(pipeline, "page_table") and getattr(pipeline.page_table, "db_path", None) == ":memory:":
+                from memory.page_table import PageTable
+                pipeline.page_table = PageTable(db_path=":memory:")
+            app.state.ingested_turn_hashes = set()
+
+        # Handle global knowledge base mounting on demand
+        if x_quanta_global_kb:
+            if getattr(pipeline.page_table, "global_kb", None) is None:
+                try:
+                    from memory.global_kb import GlobalKnowledgeBase
+                    kb_path = Path("data/wikipedia_quanta.db")
+                    if kb_path.exists():
+                        pipeline.page_table.mount_global_kb(GlobalKnowledgeBase(kb_path))
+                except Exception as e:
+                    logger.warning("Failed to mount GlobalKnowledgeBase: %s", e)
+        elif x_quanta_no_global_kb:
+            if hasattr(pipeline.page_table, "global_kb"):
+                pipeline.page_table.global_kb = None
 
         threshold = x_quanta_threshold if x_quanta_threshold is not None else cfg.compression_threshold
         format_type = x_quanta_format if x_quanta_format is not None else cfg.context_format
@@ -377,7 +428,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     if history_text.strip():
                         try:
                             is_cold_start = True
-                            pipeline.process(history_text)
+                            pipeline.process(history_text, validate=bool(x_quanta_validate))
                             stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                         except Exception as e:
                             logger.warning("Error during dialogue history ASG ingestion: %s", e)
@@ -388,11 +439,11 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 if doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
                     try:
                         is_cold_start = True
-                        pipeline.process(doc_from_user)
+                        pipeline.process(doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
                         app.state.ingested_turn_hashes.add(doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
-                        logger.warning("Error during user context document ASG ingestion: %s", e)
+                        logger.error("Error during user context document ASG ingestion: %s", e)
 
             # 3. Ingest system context document if present
             if doc_from_system:
@@ -400,11 +451,11 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 if sys_doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
                     try:
                         is_cold_start = True
-                        pipeline.process(doc_from_system)
+                        pipeline.process(doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
                         app.state.ingested_turn_hashes.add(sys_doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
-                        logger.warning("Error during system context document ASG ingestion: %s", e)
+                        logger.error("Error during system context document ASG ingestion: %s", e)
 
             t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
 

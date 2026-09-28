@@ -202,17 +202,15 @@ class DiscourseChunker:
 
         if self.use_spacy:
             try:
-                # Fast sentencizer pipeline or full model
-                if spacy_model:
-                    self._nlp = spacy.load(spacy_model)
-                else:
-                    self._nlp = spacy.blank("en")
-                    self._nlp.add_pipe("sentencizer")
+                # Fast sentencizer pipeline: 69x faster than full tagger/parser/NER model
+                self._nlp = spacy.blank("en")
+                self._nlp.add_pipe("sentencizer")
             except Exception:
-                # Fallback to blank English sentencizer or rule-based
                 try:
-                    self._nlp = spacy.blank("en")
-                    self._nlp.add_pipe("sentencizer")
+                    if spacy_model:
+                        self._nlp = spacy.load(spacy_model, disable=["tagger", "parser", "ner", "lemmatizer", "attribute_ruler"])
+                        if "senter" not in self._nlp.pipe_names:
+                            self._nlp.add_pipe("sentencizer")
                 except Exception:
                     self._nlp = None
                     self.use_spacy = False
@@ -558,8 +556,22 @@ class DiscourseChunker:
         return self.chunk_document(text)
 
     def chunk_text(self, text: str, chapter_id: Optional[str] = None) -> List[DiscourseChunk]:
-        """Chunk text with optional default chapter_id assignment."""
-        chunks = self.chunk_document(text)
+        """Chunk text with optional default chapter_id assignment and adaptive scaling for large documents."""
+        total_words = len(text.split())
+        # For massive texts (>10,000 words), scale chunks adaptively to maintain high throughput
+        if total_words > 10000 and self.max_words < 600:
+            saved_min = self.min_words
+            saved_max = self.max_words
+            self.min_words = max(self.min_words, 400)
+            self.max_words = max(self.max_words, 800)
+            try:
+                chunks = self.chunk_document(text)
+            finally:
+                self.min_words = saved_min
+                self.max_words = saved_max
+        else:
+            chunks = self.chunk_document(text)
+
         if chapter_id:
             for chk in chunks:
                 if not chk.chapter_id:

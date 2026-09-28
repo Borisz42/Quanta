@@ -193,6 +193,16 @@ class CognitivePipeline:
                 )
             ]
 
+        # Multi-chunk streaming episodic routing:
+        # Long documents and multi-chunk narratives must be processed using the streaming
+        # episodic pipeline (process_narrative) to guarantee O(1) active canvas bounds,
+        # Merkle episodic folding, and eliminate monolithic Blake3 CID hash cascades.
+        if len(chunks) > 1:
+            graphs, chapter_fold = self.process_narrative(
+                text, chapter_id=chapter_id, validate=validate, language_hint=language_hint
+            )
+            return graphs[0] if graphs else QuantaGraph()
+
         chunk_extractions: List[DiscourseExtractionResult] = []
 
         # 2. Iterate chunks through transducer with active entity tracking & MUC repair
@@ -374,6 +384,7 @@ class CognitivePipeline:
         chapter_id: str = "ch_01",
         validate: bool = True,
         queue_size: int = 4,
+        language_hint: Optional[str] = None,
     ) -> Tuple[List[QuantaGraph], QuantaNode]:
         """Asynchronously process a multi-paragraph narrative using a 3-stage pipelined architecture.
 
@@ -423,6 +434,8 @@ class CognitivePipeline:
             for chk in chunks:
                 self.entity_engine.pre_scan_and_page(chk.text)
                 manifest_prompt = self.entity_engine.format_prompt_block()
+                if language_hint:
+                    manifest_prompt = f"{language_hint}\n{manifest_prompt}" if manifest_prompt else language_hint
                 active_ents = (
                     self.entity_engine.manifest.all_active()
                     if hasattr(self.entity_engine, "manifest")
@@ -533,6 +546,7 @@ class CognitivePipeline:
         text: str,
         chapter_id: str = "ch_01",
         validate: bool = True,
+        language_hint: Optional[str] = None,
     ) -> Tuple[List[QuantaGraph], QuantaNode]:
         """Process a multi-paragraph narrative or chapter using asynchronous multi-stage pipelining.
 
@@ -548,12 +562,12 @@ class CognitivePipeline:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(
                     asyncio.run,
-                    self.process_narrative_async(text, chapter_id=chapter_id, validate=validate),
+                    self.process_narrative_async(text, chapter_id=chapter_id, validate=validate, language_hint=language_hint),
                 )
                 return future.result()
         else:
             return asyncio.run(
-                self.process_narrative_async(text, chapter_id=chapter_id, validate=validate)
+                self.process_narrative_async(text, chapter_id=chapter_id, validate=validate, language_hint=language_hint)
             )
 
     def ingest_book(
