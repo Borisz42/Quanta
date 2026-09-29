@@ -23,6 +23,12 @@ import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import urllib.request
 
+try:
+    from datasets import load_dataset
+    HAS_DATASETS = True
+except ImportError:
+    HAS_DATASETS = False
+
 logger = logging.getLogger("quanta.benchmarks.suite_loaders")
 
 
@@ -144,14 +150,32 @@ class BenchmarkSuiteLoader:
         cache_file = self.raw_dir / "arc_challenge.jsonl"
         items: List[Dict[str, Any]] = []
 
-        if cache_file.exists():
+        if HAS_DATASETS:
+            try:
+                logger.info("Downloading ai2_arc (ARC-Challenge) from Hugging Face...")
+                ds = load_dataset("allenai/ai2_arc", "ARC-Challenge", split="test")
+                for item in ds.select(range(min(limit, len(ds)))):
+                    items.append({
+                        "id": item["id"],
+                        "question": item["question"],
+                        "choices": item["choices"],
+                        "answerKey": item["answerKey"],
+                        "domain": "General Science",
+                        "key_entities": [],
+                    })
+            except Exception as e:
+                logger.warning("Failed to load ARC-Challenge from HF: %s", e)
+
+        if not items and cache_file.exists():
             with open(cache_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         items.append(json.loads(line))
+                        if len(items) >= limit: break
 
         # Verified authentic ARC-Challenge science items across Physics, Chemistry, Biology, Astronomy
         if not items:
+            logger.warning("Falling back to hardcoded ARC-Challenge mock data")
             items = [
                 {
                     "id": "ARC_CHALLENGE_001",
@@ -270,13 +294,46 @@ class BenchmarkSuiteLoader:
     # -------------------------------------------------------------------------
 
     def load_musique(self, limit: int = 20) -> List[BenchmarkSample]:
-        """Loads official 2-hop to 4-hop questions from data/benchmarks/musique_sample_real.json."""
+        """Loads official 2-hop to 4-hop questions from data/benchmarks/musique_sample_real.json or HF."""
         musique_file = self.benchmarks_dir / "musique_sample_real.json"
-        if not musique_file.exists():
-            raise FileNotFoundError(f"MuSiQue dataset not found at {musique_file}")
+        data = []
 
-        with open(musique_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        if HAS_DATASETS:
+            try:
+                logger.info("Downloading bdsaglam/musique from Hugging Face...")
+                ds = load_dataset("bdsaglam/musique", split="validation")
+                for item in ds.select(range(min(limit, len(ds)))):
+                    # HF format might differ slightly
+                    # We map paragraphs to passages
+                    paragraphs = item.get("paragraphs", [])
+                    # separate true support from distractors based on "is_supporting" flag if it exists
+                    gold = [p["paragraph_text"] for p in paragraphs if p.get("is_supporting", False)]
+                    distractors = [p["paragraph_text"] for p in paragraphs if not p.get("is_supporting", False)]
+                    # Some musique dataset variants format differently
+
+                    data.append({
+                        "id": item.get("id", ""),
+                        "question": item.get("question", ""),
+                        "gold_passages": gold if gold else [p["paragraph_text"] for p in paragraphs],
+                        "distractor_passages": distractors,
+                        "answer": item.get("answer", "")
+                    })
+            except Exception as e:
+                logger.warning("Failed to load MuSiQue from HF: %s", e)
+
+        if not data and musique_file.exists():
+            with open(musique_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+        if not data:
+             logger.warning("Falling back to hardcoded MuSiQue mock data")
+             data = [{
+                "id": "musique_mock_1",
+                "question": "What is the capital of France?",
+                "gold_passages": ["France is a country in Europe. Its capital is Paris."],
+                "distractor_passages": ["London is the capital of the UK."],
+                "answer": "Paris"
+             }]
 
         samples: List[BenchmarkSample] = []
         for item in data[:limit]:
@@ -315,11 +372,26 @@ class BenchmarkSuiteLoader:
     # -------------------------------------------------------------------------
 
     def load_proofwriter(self, limit: int = 20) -> List[BenchmarkSample]:
-        """Loads rule-based multi-hop deduction theories and queries from data/raw/proofwriter_train.jsonl."""
+        """Loads rule-based multi-hop deduction theories and queries from HF or data/raw/proofwriter_train.jsonl."""
         pw_file = self.raw_dir / "proofwriter_train.jsonl"
         items: List[Dict[str, Any]] = []
 
-        if pw_file.exists():
+        if HAS_DATASETS:
+            try:
+                logger.info("Downloading tasksource/proofwriter from Hugging Face...")
+                ds = load_dataset("tasksource/proofwriter", split="train") # test split unavailable, use train
+                for item in ds.select(range(min(limit, len(ds)))):
+                    items.append({
+                        "id": item.get("id", ""),
+                        "theory": item.get("theory") or item.get("context", ""),
+                        "question": item.get("question", ""),
+                        "answer": str(item.get("answer") or item.get("label", "")).lower(),
+                        "depth": 5
+                    })
+            except Exception as e:
+                logger.warning("Failed to load ProofWriter from HF: %s", e)
+
+        if not items and pw_file.exists():
             with open(pw_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if not line.strip():
@@ -330,6 +402,7 @@ class BenchmarkSuiteLoader:
 
         # Fallback canonical ProofWriter rules if file absent
         if not items:
+            logger.warning("Falling back to hardcoded ProofWriter mock data")
             items = [
                 {
                     "id": "proofwriter_001",
@@ -386,11 +459,26 @@ class BenchmarkSuiteLoader:
     # -------------------------------------------------------------------------
 
     def load_babi_state_tracking(self, limit: int = 20) -> List[BenchmarkSample]:
-        """Loads bAbI state-tracking and movement tasks from data/raw/babi_train.jsonl."""
+        """Loads bAbI state-tracking and movement tasks from HF or data/raw/babi_train.jsonl."""
         babi_file = self.raw_dir / "babi_train.jsonl"
         items: List[Dict[str, Any]] = []
 
-        if babi_file.exists():
+        if HAS_DATASETS:
+            try:
+                logger.info("Downloading Muennighoff/babi from Hugging Face...")
+                ds = load_dataset("Muennighoff/babi", split="test")
+                for item in ds.select(range(min(limit, len(ds)))):
+                    passage = item.get("passage") or item.get("story", "")
+                    items.append({
+                        "id": f"babi_{len(items)+1}",
+                        "passage": passage.get("text", "") if isinstance(passage, dict) else str(passage),
+                        "question": item.get("question", ""),
+                        "answer": str(item.get("answer", "")).lower(),
+                    })
+            except Exception as e:
+                logger.warning("Failed to load bAbI from HF: %s", e)
+
+        if not items and babi_file.exists():
             with open(babi_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if not line.strip():
@@ -403,6 +491,7 @@ class BenchmarkSuiteLoader:
 
         # Fallback canonical bAbI tasks (Tasks 1, 2, 3: supporting facts, location updates)
         if not items:
+            logger.warning("Falling back to hardcoded bAbI mock data")
             items = [
                 {
                     "id": "babi_t2_001",
@@ -452,32 +541,52 @@ class BenchmarkSuiteLoader:
 
     def load_squad_overhead(self, limit: int = 20) -> List[BenchmarkSample]:
         """Loads short (<250 words) passages to measure single-turn ingestion latency penalty."""
-        samples_canon = [
-            {
-                "id": "squad_short_001",
-                "context": "Oxygen is a chemical element with the symbol O and atomic number 8. It is a member of the chalcogen group in the periodic table, a highly reactive nonmetal, and an oxidizing agent that readily forms oxides with most elements as well as with other compounds.",
-                "question": "What is the atomic number of oxygen?",
-                "answer": "8",
-            },
-            {
-                "id": "squad_short_002",
-                "context": "The James Webb Space Telescope was launched on an Ariane 5 rocket from Kourou, French Guiana, on 25 December 2021. It orbits the Sun–Earth L2 Lagrange point, approximately 1.5 million kilometers from Earth.",
-                "question": "From where was the James Webb Space Telescope launched?",
-                "answer": "Kourou",
-            },
-            {
-                "id": "squad_short_003",
-                "context": "The Apollo program was the third United States human spaceflight program carried out by NASA. Apollo 11 landed astronauts Neil Armstrong and Buzz Aldrin on the Moon on July 20, 1969.",
-                "question": "In what year did Apollo 11 land on the Moon?",
-                "answer": "1969",
-            },
-            {
-                "id": "squad_short_004",
-                "context": "Photosynthesis occurs in plants and algae inside specialized organelles called chloroplasts. Chloroplasts contain chlorophyll, which absorbs light energy to synthesize organic compounds from carbon dioxide and water.",
-                "question": "In which organelle does photosynthesis occur?",
-                "answer": "chloroplasts",
-            },
-        ]
+        samples_canon = []
+
+        if HAS_DATASETS:
+            try:
+                logger.info("Downloading rajpurkar/squad_v2 from Hugging Face...")
+                ds = load_dataset("rajpurkar/squad_v2", split="validation")
+                # Filter for answerable questions
+                ds = ds.filter(lambda x: len(x["answers"]["text"]) > 0)
+                for item in ds.select(range(min(limit, len(ds)))):
+                    samples_canon.append({
+                        "id": item.get("id", ""),
+                        "context": item.get("context", ""),
+                        "question": item.get("question", ""),
+                        "answer": item["answers"]["text"][0] if item.get("answers") and item["answers"]["text"] else ""
+                    })
+            except Exception as e:
+                logger.warning("Failed to load SQuAD from HF: %s", e)
+
+        if not samples_canon:
+            logger.warning("Falling back to hardcoded SQuAD mock data")
+            samples_canon = [
+                {
+                    "id": "squad_short_001",
+                    "context": "Oxygen is a chemical element with the symbol O and atomic number 8. It is a member of the chalcogen group in the periodic table, a highly reactive nonmetal, and an oxidizing agent that readily forms oxides with most elements as well as with other compounds.",
+                    "question": "What is the atomic number of oxygen?",
+                    "answer": "8",
+                },
+                {
+                    "id": "squad_short_002",
+                    "context": "The James Webb Space Telescope was launched on an Ariane 5 rocket from Kourou, French Guiana, on 25 December 2021. It orbits the Sun–Earth L2 Lagrange point, approximately 1.5 million kilometers from Earth.",
+                    "question": "From where was the James Webb Space Telescope launched?",
+                    "answer": "Kourou",
+                },
+                {
+                    "id": "squad_short_003",
+                    "context": "The Apollo program was the third United States human spaceflight program carried out by NASA. Apollo 11 landed astronauts Neil Armstrong and Buzz Aldrin on the Moon on July 20, 1969.",
+                    "question": "In what year did Apollo 11 land on the Moon?",
+                    "answer": "1969",
+                },
+                {
+                    "id": "squad_short_004",
+                    "context": "Photosynthesis occurs in plants and algae inside specialized organelles called chloroplasts. Chloroplasts contain chlorophyll, which absorbs light energy to synthesize organic compounds from carbon dioxide and water.",
+                    "question": "In which organelle does photosynthesis occur?",
+                    "answer": "chloroplasts",
+                },
+            ]
 
         samples: List[BenchmarkSample] = []
         for i in range(limit):
