@@ -383,9 +383,9 @@ class BenchmarkSuiteLoader:
                 for item in ds.select(range(min(limit, len(ds)))):
                     items.append({
                         "id": item.get("id", ""),
-                        "theory": item.get("context", ""),
+                        "theory": item.get("theory") or item.get("context", ""),
                         "question": item.get("question", ""),
-                        "answer": str(item.get("label", "")).lower(),
+                        "answer": str(item.get("answer") or item.get("label", "")).lower(),
                         "depth": 5
                     })
             except Exception as e:
@@ -468,15 +468,10 @@ class BenchmarkSuiteLoader:
                 logger.info("Downloading Muennighoff/babi from Hugging Face...")
                 ds = load_dataset("Muennighoff/babi", split="test")
                 for item in ds.select(range(min(limit, len(ds)))):
-                    # HF dataset usually has 'story', 'question', 'answer'
-                    # The passage in Muennighoff/babi might be multi-sentence text.
-                    # Usually "text" contains the story and question, or "story" is isolated.
-                    # Muennighoff babi often formats it as a single 'story' block or similar.
-                    # For simplicity, we just safely get text.
-                    story = item.get("story", "")
+                    passage = item.get("passage") or item.get("story", "")
                     items.append({
                         "id": f"babi_{len(items)+1}",
-                        "passage": story.get("text", "") if isinstance(story, dict) else str(story),
+                        "passage": passage.get("text", "") if isinstance(passage, dict) else str(passage),
                         "question": item.get("question", ""),
                         "answer": str(item.get("answer", "")).lower(),
                     })
