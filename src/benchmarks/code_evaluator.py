@@ -6,6 +6,7 @@ with a strict timeout, capturing stdout, stderr, and assertion status.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 import logging
 import os
@@ -15,9 +16,123 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("quanta.benchmarks.code_evaluator")
+
+
+def clean_pre_code(pre_text: str) -> str:
+    """Extracts valid Python code declarations before def entry_point, dropping conversational prose."""
+    if not pre_text.strip():
+        return ""
+    lines = pre_text.split("\n")
+    # Try finding the start of code by trimming prose lines from the top
+    for start_i in range(len(lines)):
+        candidate = "\n".join(lines[start_i:])
+        if not candidate.strip():
+            break
+        try:
+            ast.parse(candidate)
+            return candidate.strip()
+        except SyntaxError:
+            continue
+    # Fallback: retain lines that look like Python code statements
+    filtered = [
+        ln for ln in lines
+        if ln.strip().startswith(("import ", "from ", "def ", "class ", "@", "#"))
+    ]
+    return "\n".join(filtered).strip()
+
+
+def clean_code_body(code_str: str) -> str:
+    """Trims trailing conversational prose from code if syntax error occurs."""
+    if not code_str.strip():
+        return ""
+    try:
+        ast.parse(code_str)
+        return code_str.strip()
+    except SyntaxError:
+        pass
+
+    lines = code_str.rstrip().split("\n")
+    for end_i in range(len(lines) - 1, 0, -1):
+        candidate = "\n".join(lines[:end_i]).rstrip()
+        if not candidate:
+            break
+        try:
+            ast.parse(candidate)
+            return candidate
+        except SyntaxError:
+            continue
+    return code_str.strip()
+
+
+def extract_top_level_names(code: str) -> Set[str]:
+    """Extracts top-level function, class, and variable names from code."""
+    names: Set[str] = set()
+    if not code.strip():
+        return names
+    try:
+        tree = ast.parse(code)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    names.add(node.target.id)
+    except SyntaxError:
+        for m in re.finditer(r"^\s*(?:def|class)\s+([a-zA-Z0-9_]+)", code, re.MULTILINE):
+            names.add(m.group(1))
+    return names
+
+
+def extract_import_lines(code: str) -> Set[str]:
+    """Extracts normalized import statements from code."""
+    imports: Set[str] = set()
+    for line in code.splitlines():
+        trimmed = line.strip()
+        if trimmed.startswith(("import ", "from ")):
+            imports.add(trimmed)
+    return imports
+
+
+def deduplicate_prompt_helpers(prompt_helpers: str, extracted_code: str) -> str:
+    """Filters prompt_helpers to remove functions/classes/imports already defined in extracted_code."""
+    if not prompt_helpers.strip():
+        return ""
+
+    extracted_names = extract_top_level_names(extracted_code)
+    extracted_imports = extract_import_lines(extracted_code)
+
+    try:
+        tree = ast.parse(prompt_helpers)
+    except SyntaxError:
+        return prompt_helpers.strip()
+
+    kept_segments = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name in extracted_names:
+                continue
+        elif isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if any(t in extracted_names for t in targets):
+                continue
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            seg = ast.get_source_segment(prompt_helpers, node)
+            if seg and seg.strip() in extracted_imports:
+                continue
+
+        seg = ast.get_source_segment(prompt_helpers, node)
+        if seg:
+            kept_segments.append(seg)
+
+    return "\n\n".join(kept_segments).strip()
+
 
 
 @dataclass
@@ -60,13 +175,12 @@ class CodeEvaluator:
         matches = re.findall(pattern, completion, re.IGNORECASE)
         raw_code = matches[0] if matches else completion
 
-        # If it defines the function itself, extract from 'def entry_point' while retaining imports
+        # If it defines the function itself, extract while preserving preceding helpers/imports
         if entry_point and f"def {entry_point}" in raw_code:
             idx = raw_code.find(f"def {entry_point}")
-            pre_lines = [ln for ln in raw_code[:idx].split("\n") if ln.strip().startswith(("import ", "from "))]
-            pre_imports = "\n".join(pre_lines)
-            body = raw_code[idx:].rstrip()
-            return f"{pre_imports}\n{body}".strip() if pre_imports else body
+            pre_code = clean_pre_code(raw_code[:idx])
+            body = clean_code_body(raw_code[idx:])
+            return f"{pre_code}\n\n{body}".strip() if pre_code else body
 
         # Otherwise it's the function body to append to prompt
         lines = raw_code.rstrip().split("\n")
@@ -95,7 +209,16 @@ class CodeEvaluator:
 
         # Full test script construction:
         if entry_point and f"def {entry_point}" in extracted_code:
-            full_code = preamble + extracted_code + "\n\n" + test_code + f"\n\ncheck({entry_point})\n"
+            # Extract prompt helper declarations preceding def {entry_point}
+            if f"def {entry_point}" in prompt:
+                idx = prompt.find(f"def {entry_point}")
+                raw_helpers = prompt[:idx].rstrip() if idx != -1 else ""
+            else:
+                raw_helpers = ""
+
+            prompt_helpers = deduplicate_prompt_helpers(raw_helpers, extracted_code)
+            helpers_block = f"{prompt_helpers}\n\n" if prompt_helpers else ""
+            full_code = preamble + helpers_block + extracted_code + "\n\n" + test_code + f"\n\ncheck({entry_point})\n"
         else:
             full_code = preamble + prompt.rstrip() + "\n" + extracted_code + "\n\n" + test_code + f"\n\ncheck({entry_point})\n"
 
