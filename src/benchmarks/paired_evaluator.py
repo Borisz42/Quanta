@@ -269,8 +269,8 @@ class PairedEvaluator:
         """Executes Condition A, B, and C on a single benchmark sample."""
         if sample.suite == "humaneval":
             req_max_tokens = 512
-        elif sample.suite in ("long_variable_tracking", "babilong"):
-            req_max_tokens = 300  # Multi-step aggregation/tracking needs room for calculation
+        elif sample.suite in ("long_variable_tracking", "babilong", "arc_science"):
+            req_max_tokens = 300  # Multi-step aggregation/tracking & science CoT need room for reasoning
         else:
             req_max_tokens = 150
 
@@ -321,8 +321,12 @@ class PairedEvaluator:
             corr_a = (key_a == sample.gold_answer)
             halluc_a = not corr_a
         else:
-            corr_a = BenchmarkMetrics.exact_match_score(ans_a, sample.gold_answer) or (sample.gold_answer.lower() in ans_a.lower())
-            halluc_a = BenchmarkMetrics.is_hallucinated(ans_a, sample.gold_answer)
+            corr_a = (
+                BenchmarkMetrics.exact_match_score(ans_a, sample.gold_answer)
+                or (sample.gold_answer.lower() in ans_a.lower())
+                or BenchmarkMetrics.numeric_match_score(ans_a, sample.gold_answer)
+            )
+            halluc_a = False if corr_a else BenchmarkMetrics.is_hallucinated(ans_a, sample.gold_answer)
 
         cond_a = ConditionResult(
             condition=EvaluationCondition.BASE_LLM,
@@ -384,8 +388,12 @@ class PairedEvaluator:
                 corr_b = (key_b == sample.gold_answer)
                 halluc_b = not corr_b
             else:
-                corr_b = BenchmarkMetrics.exact_match_score(ans_b, sample.gold_answer) or (sample.gold_answer.lower() in ans_b.lower())
-                halluc_b = BenchmarkMetrics.is_hallucinated(ans_b, sample.gold_answer)
+                corr_b = (
+                    BenchmarkMetrics.exact_match_score(ans_b, sample.gold_answer)
+                    or (sample.gold_answer.lower() in ans_b.lower())
+                    or BenchmarkMetrics.numeric_match_score(ans_b, sample.gold_answer)
+                )
+                halluc_b = False if corr_b else BenchmarkMetrics.is_hallucinated(ans_b, sample.gold_answer)
 
             cond_b = ConditionResult(
                 condition=EvaluationCondition.QUANTA_LOCAL,
@@ -447,8 +455,12 @@ class PairedEvaluator:
             corr_c = (key_c == sample.gold_answer)
             halluc_c = not corr_c
         else:
-            corr_c = BenchmarkMetrics.exact_match_score(ans_c, sample.gold_answer) or (sample.gold_answer.lower() in ans_c.lower())
-            halluc_c = BenchmarkMetrics.is_hallucinated(ans_c, sample.gold_answer)
+            corr_c = (
+                BenchmarkMetrics.exact_match_score(ans_c, sample.gold_answer)
+                or (sample.gold_answer.lower() in ans_c.lower())
+                or BenchmarkMetrics.numeric_match_score(ans_c, sample.gold_answer)
+            )
+            halluc_c = False if corr_c else BenchmarkMetrics.is_hallucinated(ans_c, sample.gold_answer)
 
         cond_c = ConditionResult(
             condition=EvaluationCondition.QUANTA_GLOBAL,

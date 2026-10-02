@@ -264,7 +264,7 @@ class BenchmarkSuiteLoader:
             choices_text = item["choices"]["text"]
             choices_labels = item["choices"]["label"]
             choice_str = "\n".join(f"({lbl}) {txt}" for lbl, txt in zip(choices_labels, choices_text))
-            full_prompt = f"{item['question']}\n\nChoices:\n{choice_str}\n\nAnswer with the choice letter (A, B, C, or D):"
+            full_prompt = f"{item['question']}\n\nChoices:\n{choice_str}\n\nConclude your reasoning with 'Answer: [A/B/C/D]'."
             t_cnt = self.estimate_token_count(full_prompt)
 
             gold_key = item["answerKey"]
