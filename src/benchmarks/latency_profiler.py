@@ -50,12 +50,51 @@ class LatencyProfilePoint:
     suite: str
     task_id: str
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "token_count": self.token_count,
+            "ingestion_time_s": round(self.ingestion_time_s, 6),
+            "retrieval_time_ms": round(self.retrieval_time_ms, 3),
+            "base_ttft_s": round(self.base_ttft_s, 6),
+            "quanta_ttft_s": round(self.quanta_ttft_s, 6),
+            "base_e2e_s": round(self.base_e2e_s, 4),
+            "quanta_e2e_s": round(self.quanta_e2e_s, 4),
+            "suite": self.suite,
+            "task_id": self.task_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> LatencyProfilePoint:
+        return cls(
+            token_count=data.get("token_count", 1),
+            ingestion_time_s=data.get("ingestion_time_s", 0.0001),
+            retrieval_time_ms=data.get("retrieval_time_ms", 0.0),
+            base_ttft_s=data.get("base_ttft_s", 0.0),
+            quanta_ttft_s=data.get("quanta_ttft_s", 0.0),
+            base_e2e_s=data.get("base_e2e_s", 0.0),
+            quanta_e2e_s=data.get("quanta_e2e_s", 0.0),
+            suite=data.get("suite", "general"),
+            task_id=data.get("task_id", ""),
+        )
+
 
 class LatencyProfiler:
     """Empirical regression modeler for context scaling and ingestion throughput."""
 
     def __init__(self):
         self.data_points: List[LatencyProfilePoint] = []
+
+    def export_datapoints(self) -> List[Dict[str, Any]]:
+        """Exports all recorded latency points as dictionaries."""
+        return [p.to_dict() for p in self.data_points]
+
+    def import_datapoints(self, points: List[Dict[str, Any]]):
+        """Restores recorded latency points from a list of dictionaries."""
+        for pt in points:
+            try:
+                self.data_points.append(LatencyProfilePoint.from_dict(pt))
+            except Exception as e:
+                logger.warning("Failed to import latency datapoint: %s", e)
 
     def record_datapoint(
         self,
