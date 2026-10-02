@@ -322,6 +322,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_no_global_kb: Optional[bool] = Header(None, alias="X-Quanta-No-Global-KB"),
         x_quanta_reset: Optional[bool] = Header(None, alias="X-Quanta-Reset"),
         x_quanta_validate: Optional[bool] = Header(False, alias="X-Quanta-Validate"),
+        x_quanta_max_context_tokens: Optional[int] = Header(None, alias="X-Quanta-Max-Context-Tokens"),
     ):
         t0 = time.perf_counter()
         stats["total_requests"] += 1
@@ -462,10 +463,19 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             # Retrieve active context via spreading activation (strictly from natural user_query)
             t_ret_start = time.perf_counter()
             try:
+                # Dynamic context budgeting for multi-hop queries and multi-document benchmarks
+                doc_text = (doc_from_user or "") + " " + (doc_from_system or "")
+                num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
+                query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
+
+                effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else cfg.max_context_tokens
+                if num_doc_headings >= 15 or query_hop_depth >= 3:
+                    effective_max_tokens = max(effective_max_tokens, 1200)
+
                 retrieved_context = pipeline.retrieve_context(
                     query=user_query,
                     format=format_type,
-                    max_tokens=cfg.max_context_tokens,
+                    max_tokens=effective_max_tokens,
                 )
             except Exception as e:
                 logger.warning("Error retrieving context from PageTable: %s", e)

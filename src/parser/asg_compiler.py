@@ -244,7 +244,7 @@ class ASGCompiler:
         extraction_result = _normalize_extraction(extraction)
 
         # 2. Foreign-key cross-reference validation
-        fk_errors = extraction_result.validate_foreign_keys()
+        fk_errors = extraction_result.validate_foreign_keys(prune_dangling_relations=True)
         if fk_errors:
             raise ASGCompilationError(
                 f"Foreign-key validation failed before compilation: {fk_errors}"
@@ -422,6 +422,7 @@ class ASGCompiler:
                         break
             if cached_node is not None:
                 cached_node.register_binding = reg_slot
+                cached_node.edges.clear()
                 return cached_node
 
         node = QuantaNode(literal=entity.canonical_name)
@@ -552,6 +553,7 @@ class ASGCompiler:
         if self.interner is not None:
             interned = self.interner.intern_node(node)
             interned.register_binding = reg_slot
+            interned.edges.clear()
             return interned
         return node
 

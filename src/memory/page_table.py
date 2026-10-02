@@ -385,6 +385,8 @@ class PageTable(MutableMapping):
         self._reverse_edges: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
         self._literal_index: Dict[str, Set[str]] = defaultdict(set)
         self.global_kb: Optional[Any] = None
+        self.active_canvas: Optional[Any] = None
+        self.entity_mapper: Optional[Any] = None
 
         # Warm up vector index from existing nodes in database
         self._warmup_index()
@@ -647,6 +649,121 @@ class PageTable(MutableMapping):
     def mount_global_kb(self, global_kb: Any):
         """Mounts a GlobalKnowledgeBase as read-only universal encyclopedic fallback provider."""
         self.global_kb = global_kb
+
+    def attach_active_canvas(self, active_canvas: Any):
+        """Attaches an ActiveCanvas instance for in-memory working cache paging."""
+        self.active_canvas = active_canvas
+
+    def add_edge(self, source_cid: str, relation: str, target_cid: str) -> bool:
+        """Adds a directed relation edge between two nodes in PageTable storage."""
+        with self._lock:
+            cur = self._conn.cursor()
+            cur.execute("SELECT edges FROM nodes WHERE cid = ?", (source_cid,))
+            row = cur.fetchone()
+            if not row:
+                return False
+            edges_str = row[0]
+            try:
+                edges = json.loads(edges_str) if edges_str else {}
+            except Exception:
+                edges = {}
+
+            if relation not in edges:
+                edges[relation] = []
+            if target_cid not in edges[relation]:
+                edges[relation].append(target_cid)
+
+            new_edges_str = json.dumps(edges)
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE nodes SET edges = ? WHERE cid = ?",
+                    (new_edges_str, source_cid),
+                )
+            self._reverse_edges[target_cid].add((source_cid, relation))
+
+            if self.active_canvas is not None and hasattr(self.active_canvas, "has") and self.active_canvas.has(source_cid):
+                node = self.active_canvas.get(source_cid)
+                if node is not None:
+                    canvas_node = QuantaNode(
+                        vector=node.vector.copy(),
+                        anchor=node.anchor,
+                        literal=node.literal,
+                        parent_cid=node.parent_cid,
+                        edges={k: list(v) for k, v in node.edges.items()},
+                    )
+                    canvas_node._cid_cache = source_cid
+                    if relation not in canvas_node.edges:
+                        canvas_node.edges[relation] = []
+                    if target_cid not in canvas_node.edges[relation]:
+                        canvas_node.edges[relation].append(target_cid)
+                    self.active_canvas.put(canvas_node)
+            return True
+
+    def get_entity_mapper(self) -> Any:
+        """Lazily returns or instantiates WikidataEntityMapper."""
+        if self.entity_mapper is None:
+            try:
+                from data.wikidata_ingester import WikidataEntityMapper
+                self.entity_mapper = WikidataEntityMapper()
+            except Exception as e:
+                self.entity_mapper = None
+        return self.entity_mapper
+
+    def bridge_latent_entity(
+        self,
+        name_or_qid: str,
+        active_canvas: Optional[Any] = None,
+    ) -> Optional[QuantaNode]:
+        """Bridges a latent entity into PageTable and ActiveCanvas from Global KB or Wikidata."""
+        canvas = active_canvas or getattr(self, "active_canvas", None)
+        node: Optional[QuantaNode] = None
+
+        # 1. Try Global KB if mounted
+        if self.global_kb is not None:
+            if hasattr(self.global_kb, "lookup_entity"):
+                matches = self.global_kb.lookup_entity(name_or_qid, limit=1)
+                if matches:
+                    node = matches[0]
+            if node is None and hasattr(self.global_kb, "get_entity_by_qid") and name_or_qid.upper().startswith("Q"):
+                node = self.global_kb.get_entity_by_qid(name_or_qid.upper())
+
+        # 2. Try WikidataEntityMapper fallback
+        if node is None:
+            mapper = self.get_entity_mapper()
+            if mapper is not None:
+                try:
+                    payload = {
+                        "qid": name_or_qid if (name_or_qid.startswith("Q") and name_or_qid[1:].isdigit()) else f"Q_{name_or_qid.replace(' ', '_')}",
+                        "label": name_or_qid,
+                        "category": "other",
+                        "description": f"Bridged latent entity {name_or_qid}",
+                    }
+                    node = mapper.map_entity_to_node(payload)
+                except Exception:
+                    pass
+
+        if node is not None:
+            self.store_node(node)
+            if canvas is not None and hasattr(canvas, "put"):
+                canvas.put(node)
+            return node
+        return None
+
+    def resolve_or_bridge_entity(
+        self,
+        name_or_alias: str,
+        active_canvas: Optional[Any] = None,
+    ) -> Optional[QuantaNode]:
+        """Resolves existing entity in PageTable or bridges latent entity into ActiveCanvas."""
+        canvas = active_canvas or getattr(self, "active_canvas", None)
+        cids = self.find_cids_by_literal(name_or_alias, limit=1)
+        if cids:
+            node = self.fetch_node(cids[0])
+            if node is not None:
+                if canvas is not None and hasattr(canvas, "put"):
+                    canvas.put(node)
+                return node
+        return self.bridge_latent_entity(name_or_alias, active_canvas=canvas)
 
     def has_node(self, cid: str) -> bool:
         """Checks whether a node exists in storage."""
@@ -919,6 +1036,11 @@ class ActiveCanvas:
         """Checks if a node CID is currently pinned."""
         with self._lock:
             return cid in self._pinned
+
+    def has(self, cid: str) -> bool:
+        """Checks if a node CID is present in the canvas."""
+        with self._lock:
+            return cid in self._nodes
 
     def remove(self, cid: str) -> Optional[QuantaNode]:
         """Removes a node from the canvas."""

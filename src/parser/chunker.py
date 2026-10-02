@@ -381,6 +381,19 @@ class DiscourseChunker:
         for line, line_offset in line_offsets:
             stripped = line.strip()
 
+            # 0. Check for explicit Document [N] / Passage [N] prefix (common in multi-hop QA benchmarks)
+            doc_prefix_match = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?[:.\-—–]?)\s*(.*)$", stripped, re.IGNORECASE)
+            if doc_prefix_match:
+                doc_heading = doc_prefix_match.group(1).rstrip(":.- ")
+                doc_body = doc_prefix_match.group(2).strip()
+                flush_paragraph()
+                current_chapter_id = re.sub(r"[^\w-]", "", doc_heading.lower().replace(" ", "_"))
+                current_chapter_title = doc_heading
+                if doc_body:
+                    body_offset = line_offset + stripped.find(doc_body)
+                    current_para_lines.append((doc_body + "\n", body_offset))
+                continue
+
             # 1. Check for Chapter / Section delimiter
             ch_info = self.is_chapter_heading(stripped)
             if ch_info:

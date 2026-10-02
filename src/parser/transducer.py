@@ -766,7 +766,7 @@ class MockTransducer(BaseDiscourseTransducer):
 
         for s_idx, sent in enumerate(raw_sents, start=1):
             ev_id = f"Ev{s_idx}"
-            caps = re.findall(r"\b[A-Z][a-zA-Z0-9_-]+(?:\s+[A-Z0-9][a-zA-Z0-9_-]+)*\b", sent)
+            caps = re.findall(r"\b[A-Z][a-zA-Z0-9_-]+(?:\s+(?:of|the|de|da|von|van|and|&)\s+[A-Z0-9][a-zA-Z0-9_-]+|\s+[A-Z0-9][a-zA-Z0-9_-]+)*\b", sent)
             current_sent_ents: List[ExtractedEntity] = []
             for cap in caps:
                 c_clean = cap.strip(".,;:\"'")
@@ -774,9 +774,9 @@ class MockTransducer(BaseDiscourseTransducer):
                     if c_clean not in ent_names_seen:
                         ent_names_seen.add(c_clean)
                         e_id = f"E{len(entities) + 1}"
-                        is_person = any(t in c_clean.lower() for t in ("dr", "vance", "director", "benjamin", "technician", "astronomer", "researcher", "engineer", "customer", "operator", "auditor"))
-                        is_org = any(t in c_clean.lower() for t in ("nasa", "esa", "service", "client", "controller", "software", "orchestrator", "team", "group", "repository", "gateway", "system"))
-                        is_loc = any(t in c_clean.lower() for t in ("cell", "chamber", "zone", "kourou", "orbit", "space", "point", "atmosphere"))
+                        is_person = any(t in c_clean.lower() for t in ("dr", "vance", "director", "benjamin", "technician", "astronomer", "researcher", "engineer", "customer", "operator", "auditor", "charles", "alan", "turing", "babbage", "albert", "einstein", "archimedes"))
+                        is_org = any(t in c_clean.lower() for t in ("nasa", "esa", "service", "client", "controller", "software", "orchestrator", "team", "group", "repository", "gateway", "system", "university", "college", "institute", "academy", "school"))
+                        is_loc = any(t in c_clean.lower() for t in ("cell", "chamber", "zone", "kourou", "orbit", "space", "point", "atmosphere", "cemetery", "island", "county", "city", "state", "country", "kingdom", "republic", "municipality", "province", "district", "center", "centre", "london", "cambridge", "paris", "berlin", "tokyo", "syracuse"))
                         cat = "PERSON" if is_person else ("ORGANIZATION" if is_org else ("LOCATION" if is_loc else "ARTIFACT"))
                         ent = ExtractedEntity(
                             id=e_id,
@@ -793,22 +793,32 @@ class MockTransducer(BaseDiscourseTransducer):
                                 break
 
             pred = "observe"
-            for p_candidate in ("launch", "deploy", "observe", "verify", "detect", "initiate", "authorize", "reserve", "confirm", "publish", "invalidate", "cancel", "release", "prohibit", "isolate", "synthesize", "operate", "maintain", "execute"):
-                if re.search(rf"\b{p_candidate}", sent, re.IGNORECASE):
+            for p_candidate in (
+                "launch", "deploy", "observe", "verify", "detect", "initiate", "authorize", "reserve",
+                "confirm", "publish", "invalidate", "cancel", "release", "prohibit", "isolate", "synthesize",
+                "operate", "maintain", "execute", "attend", "attended", "study", "studied", "locate", "located",
+                "share", "shares", "border", "borders", "born", "died", "found", "founded", "establish", "established",
+                "formulate", "formulated", "house", "houses", "housing"
+            ):
+                if re.search(rf"\b{p_candidate}\b", sent, re.IGNORECASE):
                     pred = p_candidate
                     break
 
-            # Find agent-capable entity
+            # Find agent, patient, and location entities
             event_agent_id = None
             event_patient_id = None
+            event_loc_id = None
             for e in current_sent_ents:
-                if e.category in ("PERSON", "ORGANIZATION"):
+                if e.category == "PERSON" and event_agent_id is None:
                     event_agent_id = e.id
-                    break
-                elif event_patient_id is None:
+                elif e.category in ("ORGANIZATION", "UNIVERSITY") and event_agent_id is None:
+                    event_agent_id = e.id
+                elif e.category == "LOCATION" and event_loc_id is None:
+                    event_loc_id = e.id
+                elif event_patient_id is None and e.id != event_agent_id:
                     event_patient_id = e.id
 
-            if not event_agent_id and not event_patient_id:
+            if not event_agent_id and not event_patient_id and not event_loc_id:
                 event_agent_id = default_ent.id
 
             events.append(
@@ -816,7 +826,8 @@ class MockTransducer(BaseDiscourseTransducer):
                     id=ev_id,
                     predicate=pred,
                     agent_id=event_agent_id,
-                    patient_id=event_patient_id if event_agent_id is None else None,
+                    patient_id=event_patient_id,
+                    location_id=event_loc_id,
                     temporal_anchor=None,
                     tense="PAST",
                     polarity=not any(neg in sent.lower() for neg in ("prohibit", "declined", "invalid", "cancel", "failed")),
@@ -828,10 +839,11 @@ class MockTransducer(BaseDiscourseTransducer):
                     id=f"P{s_idx}",
                     claim_text=sent,
                     epistemic_status="FACT",
-                    source_agent_id=event_agent_id or event_patient_id,
+                    source_agent_id=event_agent_id or event_patient_id or event_loc_id,
                     event_id=ev_id,
                 )
             )
+
             if s_idx > 1:
                 relations.append(
                     ExtractedRelation(
