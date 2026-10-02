@@ -78,6 +78,7 @@ class PairedResult:
             "prompt": self.prompt,
             "gold_answer": self.gold_answer,
             "token_count": self.token_count,
+            "metadata": self.metadata,
             "base": {
                 "answer": self.base_result.answer,
                 "correct": self.base_result.is_correct,

@@ -173,11 +173,27 @@ class CodeEvaluator:
         # Check for ```python ... ``` markdown block
         pattern = r"```(?:python)?\s*\n?([\s\S]*?)```"
         matches = re.findall(pattern, completion, re.IGNORECASE)
-        raw_code = matches[0] if matches else completion
+        if matches:
+            chosen = matches[0]
+            if entry_point:
+                for block in matches:
+                    if f"def {entry_point}" in block:
+                        chosen = block
+                        break
+            raw_code = chosen
+        else:
+            raw_code = completion
+
+        # If entry_point is not explicitly provided, attempt to infer from a top-level function definition
+        effective_entry_point = entry_point
+        if not effective_entry_point:
+            m = re.search(r"def\s+([a-zA-Z_]\w*)\s*\(", raw_code)
+            if m:
+                effective_entry_point = m.group(1)
 
         # If it defines the function itself, extract while preserving preceding helpers/imports
-        if entry_point and f"def {entry_point}" in raw_code:
-            idx = raw_code.find(f"def {entry_point}")
+        if effective_entry_point and f"def {effective_entry_point}" in raw_code:
+            idx = raw_code.find(f"def {effective_entry_point}")
             pre_code = clean_pre_code(raw_code[:idx])
             body = clean_code_body(raw_code[idx:])
             return f"{pre_code}\n\n{body}".strip() if pre_code else body
