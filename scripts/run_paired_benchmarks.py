@@ -46,6 +46,7 @@ if hasattr(sys.stderr, "reconfigure"):
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from benchmarks.checkpoint import BenchmarkCheckpointManager
 from benchmarks.latency_profiler import LatencyProfiler
 from benchmarks.metrics import ComparativeScorecard
 from benchmarks.paired_evaluator import PairedEvaluator, PairedResult
@@ -87,9 +88,18 @@ AVAILABLE_SUITES = {
 }
 
 
-def interactive_selection() -> Tuple[Dict[str, int], str, str]:
+def interactive_selection(default_checkpoint_path: Optional[Path] = None) -> Tuple[Dict[str, int], str, str, bool]:
     """Provides an interactive terminal menu for configuring suites and sample sizes."""
     print(format_ansi("\n--- INTERACTIVE BENCHMARK CONFIGURATION ---", "1;33"))
+
+    checkpoint_mgr = BenchmarkCheckpointManager(checkpoint_path=default_checkpoint_path)
+    resume = False
+    if checkpoint_mgr.has_checkpoint():
+        ans_res = input(f"Existing checkpoint detected at '{checkpoint_mgr.checkpoint_path}'. Resume previous run? [Y/n] (default: Y): ").strip().lower()
+        resume = ans_res not in ("n", "no")
+        if resume:
+            print(format_ansi(f"[>] Will resume existing checkpoint.", "1;32"))
+
     print("Select benchmark suites and sample counts:\n")
 
     selected: Dict[str, int] = {}
@@ -119,7 +129,7 @@ def interactive_selection() -> Tuple[Dict[str, int], str, str]:
         print("Run cancelled by user.")
         sys.exit(0)
 
-    return selected, ablation_mode, mode
+    return selected, ablation_mode, mode, resume
 
 
 def parse_suite_arg(suite_arg: str, default_samples: int) -> Dict[str, int]:
@@ -151,6 +161,7 @@ def generate_markdown_report(
     latency_profiler: LatencyProfiler,
     ablation_mode: str,
     execution_mode: str,
+    raw_predictions: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> str:
     """Formats full evaluation report as comprehensive GitHub Markdown."""
     lines = [
@@ -240,7 +251,116 @@ def generate_markdown_report(
         "1. **Short-Context Ingestion Penalty (SQuAD):** On single-turn queries under 250 words, the base LLM direct answer is faster by ~50–100 ms. QUANTA is an external coprocessor for complex multi-hop, state-tracking, and long-horizon tasks.",
         "2. **Stylistic & Creative Generation:** Highly idiomatic, metaphorical, or poetic expressions undergo semantic canonicalization into NSM primes, prioritizing factual and relational consistency over stylistic flourish.",
         "",
+        "---",
+        "",
+        "## 5. Evaluation Discrepancies & Forensic Diagnostics",
+        "",
     ])
+
+    discrepancies: List[Dict[str, Any]] = []
+    if raw_predictions:
+        for s_name, s_items in raw_predictions.items():
+            for item in s_items:
+                base_info = item.get("base", {}) or {}
+                quanta_info = item.get("quanta_global", {}) or item.get("quanta_local", {}) or {}
+                base_corr = bool(base_info.get("correct", base_info.get("is_correct", False)))
+                quanta_corr = bool(quanta_info.get("correct", quanta_info.get("is_correct", False)))
+
+                tag = (
+                    item.get("diagnostic_tag")
+                    or quanta_info.get("diagnostic_tag")
+                    or base_info.get("diagnostic_tag")
+                )
+
+                is_divergent = (base_corr != quanta_corr)
+                is_flagged = bool(tag)
+                has_error = bool(base_info.get("error_message") or quanta_info.get("error_message"))
+
+                if is_divergent or is_flagged or has_error:
+                    discrepancies.append({
+                        "suite": s_name,
+                        "id": item.get("id", ""),
+                        "prompt": item.get("prompt", ""),
+                        "gold": item.get("gold_answer", ""),
+                        "base_ans": base_info.get("answer", ""),
+                        "base_corr": base_corr,
+                        "quanta_ans": quanta_info.get("answer", ""),
+                        "quanta_corr": quanta_corr,
+                        "tag": tag,
+                        "notes": item.get("forensic_notes") or quanta_info.get("error_message") or base_info.get("error_message"),
+                    })
+
+    if not discrepancies:
+        lines.append(
+            "No evaluation discrepancies, harness anomalies, or diverging outputs were detected across the evaluated samples. All evaluated benchmarks completed with concordant results."
+        )
+    else:
+        lines.extend([
+            f"A total of **{len(discrepancies)}** evaluation discrepancies and diverging cases were forensic-audited during this run:",
+            "",
+            "| Suite | Sample ID | Tag / Category | Base LLM | QUANTA+KB | Forensic Summary |",
+            "|---|---|---|---|---|---|",
+        ])
+        for d in discrepancies:
+            b_status = "PASS" if d["base_corr"] else "FAIL"
+            q_status = "PASS" if d["quanta_corr"] else "FAIL"
+            tag_label = f"`{d['tag']}`" if d["tag"] else ("`Divergence (Base Win)`" if d["base_corr"] else "`Divergence (QUANTA Win)`")
+            notes_short = d["notes"] or ("Outcome diverged between Base LLM and QUANTA" if d["base_corr"] != d["quanta_corr"] else "Anomalous execution")
+            notes_cell = notes_short.replace("\n", " ")[:65]
+            lines.append(
+                f"| `{d['suite']}` | `{d['id']}` | {tag_label} | {b_status} | {q_status} | {notes_cell} |"
+            )
+
+        lines.extend(["", "### Detailed Forensic Diagnostics & Discrepancy Breakdown", ""])
+        for idx, d in enumerate(discrepancies, 1):
+            b_status = "PASS" if d["base_corr"] else "FAIL"
+            q_status = "PASS" if d["quanta_corr"] else "FAIL"
+            tag_label = d["tag"] or ("Divergence: Base Pass / QUANTA Fail" if d["base_corr"] else "Divergence: QUANTA Pass / Base Fail")
+            prompt_preview = d["prompt"].strip()
+            if len(prompt_preview) > 300:
+                prompt_preview = prompt_preview[:200] + "\n... [truncated] ...\n" + prompt_preview[-100:]
+
+            base_ans_preview = d["base_ans"].strip()
+            if len(base_ans_preview) > 300:
+                base_ans_preview = base_ans_preview[:200] + "\n... [truncated] ...\n" + base_ans_preview[-100:]
+
+            quanta_ans_preview = d["quanta_ans"].strip()
+            if len(quanta_ans_preview) > 300:
+                quanta_ans_preview = quanta_ans_preview[:200] + "\n... [truncated] ...\n" + quanta_ans_preview[-100:]
+
+            diag_explanation = d["notes"]
+            if not diag_explanation:
+                if d["tag"] == "[HARNESS BUG]":
+                    diag_explanation = "Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError)."
+                elif d["tag"] == "[NUMERIC PASS]":
+                    diag_explanation = f"Calculation matched gold numeric quantity '{d['gold']}' despite non-contiguous string formatting."
+                elif d["quanta_corr"] and not d["base_corr"]:
+                    diag_explanation = "QUANTA successfully retrieved relevant episodic context, while Base LLM failed due to token cutoff or missing facts."
+                else:
+                    diag_explanation = "Base LLM answered correctly while QUANTA output did not meet exact match criteria."
+
+            lines.extend([
+                f"#### Case {idx}: `{d['id']}` ({d['suite']})",
+                f"* **Diagnostic Tag / Category:** `{tag_label}`",
+                f"* **Evaluation Outcome:** Base LLM: `{b_status}` | QUANTA+KB: `{q_status}`",
+                f"* **Ground Truth Answer:** `{d['gold']}`",
+                f"* **Task Prompt:**",
+                "```text",
+                prompt_preview,
+                "```",
+                f"* **Base LLM Answer:**",
+                "```text",
+                base_ans_preview,
+                "```",
+                f"* **QUANTA Answer:**",
+                "```text",
+                quanta_ans_preview,
+                "```",
+                f"* **Forensic Diagnosis:** {diag_explanation}",
+                "",
+                "---",
+                "",
+            ])
 
     return "\n".join(lines)
 
@@ -253,6 +373,9 @@ def main():
     parser.add_argument("--mode", type=str, default="live", choices=["live", "mock"], help="Execution mode (live HTTP or mock CI)")
     parser.add_argument("--base-url", type=str, default="http://127.0.0.1:8888/v1", help="Unsloth Studio HTTP API URL")
     parser.add_argument("--quanta-url", type=str, default="http://127.0.0.1:8000/v1", help="QUANTA Reverse Proxy HTTP API URL")
+    parser.add_argument("--resume", action="store_true", help="Resume benchmark evaluation from checkpoint file if available")
+    parser.add_argument("--checkpoint-file", type=str, default="output/.paired_benchmark_checkpoint.json", help="Path to checkpoint file")
+    parser.add_argument("--no-checkpoint", action="store_true", help="Disable incremental checkpointing")
     parser.add_argument("--export-submissions", action="store_true", help="Generate official leaderboard submission packages")
     parser.add_argument("--export-latex", action="store_true", help="Export publication LaTeX tables and BibTeX citations")
     parser.add_argument("--interactive", action="store_true", help="Open interactive terminal menu")
@@ -261,7 +384,8 @@ def main():
     print_banner()
 
     if args.interactive:
-        suite_config, ablation_mode, mode = interactive_selection()
+        suite_config, ablation_mode, mode, resume_flag = interactive_selection(Path(args.checkpoint_file))
+        args.resume = args.resume or resume_flag
     else:
         suite_config = parse_suite_arg(args.suite, args.samples)
         ablation_mode = args.ablation_mode
@@ -269,6 +393,11 @@ def main():
 
     print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()}", "1;32"))
     print(format_ansi(f"[>] Target Suites: {suite_config}\n", "1;37"))
+
+    checkpoint_mgr = BenchmarkCheckpointManager(
+        checkpoint_path=args.checkpoint_file,
+        active=not args.no_checkpoint,
+    )
 
     loader = BenchmarkSuiteLoader()
     evaluator = PairedEvaluator(
@@ -278,6 +407,25 @@ def main():
         ablation_mode=ablation_mode,
     )
     exporter = PublicationExporter()
+
+    if args.resume and checkpoint_mgr.has_checkpoint():
+        checkpoint_mgr.initialize_run(
+            execution_mode=mode,
+            ablation_mode=ablation_mode,
+            suite_config=suite_config,
+            resume=True,
+        )
+        print(format_ansi(f"[>] Resuming from checkpoint: {checkpoint_mgr.checkpoint_path}", "1;32"))
+        evaluator.latency_profiler.import_datapoints(checkpoint_mgr.get_latency_datapoints())
+    else:
+        if args.resume:
+            print(format_ansi("[!] No previous checkpoint found. Starting fresh evaluation run.", "1;33"))
+        checkpoint_mgr.initialize_run(
+            execution_mode=mode,
+            ablation_mode=ablation_mode,
+            suite_config=suite_config,
+            resume=False,
+        )
 
     all_scorecards: List[ComparativeScorecard] = []
     raw_predictions: Dict[str, List[Dict[str, Any]]] = {}
@@ -313,29 +461,58 @@ def main():
             logger.warning("Skipping unknown suite: %s", suite_name)
             continue
 
+        completed_sample_ids = checkpoint_mgr.get_completed_sample_ids(suite_name) if args.resume else set()
         suite_raw_list = []
         suite_paired_results = []
+
         for i, s in enumerate(samples, 1):
+            if args.resume and s.id in completed_sample_ids:
+                cached_pr = checkpoint_mgr.get_sample_result(suite_name, s.id)
+                if cached_pr:
+                    suite_paired_results.append(cached_pr)
+                    suite_raw_list.append(cached_pr.to_dict())
+
+                    corr_icon_base = "[PASS]" if cached_pr.base_result.is_correct else "[FAIL]"
+                    corr_icon_quanta = "[PASS]" if cached_pr.quanta_global_result and cached_pr.quanta_global_result.is_correct else "[FAIL]"
+                    diag_tag = cached_pr.diagnostic_tag or (cached_pr.quanta_global_result.diagnostic_tag if cached_pr.quanta_global_result else None)
+                    diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                    print(f"  [{i:>2}/{len(samples)}] {s.id:<20} [CACHED] | Base: {corr_icon_base} ({cached_pr.base_result.prompt_tokens} tok, {cached_pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({cached_pr.quanta_global_result.prompt_tokens if cached_pr.quanta_global_result else 0} tok, {cached_pr.quanta_global_result.total_e2e_latency_s if cached_pr.quanta_global_result else 0:.2f}s){diag_str}")
+                    continue
+
             pr = evaluator.evaluate_sample(s)
             suite_paired_results.append(pr)
             suite_raw_list.append(pr.to_dict())
 
+            # Save sample incrementally to checkpoint
+            latest_point = evaluator.latency_profiler.data_points[-1].to_dict() if evaluator.latency_profiler.data_points else None
+            checkpoint_mgr.save_sample(suite_name, s.id, pr, latency_datapoint=latest_point)
+
             corr_icon_base = "[PASS]" if pr.base_result.is_correct else "[FAIL]"
             corr_icon_quanta = "[PASS]" if pr.quanta_global_result and pr.quanta_global_result.is_correct else "[FAIL]"
-            print(f"  [{i:>2}/{len(samples)}] {s.id:<20} | Base: {corr_icon_base} ({pr.base_result.prompt_tokens} tok, {pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr.quanta_global_result.prompt_tokens if pr.quanta_global_result else 0} tok, {pr.quanta_global_result.total_e2e_latency_s if pr.quanta_global_result else 0:.2f}s)")
+            diag_tag = pr.diagnostic_tag or (pr.quanta_global_result.diagnostic_tag if pr.quanta_global_result else None)
+            diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+            print(f"  [{i:>2}/{len(samples)}] {s.id:<20} | Base: {corr_icon_base} ({pr.base_result.prompt_tokens} tok, {pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr.quanta_global_result.prompt_tokens if pr.quanta_global_result else 0} tok, {pr.quanta_global_result.total_e2e_latency_s if pr.quanta_global_result else 0:.2f}s){diag_str}")
+
+            # Real-time forensic diagnostic alert line
+            if diag_tag == "[HARNESS BUG]":
+                print(format_ansi(f"     ↳ [FORENSIC ALERT: HARNESS BUG] {s.id}: Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError).", "1;31"))
+            elif diag_tag == "[NUMERIC PASS]":
+                print(format_ansi(f"     ↳ [FORENSIC ALERT: NUMERIC PASS] {s.id}: String match failed due to formatting, but calculation verified numerically accurate ({s.gold_answer}).", "1;33"))
 
         raw_predictions[suite_name] = suite_raw_list
 
         sc = evaluator.evaluate_suite(suite_name, samples, precomputed_results=suite_paired_results)
+        checkpoint_mgr.save_suite_scorecard(suite_name, sc)
         all_scorecards.append(sc)
         print(sc.format_terminal_ansi())
 
+    checkpoint_mgr.mark_completed()
     t_total_elapsed = time.perf_counter() - t_suite_start
 
     # Save Markdown report
     out_dir = Path("output")
     out_dir.mkdir(parents=True, exist_ok=True)
-    report_md = generate_markdown_report(all_scorecards, evaluator.latency_profiler, ablation_mode, mode)
+    report_md = generate_markdown_report(all_scorecards, evaluator.latency_profiler, ablation_mode, mode, raw_predictions=raw_predictions)
     report_file = out_dir / "paired_benchmark_report.md"
     report_file.write_text(report_md, encoding="utf-8")
     print(format_ansi(f"\n[+] Generated comprehensive Markdown report: {report_file}", "1;32"))

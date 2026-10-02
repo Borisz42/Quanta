@@ -8,6 +8,7 @@ Provides publication-grade, reproducible evaluation harnesses comparing:
 
 from __future__ import annotations
 
+from .checkpoint import BenchmarkCheckpointManager
 from .code_evaluator import CodeEvaluator, CodeEvalResult
 from .latency_profiler import LatencyProfiler, ExtrapolationForecast
 from .metrics import BenchmarkMetrics, ComparativeScorecard
@@ -16,6 +17,7 @@ from .publication_exporter import PublicationExporter
 from .suite_loaders import BenchmarkSuiteLoader, BenchmarkSample
 
 __all__ = [
+    "BenchmarkCheckpointManager",
     "CodeEvaluator",
     "CodeEvalResult",
     "LatencyProfiler",

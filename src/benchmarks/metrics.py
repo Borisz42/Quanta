@@ -48,6 +48,61 @@ class BenchmarkMetrics:
         return normalize_answer(prediction) == normalize_answer(ground_truth)
 
     @staticmethod
+    def numeric_match_score(prediction: str, gold_answer: str) -> bool:
+        """Determines whether prediction contains the correct numeric value and unit,
+
+        even if separated by reasoning steps, formatting, or mathematical derivation.
+        """
+        if not prediction or not gold_answer:
+            return False
+
+        # 1. Parse numeric value from gold_answer
+        num_matches = re.findall(r"[-+]?\b\d+(?:,\d+)*(?:\.\d+)?\b", gold_answer)
+        if not num_matches:
+            return False
+
+        gold_num_str = num_matches[0].replace(",", "")
+        try:
+            gold_val = float(gold_num_str)
+        except ValueError:
+            return False
+
+        # Extract unit/noun from gold_answer
+        gold_noun = re.sub(r"[-+]?\b\d+(?:,\d+)*(?:\.\d+)?\b", "", gold_answer).strip()
+        gold_noun_clean = re.sub(r"[^\w\s]", "", gold_noun).strip().lower()
+
+        # 2. Extract numbers from prediction
+        pred_nums = re.findall(r"[-+]?\b\d+(?:,\d+)*(?:\.\d+)?\b", prediction)
+        matched_number = False
+        for pn in pred_nums:
+            try:
+                pval = float(pn.replace(",", ""))
+                if abs(pval - gold_val) < 1e-4:
+                    matched_number = True
+                    break
+            except ValueError:
+                continue
+
+        if not matched_number:
+            return False
+
+        # 3. If gold_answer specifies units/noun, check presence in prediction
+        if gold_noun_clean:
+            words = [w for w in gold_noun_clean.split() if len(w) > 2]
+            if words:
+                pred_lower = prediction.lower()
+                noun_matched = False
+                for w in words:
+                    stem = w.rstrip("s")
+                    if stem in pred_lower:
+                        noun_matched = True
+                        break
+                if not noun_matched:
+                    return False
+
+        return True
+
+    @staticmethod
     def f1_score(prediction: str, ground_truth: str) -> float:
         """Computes token-level precision, recall, and F1 score."""
         prediction_tokens = normalize_answer(prediction).split()

@@ -29,6 +29,8 @@ class CodeEvalResult:
     error_message: Optional[str] = None
     stdout: str = ""
     stderr: str = ""
+    is_harness_bug: bool = False
+    harness_bug_detail: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -38,6 +40,8 @@ class CodeEvalResult:
             "error_message": self.error_message,
             "stdout": self.stdout,
             "stderr": self.stderr,
+            "is_harness_bug": self.is_harness_bug,
+            "harness_bug_detail": self.harness_bug_detail,
         }
 
 
@@ -126,6 +130,46 @@ class CodeEvaluator:
             passed = (process.returncode == 0)
             err = None if passed else (process.stderr.strip() or f"Process exited with code {process.returncode}")
 
+            # Real-time forensic diagnostic: check if failure was caused by harness stripping prompt helpers
+            is_harness_bug = False
+            harness_bug_detail = None
+            if not passed and err and "NameError" in err and entry_point and f"def {entry_point}" in extracted_code:
+                m = re.search(r"NameError:\s+name\s+'([^']+)'\s+is\s+not\s+defined", err)
+                if m:
+                    missing_name = m.group(1)
+                    if missing_name in prompt:
+                        # Re-run with prompt helpers preceding entry_point to verify whether code passes
+                        idx = prompt.find(f"def {entry_point}")
+                        prompt_helpers = prompt[:idx].rstrip() if idx != -1 else prompt.rstrip()
+                        full_code_with_prompt = (
+                            preamble + (prompt_helpers + "\n\n" if prompt_helpers else "") + extracted_code + "\n\n" + test_code + f"\n\ncheck({entry_point})\n"
+                        )
+                        temp_file_retry = (self.sandbox_dir / f"test_{safe_task_id}_retry_{int(time.time() * 1000)}.py").resolve()
+                        try:
+                            temp_file_retry.write_text(full_code_with_prompt, encoding="utf-8")
+                            proc_retry = subprocess.run(
+                                [sys.executable, str(temp_file_retry)],
+                                capture_output=True,
+                                text=True,
+                                timeout=self.timeout_seconds,
+                                cwd=str(self.sandbox_dir.resolve()),
+                                env=env,
+                            )
+                            if proc_retry.returncode == 0:
+                                is_harness_bug = True
+                                harness_bug_detail = (
+                                    f"Harness stripped prompt preamble containing '{missing_name}'; "
+                                    f"solution verified passing when prompt preamble is preserved."
+                                )
+                        except Exception:
+                            pass
+                        finally:
+                            if temp_file_retry.exists():
+                                try:
+                                    temp_file_retry.unlink()
+                                except OSError:
+                                    pass
+
             return CodeEvalResult(
                 task_id=task_id,
                 passed=passed,
@@ -133,6 +177,8 @@ class CodeEvaluator:
                 error_message=err,
                 stdout=process.stdout,
                 stderr=process.stderr,
+                is_harness_bug=is_harness_bug,
+                harness_bug_detail=harness_bug_detail,
             )
 
         except subprocess.TimeoutExpired:
