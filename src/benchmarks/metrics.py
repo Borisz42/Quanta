@@ -139,21 +139,26 @@ class ComparativeScorecard:
         c_yellow = "\033[1;33m"
         c_reset = "\033[0m"
 
+        lift_str = "0.0%" if abs(self.accuracy_lift_pct) < 0.05 else (f"+{self.accuracy_lift_pct:.1f}%" if self.accuracy_lift_pct > 0 else f"-{abs(self.accuracy_lift_pct):.1f}%")
+        comp_str = "0.0%" if abs(self.token_compression_pct) < 0.05 else f"{self.token_compression_pct:.1f}%"
+
         lines = [
             f"\n{c_cyan}=== Comparative Scorecard: {self.suite_name.upper()} (N={self.sample_count}) ==={c_reset}",
             f"  • Base LLM (Unsloth Studio) : Acc: {self.base_accuracy_pct:.1f}% | Halluc: {self.base_hallucination_pct:.1f}% | Prompt: {self.base_mean_prompt_tokens} tok | Latency: {self.base_mean_latency_s:.2f}s ({self.base_mean_tps:.1f} t/s)",
             f"  • QUANTA Local (Ephemeral)  : Acc: {self.quanta_local_accuracy_pct:.1f}% | Prompt: {self.quanta_local_prompt_tokens} tok | Latency: {self.quanta_local_latency_s:.2f}s",
             f"  • QUANTA + 14GB Wikidata KB : {c_green}Acc: {self.quanta_global_accuracy_pct:.1f}%{c_reset} | {c_green}Halluc: {self.quanta_global_hallucination_pct:.1f}%{c_reset} | Prompt: {self.quanta_global_prompt_tokens} tok | Latency: {self.quanta_global_latency_s:.2f}s ({self.quanta_global_tps:.1f} t/s)",
-            f"  • {c_yellow}Key Deltas:{c_reset} {c_green}+{self.accuracy_lift_pct:.1f}% Accuracy Lift{c_reset} | {c_green}{self.token_compression_pct:.1f}% Token Reduction{c_reset} | {self.speedup_ratio:.2f}x Speedup | p-value: {self.p_value or 0.001:.4f} {self.significance_str}",
+            f"  • {c_yellow}Key Deltas:{c_reset} {c_green}{lift_str} Accuracy Lift{c_reset} | {c_green}{comp_str} Token Reduction{c_reset} | {self.speedup_ratio:.2f}x Speedup | p-value: {self.p_value or 0.001:.4f} {self.significance_str}",
         ]
         return "\n".join(lines)
 
     def format_markdown_row(self) -> str:
         """Formats a row for GitHub Markdown summary tables."""
+        lift_str = "0.0%" if abs(self.accuracy_lift_pct) < 0.05 else (f"+{self.accuracy_lift_pct:.1f}%" if self.accuracy_lift_pct > 0 else f"-{abs(self.accuracy_lift_pct):.1f}%")
+        comp_str = "0.0%" if abs(self.token_compression_pct) < 0.05 else (f"-{self.token_compression_pct:.1f}%" if self.token_compression_pct > 0 else f"+{abs(self.token_compression_pct):.1f}%")
         return (
             f"| **{self.suite_name}** | {self.sample_count} | "
             f"{self.base_accuracy_pct:.1f}% | {self.quanta_local_accuracy_pct:.1f}% | **{self.quanta_global_accuracy_pct:.1f}%** | "
-            f"+{self.accuracy_lift_pct:.1f}% {self.significance_str} | "
-            f"{self.base_mean_prompt_tokens} -> **{self.quanta_global_prompt_tokens}** (-{self.token_compression_pct:.1f}%) | "
+            f"{lift_str} {self.significance_str} | "
+            f"{self.base_mean_prompt_tokens} -> **{self.quanta_global_prompt_tokens}** ({comp_str}) | "
             f"{self.base_mean_latency_s:.2f}s -> **{self.quanta_global_latency_s:.2f}s** ({self.speedup_ratio:.2f}x) |"
         )
