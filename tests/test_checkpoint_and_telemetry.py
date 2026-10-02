@@ -114,11 +114,12 @@ def test_code_evaluator_harness_bug_forensics():
     with tempfile.TemporaryDirectory() as tmp_dir:
         evaluator = CodeEvaluator(timeout_seconds=3.0, sandbox_dir=Path(tmp_dir))
 
-        # Prompt defines a helper function before entry_point
+        # Prompt defines a helper function before non-signature instruction
+        # (simulating a harness that fails to extract helper before entry_point)
         prompt = (
             "def is_palindrome(string: str) -> bool:\n"
             "    return string == string[::-1]\n\n\n"
-            "def make_palindrome(string: str) -> str:\n"
+            "# Please implement make_palindrome(string: str) -> str:\n"
             '    """ Find shortest palindrome """\n'
         )
         # Model provides self-contained entry_point that relies on is_palindrome
@@ -205,7 +206,7 @@ def test_paired_evaluator_forensic_tagging_in_mock():
         prompt=(
             "def is_palindrome(string: str) -> bool:\n"
             "    return string == string[::-1]\n\n\n"
-            "def make_palindrome(string: str) -> str:\n"
+            "# Please implement make_palindrome(string: str) -> str:\n"
         ),
         context="",
         gold_answer="",
