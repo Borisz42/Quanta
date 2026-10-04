@@ -382,7 +382,7 @@ class DiscourseExtractionResult:
                 return p
         return None
 
-    def normalize_and_repair_entities(self):
+    def normalize_and_repair_entities(self, prune_dangling_relations: bool = False):
         """Auto-mints missing entities referenced in event argument slots to prevent foreign-key failure."""
         entity_ids = {e.id for e in self.entities}
         event_ids = {ev.id for ev in self.events}
@@ -425,19 +425,21 @@ class DiscourseExtractionResult:
                     entity_ids.add(new_id)
                     all_ids.add(new_id)
 
-        # Prune dangling relations whose endpoints do not exist
-        self.relations = [
-            r for r in self.relations
-            if (not r.source_id or r.source_id in all_ids) and (not r.target_id or r.target_id in all_ids)
-        ]
+        # Prune dangling relations whose endpoints do not exist if requested
+        if prune_dangling_relations:
+            self.relations = [
+                r for r in self.relations
+                if (not r.source_id or r.source_id in all_ids) and (not r.target_id or r.target_id in all_ids)
+            ]
 
-    def validate_foreign_keys(self) -> List[str]:
+    def validate_foreign_keys(self, auto_repair: bool = True, prune_dangling_relations: bool = False) -> List[str]:
         """Validate all foreign-key cross-references across entities, events, and relations.
 
         Returns:
             List of error messages; empty if 100% valid.
         """
-        self.normalize_and_repair_entities()
+        if auto_repair:
+            self.normalize_and_repair_entities(prune_dangling_relations=prune_dangling_relations)
         errors: List[str] = []
         entity_ids = {e.id for e in self.entities}
         event_ids = {ev.id for ev in self.events}

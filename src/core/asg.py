@@ -700,10 +700,12 @@ class QuantaGraph:
                 for target_cid in targets:
                     target_node = self.get_node(target_cid)
                     if target_node is None:
+                        if rel in ("CROSS_CHUNK_BRIDGE", "CO_OCCURS", "LOCATED_IN"):
+                            continue
                         errors.append(f"Dangling edge in {cid}: relation '{rel}' points to missing CID {target_cid}")
                     elif target_node.compute_cid() != target_cid:
-                        # Exclude recursive backlinks, Merkle fold points, and narrative/discourse sequence transitions
-                        # which connect independent events in time without constituting ontological Merkle child containment.
+                        # Exclude recursive backlinks, Merkle fold points, narrative/discourse sequence transitions,
+                        # and associative cross-chunk bridges which connect independent events in time or across chunks.
                         NARRATIVE_SEQUENCE_RELS = (
                             "GRAPH_RECURSIVE_REF",
                             "GRAPH_CYCLIC_BACKLINK",
@@ -719,6 +721,9 @@ class QuantaGraph:
                             "TEMP_ALLEN_EQUALS",
                             "CFG_NEXT",
                             "DATA_FLOW_DEF_USE",
+                            "CO_OCCURS",
+                            "LOCATED_IN",
+                            "CROSS_CHUNK_BRIDGE",
                         )
                         if rel not in NARRATIVE_SEQUENCE_RELS and cid != target_cid:
                             errors.append(
@@ -1094,6 +1099,7 @@ def fold_chapter(
         raise ValueError("Cannot fold an empty sequence of chunk nodes into a chapter")
 
     chapter_graph = QuantaGraph()
+    added_nodes = []
     for c_node in chunk_nodes:
         cloned = QuantaNode(
             vector=c_node.vector.copy(),
@@ -1103,9 +1109,10 @@ def fold_chapter(
         )
         cloned.edges = {k: list(v) for k, v in c_node.edges.items()}
         chapter_graph.add_node(cloned)
+        added_nodes.append(cloned)
 
-    for i in range(len(chunk_nodes) - 1):
-        chapter_graph.add_edge(chunk_nodes[i].cid, "TEMP_ALLEN_MEETS", chunk_nodes[i + 1].cid)
+    for i in range(len(added_nodes) - 1):
+        chapter_graph.add_edge(added_nodes[i], "TEMP_ALLEN_MEETS", added_nodes[i + 1])
 
     chapter_merkle_cid = chapter_graph.compute_merkle_root()
 

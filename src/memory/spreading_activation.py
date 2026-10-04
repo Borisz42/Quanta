@@ -69,7 +69,87 @@ class SpreadingActivationRetriever:
         "IMPORTS",
         "CFG_NEXT",
         "DATA_FLOW_DEF_USE",
+        "CO_OCCURS",
+        "LOCATED_IN",
+        "CROSS_CHUNK_BRIDGE",
+        "EDUCATED_AT",
+        "STUDIED_AT",
+        "COUNTRY",
+        "CAPITAL",
+        "BORN_IN",
+        "SHARES_BORDER",
+        "PART_OF",
+        "MEMBER_OF",
+        "HEADQUARTERS",
+        "INSTANCE_OF",
+        "SUBCLASS_OF",
     }
+
+    @classmethod
+    def detect_query_hop_depth(cls, query_text: str) -> int:
+        """Analyzes query intent and syntax to determine required multi-hop depth (2, 3, or 4)."""
+        clean = (query_text or "").lower()
+        if not clean:
+            return 2
+
+        # 4-hop patterns
+        four_hop_patterns = [
+            r"shares a border with the state capital of the state where",
+            r"city that shares a border with the state capital",
+            r"capital city of the nation where the university that .* attended",
+            r"official capital.*nation.*university.*attended",
+            r"headquarters.*company that acquired.*company that produced",
+            r"country.*city.*university.*studied",
+            r"border.*(?:nation|country|state).*(?:capital|city).*(?:university|institute|spouse|studied)",
+            r"country.*(?:nation|state|city).*(?:capital|university|institute).*(?:spouse|studied)",
+            r"(?:sharing|shares)\s+a\s+border.*(?:nation|country).*(?:capital|city).*(?:where|whose)",
+        ]
+        for pat in four_hop_patterns:
+            if re.search(pat, clean):
+                return 4
+
+        # 3-hop patterns
+        three_hop_patterns = [
+            r"(?:sharing|shares)\s+a\s+border\s+with",
+            r"border(?:ing|s)\s+(?:with\s+)?the\s+state\s+capital",
+            r"state capital of the state where",
+            r"capital of the country where",
+            r"capital of the nation where",
+            r"born in the city where",
+            r"died in the city where",
+            r"housing the university where",
+            r"university where .* studied",
+            r"university that .* attended",
+            r"located in the state where",
+            r"located in the country where",
+            r"where .* is located.*located",
+            r"(?:mother|father|parent|child|spouse|brother|sister)\s+of\s+the\s+(?:mother|father|parent|child|spouse)",
+        ]
+        for pat in three_hop_patterns:
+            if re.search(pat, clean):
+                rel_count = len(re.findall(r"\b(where|which|that|whose|who)\b", clean))
+                if rel_count >= 2:
+                    return 4
+                return 3
+
+        # Nested relative clauses and chained prepositional queries (excluding initial question words)
+        words = clean.split()
+        subordinate_text = " ".join(words[1:]) if len(words) > 1 else clean
+        rel_markers = re.findall(r"\b(?:where|whose)\b|(?<=\w\s)\b(?:that|which|who)\b", subordinate_text)
+        of_in_markers = re.findall(r"\b(?:of the|in the|from the|to the)\b", clean)
+        if len(rel_markers) >= 3 or (len(rel_markers) >= 2 and len(of_in_markers) >= 2):
+            return 4
+        elif len(rel_markers) >= 2 or (len(rel_markers) >= 1 and len(of_in_markers) >= 2):
+            return 3
+
+        # Chained entity types
+        ent_chain = re.findall(r"\b(country|nation|state|city|county|capital|university|college|institute|founder|director|author|spouse|person|organization)\b", clean)
+        if len(ent_chain) >= 4:
+            return 4
+        elif len(ent_chain) >= 3:
+            return 3
+
+        return 2
 
     IRREGULAR_LEMMA_MAP: Dict[str, str] = {
         "verified": "verify",
@@ -681,15 +761,17 @@ class SpreadingActivationRetriever:
                     # If this is an entity hub with high in-degree, scale down the reverse decay
                     # for non-causal/temporal relations (thematic valencies) to prevent whole-document explosion.
                     num_incoming = len(rev_edges)
-                    degree_penalty = np.log2(num_incoming + 1.0) if num_incoming > 2 else 1.0
+                    degree_penalty = min(np.log2(num_incoming + 1.0), 1.5) if num_incoming > 2 else 1.0
 
                     reverse_cids_to_fetch = []
                     for p_cid, rel in rev_edges:
                         if p_cid != cid and (allow_all or rel in relations):
-                            # Direct narrative chains (causal/temporal) are preserved; generic thematic valencies are penalized
+                            # Direct narrative chains (causal/temporal/associative) are preserved; generic thematic valencies are penalized
                             is_structural_chain = rel in (
                                 "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
-                                "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE"
+                                "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE",
+                                "CO_OCCURS", "LOCATED_IN", "CROSS_CHUNK_BRIDGE", "EDUCATED_AT", "STUDIED_AT",
+                                "COUNTRY", "CAPITAL", "BORN_IN", "SHARES_BORDER", "PART_OF", "MEMBER_OF", "HEADQUARTERS"
                             )
                             step_decay = decay if is_structural_chain else (decay / degree_penalty)
                             rev_act = curr_act * step_decay
@@ -714,7 +796,7 @@ class SpreadingActivationRetriever:
                     )
                     rows = cur.fetchall()
                     num_incoming = len(rows)
-                    degree_penalty = np.log2(num_incoming + 1.0) if num_incoming > 2 else 1.0
+                    degree_penalty = min(np.log2(num_incoming + 1.0), 1.5) if num_incoming > 2 else 1.0
 
                     reverse_cids_to_fetch = []
                     for p_cid, p_edges_str in rows:
@@ -733,7 +815,9 @@ class SpreadingActivationRetriever:
                                 matched_incoming = True
                                 if rel in (
                                     "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
-                                    "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE"
+                                    "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE",
+                                    "CO_OCCURS", "LOCATED_IN", "CROSS_CHUNK_BRIDGE", "EDUCATED_AT", "STUDIED_AT",
+                                    "COUNTRY", "CAPITAL", "BORN_IN", "SHARES_BORDER", "PART_OF", "MEMBER_OF", "HEADQUARTERS"
                                 ):
                                     is_structural_chain = True
                                 break
@@ -883,6 +967,40 @@ class SpreadingActivationRetriever:
                             desc = f"{name} imports {t_name}."
                             if desc not in rel_descriptions:
                                 rel_descriptions.append(desc)
+                        elif rel == "LOCATED_IN":
+                            desc = f"{name} is located in {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "CO_OCCURS":
+                            # Pure internal navigation bridge for spreading activation, not natural language fact
+                            pass
+                        elif rel in ("EDUCATED_AT", "STUDIED_AT"):
+                            desc = f"{name} studied at {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "COUNTRY":
+                            desc = f"{name} is in country {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "CAPITAL":
+                            desc = f"{t_name} is the capital of {name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "BORN_IN":
+                            desc = f"{name} was born in {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "SHARES_BORDER":
+                            desc = f"{name} shares a border with {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "PART_OF":
+                            desc = f"{name} is part of {t_name}."
+                            if desc not in rel_descriptions:
+                                rel_descriptions.append(desc)
+                        elif rel == "CROSS_CHUNK_BRIDGE":
+                            # Pure internal navigation bridge for spreading activation, not natural language fact
+                            pass
 
         if not event_nodes:
             if rel_descriptions:
@@ -895,8 +1013,8 @@ class SpreadingActivationRetriever:
         ordered_events = self._order_events(subgraph, event_nodes)
 
         has_rich_literals = any(isinstance(getattr(e, 'literal', None), str) and len(e.literal.split()) >= 3 for e in ordered_events)
-        sentences: List[str] = list(rel_descriptions)
-        seen_sentences: Set[str] = {s.lower().strip() for s in sentences}
+        sentences: List[str] = []
+        seen_sentences: Set[str] = set()
         for ev in ordered_events:
             clause_text = ""
             if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:
@@ -912,6 +1030,13 @@ class SpreadingActivationRetriever:
                 if norm not in seen_sentences:
                     seen_sentences.add(norm)
                     sentences.append(clause_text[0].upper() + clause_text[1:])
+
+        # Auxiliary encyclopedic relation descriptions follow primary event narrative
+        for desc in rel_descriptions:
+            norm = desc.lower().strip()
+            if norm not in seen_sentences:
+                seen_sentences.add(norm)
+                sentences.append(desc)
 
         if not sentences and subgraph.root:
             # Fallback to direct realization
@@ -1111,16 +1236,34 @@ class SpreadingActivationRetriever:
         page_table: PageTable,
         top_k: int = 5,
         max_depth: int = 2,
+        decay: Optional[float] = None,
+        threshold: Optional[float] = None,
     ) -> QuantaGraph:
         """Compiles query, identifies seed nodes via SIMD search, and returns the activated sub-graph."""
         seeds = self.find_seed_nodes(query, page_table, top_k=top_k)
         seed_cids = [cid for cid, dist in seeds]
+
+        q_text = query if isinstance(query, str) else (str(query.root.literal) if getattr(query, "root", None) and query.root.literal else "")
+        detected_depth = self.detect_query_hop_depth(q_text) if q_text else 2
+
+        effective_depth = max_depth
+        if max_depth == 2 and detected_depth > 2:
+            effective_depth = detected_depth
+
+        eff_decay = decay if decay is not None else self.decay
+        eff_threshold = threshold if threshold is not None else self.threshold
+
+        if effective_depth >= 3 and decay is None:
+            eff_decay = max(self.decay, 0.82)
+        if effective_depth >= 3 and threshold is None:
+            eff_threshold = min(self.threshold, 0.18 if effective_depth >= 4 else 0.22)
+
         return self.traverse_subgraph(
             seed_cids=seed_cids,
             page_table=page_table,
-            max_depth=max_depth,
-            decay=self.decay,
-            threshold=self.threshold,
+            max_depth=effective_depth,
+            decay=eff_decay,
+            threshold=eff_threshold,
         )
 
     def retrieve_context(
@@ -1131,6 +1274,8 @@ class SpreadingActivationRetriever:
         max_tokens: int = 500,
         top_k: int = 10,
         max_depth: int = 2,
+        decay: Optional[float] = None,
+        threshold: Optional[float] = None,
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
         subgraph = self.retrieve_subgraph_for_query(
@@ -1138,6 +1283,8 @@ class SpreadingActivationRetriever:
             page_table=page_table,
             top_k=top_k,
             max_depth=max_depth,
+            decay=decay,
+            threshold=threshold,
         )
         return self.format_context_for_llm(
             subgraph=subgraph,

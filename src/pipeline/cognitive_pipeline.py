@@ -58,6 +58,16 @@ from verification.clingo_gate import (
 logger = logging.getLogger("quanta.pipeline.cognitive")
 
 
+def _normalize_entity_key(name: str) -> str:
+    """Normalizes entity surface strings for cross-chunk canonical matching."""
+    k = name.strip().lower()
+    for prefix in ("the ", "a ", "an "):
+        if k.startswith(prefix):
+            k = k[len(prefix):].strip()
+            break
+    return k
+
+
 class CognitivePipeline:
     """Production-grade Neuro-Symbolic Cognitive Pipeline for QUANTA.
 
@@ -132,12 +142,16 @@ class CognitivePipeline:
         # 7. Virtual Memory Page Table & Active Canvas (Strict O(1) Physical VRAM Bound)
         self.page_table = PageTable(db_path=page_table_path)
         self.active_canvas = ActiveCanvas(capacity=canvas_capacity)
+        self.page_table.attach_active_canvas(self.active_canvas)
         self.fault_handler = SemanticPageFaultHandler(
             canvas=self.active_canvas,
             page_table=self.page_table,
         )
 
-        # 8. Realizers & Emitters
+        # 8. Episodic Entity Registry for Multi-Hop Cross-Chunk Associative Bridges
+        self.episodic_entity_registry: Dict[str, List[Tuple[QuantaNode, QuantaNode, Optional[QuantaNode]]]] = {}
+
+        # 9. Realizers & Emitters
         self.realizer = realizer or EnglishRealizer()
         self.fol_emitter = fol_emitter or FOLEmitter()
         self.code_emitter = code_emitter or CodeEmitter()
@@ -194,10 +208,11 @@ class CognitivePipeline:
             ]
 
         # Multi-chunk streaming episodic routing:
-        # Long documents and multi-chunk narratives must be processed using the streaming
-        # episodic pipeline (process_narrative) to guarantee O(1) active canvas bounds,
-        # Merkle episodic folding, and eliminate monolithic Blake3 CID hash cascades.
-        if len(chunks) > 1:
+        # Long documents and multi-chunk narratives (> 6 chunks or > 600 words) must be processed
+        # using the streaming episodic pipeline (process_narrative) to guarantee O(1) active canvas
+        # bounds, Merkle episodic folding, and eliminate monolithic Blake3 CID hash cascades.
+        total_words = sum(len(c.text.split()) for c in chunks)
+        if len(chunks) > 6 or total_words > 600:
             graphs, chapter_fold = self.process_narrative(
                 text, chapter_id=chapter_id, validate=validate, language_hint=language_hint
             )
@@ -525,6 +540,78 @@ class CognitivePipeline:
                 self.merkle_book.add_chunk_node(fold_node, chapter_id=chapter_id)
                 episode_graphs.append(g)
 
+                # --- Section 4: Intra-chunk and Cross-chunk Entity Linking ---
+                # 1. Intra-chunk entity linking (CO_OCCURS / LOCATED_IN)
+                chunk_entities: List[QuantaNode] = list(getattr(g, "entity_nodes", {}).values())
+                if not chunk_entities:
+                    chunk_entities = [n for n in g.nodes.values() if n.get_slot("TYPE_ENTITY") == 1]
+
+                for i, ea in enumerate(chunk_entities):
+                    for j in range(i + 1, min(i + 4, len(chunk_entities))):
+                        eb = chunk_entities[j]
+                        if ea.cid == eb.cid:
+                            continue
+                        is_b_loc = eb.get_slot("TYPE_LOCATION") == 1 or "location" in (eb.anchor or "").lower()
+                        is_a_loc = ea.get_slot("TYPE_LOCATION") == 1 or "location" in (ea.anchor or "").lower()
+                        if is_b_loc and not is_a_loc:
+                            self.page_table.add_edge(ea.cid, "LOCATED_IN", eb.cid)
+                        elif is_a_loc and not is_b_loc:
+                            self.page_table.add_edge(eb.cid, "LOCATED_IN", ea.cid)
+                        else:
+                            self.page_table.add_edge(ea.cid, "CO_OCCURS", eb.cid)
+                            self.page_table.add_edge(eb.cid, "CO_OCCURS", ea.cid)
+
+                # 2. Cross-chunk associative bridges via episodic entity registry
+                curr_root_ev = g.root or (g.get_node(g.root_cid) if g.root_cid else None)
+
+                for ent in chunk_entities:
+                    raw_name = str(ent.literal) if ent.literal else (ent.anchor or "")
+                    cand_keys = {raw_name.strip().lower()}
+                    norm_key = _normalize_entity_key(raw_name)
+                    if len(norm_key) >= 2:
+                        cand_keys.add(norm_key)
+
+                    if extraction is not None and hasattr(extraction, "entities"):
+                        for ext_ent in extraction.entities:
+                            if ext_ent.canonical_name.strip().lower() == raw_name.lower():
+                                if ext_ent.surface_aliases:
+                                    for alias in ext_ent.surface_aliases:
+                                        a_norm = _normalize_entity_key(alias)
+                                        if len(a_norm) >= 2:
+                                            cand_keys.add(a_norm)
+
+                    # Check for prior matches across past chunks
+                    matched_records: List[Tuple[QuantaNode, QuantaNode, Optional[QuantaNode]]] = []
+                    for k in cand_keys:
+                        if k in self.episodic_entity_registry:
+                            matched_records.extend(self.episodic_entity_registry[k])
+
+                    # Deduplicate matched records by fold_node CID
+                    seen_prev_cids = set()
+                    for prev_ent, prev_fold, prev_ev_root in matched_records:
+                        if prev_fold.cid in seen_prev_cids or prev_fold.cid == fold_node.cid:
+                            continue
+                        seen_prev_cids.add(prev_fold.cid)
+
+                        # Synthesize CROSS_CHUNK_BRIDGE between fold nodes
+                        self.page_table.add_edge(prev_fold.cid, "CROSS_CHUNK_BRIDGE", fold_node.cid)
+                        self.page_table.add_edge(fold_node.cid, "CROSS_CHUNK_BRIDGE", prev_fold.cid)
+
+                        # Synthesize CO_OCCURS between the event roots
+                        if prev_ev_root is not None and curr_root_ev is not None and prev_ev_root.cid != curr_root_ev.cid:
+                            self.page_table.add_edge(prev_ev_root.cid, "CO_OCCURS", curr_root_ev.cid)
+                            self.page_table.add_edge(curr_root_ev.cid, "CO_OCCURS", prev_ev_root.cid)
+
+                        # Synthesize CO_OCCURS between entity nodes across chunks if different CIDs
+                        if prev_ent.cid != ent.cid:
+                            self.page_table.add_edge(prev_ent.cid, "CO_OCCURS", ent.cid)
+                            self.page_table.add_edge(ent.cid, "CO_OCCURS", prev_ent.cid)
+
+                    # Register current occurrence under all candidate keys
+                    record = (ent, fold_node, curr_root_ev)
+                    for k in cand_keys:
+                        self.episodic_entity_registry.setdefault(k, []).append(record)
+
                 q_compilation.task_done()
 
         # Execute 3 stages concurrently
@@ -645,6 +732,8 @@ class CognitivePipeline:
         max_tokens: int = 500,
         top_k: int = 10,
         max_depth: int = 2,
+        decay: Optional[float] = None,
+        threshold: Optional[float] = None,
     ) -> str:
         """Retrieves minimal relevant verified ASG context for external LLMs via spreading activation.
 
@@ -654,17 +743,27 @@ class CognitivePipeline:
             max_tokens: Maximum context token length.
             top_k: Number of SIMD seeds to explore.
             max_depth: Depth of spreading activation traversal.
+            decay: Custom activation decay rate.
+            threshold: Custom activation cutoff threshold.
 
         Returns:
             Formatted context string for host LLM prompt injection.
         """
+        effective_max_tokens = max_tokens
+        if max_tokens <= 600:
+            detected_depth = self.retriever.detect_query_hop_depth(query)
+            if detected_depth >= 3:
+                effective_max_tokens = 1200
+
         return self.retriever.retrieve_context(
             query=query,
             page_table=self.page_table,
             format=format,
-            max_tokens=max_tokens,
+            max_tokens=effective_max_tokens,
             top_k=top_k,
             max_depth=max_depth,
+            decay=decay,
+            threshold=threshold,
         )
 
     def answer_query(
@@ -836,6 +935,8 @@ class CognitivePipeline:
         if hasattr(self, "stitcher") and self.stitcher is not None:
             self.stitcher.reset()
         self.merkle_book = HierarchicalMerkleBook()
+        if hasattr(self, "episodic_entity_registry"):
+            self.episodic_entity_registry.clear()
         if clear_page_table and hasattr(self.page_table, "clear"):
             self.page_table.clear()
 
