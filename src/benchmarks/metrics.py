@@ -123,7 +123,7 @@ class BenchmarkMetrics:
     @staticmethod
     def extractive_match_score(prediction: str, ground_truth: str) -> bool:
         """Determines whether ground truth is stated as an affirmative answer in prediction,
-        excluding negative hedging statements (e.g. 'cannot be determined', 'no mention of')."""
+        robustly handling CoT step-by-step reasoning and trailing conclusion anchors."""
         if not prediction or not ground_truth:
             return False
 
@@ -131,6 +131,24 @@ class BenchmarkMetrics:
         gold_norm = normalize_answer(ground_truth)
         if pred_norm == gold_norm:
             return True
+
+        # Check for explicit conclusion anchor in prediction (e.g. "Answer: True", "**Answer:** [False]", "Answer: Paris")
+        m_concl = re.findall(
+            r"(?:\*{0,2}(?:answer|conclusion)\*{0,2}\s*[:\-]\s*\[?\*?([^\n\.\*\]]+)\*?\]?)",
+            prediction,
+            re.IGNORECASE,
+        )
+        if m_concl:
+            # Check the last conclusion anchor
+            last_concl = normalize_answer(m_concl[-1].strip())
+            if last_concl == gold_norm:
+                return True
+            if gold_norm in last_concl and bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", last_concl)):
+                return True
+            # If explicit conclusion exists for Boolean/T/F/U and contradicts gold, don't fallback to looser body matches
+            if gold_norm in ("true", "false", "unknown"):
+                if last_concl in ("true", "false", "unknown") and last_concl != gold_norm:
+                    return False
 
         # Guard against negative hedging statements when gold is not 'unknown'
         if gold_norm not in ("unknown", "uncertain"):
@@ -171,19 +189,11 @@ class BenchmarkMetrics:
 
         lines = [line.strip() for line in clean.splitlines() if line.strip()]
 
-        # 1. Leading choice on first non-empty line: e.g. "Answer: A", "(A)", "A. The ..."
-        if lines:
-            m_lead = re.match(r"^(?:(?:answer|choice|option|correct\s+choice)\s*[:\-]?\s*)?[\(\[]?([A-D])[\)\]]?(?:\.|\:|\)|\s+|$)", lines[0], re.IGNORECASE)
-            if m_lead and not lines[0].lower().startswith("choices:"):
-                # If the first line is solely an answer declaration, take it immediately
-                if len(lines[0].split()) <= 6 or lines[0].lower().startswith(("answer:", "choice:", "option:")):
-                    return m_lead.group(1).upper()
-
-        # 2. Explicit answer anchors throughout text (case-insensitive keyword, capturing choice letter A-D)
+        # 1. Explicit answer anchors throughout text (case-insensitive keyword, capturing choice letter A-D)
         anchor_patterns = [
-            r"(?:(?:the\s+)?(?:correct\s+)?(?:choice|option|answer)\s*(?:is\s*[:\-]?|[:\-])|therefore,?\s*(?:(?:the\s+)?answer\s*(?:is\s*[:\-]?|[:\-])\s*)?)\s*\[?\(?([A-D])\)?\]?",
-            r"\b(?:answer|choice|option)\s*[:\-]\s*\[?\(?([A-D])\)?\]?",
-            r"\bconclu(?:de|sion)\s*(?:is\s*[:\-]?|[:\-])?\s*\[?\(?([A-D])\)?\]?",
+            r"(?:\*{0,2})(?:(?:the\s+)?(?:correct\s+)?(?:choice|option|answer)\s*(?:is\s*[:\-]?|[:\-])|therefore,?\s*(?:(?:the\s+)?answer\s*(?:is\s*[:\-]?|[:\-])\s*)?)(?:\*{0,2})\s*\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
+            r"\b(?:\*{0,2})(?:answer|choice|option)(?:\*{0,2})\s*[:\-]\s*(?:\*{0,2})\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
+            r"\bconclu(?:de|sion)\s*(?:is\s*[:\-]?|[:\-])?\s*(?:\*{0,2})\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
             r"\b([A-D])\s+is\s+the\s+correct\s+(?:choice|answer)\b",
             r"\bsupports\s+(?:choice|option)\s+\(?([A-D])\)?",
         ]
@@ -196,17 +206,17 @@ class BenchmarkMetrics:
             all_anchor_matches.sort(key=lambda x: x[0])
             return all_anchor_matches[-1][1]
 
-        # 3. Concluding lines examination (last 5 non-empty lines in reverse from bottom to top)
+        # 2. Concluding lines examination (last 5 non-empty lines in reverse from bottom to top)
         for line in reversed(lines[-5:]):
             for pattern in anchor_patterns:
                 line_matches = list(re.finditer(pattern, line, re.IGNORECASE))
                 if line_matches:
                     return line_matches[-1].group(1).upper()
 
-            # Isolated uppercase choice on its own line: e.g. "B", "(B)", "**B**", "\boxed{B}"
-            m_iso = re.match(r"^\s*(?:\*\*|\\boxed\{|[\(\[])?\s*([A-D])\s*(?:\*\*|\}|[\)\]])?\.?\s*$", line)
-            if m_iso:
-                return m_iso.group(1).upper()
+            # Concluding line with Answer declaration: e.g. "Answer: [B]", "**Answer:** B", "Answer: B"
+            m_concl_line = re.match(r"^\s*(?:\*{0,2}Answer\*{0,2}\s*[:\-]\s*)?(?:\*\*|\\boxed\{|[\(\[])?\s*([A-D])\s*(?:\*\*|\}|[\)\]])?\.?\s*$", line, re.IGNORECASE)
+            if m_concl_line:
+                return m_concl_line.group(1).upper()
 
             # Explicit option/choice in concluding line: "Option A", "Choice B"
             m_opt = list(re.finditer(r"\b(?:option|choice)\s+([A-D])\b", line, re.IGNORECASE))
@@ -219,11 +229,12 @@ class BenchmarkMetrics:
                 if m_paren:
                     return m_paren[-1].group(1).upper()
 
-        # 4. Fallback leading choice on first line if any
+        # 3. Leading choice on first non-empty line (fallback if no trailing conclusion anchor exists)
         if lines:
-            m_lead_gen = re.match(r"^[\(\[]?([A-D])[\)\]]?(?:\.|\:|\))\s+", lines[0])
-            if m_lead_gen:
-                return m_lead_gen.group(1).upper()
+            m_lead = re.match(r"^(?:(?:\*{0,2}(?:answer|choice|option|correct\s+choice)\*{0,2})\s*[:\-]?\s*)?[\(\[]?([A-D])[\)\]]?(?:\.|\:|\)|\s+|$)", lines[0], re.IGNORECASE)
+            if m_lead and not lines[0].lower().startswith("choices:"):
+                if len(lines[0].split()) <= 6 or lines[0].lower().startswith(("answer:", "**answer:**", "choice:", "option:")):
+                    return m_lead.group(1).upper()
 
         return None
 

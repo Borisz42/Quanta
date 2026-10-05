@@ -15,12 +15,14 @@ Instrumented for:
 
 from __future__ import annotations
 
+import concurrent.futures
 from dataclasses import dataclass, field
 from enum import Enum
 import json
 import logging
 import os
 from pathlib import Path
+import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -175,12 +177,15 @@ class PairedEvaluator:
         mode: str = "live",  # 'live' or 'mock'
         ablation_mode: str = "3way",  # 'paired' or '3way'
         timeout_seconds: float = 120.0,
+        concurrency: int = 1,
     ):
         self.base_llm_url = base_llm_url.rstrip("/")
         self.quanta_proxy_url = quanta_proxy_url.rstrip("/")
         self.mode = mode
         self.ablation_mode = ablation_mode
         self.timeout_seconds = timeout_seconds
+        self.concurrency = max(1, concurrency)
+        self._lock = threading.Lock()
 
         self.code_evaluator = CodeEvaluator()
         self.latency_profiler = LatencyProfiler()
@@ -383,7 +388,11 @@ class PairedEvaluator:
             ans = gold
             return ans, quanta_tok, 25, 0.025, 0.32, 55.0, ingest_s
 
-    def evaluate_sample(self, sample: BenchmarkSample) -> PairedResult:
+    def evaluate_sample(
+        self,
+        sample: BenchmarkSample,
+        session_id: Optional[str] = None,
+    ) -> PairedResult:
         """Executes Condition A, B, and C on a single benchmark sample."""
         if sample.suite == "musique":
             req_max_tokens = 2048  # High CoT reasoning budget across 20 passages, eliminating truncations
@@ -530,8 +539,10 @@ class PairedEvaluator:
                     "X-Quanta-No-Global-KB": "true",
                     "X-Quanta-Reset": "true",
                     "X-Quanta-Timeout": str(sample_timeout),
-                    "X-Quanta-Max-Context-Tokens": "1800" if sample.suite == "musique" else "1500",
+                    "X-Quanta-Max-Context-Tokens": "2000" if sample.suite == "musique" else "1500",
                 }
+                if session_id:
+                    headers_b["X-Quanta-Session-ID"] = session_id
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
                     self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
                 )
@@ -579,8 +590,10 @@ class PairedEvaluator:
             headers_c = {
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
-                "X-Quanta-Max-Context-Tokens": "1800" if sample.suite == "musique" else "1500",
+                "X-Quanta-Max-Context-Tokens": "2000" if sample.suite == "musique" else "1500",
             }
+            if session_id:
+                headers_c["X-Quanta-Session-ID"] = session_id
             if is_factual_domain:
                 headers_c["X-Quanta-Global-KB"] = "true"
                 headers_c["X-Quanta-Enrich"] = "true"
@@ -607,17 +620,18 @@ class PairedEvaluator:
         )
 
         # Record datapoint in latency profiler
-        self.latency_profiler.record_datapoint(
-            token_count=sample.token_count,
-            ingestion_time_s=ingest_c,
-            retrieval_time_ms=retrieval_ms_c,
-            base_ttft_s=ttft_a,
-            quanta_ttft_s=ttft_c,
-            base_e2e_s=lat_a,
-            quanta_e2e_s=total_c,
-            suite=sample.suite,
-            task_id=sample.id,
-        )
+        with self._lock:
+            self.latency_profiler.record_datapoint(
+                token_count=sample.token_count,
+                ingestion_time_s=ingest_c,
+                retrieval_time_ms=retrieval_ms_c,
+                base_ttft_s=ttft_a,
+                quanta_ttft_s=ttft_c,
+                base_e2e_s=lat_a,
+                quanta_e2e_s=total_c,
+                suite=sample.suite,
+                task_id=sample.id,
+            )
 
         # Determine aggregate forensic diagnostic tag and notes
         pr_tag = None
@@ -659,17 +673,26 @@ class PairedEvaluator:
         """Evaluates an entire benchmark suite, producing a ComparativeScorecard."""
         if precomputed_results is not None:
             results = precomputed_results
-            base_binary = [1 if pr.base_result.is_correct else 0 for pr in results]
-            quanta_binary = [1 if pr.quanta_global_result and pr.quanta_global_result.is_correct else 0 for pr in results]
         else:
-            results = []
-            base_binary = []
-            quanta_binary = []
-            for sample in samples:
-                pr = self.evaluate_sample(sample)
-                results.append(pr)
-                base_binary.append(1 if pr.base_result.is_correct else 0)
-                quanta_binary.append(1 if pr.quanta_global_result and pr.quanta_global_result.is_correct else 0)
+            if self.concurrency > 1 and len(samples) > 1:
+                results = [None] * len(samples)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency) as executor:
+                    future_to_idx = {
+                        executor.submit(
+                            self.evaluate_sample,
+                            sample,
+                            session_id=f"worker_{idx % self.concurrency}",
+                        ): idx
+                        for idx, sample in enumerate(samples)
+                    }
+                    for future in concurrent.futures.as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        results[idx] = future.result()
+            else:
+                results = [self.evaluate_sample(sample) for sample in samples]
+
+        base_binary = [1 if pr.base_result.is_correct else 0 for pr in results]
+        quanta_binary = [1 if pr.quanta_global_result and pr.quanta_global_result.is_correct else 0 for pr in results]
 
         n = len(results)
         if n == 0:

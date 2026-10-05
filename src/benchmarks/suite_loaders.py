@@ -271,7 +271,12 @@ class BenchmarkSuiteLoader:
             choices_text = item["choices"]["text"]
             choices_labels = item["choices"]["label"]
             choice_str = "\n".join(f"({lbl}) {txt}" for lbl, txt in zip(choices_labels, choices_text))
-            full_prompt = f"{item['question']}\n\nChoices:\n{choice_str}\n\nState your final choice on the first line as 'Answer: [A/B/C/D]' followed by your explanation, or conclude with 'Answer: [A/B/C/D]'."
+            full_prompt = (
+                f"{item['question']}\n\n"
+                f"Choices:\n{choice_str}\n\n"
+                "First explain your scientific reasoning step by step. "
+                "Then conclude your final answer on a new line in the exact format: 'Answer: [A/B/C/D]'."
+            )
             t_cnt = self.estimate_token_count(full_prompt)
 
             gold_key = item["answerKey"]
@@ -351,7 +356,11 @@ class BenchmarkSuiteLoader:
             rnd.shuffle(shuffled_passages)
 
             context_str = "\n\n".join(f"Document [{i+1}]: {p}" for i, p in enumerate(shuffled_passages))
-            full_prompt = item["question"]
+            full_prompt = (
+                f"{item['question']}\n\n"
+                "Explain the step-by-step connections across the documents, "
+                "then conclude on a new line with 'Answer: <final answer>'."
+            )
             t_cnt = self.estimate_token_count(context_str + "\n" + full_prompt)
 
             samples.append(
@@ -439,11 +448,14 @@ class BenchmarkSuiteLoader:
             sample_id = item.get("id", f"proofwriter_{i+1}")
             context = str(item.get("theory", ""))
             raw_q = str(item.get("question", "")).strip()
-            # If question is a bare declarative statement (from proofwriter_train.jsonl), frame it as an interrogative
-            if not raw_q.lower().startswith("is the following") and not raw_q.endswith("?"):
-                q = f"Is the following statement true, false, or unknown based on the text: {raw_q}? Answer with only True, False, or Unknown."
-            else:
-                q = raw_q
+            # Clean any legacy meta-question phrasing if present
+            m_clean = re.search(r"(?:is the following statement true, false, or unknown based on the text:\s*|based on the provided facts and rules, determine whether the following statement is true, false, or unknown:\s*['\"]?)(.*?)(?:['\"]?\?\s*Answer with only.*)?$", raw_q, re.IGNORECASE)
+            statement_text = m_clean.group(1).rstrip(".? '\"") if m_clean and len(m_clean.group(1).strip()) > 3 else raw_q.rstrip(".? '\"")
+
+            q = (
+                f"Based on the provided facts and rules, determine whether the following statement is true, false, or unknown: '{statement_text}'\n\n"
+                "Explain your deductive reasoning step by step, then conclude on a new line with 'Answer: [True/False/Unknown]'."
+            )
             ans = str(item.get("answer", "true")).strip().lower()
             t_cnt = self.estimate_token_count(context + " " + q)
 

@@ -20,13 +20,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 from dataclasses import asdict
 from datetime import datetime
 import json
 import logging
 import os
 from pathlib import Path
+import queue
 import sys
+import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -386,6 +389,7 @@ def main():
     parser.add_argument("--auto-spawn", dest="auto_spawn", action="store_true", default=True, help="Automatically check and spin up backend services in live mode (default: True)")
     parser.add_argument("--no-auto-spawn", dest="auto_spawn", action="store_false", help="Disable automatic backend service spinup")
     parser.add_argument("--target-model", type=str, default="unsloth/Qwen3.5-4B-MTP-GGUF", help="Downstream base LLM model ID")
+    parser.add_argument("--workers", type=int, default=1, help="Number of concurrent worker threads for 4-slot parallel API execution (default: 1)")
     args = parser.parse_args()
 
     print_banner()
@@ -409,7 +413,7 @@ def main():
             except Exception as e:
                 logger.warning("Could not read saved suite_config from checkpoint: %s", e)
 
-    print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()}", "1;32"))
+    print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()} | Workers={args.workers}", "1;32"))
     print(format_ansi(f"[>] Target Suites: {suite_config}\n", "1;37"))
 
     # Automated backend service readiness verification & spinup for Live Mode
@@ -447,6 +451,7 @@ def main():
         quanta_proxy_url=args.quanta_url,
         mode=mode,
         ablation_mode=ablation_mode,
+        concurrency=args.workers,
     )
     exporter = PublicationExporter()
 
@@ -504,45 +509,76 @@ def main():
             continue
 
         completed_sample_ids = checkpoint_mgr.get_completed_sample_ids(suite_name) if args.resume else set()
-        suite_raw_list = []
-        suite_paired_results = []
+        suite_paired_results = [None] * len(samples)
 
+        print_lock = threading.Lock()
+        checkpoint_lock = threading.Lock()
+
+        # Identify which samples are already cached vs need evaluation
+        to_evaluate = []
         for i, s in enumerate(samples, 1):
             if args.resume and s.id in completed_sample_ids:
                 cached_pr = checkpoint_mgr.get_sample_result(suite_name, s.id)
                 if cached_pr:
-                    suite_paired_results.append(cached_pr)
-                    suite_raw_list.append(cached_pr.to_dict())
-
+                    suite_paired_results[i - 1] = cached_pr
                     corr_icon_base = "[PASS]" if cached_pr.base_result.is_correct else "[FAIL]"
                     corr_icon_quanta = "[PASS]" if cached_pr.quanta_global_result and cached_pr.quanta_global_result.is_correct else "[FAIL]"
                     diag_tag = cached_pr.diagnostic_tag or (cached_pr.quanta_global_result.diagnostic_tag if cached_pr.quanta_global_result else None)
                     diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
                     print(f"  [{i:>2}/{len(samples)}] {s.id:<20} [CACHED] | Base: {corr_icon_base} ({cached_pr.base_result.prompt_tokens} tok, {cached_pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({cached_pr.quanta_global_result.prompt_tokens if cached_pr.quanta_global_result else 0} tok, {cached_pr.quanta_global_result.total_e2e_latency_s if cached_pr.quanta_global_result else 0:.2f}s){diag_str}")
                     continue
+            to_evaluate.append((i, s))
 
-            pr = evaluator.evaluate_sample(s)
-            suite_paired_results.append(pr)
-            suite_raw_list.append(pr.to_dict())
+        def _process_sample(item_tuple: Tuple[int, BenchmarkSample], session_id: Optional[str] = None) -> Tuple[int, PairedResult]:
+            idx_1based, sample_obj = item_tuple
+            pr_res = evaluator.evaluate_sample(sample_obj, session_id=session_id)
 
-            # Save sample incrementally to checkpoint
-            latest_point = evaluator.latency_profiler.data_points[-1].to_dict() if evaluator.latency_profiler.data_points else None
-            checkpoint_mgr.save_sample(suite_name, s.id, pr, latency_datapoint=latest_point)
+            with checkpoint_lock:
+                latest_point = evaluator.latency_profiler.data_points[-1].to_dict() if evaluator.latency_profiler.data_points else None
+                checkpoint_mgr.save_sample(suite_name, sample_obj.id, pr_res, latency_datapoint=latest_point)
 
-            corr_icon_base = "[PASS]" if pr.base_result.is_correct else "[FAIL]"
-            corr_icon_quanta = "[PASS]" if pr.quanta_global_result and pr.quanta_global_result.is_correct else "[FAIL]"
-            diag_tag = pr.diagnostic_tag or (pr.quanta_global_result.diagnostic_tag if pr.quanta_global_result else None)
-            diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
-            print(f"  [{i:>2}/{len(samples)}] {s.id:<20} | Base: {corr_icon_base} ({pr.base_result.prompt_tokens} tok, {pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr.quanta_global_result.prompt_tokens if pr.quanta_global_result else 0} tok, {pr.quanta_global_result.total_e2e_latency_s if pr.quanta_global_result else 0:.2f}s){diag_str}")
+            with print_lock:
+                corr_icon_base = "[PASS]" if pr_res.base_result.is_correct else "[FAIL]"
+                corr_icon_quanta = "[PASS]" if pr_res.quanta_global_result and pr_res.quanta_global_result.is_correct else "[FAIL]"
+                diag_tag = pr_res.diagnostic_tag or (pr_res.quanta_global_result.diagnostic_tag if pr_res.quanta_global_result else None)
+                diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                sess_info = f" [{session_id}]" if session_id else ""
+                print(f"  [{idx_1based:>2}/{len(samples)}] {sample_obj.id:<20}{sess_info} | Base: {corr_icon_base} ({pr_res.base_result.prompt_tokens} tok, {pr_res.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr_res.quanta_global_result.prompt_tokens if pr_res.quanta_global_result else 0} tok, {pr_res.quanta_global_result.total_e2e_latency_s if pr_res.quanta_global_result else 0:.2f}s){diag_str}")
 
-            # Real-time forensic diagnostic alert line
-            if diag_tag == "[TRUNCATED]":
-                print(format_ansi(f"     ↳ [FORENSIC ALERT: TRUNCATED] {s.id}: Output was cut off by token limit (finish_reason='length')!", "1;31"))
-            elif diag_tag == "[HARNESS BUG]":
-                print(format_ansi(f"     ↳ [FORENSIC ALERT: HARNESS BUG] {s.id}: Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError).", "1;31"))
-            elif diag_tag == "[NUMERIC PASS]":
-                print(format_ansi(f"     ↳ [FORENSIC ALERT: NUMERIC PASS] {s.id}: String match failed due to formatting, but calculation verified numerically accurate ({s.gold_answer}).", "1;33"))
+                if diag_tag == "[TRUNCATED]":
+                    print(format_ansi(f"     ↳ [FORENSIC ALERT: TRUNCATED] {sample_obj.id}: Output was cut off by token limit (finish_reason='length')!", "1;31"))
+                elif diag_tag == "[HARNESS BUG]":
+                    print(format_ansi(f"     ↳ [FORENSIC ALERT: HARNESS BUG] {sample_obj.id}: Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError).", "1;31"))
+                elif diag_tag == "[NUMERIC PASS]":
+                    print(format_ansi(f"     ↳ [FORENSIC ALERT: NUMERIC PASS] {sample_obj.id}: String match failed due to formatting, but calculation verified numerically accurate ({sample_obj.gold_answer}).", "1;33"))
 
+            return idx_1based, pr_res
+
+        if to_evaluate:
+            if args.workers > 1 and len(to_evaluate) > 1:
+                worker_tokens = queue.Queue()
+                for w in range(args.workers):
+                    worker_tokens.put(f"worker_{w}")
+
+                def _worker_wrapper(item):
+                    token = worker_tokens.get()
+                    try:
+                        return _process_sample(item, session_id=token)
+                    finally:
+                        worker_tokens.put(token)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+                    futures = [pool.submit(_worker_wrapper, itm) for itm in to_evaluate]
+                    for fut in concurrent.futures.as_completed(futures):
+                        idx_1b, pr_res = fut.result()
+                        suite_paired_results[idx_1b - 1] = pr_res
+            else:
+                for itm in to_evaluate:
+                    idx_1b, pr_res = _process_sample(itm)
+                    suite_paired_results[idx_1b - 1] = pr_res
+
+        suite_paired_results = [pr for pr in suite_paired_results if pr is not None]
+        suite_raw_list = [pr.to_dict() for pr in suite_paired_results]
         raw_predictions[suite_name] = suite_raw_list
 
         sc = evaluator.evaluate_suite(suite_name, samples, precomputed_results=suite_paired_results)

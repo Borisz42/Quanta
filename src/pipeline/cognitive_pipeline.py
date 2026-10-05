@@ -300,7 +300,10 @@ class CognitivePipeline:
         graph = self.compiler.compile(stitched, validate=validate)
 
         # 5. Ingest into Virtual Page Table and Active Canvas
+        doc_heading = chunks[0].chapter_title if (chunks and chunks[0].chapter_title) else None
         for node in graph.nodes.values():
+            if doc_heading and not node.parent_cid:
+                node.parent_cid = doc_heading
             self.page_table.store_node(node)
             self.active_canvas.put(node)
 
@@ -311,6 +314,8 @@ class CognitivePipeline:
 
         # 6. Fold into episode Merkle node
         fold_node = fold_discourse_episode(graph.copy(), chunk_id=chunks[0].chunk_id)
+        if doc_heading and not fold_node.parent_cid:
+            fold_node.parent_cid = doc_heading
         self.page_table.store_node(fold_node)
         self.active_canvas.put(fold_node)
         self.merkle_book.add_chunk_node(fold_node, chapter_id=chapter_id)
@@ -404,7 +409,15 @@ class CognitivePipeline:
         graph = self.compiler.compile(extraction, validate=validate)
 
         # 5. Ingest into Virtual Page Table and Active Canvas
+        doc_heading = None
+        m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", chunk_text.strip(), re.IGNORECASE)
+        if m_doc:
+            doc_heading = m_doc.group(1).strip()
+        elif chapter_id and ("document" in chapter_id.lower() or "passage" in chapter_id.lower()):
+            doc_heading = chapter_id
         for node in graph.nodes.values():
+            if doc_heading and not node.parent_cid:
+                node.parent_cid = doc_heading
             self.page_table.store_node(node)
             self.active_canvas.put(node)
 
@@ -548,7 +561,15 @@ class CognitivePipeline:
                 # Compile to verified QuantaGraph ASG
                 g = await asyncio.to_thread(self.compiler.compile, extraction, validate=validate)
 
+                doc_heading = chk.chapter_title or None
+                if not doc_heading and chk.text:
+                    m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", chk.text.strip(), re.IGNORECASE)
+                    if m_doc:
+                        doc_heading = m_doc.group(1).strip()
+
                 for node in g.nodes.values():
+                    if doc_heading and not node.parent_cid:
+                        node.parent_cid = doc_heading
                     self.page_table.store_node(node)
                     self.active_canvas.put(node)
 
@@ -558,6 +579,8 @@ class CognitivePipeline:
 
                 # Fold discourse episode into 32-byte Merkle fold node
                 fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
+                if doc_heading and not fold_node.parent_cid:
+                    fold_node.parent_cid = doc_heading
                 self.page_table.store_node(fold_node)
                 self.active_canvas.put(fold_node)
                 episode_fold_nodes.append(fold_node)
@@ -783,19 +806,22 @@ class CognitivePipeline:
             Formatted context string for host LLM prompt injection.
         """
         effective_max_tokens = max_tokens
-        if max_tokens <= 600:
-            detected_depth = self.retriever.detect_query_hop_depth(query)
-            if detected_depth >= 3:
+        detected_depth = self.retriever.detect_query_hop_depth(query) if hasattr(self, "retriever") else 2
+        effective_depth = max_depth
+        if detected_depth >= 3:
+            effective_depth = max(max_depth, 3)
+            if max_tokens <= 600:
                 effective_max_tokens = 1200
 
+        eff_decay = decay if decay is not None else (0.85 if effective_depth >= 3 else None)
         return self.retriever.retrieve_context(
             query=query,
             page_table=self.page_table,
             format=format,
             max_tokens=effective_max_tokens,
             top_k=top_k,
-            max_depth=max_depth,
-            decay=decay,
+            max_depth=effective_depth,
+            decay=eff_decay,
             threshold=threshold,
         )
 

@@ -124,6 +124,9 @@ class SpreadingActivationRetriever:
             r"located in the country where",
             r"where .* is located.*located",
             r"(?:mother|father|parent|child|spouse|brother|sister)\s+of\s+the\s+(?:mother|father|parent|child|spouse)",
+            r"(?:who|what|when|where)\s+was\s+the\s+.*(?:during|in|after|before)\s+the\s+(?:war|rebellion|conflict|revolt|period|empire)",
+            r"(?:who|what|when|where)\s+.*(?:ruler|leader|capital|emperor|king|president|governor|founder).*that\s+(?:lost|won|captured|conquered|ruled|ended)\s+in\s+\d{4}",
+            r"across\s+(?:the\s+)?documents|step-by-step\s+connections",
         ]
         for pat in three_hop_patterns:
             if re.search(pat, clean):
@@ -537,6 +540,24 @@ class SpreadingActivationRetriever:
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
+        # Relational phrases and historical/temporal anchors (e.g. "capital of the province", "lost in 1853", "fall of Nanjing")
+        relational_temporal_patterns = [
+            r"\b[a-zA-Z]+(?:ed|t|en|ing|d)\s+(?:in|during|at|on|by)\s+\d{3,4}(?:s)?\b",  # e.g. "lost in 1853", "captured in 1853", "founded in 1912"
+            r"\b(?:in|during|around|before|after)\s+\d{3,4}(?:s)?\b",                     # e.g. "in 1853"
+            r"\b(?:capital|headquarters|director|founder|author|producer|spouse|parent|child|minister|emperor|king|queen|governor|president|leader|ruler)\s+of\s+(?:the\s+)?[A-Za-z0-9_\s-]+\b",
+            r"\b(?:shares|sharing)\s+a\s+border\s+with\s+(?:the\s+)?[A-Za-z0-9_\s-]+\b",
+            r"\b(?:capital|city|province|state|nation|country)\s+of\s+(?:the\s+)?[A-Za-z0-9_\s-]+\b",
+            r"\b(?:fall|rebellion|war|battle|treaty|revolt|siege)\s+of\s+[A-Za-z0-9_\s-]+\b", # e.g. "fall of Nanjing", "Taiping rebellion"
+        ]
+        for pat in relational_temporal_patterns:
+            matches = re.findall(pat, clean_text, re.IGNORECASE)
+            for m in matches:
+                m_clean = m.strip()
+                if m_clean.lower().startswith("the "):
+                    m_clean = m_clean[4:]
+                if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
+                    entities.append(m_clean)
+
         # Capitalized Proper Nouns, PascalCase & Snake_case code identifiers (CASE SENSITIVE, NO re.IGNORECASE!)
         capitalized_patterns = [
             r"\b[A-Z][a-z0-9]+(?:[A-Z][a-zA-Z0-9]*)+\b",  # PascalCase: ColorSwitcherStrategy, PlayerStrategy
@@ -553,18 +574,19 @@ class SpreadingActivationRetriever:
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
-        # Extract salient technical and domain noun tokens for robust seed matching
+        # Extract salient technical and domain noun tokens for robust seed matching (including 4-digit years)
         tokens = re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)
         existing_lower = {e.lower() for e in entities}
         for tok in tokens:
             t_lower = tok.lower()
+            is_valid_year = t_lower.isdigit() and len(t_lower) == 4 and (t_lower.startswith("1") or t_lower.startswith("2"))
             if (
                 t_lower not in self.QUESTION_STOPWORDS
                 and t_lower != pred_token
                 and len(t_lower) >= 3
                 and t_lower not in self.IRREGULAR_LEMMA_MAP
                 and t_lower not in existing_lower
-                and not t_lower.isdigit()
+                and (not t_lower.isdigit() or is_valid_year)
                 and not re.match(r"^\d+-\d+$", t_lower)
             ):
                 entities.append(tok)
@@ -1095,10 +1117,28 @@ class SpreadingActivationRetriever:
         has_rich_literals = any(isinstance(getattr(e, 'literal', None), str) and len(e.literal.split()) >= 3 for e in ordered_events)
         sentences: List[str] = []
         seen_sentences: Set[str] = set()
+        doc_grouped_sentences: Dict[str, List[str]] = {}
+        has_any_doc_tags = False
+
         for ev in ordered_events:
+            doc_tag = None
+            if ev.parent_cid and re.match(r"^(?:Document|Passage)\s*\[?\d+\]?", str(ev.parent_cid), re.IGNORECASE):
+                doc_tag = str(ev.parent_cid).strip()
+            elif hasattr(ev, "chapter_title") and getattr(ev, "chapter_title", None):
+                doc_tag = str(getattr(ev, "chapter_title")).strip()
+            elif isinstance(ev.literal, str) and re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", ev.literal, re.IGNORECASE):
+                m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", ev.literal, re.IGNORECASE)
+                if m_doc:
+                    doc_tag = m_doc.group(1).strip()
+
+            if doc_tag:
+                has_any_doc_tags = True
+
             clause_text = ""
             if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:
                 clause_text = ev.literal.strip()
+                if doc_tag and clause_text.lower().startswith(doc_tag.lower()):
+                    clause_text = re.sub(r"^" + re.escape(doc_tag) + r"[:.\-\s]*", "", clause_text, flags=re.IGNORECASE).strip()
             elif not has_rich_literals:
                 clause = self.realizer._realize_clause(subgraph, ev)
                 if clause:
@@ -1114,7 +1154,21 @@ class SpreadingActivationRetriever:
                 norm = clause_text.lower().strip()
                 if norm not in seen_sentences:
                     seen_sentences.add(norm)
-                    sentences.append(clause_text[0].upper() + clause_text[1:])
+                    formatted_sent = clause_text[0].upper() + clause_text[1:]
+                    if doc_tag:
+                        doc_grouped_sentences.setdefault(doc_tag, []).append(formatted_sent)
+                    else:
+                        doc_grouped_sentences.setdefault("", []).append(formatted_sent)
+
+        if has_any_doc_tags:
+            for d_tag, s_list in doc_grouped_sentences.items():
+                if d_tag:
+                    sentences.append(f"{d_tag} (Excerpt): {' '.join(s_list)}")
+                else:
+                    sentences.append(" ".join(s_list))
+        else:
+            for s_list in doc_grouped_sentences.values():
+                sentences.extend(s_list)
 
         # Assemble final context sentences: prioritize verified encyclopedic relations
         all_sentences: List[str] = []
@@ -1337,16 +1391,16 @@ class SpreadingActivationRetriever:
         detected_depth = self.detect_query_hop_depth(q_text) if q_text else 2
 
         effective_depth = max_depth
-        if max_depth == 2 and detected_depth > 2:
-            effective_depth = detected_depth
+        if max_depth == 2 and detected_depth >= 3:
+            effective_depth = max(3, detected_depth)
 
         eff_decay = decay if decay is not None else self.decay
         eff_threshold = threshold if threshold is not None else self.threshold
 
         if effective_depth >= 3 and decay is None:
-            eff_decay = max(self.decay, 0.82)
+            eff_decay = max(self.decay, 0.85)
         if effective_depth >= 3 and threshold is None:
-            eff_threshold = min(self.threshold, 0.18 if effective_depth >= 4 else 0.22)
+            eff_threshold = min(self.threshold, 0.18 if effective_depth >= 4 else 0.20)
 
         return self.traverse_subgraph(
             seed_cids=seed_cids,
@@ -1368,11 +1422,16 @@ class SpreadingActivationRetriever:
         threshold: Optional[float] = None,
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
+        detected_depth = self.detect_query_hop_depth(query) if query else 2
+        effective_depth = max_depth
+        if max_depth == 2 and detected_depth >= 3:
+            effective_depth = max(3, detected_depth)
+
         subgraph = self.retrieve_subgraph_for_query(
             query=query,
             page_table=page_table,
             top_k=top_k,
-            max_depth=max_depth,
+            max_depth=effective_depth,
             decay=decay,
             threshold=threshold,
         )

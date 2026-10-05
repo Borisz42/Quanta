@@ -212,6 +212,71 @@ def extract_context_from_system(messages: Sequence[ChatMessage]) -> Tuple[Option
 
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Session-Isolated Pipeline Pool
+# -----------------------------------------------------------------------------
+
+class PipelinePool:
+    """Manages session-isolated CognitivePipeline instances for concurrent benchmark evaluation."""
+
+    def __init__(self, config: QuantaProxyConfig):
+        self.config = config
+        self.default_pipeline = config.pipeline or CognitivePipeline(
+            transducer_backend=config.transducer_backend,
+            page_table_path=config.page_table_path,
+        )
+        self.session_pipelines: Dict[str, CognitivePipeline] = {}
+        self.session_hashes: Dict[str, Set[str]] = {}
+        self._default_hashes: Set[str] = set()
+        self._lock = asyncio.Lock()
+
+    async def get_pipeline(self, session_id: Optional[str]) -> CognitivePipeline:
+        if not session_id or session_id == "default":
+            return self.default_pipeline
+        async with self._lock:
+            if session_id not in self.session_pipelines:
+                logger.info("Initializing isolated CognitivePipeline for session '%s'", session_id)
+                self.session_pipelines[session_id] = CognitivePipeline(
+                    transducer_backend=self.config.transducer_backend,
+                    page_table_path=":memory:",
+                )
+            return self.session_pipelines[session_id]
+
+    def get_ingested_hashes(self, session_id: Optional[str]) -> Set[str]:
+        if not session_id or session_id == "default":
+            return self._default_hashes
+        if session_id not in self.session_hashes:
+            self.session_hashes[session_id] = set()
+        return self.session_hashes[session_id]
+
+    def reset_session(self, session_id: Optional[str], pipeline: Optional[CognitivePipeline] = None) -> None:
+        pipe = pipeline or (self.session_pipelines.get(session_id) if session_id and session_id != "default" else self.default_pipeline)
+        if pipe is not None:
+            if hasattr(pipe, "reset"):
+                pipe.reset()
+            else:
+                if hasattr(pipe, "active_canvas") and pipe.active_canvas is not None:
+                    pipe.active_canvas.clear()
+                if hasattr(pipe, "entity_engine") and hasattr(pipe.entity_engine, "manifest"):
+                    pipe.entity_engine.manifest.reset()
+                if hasattr(pipe, "stitcher") and pipe.stitcher is not None:
+                    pipe.stitcher.reset()
+                if hasattr(pipe, "merkle_book"):
+                    from core.asg import HierarchicalMerkleBook
+                    pipe.merkle_book = HierarchicalMerkleBook()
+                if hasattr(pipe, "page_table") and pipe.page_table is not None:
+                    if hasattr(pipe.page_table, "clear"):
+                        pipe.page_table.clear()
+                    elif getattr(pipe.page_table, "db_path", None) == ":memory:":
+                        from memory.page_table import PageTable
+                        pipe.page_table = PageTable(db_path=":memory:")
+                if hasattr(pipe, "episodic_entity_registry"):
+                    pipe.episodic_entity_registry.clear()
+        hashes = self.get_ingested_hashes(session_id)
+        hashes.clear()
+
+
+# -----------------------------------------------------------------------------
 # Proxy Application Factory
 # -----------------------------------------------------------------------------
 
@@ -233,15 +298,9 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Initialize or attach pipeline
-    pipeline: CognitivePipeline
-    if cfg.pipeline is not None:
-        pipeline = cfg.pipeline
-    else:
-        pipeline = CognitivePipeline(
-            transducer_backend=cfg.transducer_backend,
-            page_table_path=cfg.page_table_path,
-        )
+    # Initialize session-isolated pipeline pool
+    pool = PipelinePool(cfg)
+    pipeline = pool.default_pipeline
 
     # Telemetry state
     stats = {
@@ -254,6 +313,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
     # Store state on app
     app.state.config = cfg
+    app.state.pool = pool
     app.state.pipeline = pipeline
     app.state.stats = stats
     app.state.ingested_turn_hashes = set()
@@ -290,22 +350,12 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         )
 
     @app.post("/v1/quanta/reset")
-    async def reset_quanta_memory():
+    async def reset_quanta_memory(
+        x_quanta_session_id: Optional[str] = Header(None, alias="X-Quanta-Session-ID"),
+    ):
         """Flushes ephemeral working memory, resets ActiveCanvas and clears ingested hashes."""
-        if hasattr(pipeline, "active_canvas"):
-            pipeline.active_canvas.clear()
-        if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
-            pipeline.entity_engine.manifest.reset()
-        if hasattr(pipeline, "stitcher"):
-            pipeline.stitcher.reset()
-        if hasattr(pipeline, "merkle_book"):
-            from core.asg import HierarchicalMerkleBook
-            pipeline.merkle_book = HierarchicalMerkleBook()
-        if hasattr(pipeline, "page_table") and getattr(pipeline.page_table, "db_path", None) == ":memory:":
-            from memory.page_table import PageTable
-            pipeline.page_table = PageTable(db_path=":memory:")
-        app.state.ingested_turn_hashes = set()
-        return {"status": "ok", "message": "QUANTA memory and session hashes reset successfully"}
+        pool.reset_session(x_quanta_session_id)
+        return {"status": "ok", "message": f"QUANTA memory and session hashes reset successfully for session {x_quanta_session_id or 'default'}"}
 
     # -------------------------------------------------------------------------
     # Chat Completions Endpoint
@@ -315,6 +365,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
     async def chat_completions(
         request: ChatCompletionRequest,
         raw_request: Request,
+        x_quanta_session_id: Optional[str] = Header(None, alias="X-Quanta-Session-ID"),
         x_quanta_threshold: Optional[int] = Header(None, alias="X-Quanta-Threshold"),
         x_quanta_format: Optional[str] = Header(None, alias="X-Quanta-Format"),
         x_quanta_force_enrich: Optional[bool] = Header(None, alias="X-Quanta-Enrich"),
@@ -328,28 +379,11 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         t0 = time.perf_counter()
         stats["total_requests"] += 1
 
+        pipeline = await pool.get_pipeline(x_quanta_session_id)
+        ingested_turn_hashes = pool.get_ingested_hashes(x_quanta_session_id)
+
         if x_quanta_reset:
-            if hasattr(pipeline, "reset"):
-                pipeline.reset()
-            else:
-                if hasattr(pipeline, "active_canvas") and pipeline.active_canvas is not None:
-                    pipeline.active_canvas.clear()
-                if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
-                    pipeline.entity_engine.manifest.reset()
-                if hasattr(pipeline, "stitcher") and pipeline.stitcher is not None:
-                    pipeline.stitcher.reset()
-                if hasattr(pipeline, "merkle_book"):
-                    from core.asg import HierarchicalMerkleBook
-                    pipeline.merkle_book = HierarchicalMerkleBook()
-                if hasattr(pipeline, "page_table") and pipeline.page_table is not None:
-                    if hasattr(pipeline.page_table, "clear"):
-                        pipeline.page_table.clear()
-                    elif getattr(pipeline.page_table, "db_path", None) == ":memory:":
-                        from memory.page_table import PageTable
-                        pipeline.page_table = PageTable(db_path=":memory:")
-                if hasattr(pipeline, "episodic_entity_registry"):
-                    pipeline.episodic_entity_registry.clear()
-            app.state.ingested_turn_hashes = set()
+            pool.reset_session(x_quanta_session_id, pipeline)
 
         # Handle global knowledge base mounting on demand
         if x_quanta_global_kb:
@@ -443,9 +477,9 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                         speaker = "Human" if m.role == "user" else "Assistant"
                         turn_text = f"{speaker}: {m.content.strip()}"
                         turn_hash = hashlib.sha256(turn_text.encode("utf-8")).hexdigest()
-                        if turn_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                        if turn_hash not in ingested_turn_hashes:
                             history_text_blocks.append(turn_text)
-                            app.state.ingested_turn_hashes.add(turn_hash)
+                            ingested_turn_hashes.add(turn_hash)
 
                 if history_text_blocks:
                     history_text = "\n\n".join(history_text_blocks)
@@ -460,11 +494,11 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             # 2. Ingest single-query user context document (cold-start single query)
             if doc_from_user:
                 doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
-                if doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                if doc_hash not in ingested_turn_hashes:
                     try:
                         is_cold_start = True
                         await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
-                        app.state.ingested_turn_hashes.add(doc_hash)
+                        ingested_turn_hashes.add(doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
                         logger.error("Error during user context document ASG ingestion: %s", e)
@@ -472,11 +506,11 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             # 3. Ingest system context document if present
             if doc_from_system:
                 sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
-                if sys_doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
+                if sys_doc_hash not in ingested_turn_hashes:
                     try:
                         is_cold_start = True
                         await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
-                        app.state.ingested_turn_hashes.add(sys_doc_hash)
+                        ingested_turn_hashes.add(sys_doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
                         logger.error("Error during system context document ASG ingestion: %s", e)
@@ -493,7 +527,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
                 effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else cfg.max_context_tokens
                 if num_doc_headings >= 15 or query_hop_depth >= 3:
-                    effective_max_tokens = max(effective_max_tokens, 1200)
+                    effective_max_tokens = max(effective_max_tokens, 2000)
 
                 retrieved_context = await asyncio.to_thread(
                     pipeline.retrieve_context,
