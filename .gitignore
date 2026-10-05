@@ -185,6 +185,11 @@ cython_debug/
 # QUANTA generated artifacts and datasets
 output/*
 !output/canonical_slots_layout.json
+!output/paired_benchmark_report.md
+!output/publication/
+!output/publication/**
+!output/submissions/
+!output/submissions/**
 !output/.gitkeep
 /data/*
 !/data/.gitkeep

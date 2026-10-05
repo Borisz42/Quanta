@@ -1,0 +1,30 @@
+{
+  "musique_ans_preds": {
+    "2hop__153573_109006": "Richard Levinson and William Link",
+    "4hop1__129721_32392_823060_610794": "Aiken County",
+    "3hop2__655849_223623_162182": "Central Coast",
+    "3hop1__241001_568433_47686": "Toronto",
+    "2hop__231890_595414": "Miller County",
+    "2hop__525242_52835": "John D",
+    "2hop__169443_83769": "Matthew McConaughey",
+    "4hop1__436202_765799_282674_759393": "Hayes was born and raised in Appleton, Wisconsin",
+    "3hop1__539312_744503_34754": "U.S. Involvement",
+    "3hop2__90098_60649_10557": "Medieval Latin",
+    "2hop__21104_16335": "Conversions",
+    "2hop__499003_853511": "Sire Records",
+    "2hop__822965_165304": "Grant James Williams",
+    "3hop2__19639_90098_10557": "Old High German",
+    "4hop1__342858_131850_33897_81096": "Phoenix",
+    "2hop__82910_75184": "Claudia Wells",
+    "2hop__156700_63853": "Orange/Gariep River",
+    "4hop1__17192_17130_70784_61381": "does not provide the establishment dates",
+    "3hop1__132798_40769_64047": "4 November 2015",
+    "4hop1__56635_49925_13759_736921": "German State",
+    "2hop__384238_74735": "James McCartney",
+    "2hop__860241_766393": "Edgar Award for best first novel",
+    "2hop__88372_83837": "Lesley Gore",
+    "2hop__156658_155922": "Parramatta River",
+    "3hop2__326964_36852_7713": "461 years"
+  },
+  "model_name": "QUANTA-Qwen3.5-4B-MTP-NeuroSymbolic"
+}
