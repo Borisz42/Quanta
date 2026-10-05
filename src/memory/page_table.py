@@ -393,6 +393,16 @@ class PageTable(MutableMapping):
 
     def _init_schema(self):
         with self._conn:
+            try:
+                self._conn.execute("PRAGMA synchronous = OFF")
+                self._conn.execute("PRAGMA temp_store = MEMORY")
+                if self.db_path != ":memory:":
+                    self._conn.execute("PRAGMA journal_mode = WAL")
+                else:
+                    self._conn.execute("PRAGMA journal_mode = MEMORY")
+                self._conn.execute("PRAGMA cache_size = -64000")
+            except Exception:
+                pass
             self._conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS nodes (
@@ -576,7 +586,10 @@ class PageTable(MutableMapping):
             row = cur.fetchone()
             if not row:
                 if self.global_kb is not None:
-                    return self.global_kb.get_entity_by_cid(cid)
+                    node = self.global_kb.get_entity_by_cid(cid)
+                    if node is None and hasattr(self.global_kb, "get_entity_by_qid"):
+                        node = self.global_kb.get_entity_by_qid(cid)
+                    return node
                 return None
 
             vector_bytes, anchor_id, literal_str, parent_cid, edges_str = row
@@ -698,6 +711,79 @@ class PageTable(MutableMapping):
                         canvas_node.edges[relation].append(target_cid)
                     self.active_canvas.put(canvas_node)
             return True
+
+    def add_edges_batch(self, edge_tuples: Sequence[Tuple[str, str, str]]) -> int:
+        """Batch adds directed relation edges between nodes in a single atomic transaction.
+        
+        Args:
+            edge_tuples: Sequence of (source_cid, relation, target_cid) tuples.
+            
+        Returns:
+            Number of edges processed.
+        """
+        if not edge_tuples:
+            return 0
+        with self._lock:
+            by_source = defaultdict(list)
+            for s_cid, rel, t_cid in edge_tuples:
+                by_source[s_cid].append((rel, t_cid))
+                self._reverse_edges[t_cid].add((s_cid, rel))
+
+            source_cids = list(by_source.keys())
+            placeholders = ",".join("?" for _ in source_cids)
+            cur = self._conn.cursor()
+            cur.execute(f"SELECT cid, edges FROM nodes WHERE cid IN ({placeholders})", source_cids)
+            rows = cur.fetchall()
+
+            update_rows = []
+            for cid, edges_str in rows:
+                try:
+                    edges = json.loads(edges_str) if edges_str else {}
+                except Exception:
+                    edges = {}
+                changed = False
+                for rel, t_cid in by_source[cid]:
+                    if rel not in edges:
+                        edges[rel] = []
+                    if t_cid not in edges[rel]:
+                        edges[rel].append(t_cid)
+                        changed = True
+                if changed:
+                    update_rows.append((json.dumps(edges), cid))
+
+            if update_rows:
+                with self._conn:
+                    self._conn.executemany("UPDATE nodes SET edges = ? WHERE cid = ?", update_rows)
+
+            # Update active canvas if present
+            if self.active_canvas is not None and hasattr(self.active_canvas, "has"):
+                for cid, _ in update_rows:
+                    if self.active_canvas.has(cid):
+                        node = self.active_canvas.get(cid)
+                        if node is not None:
+                            for rel, t_cid in by_source[cid]:
+                                if rel not in node.edges:
+                                    node.edges[rel] = []
+                                if t_cid not in node.edges[rel]:
+                                    node.edges[rel].append(t_cid)
+            return len(edge_tuples)
+
+    def clear(self) -> None:
+        """Clears all stored nodes, subgraphs, vectors, and edge indices from PageTable."""
+        with self._lock:
+            with self._conn:
+                self._conn.executescript(
+                    """
+                    DELETE FROM nodes;
+                    DELETE FROM subgraphs;
+                    DELETE FROM metadata;
+                    """
+                )
+            self.vector_index = SimdHammingIndex()
+            self._reverse_edges.clear()
+            self._literal_index.clear()
+            if self.active_canvas is not None and hasattr(self.active_canvas, "clear"):
+                self.active_canvas.clear()
 
     def get_entity_mapper(self) -> Any:
         """Lazily returns or instantiates WikidataEntityMapper."""

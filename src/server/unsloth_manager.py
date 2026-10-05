@@ -246,6 +246,20 @@ class UnslothServerManager:
         logger.error("Unsloth service failed to respond within %.1f seconds.", timeout)
         return False
 
+    def is_model_loaded(self, model_id: Optional[str] = None) -> bool:
+        """Checks if the target model is currently loaded in GPU VRAM."""
+        target = model_id or self.target_model
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                r = client.get(f"{self.api_url}/models")
+                if r.status_code == 200:
+                    models = r.json().get("data", [])
+                    entry = next((m for m in models if m.get("id") == target), None)
+                    return bool(entry and entry.get("loaded"))
+        except Exception:
+            pass
+        return False
+
     def ensure_model_loaded(
         self,
         model_id: Optional[str] = None,
@@ -265,17 +279,13 @@ class UnslothServerManager:
         self.enforce_gpu_policy()
 
         # Check model loaded state
+        if self.is_model_loaded(target):
+            logger.info("Model '%s' is verified loaded in VRAM.", target)
+            return True
+
+        # Not loaded or not present: trigger load request
         try:
             with httpx.Client(timeout=5.0) as client:
-                r = client.get(f"{self.api_url}/models")
-                if r.status_code == 200:
-                    models = r.json().get("data", [])
-                    entry = next((m for m in models if m.get("id") == target), None)
-                    if entry and entry.get("loaded"):
-                        logger.info("Model '%s' is verified loaded in VRAM.", target)
-                        return True
-
-                # Not loaded or not present: trigger load request
                 logger.info("Model '%s' is dormant. Sending POST /api/inference/load...", target)
                 load_payload = {
                     "model_path": target,
@@ -289,13 +299,9 @@ class UnslothServerManager:
                     t0 = time.time()
                     while time.time() - t0 < timeout:
                         time.sleep(1.0)
-                        chk = client.get(f"{self.api_url}/models", timeout=5.0)
-                        if chk.status_code == 200:
-                            models = chk.json().get("data", [])
-                            m = next((item for item in models if item.get("id") == target), None)
-                            if m and m.get("loaded"):
-                                logger.info("Model '%s' successfully loaded into VRAM.", target)
-                                return True
+                        if self.is_model_loaded(target):
+                            logger.info("Model '%s' successfully loaded into VRAM.", target)
+                            return True
         except Exception as e:
             logger.warning("Error verifying/loading model '%s': %s", target, e)
 
@@ -328,9 +334,17 @@ class UnslothServerManager:
             "temperature": temperature,
         }
 
+        # Auto-ensure model loaded before dispatching query
+        if not self.is_model_loaded(target):
+            self.ensure_model_loaded(target)
+
         t0 = time.perf_counter()
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(f"{self.api_url}/chat/completions", json=payload)
+            if resp.status_code == 400 and "No model loaded" in resp.text:
+                logger.warning("Unsloth reported no model loaded. Attempting automatic load...")
+                if self.ensure_model_loaded(target):
+                    resp = client.post(f"{self.api_url}/chat/completions", json=payload)
         dt_s = time.perf_counter() - t0
 
         if resp.status_code != 200:

@@ -163,6 +163,26 @@ class CognitivePipeline:
         # 10. Merkle Book State
         self.merkle_book = HierarchicalMerkleBook()
 
+    def reset(self) -> None:
+        """Cleanly resets all working memory, active canvas, page table, and episodic state."""
+        if hasattr(self, "active_canvas") and self.active_canvas is not None:
+            self.active_canvas.clear()
+        if hasattr(self, "entity_engine") and hasattr(self.entity_engine, "manifest"):
+            self.entity_engine.manifest.reset()
+        if hasattr(self, "stitcher") and self.stitcher is not None:
+            self.stitcher.reset()
+        if hasattr(self, "merkle_book"):
+            from core.asg import HierarchicalMerkleBook
+            self.merkle_book = HierarchicalMerkleBook()
+        if hasattr(self, "page_table") and self.page_table is not None:
+            self.page_table.clear()
+            self.page_table.attach_active_canvas(self.active_canvas)
+        if hasattr(self, "fault_handler") and self.fault_handler is not None:
+            self.fault_handler.page_table = self.page_table
+            self.fault_handler.canvas = self.active_canvas
+        if hasattr(self, "episodic_entity_registry"):
+            self.episodic_entity_registry.clear()
+
     def process(
         self,
         text: str,
@@ -352,12 +372,14 @@ class CognitivePipeline:
             if repair_res.extraction_result is not None:
                 extraction = repair_res.extraction_result
             elif repair_res.final_sexpr:
-                extraction = parse_sexpr(repair_res.final_sexpr)
+                try:
+                    extraction = parse_sexpr(repair_res.final_sexpr)
+                except Exception:
+                    extraction = None
             elif repair_res.graph is not None and hasattr(repair_res.graph, "extraction_result"):
                 extraction = repair_res.graph.extraction_result
-            else:
-                if not repair_res.success and repair_res.error_message:
-                    raise ASGCompilationError(repair_res.error_message)
+
+            if extraction is None:
                 extraction = self._invoke_transducer_chunk(
                     chunk_text,
                     cid,
@@ -482,12 +504,14 @@ class CognitivePipeline:
                     if repair_res.extraction_result is not None:
                         extraction = repair_res.extraction_result
                     elif repair_res.final_sexpr:
-                        extraction = parse_sexpr(repair_res.final_sexpr)
+                        try:
+                            extraction = parse_sexpr(repair_res.final_sexpr)
+                        except Exception:
+                            extraction = None
                     elif repair_res.graph is not None and hasattr(repair_res.graph, "extraction_result"):
                         extraction = repair_res.graph.extraction_result
-                    else:
-                        if not repair_res.success and repair_res.error_message:
-                            raise ASGCompilationError(repair_res.error_message)
+
+                    if extraction is None:
                         extraction = await asyncio.to_thread(
                             self._invoke_transducer_chunk,
                             chk.text,
@@ -541,6 +565,8 @@ class CognitivePipeline:
                 episode_graphs.append(g)
 
                 # --- Section 4: Intra-chunk and Cross-chunk Entity Linking ---
+                edges_to_add: List[Tuple[str, str, str]] = []
+
                 # 1. Intra-chunk entity linking (CO_OCCURS / LOCATED_IN)
                 chunk_entities: List[QuantaNode] = list(getattr(g, "entity_nodes", {}).values())
                 if not chunk_entities:
@@ -554,12 +580,12 @@ class CognitivePipeline:
                         is_b_loc = eb.get_slot("TYPE_LOCATION") == 1 or "location" in (eb.anchor or "").lower()
                         is_a_loc = ea.get_slot("TYPE_LOCATION") == 1 or "location" in (ea.anchor or "").lower()
                         if is_b_loc and not is_a_loc:
-                            self.page_table.add_edge(ea.cid, "LOCATED_IN", eb.cid)
+                            edges_to_add.append((ea.cid, "LOCATED_IN", eb.cid))
                         elif is_a_loc and not is_b_loc:
-                            self.page_table.add_edge(eb.cid, "LOCATED_IN", ea.cid)
+                            edges_to_add.append((eb.cid, "LOCATED_IN", ea.cid))
                         else:
-                            self.page_table.add_edge(ea.cid, "CO_OCCURS", eb.cid)
-                            self.page_table.add_edge(eb.cid, "CO_OCCURS", ea.cid)
+                            edges_to_add.append((ea.cid, "CO_OCCURS", eb.cid))
+                            edges_to_add.append((eb.cid, "CO_OCCURS", ea.cid))
 
                 # 2. Cross-chunk associative bridges via episodic entity registry
                 curr_root_ev = g.root or (g.get_node(g.root_cid) if g.root_cid else None)
@@ -580,37 +606,44 @@ class CognitivePipeline:
                                         if len(a_norm) >= 2:
                                             cand_keys.add(a_norm)
 
-                    # Check for prior matches across past chunks
+                    # Check for prior matches across past chunks (bounded to last 3 occurrences to prevent O(N^2) complete graph explosion)
                     matched_records: List[Tuple[QuantaNode, QuantaNode, Optional[QuantaNode]]] = []
                     for k in cand_keys:
                         if k in self.episodic_entity_registry:
-                            matched_records.extend(self.episodic_entity_registry[k])
+                            matched_records.extend(self.episodic_entity_registry[k][-3:])
 
                     # Deduplicate matched records by fold_node CID
                     seen_prev_cids = set()
-                    for prev_ent, prev_fold, prev_ev_root in matched_records:
+                    for prev_ent, prev_fold, prev_ev_root in matched_records[-6:]:
                         if prev_fold.cid in seen_prev_cids or prev_fold.cid == fold_node.cid:
                             continue
                         seen_prev_cids.add(prev_fold.cid)
 
                         # Synthesize CROSS_CHUNK_BRIDGE between fold nodes
-                        self.page_table.add_edge(prev_fold.cid, "CROSS_CHUNK_BRIDGE", fold_node.cid)
-                        self.page_table.add_edge(fold_node.cid, "CROSS_CHUNK_BRIDGE", prev_fold.cid)
+                        edges_to_add.append((prev_fold.cid, "CROSS_CHUNK_BRIDGE", fold_node.cid))
+                        edges_to_add.append((fold_node.cid, "CROSS_CHUNK_BRIDGE", prev_fold.cid))
 
                         # Synthesize CO_OCCURS between the event roots
                         if prev_ev_root is not None and curr_root_ev is not None and prev_ev_root.cid != curr_root_ev.cid:
-                            self.page_table.add_edge(prev_ev_root.cid, "CO_OCCURS", curr_root_ev.cid)
-                            self.page_table.add_edge(curr_root_ev.cid, "CO_OCCURS", prev_ev_root.cid)
+                            edges_to_add.append((prev_ev_root.cid, "CO_OCCURS", curr_root_ev.cid))
+                            edges_to_add.append((curr_root_ev.cid, "CO_OCCURS", prev_ev_root.cid))
 
                         # Synthesize CO_OCCURS between entity nodes across chunks if different CIDs
                         if prev_ent.cid != ent.cid:
-                            self.page_table.add_edge(prev_ent.cid, "CO_OCCURS", ent.cid)
-                            self.page_table.add_edge(ent.cid, "CO_OCCURS", prev_ent.cid)
+                            edges_to_add.append((prev_ent.cid, "CO_OCCURS", ent.cid))
+                            edges_to_add.append((ent.cid, "CO_OCCURS", prev_ent.cid))
 
                     # Register current occurrence under all candidate keys
                     record = (ent, fold_node, curr_root_ev)
                     for k in cand_keys:
                         self.episodic_entity_registry.setdefault(k, []).append(record)
+
+                if edges_to_add:
+                    if hasattr(self.page_table, "add_edges_batch"):
+                        self.page_table.add_edges_batch(edges_to_add)
+                    else:
+                        for s_cid, rel, t_cid in edges_to_add:
+                            self.page_table.add_edge(s_cid, rel, t_cid)
 
                 q_compilation.task_done()
 
@@ -927,18 +960,6 @@ class CognitivePipeline:
     def realize(self, graph: QuantaGraph) -> str:
         """Realize an ASG into compositional, honest English text."""
         return self.realizer.realize_graph(graph)
-
-    def reset(self, clear_page_table: bool = False):
-        """Reset working memory entity manifest, active canvas, stitcher, Merkle book, and optionally page table."""
-        self.entity_engine.reset()
-        self.active_canvas.clear()
-        if hasattr(self, "stitcher") and self.stitcher is not None:
-            self.stitcher.reset()
-        self.merkle_book = HierarchicalMerkleBook()
-        if hasattr(self, "episodic_entity_registry"):
-            self.episodic_entity_registry.clear()
-        if clear_page_table and hasattr(self.page_table, "clear"):
-            self.page_table.clear()
 
     def close(self):
         """Release PageTable and EntityEngine resources."""

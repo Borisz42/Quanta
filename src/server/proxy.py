@@ -323,23 +323,32 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_reset: Optional[bool] = Header(None, alias="X-Quanta-Reset"),
         x_quanta_validate: Optional[bool] = Header(False, alias="X-Quanta-Validate"),
         x_quanta_max_context_tokens: Optional[int] = Header(None, alias="X-Quanta-Max-Context-Tokens"),
+        x_quanta_timeout: Optional[float] = Header(None, alias="X-Quanta-Timeout"),
     ):
         t0 = time.perf_counter()
         stats["total_requests"] += 1
 
         if x_quanta_reset:
-            if hasattr(pipeline, "active_canvas"):
-                pipeline.active_canvas.clear()
-            if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
-                pipeline.entity_engine.manifest.reset()
-            if hasattr(pipeline, "stitcher"):
-                pipeline.stitcher.reset()
-            if hasattr(pipeline, "merkle_book"):
-                from core.asg import HierarchicalMerkleBook
-                pipeline.merkle_book = HierarchicalMerkleBook()
-            if hasattr(pipeline, "page_table") and getattr(pipeline.page_table, "db_path", None) == ":memory:":
-                from memory.page_table import PageTable
-                pipeline.page_table = PageTable(db_path=":memory:")
+            if hasattr(pipeline, "reset"):
+                pipeline.reset()
+            else:
+                if hasattr(pipeline, "active_canvas") and pipeline.active_canvas is not None:
+                    pipeline.active_canvas.clear()
+                if hasattr(pipeline, "entity_engine") and hasattr(pipeline.entity_engine, "manifest"):
+                    pipeline.entity_engine.manifest.reset()
+                if hasattr(pipeline, "stitcher") and pipeline.stitcher is not None:
+                    pipeline.stitcher.reset()
+                if hasattr(pipeline, "merkle_book"):
+                    from core.asg import HierarchicalMerkleBook
+                    pipeline.merkle_book = HierarchicalMerkleBook()
+                if hasattr(pipeline, "page_table") and pipeline.page_table is not None:
+                    if hasattr(pipeline.page_table, "clear"):
+                        pipeline.page_table.clear()
+                    elif getattr(pipeline.page_table, "db_path", None) == ":memory:":
+                        from memory.page_table import PageTable
+                        pipeline.page_table = PageTable(db_path=":memory:")
+                if hasattr(pipeline, "episodic_entity_registry"):
+                    pipeline.episodic_entity_registry.clear()
             app.state.ingested_turn_hashes = set()
 
         # Handle global knowledge base mounting on demand
@@ -347,9 +356,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             if getattr(pipeline.page_table, "global_kb", None) is None:
                 try:
                     from memory.global_kb import GlobalKnowledgeBase
-                    kb_path = Path("data/wikipedia_quanta.db")
+                    repo_root = Path(__file__).resolve().parent.parent.parent
+                    kb_path = repo_root / "data" / "wikipedia_quanta.db"
+                    if not kb_path.exists():
+                        kb_path = Path("data/wikipedia_quanta.db")
                     if kb_path.exists():
                         pipeline.page_table.mount_global_kb(GlobalKnowledgeBase(kb_path))
+                        logger.info("Successfully mounted GlobalKnowledgeBase from %s", kb_path)
                 except Exception as e:
                     logger.warning("Failed to mount GlobalKnowledgeBase: %s", e)
         elif x_quanta_no_global_kb:
@@ -400,13 +413,20 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         t_ingest_ms = 0.0
         t_ret_ms = 0.0
 
-        if should_compress or force_enrich or has_single_query_context:
+        should_enrich_or_compress = (
+            should_compress
+            or force_enrich
+            or (bool(x_quanta_global_kb) and not has_single_query_context)
+        )
+
+        if should_enrich_or_compress:
             logger.info(
-                "Triggering QUANTA context compression: raw_tokens=%d, threshold=%d, prior_turns=%d, has_single_ctx=%s",
+                "Triggering QUANTA context compression/enrichment: raw_tokens=%d, threshold=%d, prior_turns=%d, has_single_ctx=%s, global_kb=%s",
                 raw_tokens,
                 threshold,
                 len(dialogue_history),
                 has_single_query_context,
+                bool(x_quanta_global_kb),
             )
 
             import hashlib
@@ -429,7 +449,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     if history_text.strip():
                         try:
                             is_cold_start = True
-                            pipeline.process(history_text, validate=bool(x_quanta_validate))
+                            await asyncio.to_thread(pipeline.process, history_text, validate=bool(x_quanta_validate))
                             stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                         except Exception as e:
                             logger.warning("Error during dialogue history ASG ingestion: %s", e)
@@ -440,7 +460,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 if doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
                     try:
                         is_cold_start = True
-                        pipeline.process(doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
+                        await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
                         app.state.ingested_turn_hashes.add(doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
@@ -452,7 +472,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 if sys_doc_hash not in getattr(app.state, "ingested_turn_hashes", set()):
                     try:
                         is_cold_start = True
-                        pipeline.process(doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
+                        await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
                         app.state.ingested_turn_hashes.add(sys_doc_hash)
                         stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
                     except Exception as e:
@@ -472,7 +492,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 if num_doc_headings >= 15 or query_hop_depth >= 3:
                     effective_max_tokens = max(effective_max_tokens, 1200)
 
-                retrieved_context = pipeline.retrieve_context(
+                retrieved_context = await asyncio.to_thread(
+                    pipeline.retrieve_context,
                     query=user_query,
                     format=format_type,
                     max_tokens=effective_max_tokens,
@@ -587,6 +608,12 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
         tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
 
+        effective_timeout = (
+            x_quanta_timeout
+            if x_quanta_timeout is not None
+            else max(cfg.timeout_seconds, 60.0 + (raw_tokens / 1000.0) * 3.0)
+        )
+
         if request.stream:
             return await _handle_streaming_response(
                 backend_url=cfg.backend_url,
@@ -597,7 +624,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 fallback_pipeline=pipeline if cfg.fallback_to_local else None,
                 query=user_query,
                 context=retrieved_context,
-                timeout=cfg.timeout_seconds,
+                timeout=effective_timeout,
             )
         else:
             return await _handle_unary_response(
@@ -609,7 +636,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 fallback_pipeline=pipeline if cfg.fallback_to_local else None,
                 query=user_query,
                 context=retrieved_context,
-                timeout=cfg.timeout_seconds,
+                timeout=effective_timeout,
                 tracer=tracer,
                 quanta_meta=quanta_meta,
             )

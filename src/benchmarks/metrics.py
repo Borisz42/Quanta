@@ -121,6 +121,41 @@ class BenchmarkMetrics:
         return round(f1, 4)
 
     @staticmethod
+    def extractive_match_score(prediction: str, ground_truth: str) -> bool:
+        """Determines whether ground truth is stated as an affirmative answer in prediction,
+        excluding negative hedging statements (e.g. 'cannot be determined', 'no mention of')."""
+        if not prediction or not ground_truth:
+            return False
+
+        pred_norm = normalize_answer(prediction)
+        gold_norm = normalize_answer(ground_truth)
+        if pred_norm == gold_norm:
+            return True
+
+        # Guard against negative hedging statements when gold is not 'unknown'
+        if gold_norm not in ("unknown", "uncertain"):
+            hedging_patterns = [
+                r"\bcannot be determined\b",
+                r"\bcan not be determined\b",
+                r"\bno mention of\b",
+                r"\bnot mentioned\b",
+                r"\bnot contain the information\b",
+                r"\bdoes not state\b",
+                r"\binsufficient information\b",
+                r"\buncertain based on\b",
+            ]
+            for pat in hedging_patterns:
+                if re.search(pat, prediction, re.IGNORECASE):
+                    # Only pass if there is an explicit answer block despite the hedging
+                    if not re.search(r"\banswer\s*[:\-]\s*[\*\_]*" + re.escape(ground_truth) + r"[\*\_]*", prediction, re.IGNORECASE):
+                        return False
+
+        # Check word-boundary match of normalized gold answer in normalized prediction
+        if gold_norm in pred_norm:
+            return bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", pred_norm))
+        return False
+
+    @staticmethod
     def extract_multiple_choice_key(text: str) -> Optional[str]:
         """Extracts choice letter (A, B, C, D) from text output with closing-answer prioritization."""
         if not text:
@@ -133,12 +168,23 @@ class BenchmarkMetrics:
         if re.match(r"^\s*\(?([A-Da-d])\)?\.?\s*$", clean):
             return clean.strip(" ().[]").upper()
 
-        # 1. Explicit answer anchors (case-insensitive keyword, capturing choice letter A-D)
-        # Regex 1 from Section 2:
-        # r"(?:correct\s+(?:choice|answer)\s+is|therefore,?\s*(?:the\s+answer\s+is)?|answer\s*[:\-])\s*\(?([A-D])\)?"
+        lines = [line.strip() for line in clean.splitlines() if line.strip()]
+
+        # 1. Leading choice on first non-empty line: e.g. "Answer: A", "(A)", "A. The ..."
+        if lines:
+            m_lead = re.match(r"^(?:(?:answer|choice|option|correct\s+choice)\s*[:\-]?\s*)?[\(\[]?([A-D])[\)\]]?(?:\.|\:|\)|\s+|$)", lines[0], re.IGNORECASE)
+            if m_lead and not lines[0].lower().startswith("choices:"):
+                # If the first line is solely an answer declaration, take it immediately
+                if len(lines[0].split()) <= 6 or lines[0].lower().startswith(("answer:", "choice:", "option:")):
+                    return m_lead.group(1).upper()
+
+        # 2. Explicit answer anchors throughout text (case-insensitive keyword, capturing choice letter A-D)
         anchor_patterns = [
-            r"(?:(?:the\s+)?(?:correct\s+)?(?:choice|answer)\s*(?:is\s*[:\-]?|[:\-])|therefore,?\s*(?:(?:the\s+)?answer\s*(?:is\s*[:\-]?|[:\-])\s*)?)\s*\[?\(?([A-D])\)?\]?",
+            r"(?:(?:the\s+)?(?:correct\s+)?(?:choice|option|answer)\s*(?:is\s*[:\-]?|[:\-])|therefore,?\s*(?:(?:the\s+)?answer\s*(?:is\s*[:\-]?|[:\-])\s*)?)\s*\[?\(?([A-D])\)?\]?",
+            r"\b(?:answer|choice|option)\s*[:\-]\s*\[?\(?([A-D])\)?\]?",
             r"\bconclu(?:de|sion)\s*(?:is\s*[:\-]?|[:\-])?\s*\[?\(?([A-D])\)?\]?",
+            r"\b([A-D])\s+is\s+the\s+correct\s+(?:choice|answer)\b",
+            r"\bsupports\s+(?:choice|option)\s+\(?([A-D])\)?",
         ]
         all_anchor_matches = []
         for pattern in anchor_patterns:
@@ -149,45 +195,34 @@ class BenchmarkMetrics:
             all_anchor_matches.sort(key=lambda x: x[0])
             return all_anchor_matches[-1][1]
 
-        # 2. Concluding lines examination (last 5 non-empty lines in reverse from bottom to top)
-        # As soon as the lowest line contains a valid choice or anchor, return it without backtracking.
-        lines = [line.strip() for line in clean.splitlines() if line.strip()]
+        # 3. Concluding lines examination (last 5 non-empty lines in reverse from bottom to top)
         for line in reversed(lines[-5:]):
-            # Check line-level anchor
             for pattern in anchor_patterns:
                 line_matches = list(re.finditer(pattern, line, re.IGNORECASE))
                 if line_matches:
                     return line_matches[-1].group(1).upper()
 
-            # Regex 3 from Section 2: Isolated uppercase choice on its own line: r"^\s*([A-D])\s*$"
+            # Isolated uppercase choice on its own line: r"^\s*([A-D])\s*$"
             m_iso = re.match(r"^\s*[\(\[]?([A-D])[\)\]]?\.?\s*$", line)
             if m_iso:
                 return m_iso.group(1).upper()
-
-            # Regex 2 from Section 2: Parenthesized or bracketed choice anywhere in concluding line: r"\(([A-D])\)"
-            m_paren = list(re.finditer(r"(?:\(|\b\[|\*\*|\\boxed\{)([A-D])(?:\)|\b\]|\*\*|\})", line))
-            if m_paren:
-                return m_paren[-1].group(1).upper()
 
             # Explicit option/choice in concluding line: "Option A", "Choice B"
             m_opt = list(re.finditer(r"\b(?:option|choice)\s+([A-D])\b", line, re.IGNORECASE))
             if m_opt:
                 return m_opt[-1].group(1).upper()
 
-            # Strictly case-sensitive isolated uppercase choice token on this concluding line
-            m_last = list(re.finditer(r"\b([A-D])\b", line))
-            if m_last:
-                return m_last[-1].group(1).upper()
+            # Parenthesized or bracketed choice in concluding line if line expresses a choice
+            if any(w in line.lower() for w in ("therefore", "thus", "hence", "correct", "select", "result", "answer", "final")):
+                m_paren = list(re.finditer(r"(?:\(|\b\[|\*\*|\\boxed\{)([A-D])(?:\)|\b\]|\*\*|\})", line))
+                if m_paren:
+                    return m_paren[-1].group(1).upper()
 
-        # 3. Parenthesized / bracketed / bolded / boxed choice anywhere in text (take last match)
-        m_paren_all = list(re.finditer(r"(?:\(|\b\[|\*\*|\\boxed\{)([A-D])(?:\)|\b\]|\*\*|\})", clean))
-        if m_paren_all:
-            return m_paren_all[-1].group(1).upper()
-
-        # 4. Leading choice on first line: e.g. "A. The ...", "(A) The ...", "A: The ..."
-        m_lead = re.match(r"^[\(\[]?([A-D])[\)\]]?(?:\.|\:|\))\s+", clean)
-        if m_lead:
-            return m_lead.group(1).upper()
+        # 4. Fallback leading choice on first line if any
+        if lines:
+            m_lead_gen = re.match(r"^[\(\[]?([A-D])[\)\]]?(?:\.|\:|\))\s+", lines[0])
+            if m_lead_gen:
+                return m_lead_gen.group(1).upper()
 
         return None
 

@@ -264,7 +264,7 @@ class BenchmarkSuiteLoader:
             choices_text = item["choices"]["text"]
             choices_labels = item["choices"]["label"]
             choice_str = "\n".join(f"({lbl}) {txt}" for lbl, txt in zip(choices_labels, choices_text))
-            full_prompt = f"{item['question']}\n\nChoices:\n{choice_str}\n\nConclude your reasoning with 'Answer: [A/B/C/D]'."
+            full_prompt = f"{item['question']}\n\nChoices:\n{choice_str}\n\nState your final choice on the first line as 'Answer: [A/B/C/D]' followed by your explanation, or conclude with 'Answer: [A/B/C/D]'."
             t_cnt = self.estimate_token_count(full_prompt)
 
             gold_key = item["answerKey"]
@@ -686,6 +686,56 @@ class BenchmarkSuiteLoader:
     # 8. Meta BABILong: Multi-Hop Dynamic World-State Tracking in 256k+ Context
     # -------------------------------------------------------------------------
 
+    def load_babilong(
+        self,
+        target_token_lengths: Optional[Sequence[int]] = None,
+        limit: int = 5,
+    ) -> List[BenchmarkSample]:
+        """Loads official Meta BABILong benchmark tasks from Hugging Face (booydar/babilong)
+        across token configurations ('4k', '16k', '64k', '128k', '256k'), falling back to
+        canonical generator if offline.
+        """
+        if target_token_lengths is None:
+            target_token_lengths = [4000, 16000, 64000, 128000, 256000][:limit]
+        samples: List[BenchmarkSample] = []
+        if HAS_DATASETS:
+            for target_tokens in target_token_lengths:
+                cfg_name = f"{target_tokens // 1000}k"
+                try:
+                    logger.info("Loading official booydar/babilong config %s (split qa1)...", cfg_name)
+                    ds = load_dataset("booydar/babilong", cfg_name, split="qa1")
+                    if ds and len(ds) > 0:
+                        item = ds[0]
+                        ctx = item["input"]
+                        q = item["question"].strip()
+                        ans = str(item["target"]).strip()
+                        actual_tokens = self.estimate_token_count(ctx)
+                        samples.append(
+                            BenchmarkSample(
+                                id=f"babilong_{cfg_name}",
+                                suite="babilong",
+                                prompt=q,
+                                context=ctx,
+                                gold_answer=ans,
+                                expected_tokens=[ans.lower()],
+                                token_count=actual_tokens,
+                                metadata={
+                                    "target_tokens": target_tokens,
+                                    "actual_tokens": actual_tokens,
+                                    "config": cfg_name,
+                                    "task": "qa1",
+                                    "source": "official_booydar_babilong",
+                                },
+                            )
+                        )
+                except Exception as e:
+                    logger.warning("Could not load booydar/babilong config %s from HF: %s", cfg_name, e)
+
+        if len(samples) == len(target_token_lengths):
+            return samples
+
+        return self.generate_babilong_samples(target_token_lengths=target_token_lengths)
+
     def generate_babilong_samples(
         self,
         target_token_lengths: Sequence[int] = (4000, 16000, 64000, 128000, 256000),
@@ -798,11 +848,6 @@ class BenchmarkSuiteLoader:
                 )
             )
         return samples
-
-    def load_babilong(self, limit: int = 5) -> List[BenchmarkSample]:
-        """Loads BABILong multi-hop benchmark samples across standard context horizons."""
-        lengths = [4000, 16000, 64000, 128000, 256000][:limit]
-        return self.generate_babilong_samples(target_token_lengths=lengths)
 
     # -------------------------------------------------------------------------
     # 9. Complex Long-Context: Multi-Needle Variable Tracking & Aggregation

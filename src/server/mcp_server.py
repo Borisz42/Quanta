@@ -524,5 +524,25 @@ def run_mcp_stdio(page_table_path: Optional[Union[str, Path]] = None):
     server.run_stdio()
 
 
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="QUANTA Model Context Protocol (MCP) Server")
+    parser.add_argument("--test", action="store_true", help="Run automated MCP tool self-test")
+    parser.add_argument("--interactive", action="store_true", help="Launch interactive MCP test shell")
+    parser.add_argument("--db-path", type=str, default=None, help="Path to PageTable database")
+    args = parser.parse_args()
+
+    if args.test or args.interactive:
+        from server.service_manager import get_service_manager
+        mgr = get_service_manager()
+        if args.interactive:
+            mgr.run_mcp_interactive()
+        else:
+            mgr.run_mcp_test()
+    else:
+        run_mcp_stdio(page_table_path=args.db_path)
+
+
 if __name__ == "__main__":
-    run_mcp_stdio()
+    main()

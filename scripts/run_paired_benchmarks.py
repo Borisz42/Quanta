@@ -119,6 +119,8 @@ def interactive_selection(default_checkpoint_path: Optional[Path] = None) -> Tup
 
     mode_input = input("Execution Mode: [1] Live (HTTP to Unsloth & QUANTA) [2] Mock (Fast CI Simulation) (default: 1): ").strip()
     mode = "mock" if mode_input == "2" else "live"
+    if mode == "live":
+        print(format_ansi("[>] Live mode selected: Backend readiness check & auto-spinup active.", "1;32"))
 
     total_samples = sum(selected.values())
     est_sec = total_samples * (3.5 if mode == "live" else 0.05)
@@ -379,6 +381,9 @@ def main():
     parser.add_argument("--export-submissions", action="store_true", help="Generate official leaderboard submission packages")
     parser.add_argument("--export-latex", action="store_true", help="Export publication LaTeX tables and BibTeX citations")
     parser.add_argument("--interactive", action="store_true", help="Open interactive terminal menu")
+    parser.add_argument("--auto-spawn", dest="auto_spawn", action="store_true", default=True, help="Automatically check and spin up backend services in live mode (default: True)")
+    parser.add_argument("--no-auto-spawn", dest="auto_spawn", action="store_false", help="Disable automatic backend service spinup")
+    parser.add_argument("--target-model", type=str, default="unsloth/Qwen3.5-4B-MTP-GGUF", help="Downstream base LLM model ID")
     args = parser.parse_args()
 
     print_banner()
@@ -391,8 +396,43 @@ def main():
         ablation_mode = args.ablation_mode
         mode = args.mode
 
+        # If resuming and no explicit suite argument was specified, preserve original suite configuration
+        if args.resume and not args.suite and Path(args.checkpoint_file).exists():
+            try:
+                raw_cp = json.loads(Path(args.checkpoint_file).read_text(encoding="utf-8"))
+                if isinstance(raw_cp, dict) and "suite_config" in raw_cp and raw_cp["suite_config"]:
+                    suite_config = raw_cp["suite_config"]
+                    if "ablation_mode" in raw_cp:
+                        ablation_mode = raw_cp["ablation_mode"]
+            except Exception as e:
+                logger.warning("Could not read saved suite_config from checkpoint: %s", e)
+
     print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()}", "1;32"))
     print(format_ansi(f"[>] Target Suites: {suite_config}\n", "1;37"))
+
+    # Automated backend service readiness verification & spinup for Live Mode
+    if mode == "live":
+        from server.service_manager import get_service_manager
+        svc_mgr = get_service_manager()
+        svc_mgr.base_url = args.base_url
+        svc_mgr.quanta_url = args.quanta_url
+        svc_mgr.target_model = args.target_model
+
+        if args.auto_spawn:
+            backend_ready = svc_mgr.ensure_live_backend()
+            if not backend_ready:
+                print(format_ansi("\n[!] FATAL: Live backend services could not be verified or awakened.", "1;31"))
+                print(format_ansi("    Check GPU availability or run with '--mode mock' for simulated evaluation.", "1;33"))
+                sys.exit(1)
+        else:
+            status = svc_mgr.get_service_status()
+            base_ok = status["base_llm"]["running"]
+            proxy_ok = status["quanta_proxy"]["running"]
+            if not base_ok or not proxy_ok:
+                print(format_ansi("\n[!] WARNING: Backend services not fully ready and --no-auto-spawn was set.", "1;31"))
+                print(f"    Base LLM ({args.base_url}): {'ONLINE' if base_ok else 'OFFLINE'}")
+                print(f"    QUANTA Proxy ({args.quanta_url}): {'ONLINE' if proxy_ok else 'OFFLINE'}")
+                print(format_ansi("    Live HTTP requests may encounter connection failures.\n", "1;33"))
 
     checkpoint_mgr = BenchmarkCheckpointManager(
         checkpoint_path=args.checkpoint_file,
@@ -453,7 +493,7 @@ def main():
             samples = loader.generate_niah_samples(target_token_lengths=lengths)
         elif suite_name == "babilong":
             lengths = [4000, 16000, 64000, 128000, 256000][:sample_cnt]
-            samples = loader.generate_babilong_samples(target_token_lengths=lengths)
+            samples = loader.load_babilong(target_token_lengths=lengths)
         elif suite_name == "long_variable_tracking":
             lengths = [4000, 16000, 64000, 128000, 256000][:sample_cnt]
             samples = loader.generate_variable_tracking_samples(target_token_lengths=lengths)

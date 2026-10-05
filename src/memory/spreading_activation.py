@@ -254,6 +254,20 @@ class SpreadingActivationRetriever:
         "mikor", "miért", "hogyan", "volt", "voltak", "lett", "lettek", "van", "vannak",
         "az", "egy", "és", "vagy", "hogy", "után", "alatt", "előtt", "által", "szerint",
         "nem", "sem", "meg", "el", "fel", "le", "ki", "be", "át", "rá",
+        # Generic query verbs & procedural terms
+        "know", "knew", "known", "want", "wants", "wanted", "like", "likely", "unlikely",
+        "make", "makes", "made", "respond", "response", "different", "difference",
+        "signal", "signals", "step", "steps", "result", "results", "process", "processes",
+        "following", "statement", "statements", "answer", "choose", "select", "state",
+        "group", "groups", "true", "false", "question", "questions", "during",
+        "effect", "effects", "human", "humans", "beginning", "beginnings", "end", "ends",
+        "explanation", "explanations", "reasoning", "choice", "choices", "option", "options",
+        "conclude", "conclusion", "final", "line", "letter",
+        "first", "second", "third", "fourth", "fifth", "last", "one", "two", "three", "four", "five",
+        # Comparative adjectives & change terms
+        "longer", "shorter", "faster", "slower", "higher", "lower", "larger", "smaller", "greater", "lesser",
+        "increase", "increases", "increased", "increasing", "decrease", "decreases", "decreased", "decreasing",
+        "become", "becomes", "became", "becoming",
     }
 
     def __init__(
@@ -482,6 +496,18 @@ class SpreadingActivationRetriever:
         """Extracts candidate named entity mentions or noun phrases from query text."""
         entities: List[str] = []
 
+        # Clean meta-prompt instructions from query_text before entity extraction
+        clean_text = query_text
+        meta_instruction_patterns = [
+            r"State your final choice.*$",
+            r"Answer with only True, False.*$",
+            r"Provide only the.*$",
+            r"Answer:?\s*\[?[A-D]\]?.*$",
+            r"Is the following statement.*?\:\s*",
+        ]
+        for mp in meta_instruction_patterns:
+            clean_text = re.sub(mp, "", clean_text, flags=re.IGNORECASE | re.MULTILINE)
+
         # Common domain-specific multi-word phrases (case-insensitive)
         known_patterns = [
             r"\b[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\b",              # WASP-96b, SKU-901, tok_visa_4242, tok_declined, GLASS-z12
@@ -500,7 +526,7 @@ class SpreadingActivationRetriever:
             r"\bUNO\b",
         ]
         for pat in known_patterns:
-            matches = re.findall(pat, query_text, re.IGNORECASE)
+            matches = re.findall(pat, clean_text, re.IGNORECASE)
             for m in matches:
                 m_clean = m.strip()
                 if m_clean.lower().startswith("the "):
@@ -518,7 +544,7 @@ class SpreadingActivationRetriever:
             r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)+\b", # Multi-word Title Case: James Webb Space Telescope, Eleanor Vance
         ]
         for pat in capitalized_patterns:
-            matches = re.findall(pat, query_text)
+            matches = re.findall(pat, clean_text)
             for m in matches:
                 m_clean = m.strip()
                 first_word = m_clean.split()[0].lower() if m_clean.split() else ""
@@ -528,7 +554,7 @@ class SpreadingActivationRetriever:
                     entities.append(m_clean)
 
         # Extract salient technical and domain noun tokens for robust seed matching
-        tokens = re.findall(r"\b[\w'-]+\b", query_text, re.UNICODE)
+        tokens = re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)
         existing_lower = {e.lower() for e in entities}
         for tok in tokens:
             t_lower = tok.lower()
@@ -568,36 +594,46 @@ class SpreadingActivationRetriever:
         Returns:
             List of (cid, hamming_distance) pairs sorted by distance.
         """
-        if len(page_table.vector_index) == 0:
+        has_vector_index = len(page_table.vector_index) > 0
+        has_global_kb = getattr(page_table, "global_kb", None) is not None
+        if not has_vector_index and not has_global_kb:
             return []
 
         query_vec: Union[QuantaVector, bytes, np.ndarray]
         named_entities: List[str] = []
 
         if isinstance(query, str):
-            q_graph = self.compile_query_asg(query)
-            query_vec = q_graph.root.vector if q_graph.root else QuantaVector.zeros()
-            for n in q_graph.nodes.values():
-                if n.literal and n.literal != "?X" and isinstance(n.literal, str):
-                    if n.get_slot("TYPE_EVENT") != 1 and not (n.anchor and "(v)" in n.anchor):
-                        named_entities.append(n.literal.lower())
+            named_entities = self._extract_salient_entities(query, None)
+            try:
+                q_graph = self.compile_query_asg(query)
+                query_vec = q_graph.root.vector if q_graph.root else QuantaVector.zeros()
+                for n in q_graph.nodes.values():
+                    if n.literal and n.literal != "?X" and isinstance(n.literal, str):
+                        if n.get_slot("TYPE_EVENT") != 1 and not (n.anchor and "(v)" in n.anchor):
+                            if n.literal.lower() not in [e.lower() for e in named_entities]:
+                                named_entities.append(n.literal.lower())
+            except Exception:
+                q_graph = None
+                query_vec = QuantaVector.zeros()
         elif isinstance(query, QuantaGraph):
+            q_graph = query
             query_vec = query.root.vector if query.root else QuantaVector.zeros()
             for n in query.nodes.values():
                 if n.literal and n.literal != "?X" and isinstance(n.literal, str):
                     if n.get_slot("TYPE_EVENT") != 1 and not (n.anchor and "(v)" in n.anchor):
                         named_entities.append(n.literal.lower())
         elif isinstance(query, (QuantaVector, bytes, np.ndarray)):
+            q_graph = None
             query_vec = query
         else:
             raise TypeError(f"Unsupported query type: {type(query)}")
 
-        pred_lemma = q_graph.root.literal if (isinstance(query, (str, QuantaGraph)) and q_graph.root and isinstance(q_graph.root.literal, str)) else None
+        pred_lemma = q_graph.root.literal if (q_graph and q_graph.root and isinstance(q_graph.root.literal, str)) else None
 
-        # 1. Execute fast SIMD bitwise Hamming search
-        matches = page_table.vector_index.search(query_vec, top_k=top_k)
+        # 1. Execute fast SIMD bitwise Hamming search if vector index present
+        matches = page_table.vector_index.search(query_vec, top_k=top_k) if has_vector_index else []
 
-        # 2. If named entities are present, boost matching entity CIDs if found in PageTable
+        # 2. If named entities are present, boost matching entity CIDs if found in PageTable or Global KB
         if named_entities or pred_lemma:
             existing_cids = {cid for cid, _ in matches}
             generic_stop = {
@@ -624,7 +660,7 @@ class SpreadingActivationRetriever:
                     continue
                 if hasattr(page_table, "find_cids_by_literal"):
                     cids = page_table.find_cids_by_literal(ent_clean, limit=per_ent_limit)
-                else:
+                elif hasattr(page_table, "_conn") and page_table._conn is not None:
                     cur = page_table._conn.cursor()
                     cur.execute(
                         "SELECT cid FROM nodes WHERE LOWER(literal) = ? LIMIT ?",
@@ -632,6 +668,18 @@ class SpreadingActivationRetriever:
                     )
                     rows = cur.fetchall()
                     cids = [r[0] for r in rows]
+                else:
+                    cids = []
+
+                # Query Global Knowledge Base if mounted and entity not yet found
+                if has_global_kb:
+                    try:
+                        kb_matches = page_table.global_kb.lookup_entity(ent_clean, limit=3)
+                        for kn in kb_matches:
+                            if kn.cid and kn.cid not in cids:
+                                cids.append(kn.cid)
+                    except Exception as e:
+                        logger.warning("Error querying global KB for entity '%s': %s", ent_clean, e)
 
                 for ent_cid in cids:
                     if ent_cid not in boosted_cids:
@@ -642,7 +690,7 @@ class SpreadingActivationRetriever:
 
             remaining_matches = [(cid, dist) for cid, dist in matches if cid not in boosted_cids]
 
-            # If exact named entities matched the query, do not contaminate seeds with random distant SIMD matches from unrelated chapters
+            # If exact named entities matched the query, prioritize them as seeds
             if boosted:
                 return boosted[:max(top_k, min(len(boosted), 20))]
 
@@ -938,8 +986,40 @@ class SpreadingActivationRetriever:
         entity_names: List[str] = []
         IGNORED_CALLERS = {"list", "dict", "tuple", "optional", "any", "returns none", "none", "true", "false", "typevar", "int", "str", "bool", "float"}
         for n in subgraph.nodes.values():
-            if isinstance(n.literal, dict) or (n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:"))):
+            if n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:")):
                 continue
+
+            # Handle encyclopedic / global KB nodes (where literal is a payload dict)
+            if isinstance(n.literal, dict):
+                label = n.literal.get("label") or n.anchor or "Entity"
+                desc = n.literal.get("description", "")
+                if desc and isinstance(desc, str):
+                    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", desc) if s.strip()]
+                    brief_desc = " ".join(sents[:2]).strip() if sents else desc.strip()
+                    if brief_desc and brief_desc not in rel_descriptions:
+                        rel_descriptions.append(brief_desc)
+                entity_names.append(label)
+                for rel, targets in n.edges.items():
+                    for t in targets:
+                        t_label = str(t)
+                        if rel == "INSTANCE_OF":
+                            fact = f"{label} is an instance of {t_label}."
+                            if fact not in rel_descriptions:
+                                rel_descriptions.append(fact)
+                        elif rel == "SUBCLASS_OF":
+                            fact = f"{label} is a subclass of {t_label}."
+                            if fact not in rel_descriptions:
+                                rel_descriptions.append(fact)
+                        elif rel in ("COUNTRY", "LOCATED_IN"):
+                            fact = f"{label} is located in {t_label}."
+                            if fact not in rel_descriptions:
+                                rel_descriptions.append(fact)
+                        elif rel == "HAS_PART":
+                            fact = f"{label} has part {t_label}."
+                            if fact not in rel_descriptions:
+                                rel_descriptions.append(fact)
+                continue
+
             name = str(n.literal) if n.literal is not None else (n.anchor or n.cid[:8])
             if name == "?X" or not name.strip() or name.lower().strip() in IGNORED_CALLERS:
                 continue
@@ -1024,6 +1104,11 @@ class SpreadingActivationRetriever:
                 if clause:
                     clause_text = clause.strip()
             if clause_text and not any(bad in clause_text.lower() for bad in ("handlered", "at at", "on on")):
+                words = clause_text.split()
+                if len(words) <= 2:
+                    continue
+                if words[0].lower() in ("someone", "something") and len(words) <= 3:
+                    continue
                 if not clause_text.endswith((".", "!", "?")):
                     clause_text += "."
                 norm = clause_text.lower().strip()
@@ -1031,20 +1116,25 @@ class SpreadingActivationRetriever:
                     seen_sentences.add(norm)
                     sentences.append(clause_text[0].upper() + clause_text[1:])
 
-        # Auxiliary encyclopedic relation descriptions follow primary event narrative
-        for desc in rel_descriptions:
-            norm = desc.lower().strip()
-            if norm not in seen_sentences:
-                seen_sentences.add(norm)
-                sentences.append(desc)
+        # Assemble final context sentences: prioritize verified encyclopedic relations
+        all_sentences: List[str] = []
+        if rel_descriptions:
+            for desc in rel_descriptions:
+                norm = desc.lower().strip()
+                if norm not in seen_sentences:
+                    seen_sentences.add(norm)
+                    all_sentences.append(desc)
+            all_sentences.extend(sentences)
+        else:
+            all_sentences = sentences
 
-        if not sentences and subgraph.root:
+        if not all_sentences and subgraph.root:
             # Fallback to direct realization
             full_text = self.realizer.realize_graph(subgraph)
             if full_text:
-                sentences.append(full_text)
+                all_sentences.append(full_text)
 
-        full_context = " ".join(sentences)
+        full_context = " ".join(all_sentences)
         return self._truncate_to_token_budget(full_context, max_tokens)
 
     def _format_sexpr_context(self, subgraph: QuantaGraph, max_tokens: int) -> str:

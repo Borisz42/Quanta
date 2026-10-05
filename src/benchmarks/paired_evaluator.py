@@ -187,6 +187,7 @@ class PairedEvaluator:
         headers: Optional[Dict[str, str]] = None,
         max_tokens: int = 150,
         temperature: float = 0.1,
+        timeout: Optional[float] = None,
     ) -> Tuple[str, int, int, float, float, float, Dict[str, Any]]:
         """Makes live chat completion call, measuring TTFT, latency, throughput, and metadata."""
         t0 = time.perf_counter()
@@ -199,7 +200,7 @@ class PairedEvaluator:
         }
 
         try:
-            req_timeout = max(self.timeout_seconds, 180.0)
+            req_timeout = timeout if timeout is not None else max(self.timeout_seconds, 180.0)
             with httpx.Client(timeout=req_timeout) as client:
                 resp = client.post(
                     f"{endpoint_url}/chat/completions",
@@ -372,10 +373,15 @@ class PairedEvaluator:
             req_max_tokens = 512
         elif sample.suite in ("long_variable_tracking", "babilong"):
             req_max_tokens = 300  # Multi-step aggregation/tracking needs room for calculation
-        elif sample.suite == "musique":
-            req_max_tokens = 200
+        elif sample.suite == "arc_science":
+            req_max_tokens = 350  # Reasoning through 4 multiple-choice options requires ~200-250 tokens
+        elif sample.suite in ("musique", "squad_overhead"):
+            req_max_tokens = 250
         else:
-            req_max_tokens = 150
+            req_max_tokens = 200
+
+        # Adaptive timeout scaling for long-context evaluations
+        sample_timeout = max(self.timeout_seconds, 180.0, 30.0 + (sample.token_count / 1000.0) * 3.0)
 
         # ---------------------------------------------------------------------
         # Condition A: Base LLM Standalone
@@ -404,7 +410,7 @@ class PairedEvaluator:
                     full_prompt = sample.full_input_text()
                     messages = [{"role": "user", "content": full_prompt}]
                 ans_a, p_tok_a, c_tok_a, ttft_a, lat_a, tps_a, meta_a = self._call_http_chat(
-                    self.base_llm_url, messages, max_tokens=req_max_tokens
+                    self.base_llm_url, messages, max_tokens=req_max_tokens, timeout=sample_timeout
                 )
                 ingest_a = 0.0
 
@@ -440,7 +446,7 @@ class PairedEvaluator:
                 corr = (key == sample.gold_answer)
                 halluc = not corr
             else:
-                str_match = BenchmarkMetrics.exact_match_score(ans, sample.gold_answer) or (sample.gold_answer.lower() in ans.lower())
+                str_match = BenchmarkMetrics.exact_match_score(ans, sample.gold_answer) or BenchmarkMetrics.extractive_match_score(ans, sample.gold_answer)
                 num_match = BenchmarkMetrics.numeric_match_score(ans, sample.gold_answer)
                 if not str_match and num_match:
                     corr = True
@@ -489,11 +495,15 @@ class PairedEvaluator:
                 elif sample.context:
                     messages.append({"role": "system", "content": f"Document context:\n{sample.context}"})
                 messages.append({"role": "user", "content": sample.prompt})
-                headers_b = {"X-Quanta-No-Global-KB": "true", "X-Quanta-Reset": "true"}
+                headers_b = {
+                    "X-Quanta-No-Global-KB": "true",
+                    "X-Quanta-Reset": "true",
+                    "X-Quanta-Timeout": str(sample_timeout),
+                }
                 if sample.suite == "musique":
                     headers_b["X-Quanta-Max-Context-Tokens"] = "1200"
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
-                    self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens
+                    self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
                 )
                 ingest_ms_b = meta_b.get("ingest_latency_ms", 0.0)
                 if ingest_ms_b > 0:
@@ -527,11 +537,17 @@ class PairedEvaluator:
             elif sample.context:
                 messages.append({"role": "system", "content": f"Document context:\n{sample.context}"})
             messages.append({"role": "user", "content": sample.prompt})
-            headers_c = {"X-Quanta-Global-KB": "true", "X-Quanta-Reset": "true"}
-            if sample.suite == "musique":
+            headers_c = {
+                "X-Quanta-Global-KB": "true",
+                "X-Quanta-Reset": "true",
+                "X-Quanta-Timeout": str(sample_timeout),
+            }
+            if sample.suite == "arc_science":
+                headers_c["X-Quanta-Enrich"] = "true"
+            elif sample.suite == "musique":
                 headers_c["X-Quanta-Max-Context-Tokens"] = "1200"
             ans_c, p_tok_c, c_tok_c, ttft_c, lat_c, tps_c, meta_c = self._call_http_chat(
-                self.quanta_proxy_url, messages, headers=headers_c, max_tokens=req_max_tokens
+                self.quanta_proxy_url, messages, headers=headers_c, max_tokens=req_max_tokens, timeout=sample_timeout
             )
             ingest_ms_c = meta_c.get("ingest_latency_ms", 0.0)
             retrieval_ms_c = meta_c.get("retrieval_latency_ms", 1.5)

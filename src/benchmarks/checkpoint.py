@@ -172,10 +172,32 @@ class BenchmarkCheckpointManager:
         self._state["completed_at"] = datetime.now().isoformat()
         self._save_atomic()
 
-    def get_completed_sample_ids(self, suite: str) -> Set[str]:
-        """Returns set of sample IDs already evaluated for a given suite."""
+    def get_completed_sample_ids(self, suite: str, skip_errors: bool = True) -> Set[str]:
+        """Returns set of sample IDs already evaluated for a given suite.
+        
+        Args:
+            suite: Benchmark suite name.
+            skip_errors: If True, samples whose answers ended in fatal timeout/communication errors
+                         are excluded so that subsequent runs can automatically retry them.
+        """
         suite_results = self._state.get("results", {}).get(suite, [])
-        return {r["id"] for r in suite_results if "id" in r}
+        completed = set()
+        for r in suite_results:
+            if "id" not in r:
+                continue
+            if skip_errors:
+                has_fatal_err = False
+                for cond_key in ("quanta_local", "quanta_global", "base"):
+                    cond = r.get(cond_key)
+                    if cond and isinstance(cond, dict):
+                        ans = str(cond.get("answer", ""))
+                        if ans.startswith("ERROR: timed out") or ans.startswith("ERROR: [Errno") or ans.startswith("HTTP 500"):
+                            has_fatal_err = True
+                            break
+                if has_fatal_err:
+                    continue
+            completed.add(r["id"])
+        return completed
 
     def get_sample_result(self, suite: str, sample_id: str) -> Optional[PairedResult]:
         """Retrieves and deserializes a single cached sample result if available."""

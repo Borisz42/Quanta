@@ -86,7 +86,10 @@ def test_suite_loaders_schema():
     babilong_samples = loader.load_babilong(limit=2)
     assert len(babilong_samples) == 2
     assert babilong_samples[0].suite == "babilong"
-    assert babilong_samples[0].gold_answer in ("bedroom", "cellar", "library", "observatory", "attic")
+    assert babilong_samples[0].gold_answer.lower() in (
+        "bedroom", "cellar", "library", "observatory", "attic",
+        "bathroom", "kitchen", "garden", "hallway", "office"
+    )
     assert babilong_samples[0].token_count >= 2000
 
     # 9. Long Variable Tracking & Aggregation

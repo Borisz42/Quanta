@@ -2,21 +2,49 @@
 .SYNOPSIS
     QUANTA Development Task Runner for Windows PowerShell.
 .DESCRIPTION
-    Provides shortcuts for running tests, linting, formatting, and generating artifact exports.
+    Provides shortcuts for running benchmarks, servers, tests, linting, formatting, and generating artifact exports.
 .EXAMPLE
-    .\scripts\dev.ps1 test
-    .\scripts\dev.ps1 export
+    .\scripts\dev.ps1 benchmark
+    .\scripts\dev.ps1 serve
+    .\scripts\dev.ps1 test-mcp
+    .\scripts\dev.ps1 status
 #>
 
 param (
     [Parameter(Position = 0, Mandatory = $false)]
-    [ValidateSet("test", "test-verbose", "demo", "benchmark", "benchmark-quick", "benchmark-publish", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
-    [string]$Target = "test"
+    [ValidateSet("serve", "serve-mcp", "test-mcp", "test-proxy", "interactive-mcp", "status", "benchmark", "benchmark-quick", "benchmark-publish", "demo", "test", "test-verbose", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
+    [string]$Target = "help"
 )
 
 $ErrorActionPreference = "Stop"
 
+# Ensure repository root and src are in PYTHONPATH
+$env:PYTHONPATH = ".;src;$env:PYTHONPATH"
+
 switch ($Target) {
+    "serve" {
+        Write-Host "Starting QUANTA Reverse Proxy with automated backend verification..." -ForegroundColor Cyan
+        .\scripts\serve.ps1 -Mode proxy
+    }
+    "serve-mcp" {
+        Write-Host "Starting QUANTA Model Context Protocol (MCP) server..." -ForegroundColor Cyan
+        .\scripts\serve.ps1 -Mode mcp
+    }
+    "test-mcp" {
+        Write-Host "Running QUANTA Model Context Protocol (MCP) tools self-test..." -ForegroundColor Cyan
+        .\scripts\serve.ps1 -Mode mcp -Test
+    }
+    "test-proxy" {
+        Write-Host "Testing QUANTA Reverse Proxy end-to-end..." -ForegroundColor Cyan
+        .\scripts\serve.ps1 -Mode proxy -Test
+    }
+    "interactive-mcp" {
+        Write-Host "Launching QUANTA MCP interactive test console..." -ForegroundColor Cyan
+        .\scripts\serve.ps1 -Mode mcp -Interactive
+    }
+    "status" {
+        python -m server.service_manager status
+    }
     "benchmark" {
         Write-Host "Launching QUANTA Interactive Paired Benchmark Suite..." -ForegroundColor Cyan
         python scripts/run_paired_benchmarks.py --interactive
@@ -66,6 +94,20 @@ switch ($Target) {
         python scripts/sync_hf.py --check
     }
     "help" {
-        Write-Host "Available targets: benchmark, benchmark-quick, benchmark-publish, test, test-verbose, demo, lint, export, gather-artifacts, init, sync-hf, help" -ForegroundColor Green
+        Write-Host "Available targets:" -ForegroundColor Green
+        Write-Host "  Servers & Services:" -ForegroundColor Cyan
+        Write-Host "    serve           - Spin up Reverse Proxy on :8000 with auto-backend detection"
+        Write-Host "    serve-mcp       - Start MCP JSON-RPC stdio server"
+        Write-Host "    test-proxy      - Run end-to-end chat completion test through proxy"
+        Write-Host "    test-mcp        - Run self-test across all 5 MCP tools"
+        Write-Host "    interactive-mcp - Open interactive terminal shell to test MCP queries"
+        Write-Host "    status          - View live service status dashboard"
+        Write-Host "  Benchmarks & Tests:" -ForegroundColor Cyan
+        Write-Host "    benchmark       - Launch interactive paired benchmark suite"
+        Write-Host "    benchmark-quick - Run quick mock benchmark smoke test"
+        Write-Host "    benchmark-publish - Run full 3-way ablation benchmark suite"
+        Write-Host "    test            - Run pytest suite"
+        Write-Host "    test-verbose    - Run verbose pytest suite"
+        Write-Host "    demo            - Run context expansion demonstration"
     }
 }
