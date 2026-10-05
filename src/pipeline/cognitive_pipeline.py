@@ -163,7 +163,7 @@ class CognitivePipeline:
         # 10. Merkle Book State
         self.merkle_book = HierarchicalMerkleBook()
 
-    def reset(self) -> None:
+    def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
         if hasattr(self, "active_canvas") and self.active_canvas is not None:
             self.active_canvas.clear()
@@ -174,7 +174,7 @@ class CognitivePipeline:
         if hasattr(self, "merkle_book"):
             from core.asg import HierarchicalMerkleBook
             self.merkle_book = HierarchicalMerkleBook()
-        if hasattr(self, "page_table") and self.page_table is not None:
+        if clear_page_table and hasattr(self, "page_table") and self.page_table is not None:
             self.page_table.clear()
             self.page_table.attach_active_canvas(self.active_canvas)
         if hasattr(self, "fault_handler") and self.fault_handler is not None:

@@ -71,8 +71,8 @@ class BenchmarkSuiteLoader:
     # 1. Industry-Standard Coding: OpenAI HumanEval
     # -------------------------------------------------------------------------
 
-    def load_humaneval(self, limit: int = 20) -> List[BenchmarkSample]:
-        """Loads official OpenAI HumanEval programming tasks."""
+    def load_humaneval(self, limit: int = 82) -> List[BenchmarkSample]:
+        """Loads official OpenAI HumanEval programming tasks evenly distributed across the dataset."""
         cache_gz = self.raw_dir / "HumanEval.jsonl.gz"
         cache_file = self.raw_dir / "HumanEval.jsonl"
 
@@ -122,8 +122,15 @@ class BenchmarkSuiteLoader:
                 },
             ]
 
+        # Strided / evenly spaced sampling across the full problem set
+        if 0 < limit < len(items):
+            step = len(items) / float(limit)
+            selected_items = [items[int(i * step)] for i in range(limit)]
+        else:
+            selected_items = items[:limit]
+
         samples: List[BenchmarkSample] = []
-        for item in items[:limit]:
+        for item in selected_items:
             t_cnt = self.estimate_token_count(item["prompt"])
             samples.append(
                 BenchmarkSample(
@@ -698,6 +705,8 @@ class BenchmarkSuiteLoader:
         if target_token_lengths is None:
             target_token_lengths = [4000, 16000, 64000, 128000, 256000][:limit]
         samples: List[BenchmarkSample] = []
+        if os.environ.get("QUANTA_OFFLINE_BABILONG", "1") == "1":
+            return self.generate_babilong_samples(target_token_lengths=target_token_lengths)
         if HAS_DATASETS:
             for target_tokens in target_token_lengths:
                 cfg_name = f"{target_tokens // 1000}k"

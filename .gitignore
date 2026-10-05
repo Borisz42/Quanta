@@ -226,4 +226,7 @@ worktrees/
 unsloth_compiled_cache/
 models/
 data/training/
+
+# Scratch & temporary evaluation directories
+scratch/
 

@@ -164,9 +164,10 @@ class BenchmarkMetrics:
         if not clean:
             return None
 
-        # 0. Single-character or single-letter choice enclosed in punctuation: "A", "(A)", "B.", "[C]"
-        if re.match(r"^\s*\(?([A-Da-d])\)?\.?\s*$", clean):
-            return clean.strip(" ().[]").upper()
+        # 0. Single-character or single-letter choice enclosed in punctuation/markdown: "A", "(A)", "B.", "[C]", "**B**", "\boxed{C}"
+        m_single = re.match(r"^\s*(?:\*\*|\\boxed\{|[\(\[])?\s*([A-Da-d])\s*(?:\*\*|\}|[\)\]])?\.?\s*$", clean)
+        if m_single:
+            return m_single.group(1).upper()
 
         lines = [line.strip() for line in clean.splitlines() if line.strip()]
 
@@ -202,8 +203,8 @@ class BenchmarkMetrics:
                 if line_matches:
                     return line_matches[-1].group(1).upper()
 
-            # Isolated uppercase choice on its own line: r"^\s*([A-D])\s*$"
-            m_iso = re.match(r"^\s*[\(\[]?([A-D])[\)\]]?\.?\s*$", line)
+            # Isolated uppercase choice on its own line: e.g. "B", "(B)", "**B**", "\boxed{B}"
+            m_iso = re.match(r"^\s*(?:\*\*|\\boxed\{|[\(\[])?\s*([A-D])\s*(?:\*\*|\}|[\)\]])?\.?\s*$", line)
             if m_iso:
                 return m_iso.group(1).upper()
 

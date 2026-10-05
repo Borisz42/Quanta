@@ -76,7 +76,7 @@ def print_banner():
 
 
 AVAILABLE_SUITES = {
-    "humaneval": ("OpenAI HumanEval (Industry Coding pass@1)", 15),
+    "humaneval": ("OpenAI HumanEval (Industry Coding pass@1)", 82),
     "arc_science": ("AI2 ARC-Challenge (Science Knowledge & Reasoning)", 25),
     "musique": ("MuSiQue (Multi-Hop Relational Reasoning)", 20),
     "proofwriter": ("ProofWriter (Formal Deductive Logic & Negation)", 20),
@@ -332,7 +332,9 @@ def generate_markdown_report(
 
             diag_explanation = d["notes"]
             if not diag_explanation:
-                if d["tag"] == "[HARNESS BUG]":
+                if d["tag"] == "[TRUNCATED]":
+                    diag_explanation = "Generation stopped prematurely because token budget was exhausted (finish_reason='length')."
+                elif d["tag"] == "[HARNESS BUG]":
                     diag_explanation = "Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError)."
                 elif d["tag"] == "[NUMERIC PASS]":
                     diag_explanation = f"Calculation matched gold numeric quantity '{d['gold']}' despite non-contiguous string formatting."
@@ -534,7 +536,9 @@ def main():
             print(f"  [{i:>2}/{len(samples)}] {s.id:<20} | Base: {corr_icon_base} ({pr.base_result.prompt_tokens} tok, {pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr.quanta_global_result.prompt_tokens if pr.quanta_global_result else 0} tok, {pr.quanta_global_result.total_e2e_latency_s if pr.quanta_global_result else 0:.2f}s){diag_str}")
 
             # Real-time forensic diagnostic alert line
-            if diag_tag == "[HARNESS BUG]":
+            if diag_tag == "[TRUNCATED]":
+                print(format_ansi(f"     ↳ [FORENSIC ALERT: TRUNCATED] {s.id}: Output was cut off by token limit (finish_reason='length')!", "1;31"))
+            elif diag_tag == "[HARNESS BUG]":
                 print(format_ansi(f"     ↳ [FORENSIC ALERT: HARNESS BUG] {s.id}: Code passes unit logic in isolation, but harness stripped prompt preamble helpers (NameError).", "1;31"))
             elif diag_tag == "[NUMERIC PASS]":
                 print(format_ansi(f"     ↳ [FORENSIC ALERT: NUMERIC PASS] {s.id}: String match failed due to formatting, but calculation verified numerically accurate ({s.gold_answer}).", "1;33"))

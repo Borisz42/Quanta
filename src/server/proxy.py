@@ -413,10 +413,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         t_ingest_ms = 0.0
         t_ret_ms = 0.0
 
+        # Domain-aware gating: pure code syntax tasks should not query encyclopedic KB
+        is_code_task = bool(re.search(r"(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import)", user_query))
+
         should_enrich_or_compress = (
             should_compress
             or force_enrich
-            or (bool(x_quanta_global_kb) and not has_single_query_context)
+            or (bool(x_quanta_global_kb) and not has_single_query_context and not is_code_task)
         )
 
         if should_enrich_or_compress:

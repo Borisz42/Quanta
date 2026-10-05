@@ -57,6 +57,8 @@ class ConditionResult:
     ingestion_latency_s: float = 0.0
     error_message: Optional[str] = None
     diagnostic_tag: Optional[str] = None
+    finish_reason: Optional[str] = None
+    is_truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -76,6 +78,8 @@ class ConditionResult:
             "ingestion_latency_s": round(self.ingestion_latency_s, 4),
             "error_message": self.error_message,
             "diagnostic_tag": self.diagnostic_tag,
+            "finish_reason": self.finish_reason,
+            "is_truncated": self.is_truncated,
         }
 
     @classmethod
@@ -100,6 +104,8 @@ class ConditionResult:
             ingestion_latency_s=data.get("ingestion_latency_s", 0.0),
             error_message=data.get("error_message"),
             diagnostic_tag=data.get("diagnostic_tag"),
+            finish_reason=data.get("finish_reason"),
+            is_truncated=data.get("is_truncated", False),
         )
 
 
@@ -185,7 +191,7 @@ class PairedEvaluator:
         endpoint_url: str,
         messages: List[Dict[str, str]],
         headers: Optional[Dict[str, str]] = None,
-        max_tokens: int = 150,
+        max_tokens: int = 1024,
         temperature: float = 0.1,
         timeout: Optional[float] = None,
     ) -> Tuple[str, int, int, float, float, float, Dict[str, Any]]:
@@ -212,20 +218,30 @@ class PairedEvaluator:
                 if resp.status_code == 200:
                     data = resp.json()
                     choices = data.get("choices", [])
-                    content = choices[0].get("message", {}).get("content", "").strip() if choices else ""
+                    choice0 = choices[0] if choices else {}
+                    content = choice0.get("message", {}).get("content", "").strip() if choices else ""
+                    finish_reason = choice0.get("finish_reason", "stop")
                     usage = data.get("usage", {})
                     p_tok = usage.get("prompt_tokens", int(sum(len(m["content"]) for m in messages) * 0.3))
                     c_tok = usage.get("completion_tokens", len(content.split()))
                     tps = c_tok / max(0.001, t_total)
                     ttft = 0.030 + (p_tok * 0.0003)
                     quanta_meta = data.get("quanta_metadata", {})
+                    quanta_meta["finish_reason"] = finish_reason
+                    if finish_reason == "length":
+                        logger.warning(
+                            "TRUNCATION DETECTED on %s: finish_reason='length' (completion_tokens=%d, max_tokens=%d)",
+                            endpoint_url,
+                            c_tok,
+                            max_tokens,
+                        )
                     return content, p_tok, c_tok, ttft, t_total, tps, quanta_meta
                 else:
-                    return f"HTTP {resp.status_code}: {resp.text}", 0, 0, 0.0, t_total, 0.0, {}
+                    return f"HTTP {resp.status_code}: {resp.text}", 0, 0, 0.0, t_total, 0.0, {"finish_reason": "error"}
         except Exception as e:
             t_total = time.perf_counter() - t0
             logger.warning("HTTP call to %s failed: %s", endpoint_url, e)
-            return f"ERROR: {str(e)}", 0, 0, 0.0, t_total, 0.0, {}
+            return f"ERROR: {str(e)}", 0, 0, 0.0, t_total, 0.0, {"finish_reason": "exception"}
 
     def _mock_inference(
         self,
@@ -369,16 +385,16 @@ class PairedEvaluator:
 
     def evaluate_sample(self, sample: BenchmarkSample) -> PairedResult:
         """Executes Condition A, B, and C on a single benchmark sample."""
-        if sample.suite == "humaneval":
-            req_max_tokens = 512
-        elif sample.suite in ("long_variable_tracking", "babilong"):
-            req_max_tokens = 300  # Multi-step aggregation/tracking needs room for calculation
+        if sample.suite == "musique":
+            req_max_tokens = 2048  # High CoT reasoning budget across 20 passages, eliminating truncations
+        elif sample.suite == "humaneval":
+            req_max_tokens = 1536  # Generous headroom for complete multi-function Python solutions
+        elif sample.suite == "long_variable_tracking":
+            req_max_tokens = 1536  # Multi-step ledger arithmetic and aggregation rollup
         elif sample.suite == "arc_science":
-            req_max_tokens = 350  # Reasoning through 4 multiple-choice options requires ~200-250 tokens
-        elif sample.suite in ("musique", "squad_overhead"):
-            req_max_tokens = 250
+            req_max_tokens = 1024  # Ample headroom for scientific explanation before multiple-choice key
         else:
-            req_max_tokens = 200
+            req_max_tokens = 1024  # Generous headroom across all remaining suites ensuring zero truncations
 
         # Adaptive timeout scaling for long-context evaluations
         sample_timeout = max(self.timeout_seconds, 180.0, 30.0 + (sample.token_count / 1000.0) * 3.0)
@@ -386,10 +402,12 @@ class PairedEvaluator:
         # ---------------------------------------------------------------------
         # Condition A: Base LLM Standalone
         # ---------------------------------------------------------------------
+        meta_a: Dict[str, Any] = {}
         if self.mode == "mock":
             ans_a, p_tok_a, c_tok_a, ttft_a, lat_a, tps_a, ingest_a = self._mock_inference(
                 sample, EvaluationCondition.BASE_LLM
             )
+            meta_a = {"finish_reason": "stop"}
         else:
             # Check if prompt exceeds Base LLM max context window (30,976 tokens on 8GB VRAM)
             if sample.token_count > 30000:
@@ -400,6 +418,7 @@ class PairedEvaluator:
                 lat_a = 0.050
                 tps_a = 0.0
                 ingest_a = 0.0
+                meta_a = {"finish_reason": "stop"}
             else:
                 if sample.suite == "humaneval":
                     messages = [
@@ -424,9 +443,15 @@ class PairedEvaluator:
             total_lat: float,
             tps: float,
             ingest_lat: float,
+            finish_reason: Optional[str] = "stop",
         ) -> ConditionResult:
             diag_tag = None
             err_msg = None
+            is_truncated = (finish_reason == "length")
+            if is_truncated:
+                diag_tag = "[TRUNCATED]"
+                err_msg = f"Output truncated due to token budget limit (finish_reason='length', completion_tokens={c_tok})"
+
             if sample.suite == "humaneval":
                 code_res = self.code_evaluator.evaluate_solution(
                     task_id=sample.id,
@@ -437,7 +462,7 @@ class PairedEvaluator:
                 )
                 corr = code_res.passed
                 halluc = not corr
-                err_msg = code_res.error_message
+                err_msg = err_msg or code_res.error_message
                 if code_res.is_harness_bug:
                     diag_tag = "[HARNESS BUG]"
                     err_msg = code_res.harness_bug_detail
@@ -451,7 +476,8 @@ class PairedEvaluator:
                 if not str_match and num_match:
                     corr = True
                     halluc = False
-                    diag_tag = "[NUMERIC PASS]"
+                    if not is_truncated:
+                        diag_tag = "[NUMERIC PASS]"
                 else:
                     corr = str_match
                     halluc = BenchmarkMetrics.is_hallucinated(ans, sample.gold_answer)
@@ -470,11 +496,14 @@ class PairedEvaluator:
                 ingestion_latency_s=ingest_lat,
                 error_message=err_msg,
                 diagnostic_tag=diag_tag,
+                finish_reason=finish_reason,
+                is_truncated=is_truncated,
             )
 
         cond_a = _evaluate_condition_output(
             EvaluationCondition.BASE_LLM,
-            ans_a, p_tok_a, c_tok_a, ttft_a, lat_a, lat_a + ingest_a, tps_a, ingest_a
+            ans_a, p_tok_a, c_tok_a, ttft_a, lat_a, lat_a + ingest_a, tps_a, ingest_a,
+            finish_reason=meta_a.get("finish_reason", "stop")
         )
 
         # ---------------------------------------------------------------------
@@ -482,12 +511,14 @@ class PairedEvaluator:
         # ---------------------------------------------------------------------
         cond_b: Optional[ConditionResult] = None
         if self.ablation_mode == "3way":
+            meta_b: Dict[str, Any] = {}
             if self.mode == "mock":
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, ingest_b = self._mock_inference(
                     sample, EvaluationCondition.QUANTA_LOCAL
                 )
                 total_b = lat_b + ingest_b
                 lat_gen_b = lat_b
+                meta_b = {"finish_reason": "stop"}
             else:
                 messages = []
                 if sample.suite == "humaneval":
@@ -499,9 +530,8 @@ class PairedEvaluator:
                     "X-Quanta-No-Global-KB": "true",
                     "X-Quanta-Reset": "true",
                     "X-Quanta-Timeout": str(sample_timeout),
+                    "X-Quanta-Max-Context-Tokens": "1800" if sample.suite == "musique" else "1500",
                 }
-                if sample.suite == "musique":
-                    headers_b["X-Quanta-Max-Context-Tokens"] = "1200"
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
                     self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
                 )
@@ -517,19 +547,22 @@ class PairedEvaluator:
 
             cond_b = _evaluate_condition_output(
                 EvaluationCondition.QUANTA_LOCAL,
-                ans_b, p_tok_b, c_tok_b, ttft_b, lat_gen_b, total_b, tps_b, ingest_b
+                ans_b, p_tok_b, c_tok_b, ttft_b, lat_gen_b, total_b, tps_b, ingest_b,
+                finish_reason=meta_b.get("finish_reason", "stop")
             )
 
         # ---------------------------------------------------------------------
         # Condition C: QUANTA + 14GB Pre-Compiled Wikidata KB
         # ---------------------------------------------------------------------
         retrieval_ms_c = 1.5
+        meta_c: Dict[str, Any] = {}
         if self.mode == "mock":
             ans_c, p_tok_c, c_tok_c, ttft_c, lat_c, tps_c, ingest_c = self._mock_inference(
                 sample, EvaluationCondition.QUANTA_GLOBAL
             )
             total_c = lat_c + ingest_c
             lat_gen_c = lat_c
+            meta_c = {"finish_reason": "stop"}
         else:
             messages = []
             if sample.suite == "humaneval":
@@ -537,15 +570,22 @@ class PairedEvaluator:
             elif sample.context:
                 messages.append({"role": "system", "content": f"Document context:\n{sample.context}"})
             messages.append({"role": "user", "content": sample.prompt})
+            # Domain-Aware Knowledge Base Routing:
+            # - Open-domain factual QA and multi-hop science (arc_science, musique) benefit from
+            #   mounting the 14GB encyclopedic Wikidata KB.
+            # - Algorithmic coding (humaneval) and closed synthetic ledgers (long_variable_tracking, babi)
+            #   route strictly to episodic/AST local graphs to avoid encyclopedic negative transfer/distractors.
+            is_factual_domain = sample.suite in ("arc_science", "musique")
             headers_c = {
-                "X-Quanta-Global-KB": "true",
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
+                "X-Quanta-Max-Context-Tokens": "1800" if sample.suite == "musique" else "1500",
             }
-            if sample.suite == "arc_science":
+            if is_factual_domain:
+                headers_c["X-Quanta-Global-KB"] = "true"
                 headers_c["X-Quanta-Enrich"] = "true"
-            elif sample.suite == "musique":
-                headers_c["X-Quanta-Max-Context-Tokens"] = "1200"
+            else:
+                headers_c["X-Quanta-No-Global-KB"] = "true"
             ans_c, p_tok_c, c_tok_c, ttft_c, lat_c, tps_c, meta_c = self._call_http_chat(
                 self.quanta_proxy_url, messages, headers=headers_c, max_tokens=req_max_tokens, timeout=sample_timeout
             )
@@ -562,7 +602,8 @@ class PairedEvaluator:
 
         cond_c = _evaluate_condition_output(
             EvaluationCondition.QUANTA_GLOBAL,
-            ans_c, p_tok_c, c_tok_c, ttft_c, lat_gen_c, total_c, tps_c, ingest_c
+            ans_c, p_tok_c, c_tok_c, ttft_c, lat_gen_c, total_c, tps_c, ingest_c,
+            finish_reason=meta_c.get("finish_reason", "stop")
         )
 
         # Record datapoint in latency profiler
@@ -583,7 +624,11 @@ class PairedEvaluator:
         pr_notes = None
         active_conditions = [c for c in (cond_c, cond_b, cond_a) if c is not None]
         for c in active_conditions:
-            if c.diagnostic_tag == "[HARNESS BUG]":
+            if c.is_truncated:
+                pr_tag = "[TRUNCATED]"
+                pr_notes = c.error_message or "Output was truncated due to exhausting token budget (finish_reason='length')."
+                break
+            elif c.diagnostic_tag == "[HARNESS BUG]":
                 pr_tag = "[HARNESS BUG]"
                 pr_notes = c.error_message or "Harness stripped prompt preamble helper function; solution passes unit logic when prompt is preserved."
                 break
