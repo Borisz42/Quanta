@@ -402,21 +402,19 @@ class DiscourseExtractionResult:
                     continue
 
                 if val not in all_ids:
-                    cat = "LOCATION" if role_attr == "location_id" else "INSTRUMENT" if role_attr == "instrument_id" else "PERSON" if role_attr == "agent_id" else "ABSTRACT_CONCEPT"
                     if isinstance(val, str) and re.match(r"^E\d+$", val):
-                        new_id = val
-                        label = f"Entity_{val}"
+                        continue
+                    auto_id_counter += 1
+                    clean_val = str(val).strip('"\' ')
+                    if clean_val.isalnum() and len(clean_val) <= 5 and clean_val[0].isupper() and clean_val not in entity_ids:
+                        new_id = clean_val
+                        label = clean_val
                     else:
-                        auto_id_counter += 1
-                        clean_val = str(val).strip('"\' ')
-                        if clean_val.isalnum() and len(clean_val) <= 5 and clean_val[0].isupper() and clean_val not in entity_ids:
-                            new_id = clean_val
-                            label = clean_val
-                        else:
-                            new_id = f"E{auto_id_counter}"
-                            label = clean_val
-                        setattr(ev, role_attr, new_id)
+                        new_id = f"E{auto_id_counter}"
+                        label = clean_val
+                    setattr(ev, role_attr, new_id)
 
+                    cat = "LOCATION" if role_attr == "location_id" else "INSTRUMENT" if role_attr == "instrument_id" else "PERSON" if role_attr == "agent_id" else "ABSTRACT_CONCEPT"
                     new_ent = ExtractedEntity(
                         id=new_id,
                         canonical_name=label,

@@ -467,17 +467,19 @@ class PageTable(MutableMapping):
                                 self._reverse_edges[t].add((cid, rel))
                     except Exception:
                         pass
-                if lit_str:
+                anchor_str = self.interner.get(anchor_id) if anchor_id else None
+                is_fold = bool(
+                    anchor_str and (anchor_str.startswith("merkle:") or anchor_str.startswith("fold:"))
+                )
+                if lit_str and not is_fold:
                     try:
                         lit = json.loads(lit_str)
-                        if lit:
+                        if lit and not (isinstance(lit, dict) and lit.get("type") == "discourse_episode_fold"):
                             self._index_literal(str(lit), cid)
                     except Exception:
                         pass
-                if anchor_id:
-                    anchor_str = self.interner.get(anchor_id)
-                    if anchor_str:
-                        self._index_literal(str(anchor_str), cid)
+                if anchor_str and not is_fold:
+                    self._index_literal(str(anchor_str), cid)
             self.vector_index.add_batch(vec_batch)
 
     def get_reverse_edges(self, target_cid: str) -> List[Tuple[str, str]]:
@@ -511,9 +513,13 @@ class PageTable(MutableMapping):
         for rel, targets in node.edges.items():
             for t in targets:
                 self._reverse_edges[t].add((cid, rel))
-        if node.literal:
+        is_fold = bool(
+            (node.anchor and (node.anchor.startswith("merkle:") or node.anchor.startswith("fold:")))
+            or (isinstance(node.literal, dict) and node.literal.get("type") == "discourse_episode_fold")
+        )
+        if node.literal and not is_fold:
             self._index_literal(str(node.literal), cid)
-        if node.anchor:
+        if node.anchor and not is_fold:
             self._index_literal(str(node.anchor), cid)
 
         with self._lock, self._conn:
@@ -547,9 +553,13 @@ class PageTable(MutableMapping):
                 for rel, targets in node.edges.items():
                     for t in targets:
                         self._reverse_edges[t].add((cid, rel))
-                if node.literal:
+                is_node_fold = bool(
+                    (node.anchor and (node.anchor.startswith("merkle:") or node.anchor.startswith("fold:")))
+                    or (isinstance(node.literal, dict) and node.literal.get("type") == "discourse_episode_fold")
+                )
+                if node.literal and not is_node_fold:
                     self._index_literal(str(node.literal), cid)
-                if node.anchor:
+                if node.anchor and not is_node_fold:
                     self._index_literal(str(node.anchor), cid)
 
                 packed_vec = node.vector.to_bytes()

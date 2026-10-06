@@ -618,3 +618,48 @@ class TestMultiAnchorAndTraversalDynamics:
         budget_15 = min(cfg.max_context_tokens, max(1200, min(1600, headings_15 * 100)))
         assert budget_15 == 1500
 
+    def test_global_kb_seed_qualification(self):
+        """Verifies that single dictionary tokens are rejected for Global KB lookups while proper entities qualify."""
+        retriever = SpreadingActivationRetriever()
+        q = "On August 21, a flash flood warning was issued for the Las Vegas area. Which list presents the objects as shown below?"
+
+        # Qualified entities: multi-word phrases, capitalized proper nouns, acronyms
+        assert retriever._is_qualified_global_kb_seed("flash flood", q) is True
+        assert retriever._is_qualified_global_kb_seed("Las Vegas", q) is True
+        assert retriever._is_qualified_global_kb_seed("WASP-96b", q) is True
+        assert retriever._is_qualified_global_kb_seed("CO2", q) is True
+
+        # Rejected entities: single common dictionary words and procedural tokens
+        assert retriever._is_qualified_global_kb_seed("shown", q) is False
+        assert retriever._is_qualified_global_kb_seed("list", q) is False
+        assert retriever._is_qualified_global_kb_seed("presents", q) is False
+        assert retriever._is_qualified_global_kb_seed("area", q) is False
+        assert retriever._is_qualified_global_kb_seed("below", q) is False
+        assert retriever._is_qualified_global_kb_seed("flash", q) is False
+        assert retriever._is_qualified_global_kb_seed("each", q) is False
+
+    def test_global_kb_distractor_pruning(self):
+        """Verifies that entertainment, sports, surname and config distractors are correctly pruned."""
+        retriever = SpreadingActivationRetriever()
+        q_science = "Which statement best describes the weather and climate in Las Vegas?"
+
+        # Surnames
+        surname_node = QuantaNode(literal={"label": "shown (surname)", "description": "Shown is an American surname."})
+        assert retriever._is_distractor_entity(surname_node, q_science) is True
+
+        # Films in non-media query
+        film_node = QuantaNode(
+            literal={"label": "The Warning", "description": "A 1928 silent drama film.", "category": "creative_work"},
+            edges={"INSTANCE_OF": ["movie"]},
+        )
+        assert retriever._is_distractor_entity(film_node, q_science) is True
+
+        # Pro-gamer / esports in non-sports query
+        gamer_node = QuantaNode(literal={"label": "Flash", "description": "Lee Young-ho is a StarCraft player."})
+        assert retriever._is_distractor_entity(gamer_node, q_science) is True
+
+        # Scientific entity preserved
+        flood_node = QuantaNode(literal={"label": "flash flood", "description": "A flash flood is a rapid flooding of low-lying areas."})
+        assert retriever._is_distractor_entity(flood_node, q_science) is False
+
+

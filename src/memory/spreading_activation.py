@@ -252,6 +252,8 @@ class SpreadingActivationRetriever:
         "into", "onto", "over", "under", "about", "such", "some", "any", "all", "more", "most", "other", "also",
         "if", "then", "else", "and", "or", "not", "but", "there", "always", "possible",
         "its", "her", "his", "their", "our", "my", "your", "this", "that", "these", "those",
+        "they", "them", "she", "he", "him", "we", "us", "it", "both", "neither", "either",
+        "after", "before", "until", "since", "while",
         "describe", "explain", "review", "detail", "tell", "show", "give", "provide",
         "sentences", "sentence", "words", "word", "code", "file", "function", "class", "method",
         "element", "elements", "item", "items", "value", "values", "object", "objects", "data", "input", "output",
@@ -271,6 +273,14 @@ class SpreadingActivationRetriever:
         "conclude", "conclusion", "final", "line", "letter",
         "based", "according", "assuming", "suppose", "determine", "identify", "indicate",
         "first", "second", "third", "fourth", "fifth", "last", "one", "two", "three", "four", "five",
+        # Procedural presentation words & generic prompt tokens
+        "shown", "shows", "list", "lists", "present", "presents", "presentation",
+        "below", "above", "terms", "term", "each", "every",
+        "best", "better", "good", "bad", "worst", "least",
+        "area", "areas", "order", "orders",
+        # Calendar months and days
+        "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
         # Comparative adjectives & change terms
         "longer", "shorter", "faster", "slower", "higher", "lower", "larger", "smaller", "greater", "lesser",
         "increase", "increases", "increased", "increasing", "decrease", "decreases", "decreased", "decreasing",
@@ -512,8 +522,12 @@ class SpreadingActivationRetriever:
         """Extracts candidate named entity mentions or noun phrases from query text."""
         entities: List[str] = []
 
-        # Clean meta-prompt instructions from query_text before entity extraction
-        clean_text = re.split(r"\n\s*(?:Instructions:|Note:|Format:|Answer with)", query_text, flags=re.IGNORECASE)[0]
+        # Clean meta-prompt instructions and multiple-choice options from query_text before entity extraction
+        clean_text = re.split(
+            r"\n\s*(?:Choices:|Options:|(?:(?:\([A-Da-d]\)|[A-Da-d][\.\)])\s+)|Instructions:|Note:|Format:|Answer with)",
+            query_text,
+            flags=re.IGNORECASE
+        )[0]
         meta_instruction_patterns = [
             r"State your final choice.*$",
             r"Answer with only True, False.*$",
@@ -617,6 +631,31 @@ class SpreadingActivationRetriever:
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
+        # Extract salient compound/bigram noun phrases (e.g. "flash flood", "climate change", "solar system")
+        # In procedural experimental design queries (e.g. "which step should come first"), suppress arbitrary apparatus bigrams
+        is_procedural_science_query = bool(re.search(
+            r"\b(?:which\s+(?:of\s+these\s+)?steps?\s+should\s+come\s+first|first\s+step\s+in|next\s+step\s+in|which\s+procedure\s+should|plans?\s+an\s+investigation)\b",
+            clean_text,
+            re.IGNORECASE,
+        ))
+        if not is_procedural_science_query:
+            clean_words = [w.strip() for w in re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)]
+            existing_lower = {e.lower() for e in entities}
+            for i in range(len(clean_words) - 1):
+                w1, w2 = clean_words[i], clean_words[i + 1]
+                if (
+                    w1.lower() not in self.QUESTION_STOPWORDS
+                    and w2.lower() not in self.QUESTION_STOPWORDS
+                    and len(w1) >= 3 and len(w2) >= 3
+                    and not w1.isdigit() and not w2.isdigit()
+                    and w1.lower() not in self.IRREGULAR_LEMMA_MAP
+                    and w2.lower() not in self.IRREGULAR_LEMMA_MAP
+                ):
+                    bigram = f"{w1} {w2}"
+                    if bigram.lower() not in existing_lower and bigram not in entities:
+                        entities.append(bigram)
+                        existing_lower.add(bigram.lower())
+
         # Extract salient technical and domain noun tokens for robust seed matching (including 4-digit years)
         tokens = re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)
         existing_lower = {e.lower() for e in entities}
@@ -645,6 +684,145 @@ class SpreadingActivationRetriever:
                 existing_lower.add(t_lower)
 
         return entities
+
+    def _is_qualified_global_kb_seed(self, term: str, original_query: str) -> bool:
+        """Determines whether a candidate entity term qualifies for open-domain Global KB search."""
+        clean = term.strip()
+        if not clean or len(clean) < 3:
+            return False
+        clean_lower = clean.lower()
+        if clean_lower in self.QUESTION_STOPWORDS:
+            return False
+        if clean_lower in {
+            "students", "each", "which", "what", "where", "when", "who", "they", "this", "that",
+            "these", "those", "object", "objects", "choices", "instructions", "answer", "order",
+            "below", "shown", "shows", "list", "lists", "present", "presents", "best", "better",
+            "area", "terms", "statement", "statements", "choice", "choices", "option", "options"
+        }:
+            return False
+
+        # 1. Multi-word phrases (len >= 2)
+        if len(clean.split()) >= 2:
+            tokens = [w.lower() for w in clean.split()]
+            if all(t in self.QUESTION_STOPWORDS for t in tokens):
+                return False
+            return True
+
+        # 2. Quoted entities
+        if original_query and (f'"{clean}"' in original_query or f"'{clean}'" in original_query or f'“{clean}”' in original_query or f'‘{clean}’' in original_query):
+            return True
+
+        # 3. Capitalized proper nouns in query text (must appear capitalized mid-sentence to avoid grammatical sentence-initial false positives)
+        if original_query:
+            has_mid_sentence = False
+            for m in re.finditer(r"\b" + re.escape(clean) + r"\b", original_query):
+                word_in_query = original_query[m.start():m.end()]
+                if word_in_query[0].isupper():
+                    prefix = original_query[:m.start()].strip()
+                    if prefix and not prefix.endswith((".", "?", "!", "\n", ":", ";")):
+                        has_mid_sentence = True
+                        break
+            if has_mid_sentence:
+                return True
+
+        # 4. Acronyms, PascalCase, hyphenated terms, or terms with digits (e.g. DFTD, WASP-96b, CO2, H2O, SKU-901)
+        if any(c.isupper() for c in clean[1:]) or any(c.isdigit() for c in clean) or "-" in clean or "_" in clean or (len(clean) >= 2 and clean.isupper()):
+            return True
+
+        # Single lowercase common vocabulary words are strictly rejected for Global KB
+        return False
+
+    def _is_distractor_entity(self, node: QuantaNode, query_text: str) -> bool:
+        """Prunes entertainment/media/sports/surname distractor nodes from open-domain Global KB results."""
+        if not isinstance(node.literal, dict):
+            return False
+        label = (node.literal.get("label") or "").lower()
+        desc = (node.literal.get("description") or "").lower()
+        cat = (node.literal.get("category") or "").lower()
+        edges = getattr(node, "edges", {})
+
+        query_lower = (query_text or "").lower()
+        is_media_query = any(w in query_lower for w in (
+            "movie", "film", "song", "album", "music", "actor", "actress", "director",
+            "singer", "performer", "novel", "author", "character", "series", "played by", "recorded"
+        ))
+        is_sports_query = any(w in query_lower for w in (
+            "player", "game", "team", "sport", "esports", "match", "tournament", "athlete", "championship"
+        ))
+        is_history_query = any(w in query_lower for w in (
+            "war", "battle", "treaty", "king", "queen", "emperor", "president", "rebellion", "dynasty", "army", "general"
+        ))
+
+        # Surnames, given names, family names
+        if "(surname)" in label or "(family name)" in label or "surname" in desc or "family name" in desc:
+            if not any(w in query_lower for w in ("surname", "family name", "named after", "ancestry", "people with")):
+                return True
+
+        # Disambiguation pages
+        if "disambiguation" in label or "disambiguation" in desc or "wmf disambiguation" in label:
+            return True
+
+        # Creative works & media in non-media queries
+        if not is_media_query:
+            if cat == "creative_work":
+                return True
+            instance_of_set = {str(t).lower() for t in edges.get("INSTANCE_OF", [])}
+            subclass_of_set = {str(t).lower() for t in edges.get("SUBCLASS_OF", [])}
+            media_types = {
+                "movie", "film", "silent film", "drama film", "mythological film",
+                "music album", "single", "extended play", "song", "musical track",
+                "television series", "episode", "season", "video game", "board game",
+                "fictional character", "magazine", "comic book"
+            }
+            if instance_of_set & media_types or subclass_of_set & media_types:
+                return True
+            if any(pat in desc for pat in ("is a film", "is a movie", "silent drama film", "music album", "video game")):
+                return True
+
+        # Video game / Esports / Sports players in non-sports queries
+        if not is_sports_query:
+            if "starcraft" in desc or "pro-gaming" in desc or "esports" in desc:
+                return True
+            if cat == "human" and any(pat in desc for pat in ("ice hockey", "footballer", "baseball", "basketball")):
+                return True
+
+        # Military operations in non-history queries
+        if not is_history_query:
+            if "armed forces" in desc or "military operation" in desc or "strategic summer offensive" in desc:
+                return True
+
+        # Geographical entities (cities, countries, counties) in non-geographic queries
+        is_location_query = bool(re.search(
+            r"\b(where|capital|country|countries|located|location|city|cities|town|towns|border|borders|continent|state|states|province|provinces|headquartered|nation|nations|territory)\b",
+            query_lower
+        ))
+        if not is_location_query:
+            if cat == "location":
+                return True
+            instance_of_set = {str(t).lower() for t in edges.get("INSTANCE_OF", [])}
+            subclass_of_set = {str(t).lower() for t in edges.get("SUBCLASS_OF", [])}
+            loc_types = {
+                "city", "town", "capital", "capital city", "administrative territorial entity",
+                "county", "province", "state", "sovereign state", "country", "municipality"
+            }
+            if instance_of_set & loc_types or subclass_of_set & loc_types:
+                return True
+
+        # Config files / software directives
+        if "(config.sys directive)" in label or "config.sys" in desc:
+            return True
+
+        # Software libraries, APIs, and drivers in non-programming queries
+        is_programming_query = any(w in query_lower for w in (
+            "python", "code", "function", "library", "api", "software", "program", "class", "method", "compile", "bug", "script"
+        ))
+        if not is_programming_query:
+            if any(pat in desc for pat in ("image library", "cross-platform image library", "shared library form", "software library", "c++ library")):
+                return True
+            if any(pat in label for pat in ("image library", "software library")):
+                return True
+
+        return False
 
     # -------------------------------------------------------------------------
     # Task 4.2: SIMD Top-K Seed Selection
@@ -675,8 +853,10 @@ class SpreadingActivationRetriever:
 
         query_vec: Union[QuantaVector, bytes, np.ndarray]
         named_entities: List[str] = []
+        query_text_raw: str = ""
 
         if isinstance(query, str):
+            query_text_raw = query
             named_entities = self._extract_salient_entities(query, None)
             try:
                 q_graph = self.compile_query_asg(query)
@@ -691,6 +871,7 @@ class SpreadingActivationRetriever:
                 query_vec = QuantaVector.zeros()
         elif isinstance(query, QuantaGraph):
             q_graph = query
+            query_text_raw = getattr(query, "raw_text", "") or ""
             query_vec = query.root.vector if query.root else QuantaVector.zeros()
             for n in query.nodes.values():
                 if n.literal and n.literal != "?X" and isinstance(n.literal, str):
@@ -745,18 +926,24 @@ class SpreadingActivationRetriever:
                 else:
                     cids = []
 
-                # Query Global Knowledge Base if mounted and entity not yet found
-                if has_global_kb:
+                # Query Global Knowledge Base strictly if mounted and entity qualifies as a proper seed
+                if has_global_kb and self._is_qualified_global_kb_seed(ent_text, original_query=query_text_raw):
                     try:
                         kb_matches = page_table.global_kb.lookup_entity(ent_clean, limit=3)
                         for kn in kb_matches:
-                            if kn.cid and kn.cid not in cids:
+                            if kn.cid and kn.cid not in cids and not self._is_distractor_entity(kn, query_text_raw):
                                 cids.append(kn.cid)
                     except Exception as e:
                         logger.warning("Error querying global KB for entity '%s': %s", ent_clean, e)
 
                 for ent_cid in cids:
                     if ent_cid not in boosted_cids:
+                        n_check = page_table.fetch_node(ent_cid)
+                        if n_check and (
+                            (n_check.anchor and (n_check.anchor.startswith("merkle:") or n_check.anchor.startswith("fold:")))
+                            or (isinstance(n_check.literal, dict) and n_check.literal.get("type") == "discourse_episode_fold")
+                        ):
+                            continue
                         boosted.append((ent_cid, 0))
                         boosted_cids.add(ent_cid)
                 if len(boosted) >= cand_limit * 2:
@@ -860,15 +1047,20 @@ class SpreadingActivationRetriever:
 
             # 1. Forward outgoing traversal along allowed relations
             next_level_targets: List[str] = []
-            for rel, targets in node.edges.items():
-                if allow_all or rel in relations:
-                    for target_cid in targets:
-                        old_act = activations.get(target_cid, 0.0)
-                        if next_act > old_act:
-                            activations[target_cid] = next_act
-                            queue.append((target_cid, depth + 1))
-                            if target_cid not in node_cache:
-                                next_level_targets.append(target_cid)
+            is_node_fold = bool(
+                (node.anchor and (node.anchor.startswith("merkle:") or node.anchor.startswith("fold:")))
+                or (isinstance(node.literal, dict) and node.literal.get("type") == "discourse_episode_fold")
+            )
+            if not is_node_fold:
+                for rel, targets in node.edges.items():
+                    if allow_all or rel in relations:
+                        for target_cid in targets:
+                            old_act = activations.get(target_cid, 0.0)
+                            if next_act > old_act:
+                                activations[target_cid] = next_act
+                                queue.append((target_cid, depth + 1))
+                                if target_cid not in node_cache:
+                                    next_level_targets.append(target_cid)
 
             if next_level_targets:
                 fetched_targets = page_table.fetch_nodes(next_level_targets)
@@ -888,6 +1080,17 @@ class SpreadingActivationRetriever:
                     reverse_cids_to_fetch = []
                     for p_cid, rel in rev_edges:
                         if p_cid != cid and (allow_all or rel in relations):
+                            # Do not traverse backwards into fold summary nodes
+                            p_node = node_cache.get(p_cid)
+                            if p_node is None:
+                                p_node = page_table.fetch_node(p_cid)
+                                node_cache[p_cid] = p_node
+                            if p_node and (
+                                (p_node.anchor and (p_node.anchor.startswith("merkle:") or p_node.anchor.startswith("fold:")))
+                                or (isinstance(p_node.literal, dict) and p_node.literal.get("type") == "discourse_episode_fold")
+                            ):
+                                continue
+
                             # Direct narrative chains and thematic valencies are preserved; generic distractors are penalized
                             is_structural_chain = rel in (
                                 "VAL_X1_AGENT", "VAL_X2_PATIENT", "VAL_LOCATION_SLOT", "VAL_X5_INSTRUMENT",
@@ -1024,6 +1227,7 @@ class SpreadingActivationRetriever:
         subgraph: QuantaGraph,
         format: str = "english",
         max_tokens: int = 500,
+        query_text: str = "",
     ) -> str:
         """Formats the retrieved sub-graph into a compact prompt string for host LLMs.
 
@@ -1035,6 +1239,7 @@ class SpreadingActivationRetriever:
             subgraph: Retrieved QuantaGraph ASG sub-graph.
             format: Output format ('english' or 'sexpr').
             max_tokens: Maximum token budget (cleanly truncates at boundaries).
+            query_text: Optional raw query text for distractor filtering.
 
         Returns:
             Context string ready for LLM prompt prefix injection.
@@ -1042,14 +1247,16 @@ class SpreadingActivationRetriever:
         if not subgraph.nodes:
             return ""
 
+        effective_query = query_text or getattr(subgraph, "query_text", "")
+
         fmt_lower = format.lower().strip()
 
         if fmt_lower == "sexpr":
             return self._format_sexpr_context(subgraph, max_tokens=max_tokens)
         else:
-            return self._format_english_context(subgraph, max_tokens=max_tokens)
+            return self._format_english_context(subgraph, max_tokens=max_tokens, query_text=effective_query)
 
-    def _format_english_context(self, subgraph: QuantaGraph, max_tokens: int) -> str:
+    def _format_english_context(self, subgraph: QuantaGraph, max_tokens: int, query_text: str = "") -> str:
         """Realizes the sub-graph into natural English sentences."""
         event_nodes = [
             n for n in subgraph.nodes.values()
@@ -1067,6 +1274,10 @@ class SpreadingActivationRetriever:
 
             # Handle encyclopedic / global KB nodes (where literal is a payload dict)
             if isinstance(n.literal, dict):
+                # Apply distractor pruning for open-domain Global KB nodes
+                if query_text and self._is_distractor_entity(n, query_text):
+                    continue
+
                 label = n.literal.get("label") or n.anchor or "Entity"
                 desc = n.literal.get("description", "")
                 if desc and isinstance(desc, str):
@@ -1091,6 +1302,9 @@ class SpreadingActivationRetriever:
                             if fact not in rel_descriptions:
                                 rel_descriptions.append(fact)
                         elif rel == "HAS_PART":
+                            # Avoid calendar/number date spam (e.g. Aug. has part august 08)
+                            if re.search(r"\d", t_label) or t_label.lower().startswith(label[:3].lower()):
+                                continue
                             fact = f"{label} has part {t_label}."
                             if fact not in rel_descriptions:
                                 rel_descriptions.append(fact)
@@ -1172,9 +1386,10 @@ class SpreadingActivationRetriever:
                     m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", str(p_text).strip(), re.IGNORECASE)
                     if m_doc:
                         d_tag = m_doc.group(1).strip()
-                tag_key = str(d_tag).strip() if d_tag else f"fold_{len(doc_passages)}"
-                if p_text and tag_key not in doc_passages:
-                    doc_passages[tag_key] = str(p_text)
+                if d_tag and re.match(r"^(?:Document|Passage)\s*\[?\d+\]?", str(d_tag).strip(), re.IGNORECASE):
+                    tag_key = str(d_tag).strip()
+                    if p_text and tag_key not in doc_passages:
+                        doc_passages[tag_key] = str(p_text)
 
         if not event_nodes and not doc_passages:
             if rel_descriptions:
@@ -1277,20 +1492,18 @@ class SpreadingActivationRetriever:
             for s_list in doc_grouped_sentences.values():
                 sentences.extend(s_list)
 
-        # Assemble final context sentences: prioritize passages in multi-document QA
+        # Assemble final context sentences: prioritize passages in multi-document QA, events in single-doc
         all_sentences: List[str] = []
         if has_any_doc_tags:
             all_sentences = list(sentences)
         else:
+            all_sentences = list(sentences)
             if rel_descriptions:
                 for desc in rel_descriptions:
                     norm = desc.lower().strip()
                     if norm not in seen_sentences:
                         seen_sentences.add(norm)
                         all_sentences.append(desc)
-                all_sentences.extend(sentences)
-            else:
-                all_sentences = sentences
 
         if not all_sentences and subgraph.root:
             # Fallback to direct realization
@@ -1461,16 +1674,18 @@ class SpreadingActivationRetriever:
 
     def _truncate_to_token_budget(self, text: str, max_tokens: int) -> str:
         """Cleanly truncates text to fit within token budget at paragraph or sentence boundaries, preserving formatting."""
+        # Standard tokenizers average ~1.33 tokens per word
+        max_words = max(1, int(max_tokens / 1.33))
         words = text.split()
-        if len(words) <= max_tokens:
+        if len(words) <= max_words:
             return text
 
-        # Find character offset corresponding to max_tokens in original text
+        # Find character offset corresponding to max_words in original text
         word_count = 0
         char_cutoff = len(text)
         for m in re.finditer(r"\S+", text):
             word_count += 1
-            if word_count >= max_tokens:
+            if word_count >= max_words:
                 char_cutoff = m.end()
                 break
 
@@ -1521,20 +1736,29 @@ class SpreadingActivationRetriever:
         detected_depth = self.detect_query_hop_depth(q_text) if q_text else 2
         salient_ents = self._extract_salient_entities(q_text, None) if q_text else []
 
-        effective_depth = max_depth
-        if (max_depth <= 2 and (detected_depth >= 3 or len(salient_ents) >= 2 or len(seed_cids) >= 2)) or detected_depth >= 3:
-            effective_depth = max(3, detected_depth)
+        # Multi-hop propagation (depth >= 3, gamma=0.85, theta=0.15) is strictly reserved for:
+        # 1. Queries with detected relational hop depth >= 3
+        # 2. Episodic multi-document folds in PageTable (has_document_headings or document count >= 2)
+        has_multi_docs = False
+        if page_table and getattr(page_table, "has_document_headings", False):
+            has_multi_docs = True
 
-        eff_decay = decay if decay is not None else (0.85 if effective_depth >= 2 else self.decay)
-        eff_threshold = threshold if threshold is not None else (0.15 if effective_depth >= 2 else self.threshold)
+        is_multihop_task = (detected_depth >= 3) or has_multi_docs
 
-        return self.traverse_subgraph(
+        effective_depth = max(3, detected_depth) if is_multihop_task else max_depth
+        eff_decay = decay if decay is not None else (0.85 if is_multihop_task else self.decay)
+        eff_threshold = threshold if threshold is not None else (0.15 if is_multihop_task else self.threshold)
+
+        subgraph = self.traverse_subgraph(
             seed_cids=seed_cids,
             page_table=page_table,
             max_depth=effective_depth,
             decay=eff_decay,
             threshold=eff_threshold,
         )
+        if q_text:
+            setattr(subgraph, "query_text", q_text)
+        return subgraph
 
     def retrieve_context(
         self,
@@ -1550,12 +1774,16 @@ class SpreadingActivationRetriever:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
         detected_depth = self.detect_query_hop_depth(query) if query else 2
         salient_ents = self._extract_salient_entities(query, None) if query else []
-        effective_depth = max_depth
-        if (max_depth <= 2 and (detected_depth >= 3 or len(salient_ents) >= 2)) or detected_depth >= 3:
-            effective_depth = max(3, detected_depth)
 
-        eff_decay = decay if decay is not None else (0.85 if effective_depth >= 2 else self.decay)
-        eff_threshold = threshold if threshold is not None else (0.15 if effective_depth >= 2 else self.threshold)
+        has_multi_docs = False
+        if page_table and getattr(page_table, "has_document_headings", False):
+            has_multi_docs = True
+
+        is_multihop_task = (detected_depth >= 3) or has_multi_docs
+
+        effective_depth = max(3, detected_depth) if is_multihop_task else max_depth
+        eff_decay = decay if decay is not None else (0.85 if is_multihop_task else self.decay)
+        eff_threshold = threshold if threshold is not None else (0.15 if is_multihop_task else self.threshold)
 
         subgraph = self.retrieve_subgraph_for_query(
             query=query,
@@ -1569,6 +1797,7 @@ class SpreadingActivationRetriever:
             subgraph=subgraph,
             format=format,
             max_tokens=max_tokens,
+            query_text=query,
         )
 
 

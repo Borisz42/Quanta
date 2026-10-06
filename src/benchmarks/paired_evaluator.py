@@ -197,7 +197,7 @@ class PairedEvaluator:
         messages: List[Dict[str, str]],
         headers: Optional[Dict[str, str]] = None,
         max_tokens: int = 1024,
-        temperature: float = 0.1,
+        temperature: float = 0.0,
         timeout: Optional[float] = None,
     ) -> Tuple[str, int, int, float, float, float, Dict[str, Any]]:
         """Makes live chat completion call, measuring TTFT, latency, throughput, and metadata."""
@@ -207,8 +207,8 @@ class PairedEvaluator:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "presence_penalty": 0.2,   # Penalizes repeating previously generated tokens/topics
-            "frequency_penalty": 0.2,  # Strongly suppresses repetitive document listing loops
+            "presence_penalty": 0.0 if temperature == 0.0 else 0.2,   # Penalizes repeating previously generated tokens/topics
+            "frequency_penalty": 0.0 if temperature == 0.0 else 0.2,  # Strongly suppresses repetitive document listing loops
             "stream": False,
         }
 
@@ -539,10 +539,11 @@ class PairedEvaluator:
                     "X-Quanta-No-Global-KB": "true",
                     "X-Quanta-Reset": "true",
                     "X-Quanta-Timeout": str(sample_timeout),
-                    "X-Quanta-Max-Context-Tokens": "1500",
                 }
+                if sample.suite == "musique":
+                    headers_b["X-Quanta-Max-Context-Tokens"] = "1500"
                 if session_id:
-                    headers_b["X-Quanta-Session-ID"] = session_id
+                    headers_b["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_local"
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
                     self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
                 )
@@ -590,10 +591,11 @@ class PairedEvaluator:
             headers_c = {
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
-                "X-Quanta-Max-Context-Tokens": "1500",
             }
+            if sample.suite == "musique":
+                headers_c["X-Quanta-Max-Context-Tokens"] = "1500"
             if session_id:
-                headers_c["X-Quanta-Session-ID"] = session_id
+                headers_c["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_global"
             if is_factual_domain:
                 headers_c["X-Quanta-Global-KB"] = "true"
                 headers_c["X-Quanta-Enrich"] = "true"

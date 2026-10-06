@@ -246,30 +246,9 @@ class ASGCompiler:
         # 2. Foreign-key cross-reference validation
         fk_errors = extraction_result.validate_foreign_keys(prune_dangling_relations=True)
         if fk_errors:
-            # Fallback slot cleansing for robust live execution
-            entity_ids = {e.id for e in extraction_result.entities}
-            all_valid_ids = entity_ids | {ev.id for ev in extraction_result.events} | {p.id for p in extraction_result.propositions}
-            for ev in extraction_result.events:
-                if ev.agent_id and ev.agent_id not in all_valid_ids:
-                    ev.agent_id = None
-                if ev.patient_id and ev.patient_id not in all_valid_ids:
-                    ev.patient_id = None
-                if ev.theme_id and ev.theme_id not in all_valid_ids:
-                    ev.theme_id = None
-                if ev.location_id and ev.location_id not in entity_ids:
-                    ev.location_id = None
-                if ev.instrument_id and ev.instrument_id not in entity_ids:
-                    ev.instrument_id = None
-            for p in extraction_result.propositions:
-                if p.source_agent_id and p.source_agent_id not in all_valid_ids:
-                    p.source_agent_id = None
-                if p.event_id and p.event_id not in all_valid_ids:
-                    p.event_id = None
-            fk_errors = extraction_result.validate_foreign_keys(prune_dangling_relations=True)
-            if fk_errors:
-                raise ASGCompilationError(
-                    f"Foreign-key validation failed before compilation: {fk_errors}"
-                )
+            raise ASGCompilationError(
+                f"Foreign-key validation failed before compilation: {fk_errors}"
+            )
 
         graph = QuantaGraph()
         entity_nodes: Dict[str, QuantaNode] = {}

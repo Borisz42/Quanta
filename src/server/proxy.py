@@ -529,14 +529,15 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
                 query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
 
-                # Base budget: 600 tokens for single turn / short queries
                 # Multi-document scaling: allocate ~300-350 tokens per required hop / active document
                 if num_doc_headings >= 10 or query_hop_depth >= 3:
                     # Target: 4 to 5 full passages (~1,400 to 1,600 tokens), providing ~45% compression over 2,700 tokens
                     adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
                     effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
                 else:
-                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else min(cfg.max_context_tokens, 600)
+                    # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
+                    adaptive_budget = min(cfg.max_context_tokens, 450)
+                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
 
                 retrieved_context = await asyncio.to_thread(
                     pipeline.retrieve_context,

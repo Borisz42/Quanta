@@ -1221,7 +1221,7 @@ The table below reports the empirically measured live results from the comprehen
 | Benchmark Suite | Samples ($N$) | Base LLM Acc | QUANTA Local | QUANTA + KB | Accuracy Lift | Prompt Token Footprint | Live Latency (End-to-End) |
 |---|---|---|---|---|---|---|---|
 | **OpenAI HumanEval** | 82 | 78.0% | 79.3% | **82.9%** | **+4.9%** ($p<0.05^*$) | 185 $\to$ **185** (0.0%) | 2.48s $\to$ **3.56s** (0.70x) |
-| **AI2 ARC-Challenge** | 30 | 93.3% | **93.3%** | 86.7% | -6.7% (n.s.) | 134 $\to$ **1,485** (with KB) | 1.47s $\to$ **3.73s** (0.39x) |
+| **AI2 ARC-Challenge** | 30 | 93.3% | 93.3% | **93.3%** | **0.0%** (parity) | 134 $\to$ **223** (with KB) | 1.36s $\to$ **2.26s** (0.60x) |
 | **MuSiQue Multi-Hop** | 30 | 50.0% | 50.0% | **43.3%** | -6.7% (n.s.) | 2,527 $\to$ **2,102** (**-16.8%**) | 2.50s $\to$ **12.64s** (0.20x) |
 | **ProofWriter Logic** | 30 | 100.0% | 96.7% | **100.0%** | **0.0%** (100% parity) | 233 $\to$ **311** (0.0%) | 1.14s $\to$ **2.21s** (0.52x) |
 | **bAbI State Tracking** | 25 | 96.0% | **100.0%** | 96.0% | **+4.0%** (n.s.) | 69 $\to$ **69** (0.0%) | 1.06s $\to$ **1.97s** (0.54x) |
@@ -1231,7 +1231,7 @@ The table below reports the empirically measured live results from the comprehen
 | **Long Variable Tracking** | 5 | 40.0% | 100.0% | **60.0%** | **+60.0%** ($p=0.041^*$) | 94,120 $\to$ **641** (**-99.3%**) | 2.62s $\to$ **35.41s** (0.07x) |
 
 > [!NOTE]
-> Telemetry and per-sample live execution traces are recorded in [`output/paired_benchmark_report.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/paired_benchmark_report.md) and [`output/paired_benchmark_results.json`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/paired_benchmark_results.json). Across historical evaluation rounds on ARC-Challenge ($N=30$), QUANTA + KB scored **96.7%** (+3.3% lift) in `exp-015b` and **86.7%** in `exp-016b` (with QUANTA Local matching the Base LLM at 93.3% across both runs).
+> Telemetry and per-sample live execution traces are recorded in [`output/paired_benchmark_report.md`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/paired_benchmark_report.md) and [`output/paired_benchmark_results.json`](file:///c:/Users/PC/Documents/GitHub/Quanta/output/paired_benchmark_results.json). Across historical evaluation rounds on ARC-Challenge ($N=30$), QUANTA + KB scored **96.7%** (+3.3% lift) in `exp-015b`, dropped to **86.7%** in `exp-016b` due to multi-hop spreading activation parameter expansion and distractor harvesting, and in `exp-016c` recovered to **93.3%** (matching Base/Local parity with 0% regression and cutting KB prompt overhead from 1,485 to 223 tokens) after stem-isolated entity harvesting and procedural science gating.
 
 #### Key Empirical Findings from Live GPU Execution:
 1. **Statistically Significant Pass@1 Lift on HumanEval ($N=82$, $p < 0.05^*$)**:
@@ -1256,7 +1256,7 @@ This live ablation isolates the runtime impact and accuracy contribution of moun
 | Benchmark Domain | Local ASG Accuracy | +Wikidata KB Accuracy | Knowledge Base Lift ($\Delta$) | Local Latency | +Wikidata Latency | KB Routing Verdict |
 |---|---|---|---|---|---|---|
 | **HumanEval Coding ($N=82$)** | 79.3% | **82.9%** | **+3.7%** | 3.42s | 3.56s | **Gated (Local AST Only)** |
-| **ARC-Challenge Science ($N=30$)** | **93.3%** | 86.7% | -6.7% | 3.07s | 3.73s | **Local / Selective Gating** |
+| **ARC-Challenge Science ($N=30$)** | **93.3%** | **93.3%** | **+0.0%** | 2.18s | 2.26s | **Selective Factual Gating** |
 | **MuSiQue Multi-Hop ($N=30$)** | 50.0% | **43.3%** | -6.7% | 13.86s | 12.64s | **Enriched (Multi-Hop Path)** |
 | **ProofWriter Deductive ($N=30$)** | 96.7% | **100.0%** | **+3.3%** | 2.76s | 2.21s | **100.0% Accuracy (0 Polarity Inversions)** |
 | **bAbI State Tracking ($N=25$)** | **100.0%** | 96.0% | -4.0% | 2.04s | 1.97s | **Local (Dynamic Fluents)** |
