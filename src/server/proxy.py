@@ -48,7 +48,7 @@ class QuantaProxyConfig:
     """Runtime configuration for QUANTA OpenAI Reverse Proxy."""
     backend_url: str = field(default_factory=lambda: os.getenv("QUANTA_BACKEND_URL", "http://localhost:8888/v1"))
     compression_threshold: int = field(default_factory=lambda: int(os.getenv("QUANTA_COMPRESSION_THRESHOLD", "2000")))
-    max_context_tokens: int = 500
+    max_context_tokens: int = field(default_factory=lambda: int(os.getenv("QUANTA_MAX_CONTEXT_TOKENS", "2048")))
     context_format: str = "english"  # 'english' or 'sexpr'
     always_enrich: bool = False
     page_table_path: Optional[Union[str, Path]] = field(default_factory=lambda: os.getenv("QUANTA_PAGE_TABLE_PATH", None))
@@ -166,7 +166,7 @@ def decompose_query_context(text: Optional[str]) -> Tuple[Optional[str], str]:
 
     # 1. Explicit delimiter patterns
     explicit_patterns = [
-        r"(?:===+\s*)?(?:Context|Documentation|Background|Source|Forrás(?:dokumentumok)?|Szöveg|Eredeti forrásdokumentumok)\s*:\s*\n*([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
+        r"(?:===+\s*|#{1,6}\s*|\*{1,2})?(?:(?:Document\s+)?Context|Documentation|Background|Source|Passages?|Forrás(?:dokumentumok)?|Szöveg|Eredeti forrásdokumentumok)(?:\*{1,2}|===+)?\s*:\s*\n*([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
         r"([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
     ]
     for pat in explicit_patterns:
@@ -197,11 +197,15 @@ def decompose_query_context(text: Optional[str]) -> Tuple[Optional[str], str]:
 
 
 def extract_context_from_system(messages: Sequence[ChatMessage]) -> Tuple[Optional[str], Optional[str]]:
-    """Extracts background context from a system message if present (e.g. 'Context:\n...')."""
+    """Extracts background context from a system message if present (e.g. 'Context:\n...' or 'Document context:\n...')."""
     for m in messages:
         if m.role == "system" and m.content:
             text = m.content.strip()
-            pat = r"(?:===+\s*)?(?:Context|Documentation|Source|Forrás(?:dokumentumok)?)\s*:\s*\n*([\s\S]*)"
+            pat = (
+                r"(?:===+\s*|#{1,6}\s*|\*{1,2})?"
+                r"(?:(?:Document\s+)?Context|Documentation|Source|Passages?|Forrás(?:dokumentumok)?)"
+                r"(?:\*{1,2}|===+)?\s*:\s*\n*([\s\S]*)"
+            )
             match = re.search(pat, text, re.IGNORECASE)
             if match:
                 doc = match.group(1).strip()
@@ -413,7 +417,6 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
         # 1. Measure incoming token footprint
         raw_tokens = estimate_messages_tokens(raw_messages)
-        should_compress = (raw_tokens > threshold) or (len(raw_messages) > 4 and raw_tokens > 200)
 
         # 2. Extract active user query and historical context
         # Find the latest user message
@@ -440,6 +443,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
         has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
         user_query = isolated_question if doc_from_user else raw_user_content
+        should_compress = (raw_tokens > threshold) or (len(raw_messages) > 4 and raw_tokens > 200) or has_single_query_context
 
         retrieved_context: str = ""
         compressed_messages: List[Dict[str, Any]] = []
@@ -525,9 +529,14 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
                 query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
 
-                effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else cfg.max_context_tokens
-                if num_doc_headings >= 15 or query_hop_depth >= 3:
-                    effective_max_tokens = max(effective_max_tokens, 2000)
+                # Base budget: 600 tokens for single turn / short queries
+                # Multi-document scaling: allocate ~300-350 tokens per required hop / active document
+                if num_doc_headings >= 10 or query_hop_depth >= 3:
+                    # Target: 4 to 5 full passages (~1,400 to 1,600 tokens), providing ~45% compression over 2,700 tokens
+                    adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
+                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
+                else:
+                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else min(cfg.max_context_tokens, 600)
 
                 retrieved_context = await asyncio.to_thread(
                     pipeline.retrieve_context,
@@ -544,7 +553,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             system_content_parts = []
             if clean_sys_inst:
                 system_content_parts.append(clean_sys_inst)
-            elif system_messages:
+            elif system_messages and not doc_from_system:
                 system_content_parts.append(system_messages[-1].content or "")
 
             if retrieved_context and retrieved_context.strip():

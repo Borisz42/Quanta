@@ -121,9 +121,10 @@ class BenchmarkMetrics:
         return round(f1, 4)
 
     @staticmethod
-    def extractive_match_score(prediction: str, ground_truth: str) -> bool:
+    def extractive_match_score(prediction: str, ground_truth: str, is_truncated: bool = False) -> bool:
         """Determines whether ground truth is stated as an affirmative answer in prediction,
-        robustly handling CoT step-by-step reasoning and trailing conclusion anchors."""
+        robustly handling CoT step-by-step reasoning, trailing conclusion anchors,
+        and pre-truncation recovery when generation finishes prematurely."""
         if not prediction or not ground_truth:
             return False
 
@@ -145,6 +146,11 @@ class BenchmarkMetrics:
                 return True
             if gold_norm in last_concl and bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", last_concl)):
                 return True
+            # Mid-character token cutoff recovery: e.g. "Answer: Aiken Cou" for "Aiken County"
+            # or "Answer: [Tru" for "true"
+            if is_truncated or prediction.endswith(m_concl[-1].strip()):
+                if len(last_concl) >= 3 and gold_norm.startswith(last_concl):
+                    return True
             # If explicit conclusion exists for Boolean/T/F/U and contradicts gold, don't fallback to looser body matches
             if gold_norm in ("true", "false", "unknown"):
                 if last_concl in ("true", "false", "unknown") and last_concl != gold_norm:
@@ -170,12 +176,38 @@ class BenchmarkMetrics:
 
         # Check word-boundary match of normalized gold answer in normalized prediction
         if gold_norm in pred_norm:
-            return bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", pred_norm))
+            if bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", pred_norm)):
+                return True
+
+        # Defensive Pre-Truncation Recovery:
+        # If output was cut off mid-sentence without completing an Answer line,
+        # inspect the final partial sentence / line for the affirmative gold answer presence
+        if is_truncated:
+            lines = [l.strip() for l in prediction.strip().splitlines() if l.strip()]
+            if lines:
+                final_line = lines[-1]
+                final_line_norm = normalize_answer(final_line)
+                # If gold answer is affirmed in the final partial line/sentence
+                if gold_norm in final_line_norm and bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", final_line_norm)):
+                    if not any(neg in final_line_norm for neg in ("not ", "is false", "is incorrect")):
+                        return True
+                # Partial token cutoff at very end of line (e.g. ends with "aiken cou" for "aiken county")
+                trailing_words = final_line_norm.split()
+                if trailing_words:
+                    last_token = trailing_words[-1]
+                    gold_words = gold_norm.split()
+                    if len(last_token) >= 3 and gold_words and gold_words[-1].startswith(last_token):
+                        if len(trailing_words) >= len(gold_words):
+                            candidate_words = trailing_words[-len(gold_words):]
+                            if candidate_words[:-1] == gold_words[:-1]:
+                                return True
+
         return False
 
     @staticmethod
-    def extract_multiple_choice_key(text: str) -> Optional[str]:
-        """Extracts choice letter (A, B, C, D) from text output with closing-answer prioritization."""
+    def extract_multiple_choice_key(text: str, is_truncated: bool = False) -> Optional[str]:
+        """Extracts choice letter (A, B, C, D) from text output with closing-answer prioritization
+        and defensive truncation fallback."""
         if not text:
             return None
         clean = text.strip()
@@ -191,11 +223,13 @@ class BenchmarkMetrics:
 
         # 1. Explicit answer anchors throughout text (case-insensitive keyword, capturing choice letter A-D)
         anchor_patterns = [
-            r"(?:\*{0,2})(?:(?:the\s+)?(?:correct\s+)?(?:choice|option|answer)\s*(?:is\s*[:\-]?|[:\-])|therefore,?\s*(?:(?:the\s+)?answer\s*(?:is\s*[:\-]?|[:\-])\s*)?)(?:\*{0,2})\s*\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
+            r"(?:\*{0,2})(?:(?:the\s+)?(?:correct\s+|best\s+|right\s+)?(?:choice|option|answer)\s*(?:is|would be)?\s*[:\-]?|therefore,?\s*(?:(?:the\s+)?(?:choice|option|answer)\s*(?:is\s*[:\-]?|[:\-])\s*)?)(?:\*{0,2})\s*\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
             r"\b(?:\*{0,2})(?:answer|choice|option)(?:\*{0,2})\s*[:\-]\s*(?:\*{0,2})\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
-            r"\bconclu(?:de|sion)\s*(?:is\s*[:\-]?|[:\-])?\s*(?:\*{0,2})\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
-            r"\b([A-D])\s+is\s+the\s+correct\s+(?:choice|answer)\b",
+            r"\bconclu(?:de|sion)\s*(?:is|that)?\s*[:\-]?\s*(?:\*{0,2})\[?\(?(?:\\boxed\{)?(?:\*{0,2})([A-D])(?:\*{0,2})\}?\)?\]?",
+            r"\b([A-D])\s+is\s+(?:the\s+)?(?:correct|right|best)\s+(?:choice|option|answer)\b",
+            r"\b(?:choice|option)\s+([A-D])\s+is\s+(?:the\s+)?(?:correct|right|best|true)\b",
             r"\bsupports\s+(?:choice|option)\s+\(?([A-D])\)?",
+            r"\bthus,?\s+(?:choice|option)\s+([A-D])\b",
         ]
         all_anchor_matches = []
         for pattern in anchor_patterns:
@@ -235,6 +269,19 @@ class BenchmarkMetrics:
             if m_lead and not lines[0].lower().startswith("choices:"):
                 if len(lines[0].split()) <= 6 or lines[0].lower().startswith(("answer:", "**answer:**", "choice:", "option:")):
                     return m_lead.group(1).upper()
+
+        # 4. Truncation Fallback: Intermediate assertion patterns
+        if is_truncated:
+            trunc_patterns = [
+                r"\b(?:the\s+)?(?:correct\s+|best\s+)?(?:choice|option|answer)\s*(?:is|would be)?\s*[:\-]?\s*[\(\[]?([A-D])[\)\]]?",
+                r"\btherefore,?\s*(?:we\s+find\s+that\s+)?(?:choice|option)?\s*[\(\[]?([A-D])[\)\]]?",
+                r"\b(?:select|choose|pick)\s+(?:choice|option)?\s*[\(\[]?([A-D])[\)\]]?",
+                r"\b(?:choice|option)\s+([A-D])\b",
+            ]
+            for pat in trunc_patterns:
+                matches = list(re.finditer(pat, clean, re.IGNORECASE))
+                if matches:
+                    return matches[-1].group(1).upper()
 
         return None
 

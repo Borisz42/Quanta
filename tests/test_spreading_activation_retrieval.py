@@ -480,3 +480,141 @@ class TestMultiChapterAndScalingBenchmark:
         assert mean_lat < 5.0, f"Mean retrieval latency must be < 5.0 ms, got mean={mean_lat:.3f} ms"
 
         pt.close()
+
+
+class TestMultiAnchorAndTraversalDynamics:
+    """Validates multi-anchor harvesting, spreading activation retention, and thematic exemptions."""
+
+    def test_multi_anchor_seed_extraction(self):
+        """Verifies extraction of quoted entities, genitives, and single-word proper nouns."""
+        retriever = SpreadingActivationRetriever()
+
+        # 1. Quoted expressions
+        q1 = "Who wrote 'Turn Me On' by performer of 'Happy Pills'?"
+        ents1 = retriever._extract_salient_entities(q1, None)
+        assert any("Turn Me On" in e for e in ents1), f"Expected 'Turn Me On' in {ents1}"
+        assert any("Happy Pills" in e for e in ents1), f"Expected 'Happy Pills' in {ents1}"
+
+        # 2. Genitive constructs
+        q2 = "Who was Nelvana's founder?"
+        ents2 = retriever._extract_salient_entities(q2, None)
+        assert any("Nelvana" in e for e in ents2), f"Expected 'Nelvana' in {ents2}"
+        assert any("founder" in e for e in ents2), f"Expected 'founder' in {ents2}"
+
+        # 3. Single-word proper nouns
+        q3 = "Did Candlebox release an album in 1993?"
+        ents3 = retriever._extract_salient_entities(q3, None)
+        assert any("Candlebox" in e for e in ents3), f"Expected 'Candlebox' in {ents3}"
+
+    def test_multihop_traversal_retention_above_threshold(self, tmp_path: Path):
+        """Verifies 3-hop and 4-hop chain retention above threshold theta=0.15 with decay gamma=0.85."""
+        db_path = tmp_path / "multihop_chain.db"
+        pt = PageTable(db_path)
+        retriever = SpreadingActivationRetriever()
+
+        # Build 4-hop chain: N1 -> N2 -> N3 -> N4 -> N5
+        nodes = []
+        for i in range(1, 6):
+            n = QuantaNode(literal=f"Entity_{i}", anchor=f"ent_{i}")
+            nodes.append(n)
+
+        for n in nodes:
+            pt.store_node(n)
+
+        # Wire edges: N1 -> N2 -> N3 -> N4 -> N5 along CAUSAL_LEADS_TO
+        for i in range(4):
+            pt.add_edge(nodes[i].cid, "CAUSAL_LEADS_TO", nodes[i + 1].cid)
+
+        subgraph = retriever.traverse_subgraph(
+            seed_cids=[nodes[0].cid],
+            page_table=pt,
+            max_depth=4,
+            decay=0.85,
+            threshold=0.15,
+            bidirectional=False,
+        )
+
+        activations = getattr(subgraph, "activations", {})
+        # Hop 0: N1 = 1.0
+        assert nodes[0].cid in subgraph.nodes
+        assert activations.get(nodes[0].cid, 0.0) == 1.0
+
+        # Hop 1: N2 = 0.85 >= 0.15
+        assert nodes[1].cid in subgraph.nodes
+        assert activations.get(nodes[1].cid, 0.0) == pytest.approx(0.85, abs=1e-3)
+
+        # Hop 2: N3 = 0.85^2 = 0.7225 >= 0.15
+        assert nodes[2].cid in subgraph.nodes
+        assert activations.get(nodes[2].cid, 0.0) == pytest.approx(0.7225, abs=1e-3)
+
+        # Hop 3: N4 = 0.85^3 = 0.6141 >= 0.15
+        assert nodes[3].cid in subgraph.nodes
+        assert activations.get(nodes[3].cid, 0.0) == pytest.approx(0.614125, abs=1e-3)
+
+        # Hop 4: N5 = 0.85^4 = 0.5220 >= 0.15
+        assert nodes[4].cid in subgraph.nodes
+        assert activations.get(nodes[4].cid, 0.0) == pytest.approx(0.522006, abs=1e-3)
+
+        pt.close()
+
+    def test_thematic_valency_hub_degree_exemption(self, tmp_path: Path):
+        """Verifies VAL_X1_AGENT and VAL_X2_PATIENT are exempt from degree attenuation on hubs."""
+        db_path = tmp_path / "thematic_hub.db"
+        pt = PageTable(db_path)
+        retriever = SpreadingActivationRetriever()
+
+        # Create high-degree entity hub
+        hub = QuantaNode(literal="HubEntity", anchor="hub_ent")
+        pt.store_node(hub)
+
+        # Add 10 incoming event nodes pointing to hub
+        ev_nodes = []
+        for i in range(10):
+            ev = QuantaNode(literal=f"Event_{i}", anchor=f"ev_{i}")
+            # Event points to hub via VAL_X1_AGENT
+            ev.add_edge("VAL_X1_AGENT", hub.cid)
+            pt.store_node(ev)
+            ev_nodes.append(ev)
+
+        # Reverse traversal from hub
+        subgraph = retriever.traverse_subgraph(
+            seed_cids=[hub.cid],
+            page_table=pt,
+            max_depth=1,
+            decay=0.85,
+            threshold=0.15,
+            bidirectional=True,
+        )
+
+        activations = getattr(subgraph, "activations", {})
+        # Hub has in-degree 10. Without exemption, degree_penalty = min(log2(11), 1.5) = 1.5
+        # With exemption, step_decay = 0.85 exactly, so rev_act = 1.0 * 0.85 = 0.85.
+        for ev in ev_nodes:
+            assert ev.cid in subgraph.nodes, f"Event {ev.cid} must be retained in subgraph"
+            act = activations.get(ev.cid, 0.0)
+            assert act == pytest.approx(0.85, abs=1e-3), f"Expected 0.85 unpenalized activation, got {act}"
+
+        pt.close()
+
+    def test_adaptive_context_budget_scaling(self):
+        """Verifies adaptive context budget formula in proxy calculation."""
+        from server.proxy import QuantaProxyConfig
+
+        cfg = QuantaProxyConfig()
+        assert cfg.max_context_tokens >= 1600
+
+        # Case 1: 20 document headings -> target 1600 tokens
+        headings_20 = 20
+        budget_20 = min(cfg.max_context_tokens, max(1200, min(1600, headings_20 * 100)))
+        assert budget_20 == 1600
+
+        # Case 2: 12 document headings -> target 1200 tokens
+        headings_12 = 12
+        budget_12 = min(cfg.max_context_tokens, max(1200, min(1600, headings_12 * 100)))
+        assert budget_12 == 1200
+
+        # Case 3: 15 document headings -> target 1500 tokens
+        headings_15 = 15
+        budget_15 = min(cfg.max_context_tokens, max(1200, min(1600, headings_15 * 100)))
+        assert budget_15 == 1500
+

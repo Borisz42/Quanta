@@ -61,8 +61,11 @@ class SpreadingActivationRetriever:
         "VAL_X1_AGENT",
         "VAL_X2_PATIENT",
         "VAL_LOCATION_SLOT",
+        "VAL_X5_INSTRUMENT",
+        "CAUSAL_LEADS_TO",
         "CAUSAL_MECHANISM_LINK",
         "TEMP_ALLEN_MEETS",
+        "TEMP_ALLEN_BEFORE",
         "CALLS",
         "INHERITS_FROM",
         "IMPLEMENTS",
@@ -266,11 +269,21 @@ class SpreadingActivationRetriever:
         "effect", "effects", "human", "humans", "beginning", "beginnings", "end", "ends",
         "explanation", "explanations", "reasoning", "choice", "choices", "option", "options",
         "conclude", "conclusion", "final", "line", "letter",
+        "based", "according", "assuming", "suppose", "determine", "identify", "indicate",
         "first", "second", "third", "fourth", "fifth", "last", "one", "two", "three", "four", "five",
         # Comparative adjectives & change terms
         "longer", "shorter", "faster", "slower", "higher", "lower", "larger", "smaller", "greater", "lesser",
         "increase", "increases", "increased", "increasing", "decrease", "decreases", "decreased", "decreasing",
         "become", "becomes", "became", "becoming",
+        # Common query relation verbs & linking functional nouns
+        "wrote", "write", "written", "writer", "perform", "performs", "performed", "performer",
+        "sing", "sings", "sang", "singer", "song", "songs", "direct", "directs", "directed", "director",
+        "star", "stars", "starred", "play", "plays", "played", "player", "acted", "actor", "actress",
+        "born", "died", "live", "lived", "located", "location", "headquartered", "headquarters",
+        "leave", "leaves", "left", "departs", "departing",
+        "bus", "buses", "train", "trains", "city", "series", "contains", "contained", "containing",
+        "employer", "employee", "founder", "founded", "founding", "create", "created", "creator",
+        "develop", "developed", "developer", "eponymous", "character",
     }
 
     def __init__(
@@ -500,7 +513,7 @@ class SpreadingActivationRetriever:
         entities: List[str] = []
 
         # Clean meta-prompt instructions from query_text before entity extraction
-        clean_text = query_text
+        clean_text = re.split(r"\n\s*(?:Instructions:|Note:|Format:|Answer with)", query_text, flags=re.IGNORECASE)[0]
         meta_instruction_patterns = [
             r"State your final choice.*$",
             r"Answer with only True, False.*$",
@@ -510,6 +523,33 @@ class SpreadingActivationRetriever:
         ]
         for mp in meta_instruction_patterns:
             clean_text = re.sub(mp, "", clean_text, flags=re.IGNORECASE | re.MULTILINE)
+
+        # Quoted expressions (e.g. 'Turn Me On', "Happy Pills") - ensure no multiline cross or apostrophe matches
+        quoted_patterns = [
+            r'"([^"\n\r]+)"',
+            r"(?<![a-zA-Z])'([^'\n\r]+)'(?![a-zA-Z])",
+            r'“([^”\n\r]+)”',
+            r'‘([^’\n\r]+)’',
+        ]
+        for q_pat in quoted_patterns:
+            matches = re.findall(q_pat, clean_text)
+            for m in matches:
+                m_clean = m.strip()
+                if m_clean.lower().startswith("the "):
+                    m_clean = m_clean[4:].strip()
+                if m_clean and len(m_clean) >= 2 and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
+                    entities.append(m_clean)
+
+        # Genitive/possessive constructs (e.g. "Norah Jones's performer", "Nelvana's founder")
+        genitive_pattern = r"\b([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)*)'s\s+([A-Za-z]+)\b"
+        for m_ent, m_rel in re.findall(genitive_pattern, clean_text):
+            m_ent_clean = m_ent.strip()
+            if m_ent_clean and m_ent_clean.lower() not in self.QUESTION_STOPWORDS and m_ent_clean not in entities:
+                entities.append(m_ent_clean)
+            m_rel_clean = m_rel.strip()
+            genitive_noise = {"own", "first", "second", "last", "new", "old", "other", "best", "next", "is", "was", "has", "had"}
+            if m_rel_clean and len(m_rel_clean) >= 2 and m_rel_clean.lower() not in genitive_noise and m_rel_clean not in entities:
+                entities.append(m_rel_clean)
 
         # Common domain-specific multi-word phrases (case-insensitive)
         known_patterns = [
@@ -563,6 +603,7 @@ class SpreadingActivationRetriever:
             r"\b[A-Z][a-z0-9]+(?:[A-Z][a-zA-Z0-9]*)+\b",  # PascalCase: ColorSwitcherStrategy, PlayerStrategy
             r"\b[a-zA-Z_][a-zA-Z0-9_]*_[a-zA-Z0-9_]+\b",  # snake_case: bubble_sort, choose_card, active_color
             r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)+\b", # Multi-word Title Case: James Webb Space Telescope, Eleanor Vance
+            r"\b[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{2,}\b", # Single-word Proper Nouns: Candlebox, Nelvana, Charlemagne, Luther
         ]
         for pat in capitalized_patterns:
             matches = re.findall(pat, clean_text)
@@ -571,14 +612,25 @@ class SpreadingActivationRetriever:
                 first_word = m_clean.split()[0].lower() if m_clean.split() else ""
                 if first_word in self.QUESTION_STOPWORDS:
                     continue
+                if any(m_clean.lower() == w.lower().strip("\"'()") for e in entities for w in e.split() if len(e.split()) >= 2):
+                    continue
                 if m_clean and m_clean.lower() not in self.QUESTION_STOPWORDS and m_clean not in entities:
                     entities.append(m_clean)
 
         # Extract salient technical and domain noun tokens for robust seed matching (including 4-digit years)
         tokens = re.findall(r"\b[\w'-]+\b", clean_text, re.UNICODE)
         existing_lower = {e.lower() for e in entities}
+        # Collect constituent tokens of existing compound entities to avoid degrading multi-word precision
+        constituent_tokens = set()
+        for e in entities:
+            words = [w.lower().strip("\"'()") for w in e.split() if len(w) >= 2]
+            if len(words) >= 2:
+                constituent_tokens.update(words)
+
         for tok in tokens:
             t_lower = tok.lower()
+            if t_lower in constituent_tokens:
+                continue
             is_valid_year = t_lower.isdigit() and len(t_lower) == 4 and (t_lower.startswith("1") or t_lower.startswith("2"))
             if (
                 t_lower not in self.QUESTION_STOPWORDS
@@ -836,8 +888,9 @@ class SpreadingActivationRetriever:
                     reverse_cids_to_fetch = []
                     for p_cid, rel in rev_edges:
                         if p_cid != cid and (allow_all or rel in relations):
-                            # Direct narrative chains (causal/temporal/associative) are preserved; generic thematic valencies are penalized
+                            # Direct narrative chains and thematic valencies are preserved; generic distractors are penalized
                             is_structural_chain = rel in (
+                                "VAL_X1_AGENT", "VAL_X2_PATIENT", "VAL_LOCATION_SLOT", "VAL_X5_INSTRUMENT",
                                 "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
                                 "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE",
                                 "CO_OCCURS", "LOCATED_IN", "CROSS_CHUNK_BRIDGE", "EDUCATED_AT", "STUDIED_AT",
@@ -884,6 +937,7 @@ class SpreadingActivationRetriever:
                             if (allow_all or rel in relations) and cid in targets:
                                 matched_incoming = True
                                 if rel in (
+                                    "VAL_X1_AGENT", "VAL_X2_PATIENT", "VAL_LOCATION_SLOT", "VAL_X5_INSTRUMENT",
                                     "CAUSAL_LEADS_TO", "CAUSAL_MECHANISM_LINK", "TEMP_ALLEN_MEETS", "TEMP_ALLEN_BEFORE",
                                     "CFG_NEXT", "CALLS", "INHERITS_FROM", "IMPLEMENTS", "IMPORTS", "DATA_FLOW_DEF_USE",
                                     "CO_OCCURS", "LOCATED_IN", "CROSS_CHUNK_BRIDGE", "EDUCATED_AT", "STUDIED_AT",
@@ -1104,7 +1158,25 @@ class SpreadingActivationRetriever:
                             # Pure internal navigation bridge for spreading activation, not natural language fact
                             pass
 
-        if not event_nodes:
+        fold_nodes = [
+            n for n in subgraph.nodes.values()
+            if (n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:")))
+            or (isinstance(n.literal, dict) and n.literal.get("type") == "discourse_episode_fold")
+        ]
+        doc_passages: Dict[str, str] = {}
+        for fn in fold_nodes:
+            if isinstance(fn.literal, dict):
+                p_text = fn.literal.get("text")
+                d_tag = fn.parent_cid or fn.literal.get("chapter_title")
+                if not d_tag and p_text:
+                    m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", str(p_text).strip(), re.IGNORECASE)
+                    if m_doc:
+                        d_tag = m_doc.group(1).strip()
+                tag_key = str(d_tag).strip() if d_tag else f"fold_{len(doc_passages)}"
+                if p_text and tag_key not in doc_passages:
+                    doc_passages[tag_key] = str(p_text)
+
+        if not event_nodes and not doc_passages:
             if rel_descriptions:
                 return " ".join(rel_descriptions)
             if entity_names:
@@ -1118,7 +1190,6 @@ class SpreadingActivationRetriever:
         sentences: List[str] = []
         seen_sentences: Set[str] = set()
         doc_grouped_sentences: Dict[str, List[str]] = {}
-        has_any_doc_tags = False
 
         for ev in ordered_events:
             doc_tag = None
@@ -1130,9 +1201,6 @@ class SpreadingActivationRetriever:
                 m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", ev.literal, re.IGNORECASE)
                 if m_doc:
                     doc_tag = m_doc.group(1).strip()
-
-            if doc_tag:
-                has_any_doc_tags = True
 
             clause_text = ""
             if isinstance(ev.literal, str) and len(ev.literal.split()) >= 3:
@@ -1160,27 +1228,69 @@ class SpreadingActivationRetriever:
                     else:
                         doc_grouped_sentences.setdefault("", []).append(formatted_sent)
 
-        if has_any_doc_tags:
-            for d_tag, s_list in doc_grouped_sentences.items():
-                if d_tag:
-                    sentences.append(f"{d_tag} (Excerpt): {' '.join(s_list)}")
-                else:
-                    sentences.append(" ".join(s_list))
+        # Compute spreading activation scores per document to prioritize highest-relevance passages
+        activations = getattr(subgraph, "activations", {})
+        doc_activation_scores: Dict[str, float] = {}
+        for n in subgraph.nodes.values():
+            n_tag = n.parent_cid or (n.literal.get("chapter_title") if isinstance(n.literal, dict) else None)
+            if not n_tag and isinstance(n.literal, str):
+                m_tag = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", n.literal, re.IGNORECASE)
+                if m_tag:
+                    n_tag = m_tag.group(1).strip()
+            if n_tag:
+                n_tag = str(n_tag).strip()
+                n_act = activations.get(n.cid, 0.0)
+                doc_activation_scores[n_tag] = max(doc_activation_scores.get(n_tag, 0.0), n_act)
+
+        all_candidate_tags = set(doc_passages.keys()) | {k for k in doc_grouped_sentences.keys() if k}
+        has_any_doc_tags = any(k and not k.startswith("fold_") for k in all_candidate_tags)
+        if all_candidate_tags:
+            def _tag_sort_key(t: str) -> Tuple[float, int]:
+                m = re.search(r"\d+", str(t))
+                num = int(m.group(0)) if m else 9999
+                score = doc_activation_scores.get(t, 0.0)
+                # Prioritize highest activation score first (-score), break ties by document index
+                return (-score, num)
+
+            sorted_tags = sorted(list(all_candidate_tags), key=_tag_sort_key)
+
+            for d_tag in sorted_tags:
+                if d_tag in doc_passages:
+                    p = doc_passages[d_tag].strip()
+                    if d_tag.startswith("fold_"):
+                        sentences.append(p)
+                    elif re.match(r"^(?:Document|Passage)\s*\[?\d+\]?[:.\-\s]*", p, re.IGNORECASE):
+                        p_clean = re.sub(r"^(?:Document|Passage)\s*\[?\d+\]?[:.\-\s]*", "", p, flags=re.IGNORECASE).strip()
+                        sentences.append(f"{d_tag}: {p_clean}")
+                    else:
+                        sentences.append(f"{d_tag}: {p}")
+                elif d_tag in doc_grouped_sentences:
+                    s_list = doc_grouped_sentences[d_tag]
+                    if d_tag.startswith("fold_"):
+                        sentences.append(" ".join(s_list))
+                    else:
+                        sentences.append(f"{d_tag}: {' '.join(s_list)}")
+
+            if "" in doc_grouped_sentences:
+                sentences.append(" ".join(doc_grouped_sentences[""]))
         else:
             for s_list in doc_grouped_sentences.values():
                 sentences.extend(s_list)
 
-        # Assemble final context sentences: prioritize verified encyclopedic relations
+        # Assemble final context sentences: prioritize passages in multi-document QA
         all_sentences: List[str] = []
-        if rel_descriptions:
-            for desc in rel_descriptions:
-                norm = desc.lower().strip()
-                if norm not in seen_sentences:
-                    seen_sentences.add(norm)
-                    all_sentences.append(desc)
-            all_sentences.extend(sentences)
+        if has_any_doc_tags:
+            all_sentences = list(sentences)
         else:
-            all_sentences = sentences
+            if rel_descriptions:
+                for desc in rel_descriptions:
+                    norm = desc.lower().strip()
+                    if norm not in seen_sentences:
+                        seen_sentences.add(norm)
+                        all_sentences.append(desc)
+                all_sentences.extend(sentences)
+            else:
+                all_sentences = sentences
 
         if not all_sentences and subgraph.root:
             # Fallback to direct realization
@@ -1188,7 +1298,8 @@ class SpreadingActivationRetriever:
             if full_text:
                 all_sentences.append(full_text)
 
-        full_context = " ".join(all_sentences)
+        sep = "\n\n" if has_any_doc_tags else " "
+        full_context = sep.join(all_sentences)
         return self._truncate_to_token_budget(full_context, max_tokens)
 
     def _format_sexpr_context(self, subgraph: QuantaGraph, max_tokens: int) -> str:
@@ -1349,23 +1460,42 @@ class SpreadingActivationRetriever:
         return ordered
 
     def _truncate_to_token_budget(self, text: str, max_tokens: int) -> str:
-        """Cleanly truncates text to fit within token budget at sentence or line boundaries."""
+        """Cleanly truncates text to fit within token budget at paragraph or sentence boundaries, preserving formatting."""
         words = text.split()
-        # Approx 1.3 words per token as safe heuristic
         if len(words) <= max_tokens:
             return text
 
-        # Truncate at sentence boundary within budget
-        truncated_words = words[:max_tokens]
-        candidate = " ".join(truncated_words)
+        # Find character offset corresponding to max_tokens in original text
+        word_count = 0
+        char_cutoff = len(text)
+        for m in re.finditer(r"\S+", text):
+            word_count += 1
+            if word_count >= max_tokens:
+                char_cutoff = m.end()
+                break
 
-        last_punct = max(candidate.rfind(". "), candidate.rfind(".\n"), candidate.rfind("! "), candidate.rfind("? "))
-        if last_punct > 0:
+        candidate = text[:char_cutoff]
+
+        # 1. Prefer truncating at double newline (paragraph / document boundary)
+        last_para = candidate.rfind("\n\n")
+        if last_para > len(candidate) * 0.5:
+            return candidate[:last_para].strip()
+
+        # 2. Prefer truncating at sentence boundary
+        last_punct = max(
+            candidate.rfind(".\n"), candidate.rfind(". "),
+            candidate.rfind("!\n"), candidate.rfind("? ")
+        )
+        if last_punct > len(candidate) * 0.5:
             return candidate[:last_punct + 1].strip()
 
-        # Fallback to newline boundary or raw word truncate
+        last_punct_any = max(candidate.rfind("."), candidate.rfind("!"), candidate.rfind("?"))
+        if last_punct_any > len(candidate) * 0.5:
+            return candidate[:last_punct_any + 1].strip()
+
+        # 3. Fallback to single newline boundary or raw truncate
         last_newline = candidate.rfind("\n")
-        if last_newline > 0:
+        if last_newline > len(candidate) * 0.5:
             return candidate[:last_newline].strip()
 
         return candidate.strip() + "..."
@@ -1389,18 +1519,14 @@ class SpreadingActivationRetriever:
 
         q_text = query if isinstance(query, str) else (str(query.root.literal) if getattr(query, "root", None) and query.root.literal else "")
         detected_depth = self.detect_query_hop_depth(q_text) if q_text else 2
+        salient_ents = self._extract_salient_entities(q_text, None) if q_text else []
 
         effective_depth = max_depth
-        if max_depth == 2 and detected_depth >= 3:
+        if (max_depth <= 2 and (detected_depth >= 3 or len(salient_ents) >= 2 or len(seed_cids) >= 2)) or detected_depth >= 3:
             effective_depth = max(3, detected_depth)
 
-        eff_decay = decay if decay is not None else self.decay
-        eff_threshold = threshold if threshold is not None else self.threshold
-
-        if effective_depth >= 3 and decay is None:
-            eff_decay = max(self.decay, 0.85)
-        if effective_depth >= 3 and threshold is None:
-            eff_threshold = min(self.threshold, 0.18 if effective_depth >= 4 else 0.20)
+        eff_decay = decay if decay is not None else (0.85 if effective_depth >= 2 else self.decay)
+        eff_threshold = threshold if threshold is not None else (0.15 if effective_depth >= 2 else self.threshold)
 
         return self.traverse_subgraph(
             seed_cids=seed_cids,
@@ -1423,17 +1549,21 @@ class SpreadingActivationRetriever:
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
         detected_depth = self.detect_query_hop_depth(query) if query else 2
+        salient_ents = self._extract_salient_entities(query, None) if query else []
         effective_depth = max_depth
-        if max_depth == 2 and detected_depth >= 3:
+        if (max_depth <= 2 and (detected_depth >= 3 or len(salient_ents) >= 2)) or detected_depth >= 3:
             effective_depth = max(3, detected_depth)
+
+        eff_decay = decay if decay is not None else (0.85 if effective_depth >= 2 else self.decay)
+        eff_threshold = threshold if threshold is not None else (0.15 if effective_depth >= 2 else self.threshold)
 
         subgraph = self.retrieve_subgraph_for_query(
             query=query,
             page_table=page_table,
             top_k=top_k,
             max_depth=effective_depth,
-            decay=decay,
-            threshold=threshold,
+            decay=eff_decay,
+            threshold=eff_threshold,
         )
         return self.format_context_for_llm(
             subgraph=subgraph,

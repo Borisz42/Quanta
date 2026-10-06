@@ -157,6 +157,8 @@ class DiscourseChunker:
 
     # Chapter / structural section delimiters
     CHAPTER_PATTERNS = [
+        # Document and Passage headers (e.g. Document [1], Document 1, Passage [2])
+        re.compile(r"^(#{1,3}\s+)?((?:Document|Passage)\s*\[?\d+\]?)(?:[:.\-—–]?\s*.*)?$", re.IGNORECASE),
         # Markdown headers: # Chapter 1: ..., ## Section II - ..., # Prologue
         re.compile(r"^(#{1,3})\s+((?:chapter|book|act|part|section)\s+[\dIVXLCDM]+(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),
         re.compile(r"^(#{1,3})\s+((?:prologue|epilogue|interlude|introduction|conclusion|preface)(?:[:.\-—–]?\s+.*)?)$", re.IGNORECASE),

@@ -17,6 +17,7 @@ import asyncio
 import concurrent.futures
 import logging
 from pathlib import Path
+import re
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -232,7 +233,7 @@ class CognitivePipeline:
         # using the streaming episodic pipeline (process_narrative) to guarantee O(1) active canvas
         # bounds, Merkle episodic folding, and eliminate monolithic Blake3 CID hash cascades.
         total_words = sum(len(c.text.split()) for c in chunks)
-        if len(chunks) > 6 or total_words > 600:
+        if len(chunks) > 6 or total_words > 600 or (len(chunks) > 1 and any(c.chapter_title for c in chunks)):
             graphs, chapter_fold = self.process_narrative(
                 text, chapter_id=chapter_id, validate=validate, language_hint=language_hint
             )
@@ -314,6 +315,10 @@ class CognitivePipeline:
 
         # 6. Fold into episode Merkle node
         fold_node = fold_discourse_episode(graph.copy(), chunk_id=chunks[0].chunk_id)
+        if isinstance(fold_node.literal, dict):
+            fold_node.literal["text"] = chunks[0].text
+            if doc_heading:
+                fold_node.literal["chapter_title"] = doc_heading
         if doc_heading and not fold_node.parent_cid:
             fold_node.parent_cid = doc_heading
         self.page_table.store_node(fold_node)
@@ -464,6 +469,17 @@ class CognitivePipeline:
                 validate=validate,
             )
             fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
+            doc_heading = chk.chapter_title or None
+            if not doc_heading and chk.text:
+                m_doc = re.match(r"^((?:Document|Passage)\s*\[?\d+\]?)", chk.text.strip(), re.IGNORECASE)
+                if m_doc:
+                    doc_heading = m_doc.group(1).strip()
+            if isinstance(fold_node.literal, dict):
+                fold_node.literal["text"] = chk.text
+                if doc_heading:
+                    fold_node.literal["chapter_title"] = doc_heading
+            if doc_heading and not fold_node.parent_cid:
+                fold_node.parent_cid = doc_heading
             self.page_table.store_node(fold_node)
             self.active_canvas.put(fold_node)
             self.merkle_book.add_chunk_node(fold_node, chapter_id=chapter_id)
@@ -579,6 +595,10 @@ class CognitivePipeline:
 
                 # Fold discourse episode into 32-byte Merkle fold node
                 fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
+                if isinstance(fold_node.literal, dict):
+                    fold_node.literal["text"] = chk.text
+                    if doc_heading:
+                        fold_node.literal["chapter_title"] = doc_heading
                 if doc_heading and not fold_node.parent_cid:
                     fold_node.parent_cid = doc_heading
                 self.page_table.store_node(fold_node)

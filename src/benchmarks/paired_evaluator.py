@@ -207,6 +207,8 @@ class PairedEvaluator:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "presence_penalty": 0.2,   # Penalizes repeating previously generated tokens/topics
+            "frequency_penalty": 0.2,  # Strongly suppresses repetitive document listing loops
             "stream": False,
         }
 
@@ -395,15 +397,13 @@ class PairedEvaluator:
     ) -> PairedResult:
         """Executes Condition A, B, and C on a single benchmark sample."""
         if sample.suite == "musique":
-            req_max_tokens = 2048  # High CoT reasoning budget across 20 passages, eliminating truncations
-        elif sample.suite == "humaneval":
-            req_max_tokens = 1536  # Generous headroom for complete multi-function Python solutions
-        elif sample.suite == "long_variable_tracking":
-            req_max_tokens = 1536  # Multi-step ledger arithmetic and aggregation rollup
-        elif sample.suite == "arc_science":
-            req_max_tokens = 1024  # Ample headroom for scientific explanation before multiple-choice key
+            req_max_tokens = 768  # Bounded CoT reasoning budget (2-3 sentences + Answer anchor; prevents runaway loops)
+        elif sample.suite in ("proofwriter", "arc_science"):
+            req_max_tokens = 512  # Concise deductive/scientific reasoning (1-2 sentences + Answer anchor)
+        elif sample.suite in ("humaneval", "long_variable_tracking"):
+            req_max_tokens = 1536  # Generous headroom for complete multi-function code or multi-step ledger arithmetic
         else:
-            req_max_tokens = 1024  # Generous headroom across all remaining suites ensuring zero truncations
+            req_max_tokens = 512  # Sane bounded default preventing runaway generation loops
 
         # Adaptive timeout scaling for long-context evaluations
         sample_timeout = max(self.timeout_seconds, 180.0, 30.0 + (sample.token_count / 1000.0) * 3.0)
@@ -476,11 +476,11 @@ class PairedEvaluator:
                     diag_tag = "[HARNESS BUG]"
                     err_msg = code_res.harness_bug_detail
             elif sample.suite == "arc_science":
-                key = BenchmarkMetrics.extract_multiple_choice_key(ans)
+                key = BenchmarkMetrics.extract_multiple_choice_key(ans, is_truncated=is_truncated)
                 corr = (key == sample.gold_answer)
                 halluc = not corr
             else:
-                str_match = BenchmarkMetrics.exact_match_score(ans, sample.gold_answer) or BenchmarkMetrics.extractive_match_score(ans, sample.gold_answer)
+                str_match = BenchmarkMetrics.exact_match_score(ans, sample.gold_answer) or BenchmarkMetrics.extractive_match_score(ans, sample.gold_answer, is_truncated=is_truncated)
                 num_match = BenchmarkMetrics.numeric_match_score(ans, sample.gold_answer)
                 if not str_match and num_match:
                     corr = True
@@ -533,13 +533,13 @@ class PairedEvaluator:
                 if sample.suite == "humaneval":
                     messages.append({"role": "system", "content": "You are an expert Python programmer. Complete the following Python function. Provide only the Python code implementation inside a python codeblock without chit-chat."})
                 elif sample.context:
-                    messages.append({"role": "system", "content": f"Document context:\n{sample.context}"})
+                    messages.append({"role": "system", "content": f"Context:\n{sample.context}"})
                 messages.append({"role": "user", "content": sample.prompt})
                 headers_b = {
                     "X-Quanta-No-Global-KB": "true",
                     "X-Quanta-Reset": "true",
                     "X-Quanta-Timeout": str(sample_timeout),
-                    "X-Quanta-Max-Context-Tokens": "2000" if sample.suite == "musique" else "1500",
+                    "X-Quanta-Max-Context-Tokens": "1500",
                 }
                 if session_id:
                     headers_b["X-Quanta-Session-ID"] = session_id
@@ -579,7 +579,7 @@ class PairedEvaluator:
             if sample.suite == "humaneval":
                 messages.append({"role": "system", "content": "You are an expert Python programmer. Complete the following Python function. Provide only the Python code implementation inside a python codeblock without chit-chat."})
             elif sample.context:
-                messages.append({"role": "system", "content": f"Document context:\n{sample.context}"})
+                messages.append({"role": "system", "content": f"Context:\n{sample.context}"})
             messages.append({"role": "user", "content": sample.prompt})
             # Domain-Aware Knowledge Base Routing:
             # - Open-domain factual QA and multi-hop science (arc_science, musique) benefit from
@@ -590,7 +590,7 @@ class PairedEvaluator:
             headers_c = {
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
-                "X-Quanta-Max-Context-Tokens": "2000" if sample.suite == "musique" else "1500",
+                "X-Quanta-Max-Context-Tokens": "1500",
             }
             if session_id:
                 headers_c["X-Quanta-Session-ID"] = session_id

@@ -274,8 +274,9 @@ class BenchmarkSuiteLoader:
             full_prompt = (
                 f"{item['question']}\n\n"
                 f"Choices:\n{choice_str}\n\n"
-                "First explain your scientific reasoning step by step. "
-                "Then conclude your final answer on a new line in the exact format: 'Answer: [A/B/C/D]'."
+                "Instructions:\n"
+                "1. In 1 to 2 concise sentences, explain the scientific principle.\n"
+                "2. Conclude immediately on a new line in the exact format: 'Answer: [A/B/C/D]'."
             )
             t_cnt = self.estimate_token_count(full_prompt)
 
@@ -314,21 +315,25 @@ class BenchmarkSuiteLoader:
             try:
                 logger.info("Downloading bdsaglam/musique from Hugging Face...")
                 ds = load_dataset("bdsaglam/musique", split="validation")
-                for item in ds.select(range(min(limit, len(ds)))):
-                    # HF format might differ slightly
-                    # We map paragraphs to passages
+                for item in ds:
+                    if len(data) >= limit:
+                        break
+                    if not item.get("answerable", True):
+                        continue
                     paragraphs = item.get("paragraphs", [])
-                    # separate true support from distractors based on "is_supporting" flag if it exists
                     gold = [p["paragraph_text"] for p in paragraphs if p.get("is_supporting", False)]
                     distractors = [p["paragraph_text"] for p in paragraphs if not p.get("is_supporting", False)]
-                    # Some musique dataset variants format differently
+                    if not gold:
+                        continue
 
                     data.append({
                         "id": item.get("id", ""),
                         "question": item.get("question", ""),
-                        "gold_passages": gold if gold else [p["paragraph_text"] for p in paragraphs],
+                        "gold_passages": gold,
                         "distractor_passages": distractors,
-                        "answer": item.get("answer", "")
+                        "answer": item.get("answer", ""),
+                        "answer_aliases": item.get("answer_aliases", []),
+                        "hop_count": len(item.get("question_decomposition", [])) or 2,
                     })
             except Exception as e:
                 logger.warning("Failed to load MuSiQue from HF: %s", e)
@@ -358,10 +363,17 @@ class BenchmarkSuiteLoader:
             context_str = "\n\n".join(f"Document [{i+1}]: {p}" for i, p in enumerate(shuffled_passages))
             full_prompt = (
                 f"{item['question']}\n\n"
-                "Explain the step-by-step connections across the documents, "
-                "then conclude on a new line with 'Answer: <final answer>'."
+                "Instructions:\n"
+                "1. In 2 to 3 concise sentences, explain the factual bridge connecting the relevant documents. Do not summarize or list irrelevant documents.\n"
+                "2. Conclude immediately on a new line in the exact format: 'Answer: <final answer>'."
             )
             t_cnt = self.estimate_token_count(context_str + "\n" + full_prompt)
+
+            aliases = [str(a).lower() for a in item.get("answer_aliases", []) if a]
+            exp_tokens = [item["answer"].lower()]
+            for a in aliases:
+                if a not in exp_tokens:
+                    exp_tokens.append(a)
 
             samples.append(
                 BenchmarkSample(
@@ -370,7 +382,7 @@ class BenchmarkSuiteLoader:
                     prompt=full_prompt,
                     context=context_str,
                     gold_answer=item["answer"],
-                    expected_tokens=[item["answer"].lower()],
+                    expected_tokens=exp_tokens,
                     token_count=t_cnt,
                     metadata={
                         "hop_count": item.get("hop_count", 2),
@@ -454,7 +466,12 @@ class BenchmarkSuiteLoader:
 
             q = (
                 f"Based on the provided facts and rules, determine whether the following statement is true, false, or unknown: '{statement_text}'\n\n"
-                "Explain your deductive reasoning step by step, then conclude on a new line with 'Answer: [True/False/Unknown]'."
+                "Instructions:\n"
+                "1. In 1 to 2 concise sentences, state your deductive reasoning based strictly on the provided rules.\n"
+                "   - If the statement is logically entailed by the facts/rules, conclude 'Answer: True'.\n"
+                "   - If the statement is directly contradicted by the facts/rules, conclude 'Answer: False'.\n"
+                "   - If the facts/rules are insufficient to prove or disprove the statement, conclude 'Answer: Unknown'.\n"
+                "2. Conclude immediately on a new line in the exact format: 'Answer: [True/False/Unknown]'."
             )
             ans = str(item.get("answer", "true")).strip().lower()
             t_cnt = self.estimate_token_count(context + " " + q)

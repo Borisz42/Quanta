@@ -167,35 +167,34 @@ class UnslothServerManager:
         # Locate startup candidates
         launched = False
 
-        # Candidate 1: unsloth studio CLI via python
-        py_exe = sys.executable
-        try:
-            cmd = [
-                py_exe,
-                "-m",
-                "unsloth_cli",
-                "studio",
-                "--api-only",
-                "-H",
-                str(self.host),
-                "-p",
-                str(self.port),
-            ]
-            # Use detached process creation on Windows
-            creationflags = 0
-            if sys.platform == "win32":
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        # Candidate 1: unsloth studio CLI
+        unsloth_bin = shutil.which("unsloth") or shutil.which("unsloth.exe") or str(Path(os.path.expanduser("~")) / ".unsloth" / "studio" / "bin" / "unsloth.exe")
+        if unsloth_bin and Path(unsloth_bin).exists():
+            try:
+                cmd = [
+                    unsloth_bin,
+                    "studio",
+                    "-H",
+                    str(self.host),
+                    "-p",
+                    str(self.port),
+                ]
+                creationflags = 0
+                if sys.platform == "win32":
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
-            self._server_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creationflags,
-            )
-            launched = True
-            logger.info("Spawned Unsloth Studio process (PID: %s)", self._server_process.pid)
-        except Exception as e:
-            logger.warning("Failed to spawn unsloth_cli studio: %s", e)
+                self._server_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=creationflags,
+                )
+                time.sleep(0.5)
+                if self._server_process.poll() is None:
+                    launched = True
+                    logger.info("Spawned Unsloth Studio process (PID: %s)", self._server_process.pid)
+            except Exception as e:
+                logger.warning("Failed to spawn unsloth studio: %s", e)
 
         # Candidate 2: direct llama-server.exe if candidate 1 fails
         if not launched:
