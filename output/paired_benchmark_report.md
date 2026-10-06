@@ -1,7 +1,7 @@
 # QUANTA Paired & Ablated Benchmark Report
 
-**Date:** 2026-10-06 19:26:14  
-**Execution Mode:** `MOCK`  
+**Date:** 2026-10-06 20:50:54  
+**Execution Mode:** `LIVE`  
 **Ablation Architecture:** `3WAY` (Base LLM vs. QUANTA Local vs. QUANTA + 14GB Pre-compiled Wikidata KB)  
 **Target Hardware:** NVIDIA GeForce RTX 3070 (8GB VRAM)  
 **Base LLM:** `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q5_K_M` (Unsloth Studio `:8888`)  
@@ -12,7 +12,7 @@
 
 | Benchmark Suite | Samples ($N$) | Base LLM Acc | QUANTA Local | QUANTA + KB | Accuracy Lift | Prompt Token Footprint | Latency Speedup |
 |---|---|---|---|---|---|---|---|
-| **arc_science** | 3 | 66.7% | 100.0% | **100.0%** | +33.3% (n.s.) | 106 -> **106** (0.0%) | 0.18s -> **0.18s** (0.97x) |
+| **arc_science** | 30 | 93.3% | 93.3% | **90.0%** | -3.3% (n.s.) | 134 -> **223** (0.0%) | 1.12s -> **1.73s** (0.65x) |
 
 > [!NOTE]
 > Statistical significance marked with $^*p < 0.05, ^{**}p < 0.01, ^{***}p < 0.001$ using paired Student's $t$-test / Wilcoxon signed-rank test against the base LLM.
@@ -25,7 +25,7 @@ This section measures the exact lift and trade-off of mounting `data/wikipedia_q
 
 | Benchmark Domain | Local ASG Accuracy | +Wikidata KB Accuracy | Knowledge Base Lift ($\Delta$) | Local Latency | +Wikidata Latency | KB Overhead |
 |---|---|---|---|---|---|---|
-| **arc_science** | 100.0% | **100.0%** | **+0.0%** | 0.18s | 0.18s | +0.0 ms |
+| **arc_science** | 93.3% | **90.0%** | **+-3.3%** | 1.69s | 1.73s | +37.0 ms |
 
 ---
 
@@ -35,20 +35,20 @@ Empirical linear regression modeling of ingestion latency:
 
 $$\tau_{\text{ingest}}(N) = a \cdot N + b$$
 
-* **Processing Throughput:** 16040.1 words/sec (21333.3 tokens/sec)
+* **Processing Throughput:** 793985.0 words/sec (1056000.0 tokens/sec)
 * **Fitted Slope ($a$):** 0.000000 s/token
-* **Initialization Intercept ($b$):** 0.0050 s
+* **Initialization Intercept ($b$):** 0.0010 s
 * **Model Fit ($R^2$):** 1.0000
 
 ### Ingestion Scalability & VRAM OOM Horizon Forecast
 
 | Document Token Scale | Content Analogy | QUANTA Ingestion Time | Base LLM Prefill TTFT | Base LLM 8GB VRAM Status |
 |---|---|---|---|---|
-| **10,000 tokens** | Chapter | **0.01 s** | 3.53s | `SAFE (< 6 GB)` |
-| **50,000 tokens** | Short Book | **0.01 s** | 42.53s | `HIGH RISK (~7.8 GB)` |
-| **100,000 tokens** | Monograph | **0.01 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
-| **500,000 tokens** | Full Codebase | **0.01 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
-| **1,000,000 tokens** | 1M+ Enterprise Dossier | **0.01 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
+| **10,000 tokens** | Chapter | **0.00 s** | 3.53s | `SAFE (< 6 GB)` |
+| **50,000 tokens** | Short Book | **0.00 s** | 42.53s | `HIGH RISK (~7.8 GB)` |
+| **100,000 tokens** | Monograph | **0.00 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
+| **500,000 tokens** | Full Codebase | **0.00 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
+| **1,000,000 tokens** | 1M+ Enterprise Dossier | **0.00 s** | **CRASH (OOM)** | `OOM CRASH (> 8 GB VRAM)` |
 
 ---
 
@@ -65,33 +65,40 @@ A total of **1** evaluation discrepancies and diverging cases were forensic-audi
 
 | Suite | Sample ID | Tag / Category | Base LLM | QUANTA+KB | Forensic Summary |
 |---|---|---|---|---|---|
-| `arc_science` | `Mercury_7175875` | `Divergence (QUANTA Win)` | FAIL | PASS | Outcome diverged between Base LLM and QUANTA |
+| `arc_science` | `Mercury_7218820` | `Divergence (Base Win)` | PASS | FAIL | Outcome diverged between Base LLM and QUANTA |
 
 ### Detailed Forensic Diagnostics & Discrepancy Breakdown
 
-#### Case 1: `Mercury_7175875` (arc_science)
-* **Diagnostic Tag / Category:** `Divergence: QUANTA Pass / Base Fail`
-* **Evaluation Outcome:** Base LLM: `FAIL` | QUANTA+KB: `PASS`
-* **Ground Truth Answer:** `C`
+#### Case 1: `Mercury_7218820` (arc_science)
+* **Diagnostic Tag / Category:** `Divergence: Base Pass / QUANTA Fail`
+* **Evaluation Outcome:** Base LLM: `PASS` | QUANTA+KB: `FAIL`
+* **Ground Truth Answer:** `B`
 * **Task Prompt:**
 ```text
-An astronomer observes that a planet rotates faster after a meteorite impact. Which is the most likely effect of this increase in rotation?
+On August 21, a flash flood warning was issued for the Las Vegas area. Which statement best describes this warning in terms of weather and climate?
 
 Choices:
-(A) Planetary density will decrease.
-(B) Planetary
+(A) It is a constant climate feature throu
 ... [truncated] ...
 cientific principle.
 2. Conclude immediately on a new line in the exact format: 'Answer: [A/B/C/D]'.
 ```
 * **Base LLM Answer:**
 ```text
-(D)
+Flash floods in the Las Vegas area are episodic weather events driven by intense, short-duration rainfall that exceeds the ground's infiltration capacity, rather than a constant or continuous climate 
+... [truncated] ...
+making them distinct seasonal weather phenomena rather than consistent climatic patterns.
+
+Answer: B
 ```
 * **QUANTA Answer:**
 ```text
-The correct choice is (C). Planetary days will become shorter.
+Flash floods are episodic weather events caused by intense, short-duration precipitation that overwhelms drainage systems, rather than a constant or seasonal climate pattern. Since they occur irregula
+... [truncated] ...
+ represent a rare but possible hazard inconsistent with the region's typical dry climate.
+
+Answer: D
 ```
-* **Forensic Diagnosis:** QUANTA successfully retrieved relevant episodic context, while Base LLM failed due to token cutoff or missing facts.
+* **Forensic Diagnosis:** Base LLM answered correctly while QUANTA output did not meet exact match criteria.
 
 ---
