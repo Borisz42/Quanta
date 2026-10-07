@@ -51,6 +51,7 @@ class QuantaNode:
         "evidence_source",
         "node_type",
         "concept_code",
+        "_ppr_activation",
     )
 
     _default_interner: Optional[Any] = None
@@ -117,6 +118,7 @@ class QuantaNode:
         self.evidence_source: str = str(evidence_source)
         self.node_type: Optional[str] = node_type
         self.concept_code: Optional[int] = concept_code
+        self._ppr_activation: Optional[float] = None
 
     def invalidate_cache(self):
         """Invalidates cached CID and canonical CID."""
@@ -372,6 +374,32 @@ class QuantaNode:
             for child_cid in self.edges[rel]:
                 table.append((rel, child_cid))
         return table
+
+    def clone(self) -> QuantaNode:
+        """Creates a deep copy of this QuantaNode preserving all attributes and provenance."""
+        new_node = QuantaNode(
+            vector=self.vector.copy(),
+            edges={k: list(v) for k, v in self.edges.items()},
+            anchor=self.anchor,
+            literal=self.literal,
+            parent_cid=self.parent_cid,
+            passage_id=self.passage_id,
+            span_start=self.span_start,
+            span_end=self.span_end,
+            salience=self.salience,
+            truth_status=self.truth_status,
+            confidence=self.confidence,
+            evidence_source=self.evidence_source,
+            node_type=self.node_type,
+            concept_code=self.concept_code,
+        )
+        new_node.register_binding = self.register_binding
+        new_node.time_start = self.time_start
+        new_node.time_end = self.time_end
+        new_node._cid_cache = self._cid_cache
+        new_node._canonical_cid_cache = self._canonical_cid_cache
+        new_node._ppr_activation = self._ppr_activation
+        return new_node
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes node to dictionary format."""

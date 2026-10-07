@@ -16,6 +16,8 @@ from memory.page_table import (
     batch_quaternary_hamming,
     topk_hamming_search,
 )
+from memory.hipporag_ppr import HippoRAGRetriever
+from memory.poprag_gating import PoPRAGGating
 from memory.passage_store import PassageRecord, PassageStore
 from memory.spreading_activation import SpreadingActivationRetriever
 from memory.world_state import (
@@ -29,9 +31,11 @@ __all__ = [
     "CanonicalNodeInterner",
     "EntityStateRecord",
     "GlobalKnowledgeBase",
+    "HippoRAGRetriever",
     "PageTable",
     "PassageRecord",
     "PassageStore",
+    "PoPRAGGating",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
     "SpreadingActivationRetriever",

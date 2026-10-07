@@ -34,7 +34,9 @@ from core.types import (
     RegisterValue,
     StructuralValue,
 )
+from memory.hipporag_ppr import HippoRAGRetriever
 from memory.page_table import PageTable, SimdHammingIndex
+from memory.poprag_gating import PoPRAGGating
 from parser.schema import (
     DiscourseExtractionResult,
     ExtractedEntity,
@@ -302,6 +304,11 @@ class SpreadingActivationRetriever:
         decay: float = 0.7,
         threshold: float = 0.35,
         max_depth: int = 2,
+        algorithm: str = "bfs",
+        alpha: float = 0.15,
+        convergence_tol: float = 1e-6,
+        hipporag: Optional[HippoRAGRetriever] = None,
+        poprag_gating: Optional[PoPRAGGating] = None,
     ):
         """Initialize the SpreadingActivationRetriever.
 
@@ -310,11 +317,25 @@ class SpreadingActivationRetriever:
             decay: Activation decay factor per hop (gamma, default 0.7).
             threshold: Activation cutoff threshold (theta, default 0.35).
             max_depth: Maximum graph traversal search depth (default 2).
+            algorithm: Spreading activation algorithm ('bfs' or 'hipporag', default 'bfs').
+            alpha: Personalized PageRank teleport / restart probability for HippoRAG (default 0.15).
+            convergence_tol: Convergence tolerance for HippoRAG power iteration (default 1e-6).
+            hipporag: Optional HippoRAGRetriever instance.
+            poprag_gating: Optional PoPRAGGating instance.
         """
         self.realizer = realizer or EnglishRealizer()
         self.decay = decay
         self.threshold = threshold
         self.max_depth = max_depth
+        self.algorithm = algorithm
+        self.alpha = alpha
+        self.convergence_tol = convergence_tol
+        self.poprag_gating = poprag_gating or PoPRAGGating()
+        self.hipporag = hipporag or HippoRAGRetriever(
+            alpha=self.alpha,
+            convergence_tol=self.convergence_tol,
+            gating=self.poprag_gating,
+        )
 
     # -------------------------------------------------------------------------
     # Task 4.1: Query ASG Transduction
@@ -963,15 +984,92 @@ class SpreadingActivationRetriever:
     # Task 4.3: Implement Spreading Activation Traversal
     # -------------------------------------------------------------------------
 
+    def traverse_hipporag(
+        self,
+        seed_cids: Sequence[str],
+        graph_or_page_table: Union[QuantaGraph, PageTable],
+        max_hops: int = 4,
+        alpha: Optional[float] = None,
+        threshold: float = 0.001,
+        top_k: Optional[int] = None,
+        query_polarity: str = "positive",
+    ) -> QuantaGraph:
+        """Traverses knowledge graph via HippoRAG 2 Personalized PageRank with PoP-RAG gating.
+
+        Guarantees zero multi-hop semantic drift by propagating along topological edges
+        while pruning contradictory paths (Belnap 00_2) and dampening unverified facts (11_2).
+        """
+        if isinstance(graph_or_page_table, QuantaGraph):
+            return self.hipporag.retrieve_subgraph(
+                seed_cids=seed_cids,
+                graph=graph_or_page_table,
+                top_k=top_k,
+                threshold=threshold,
+                query_polarity=query_polarity,
+            )
+
+        # PageTable input: build local QuantaGraph of k-hop neighborhood around seeds
+        pt = graph_or_page_table
+        local_graph = QuantaGraph()
+        visited: Set[str] = set(seed_cids)
+        frontier: List[str] = list(seed_cids)
+        fetched_seeds = pt.fetch_nodes(seed_cids) if hasattr(pt, "fetch_nodes") else [pt.get_node(c) for c in seed_cids]
+        for s_node in fetched_seeds:
+            if s_node:
+                local_graph.add_node(s_node)
+
+        for _ in range(max_hops):
+            if not frontier:
+                break
+            next_frontier: List[str] = []
+            targets_to_fetch: List[str] = []
+            for u_cid in frontier:
+                u_node = local_graph.get_node(u_cid)
+                if not u_node:
+                    continue
+                # Forward edges
+                for rel, targets in u_node.edges.items():
+                    if rel in self.hipporag.allowed_relations or "*" in self.hipporag.allowed_relations:
+                        for v_cid in targets:
+                            if v_cid not in visited:
+                                visited.add(v_cid)
+                                next_frontier.append(v_cid)
+                                targets_to_fetch.append(v_cid)
+                # Reverse edges if PageTable supports it
+                if hasattr(pt, "get_reverse_edges"):
+                    rev_edges = pt.get_reverse_edges(u_cid)
+                    for p_cid, rel in rev_edges:
+                        if p_cid not in visited and (rel in self.hipporag.allowed_relations or "*" in self.hipporag.allowed_relations):
+                            visited.add(p_cid)
+                            next_frontier.append(p_cid)
+                            targets_to_fetch.append(p_cid)
+
+            if targets_to_fetch:
+                fetched_nodes = pt.fetch_nodes(targets_to_fetch) if hasattr(pt, "fetch_nodes") else [pt.get_node(c) for c in targets_to_fetch]
+                for f_node in fetched_nodes:
+                    if f_node:
+                        local_graph.add_node(f_node)
+            frontier = next_frontier
+
+        return self.hipporag.retrieve_subgraph(
+            seed_cids=seed_cids,
+            graph=local_graph,
+            top_k=top_k,
+            threshold=threshold,
+            query_polarity=query_polarity,
+        )
+
     def traverse_subgraph(
         self,
         seed_cids: Sequence[str],
-        page_table: PageTable,
+        page_table: Union[PageTable, QuantaGraph],
         max_depth: int = 2,
         decay: float = 0.7,
         threshold: float = 0.35,
         allowed_relations: Optional[Union[Set[str], Sequence[str], str]] = None,
         bidirectional: bool = True,
+        algorithm: Optional[str] = None,
+        query_polarity: str = "positive",
     ) -> QuantaGraph:
         """Traverses the PageTable knowledge graph via spreading activation.
 
@@ -986,17 +1084,29 @@ class SpreadingActivationRetriever:
 
         Args:
             seed_cids: List of initial seed CIDs.
-            page_table: PageTable database instance.
+            page_table: PageTable database instance or QuantaGraph.
             max_depth: Maximum BFS traversal depth (default 2).
             decay: Activation attenuation factor per hop (gamma, default 0.7).
             threshold: Minimum activation cutoff (theta, default 0.35).
             allowed_relations: Allowed edge types for spreading (default standard valencies,
                 or '*' / 'all' to allow all relations including encyclopedic triples).
             bidirectional: Whether to spread activation along incoming edges.
+            algorithm: 'bfs' or 'hipporag' (defaults to self.algorithm).
+            query_polarity: 'positive' or 'negative' query polarity.
 
         Returns:
             QuantaGraph containing only admitted nodes and interconnecting edges.
         """
+        active_algo = algorithm or self.algorithm
+        if active_algo == "hipporag":
+            return self.traverse_hipporag(
+                seed_cids=seed_cids,
+                graph_or_page_table=page_table,
+                max_hops=max_depth,
+                threshold=threshold if threshold < 0.1 else 0.001,
+                query_polarity=query_polarity,
+            )
+
         allow_all = (
             allowed_relations in ("*", "all")
             or (isinstance(allowed_relations, (set, list, tuple)) and "*" in allowed_relations)
@@ -1015,7 +1125,15 @@ class SpreadingActivationRetriever:
         node_cache: Dict[str, Optional[QuantaNode]] = {}
 
         # Batch prefetch initial seed nodes
-        fetched_seeds = page_table.fetch_nodes(seed_cids)
+        if hasattr(page_table, "fetch_nodes"):
+            fetched_seeds = page_table.fetch_nodes(seed_cids)
+        elif hasattr(page_table, "get_node"):
+            fetched_seeds = [page_table.get_node(cid) for cid in seed_cids]
+        elif hasattr(page_table, "nodes"):
+            fetched_seeds = [page_table.nodes.get(cid) for cid in seed_cids]
+        else:
+            fetched_seeds = []
+
         for cid, n in zip(seed_cids, fetched_seeds):
             node_cache[cid] = n
             activations[cid] = 1.0
@@ -1040,10 +1158,25 @@ class SpreadingActivationRetriever:
 
             node = node_cache.get(cid)
             if node is None:
-                node = page_table.fetch_node(cid)
+                if hasattr(page_table, "fetch_node"):
+                    node = page_table.fetch_node(cid)
+                elif hasattr(page_table, "get_node"):
+                    node = page_table.get_node(cid)
+                elif hasattr(page_table, "nodes"):
+                    node = page_table.nodes.get(cid)
                 node_cache[cid] = node
             if node is None:
                 continue
+
+            # PoP-RAG epistemic gate on source node: prune contradictory paths
+            if hasattr(node, "truth_status"):
+                gate_src = self.poprag_gating.compute_gate_factor(
+                    node.truth_status,
+                    getattr(node, "confidence", 1.0),
+                    query_polarity,
+                )
+                if gate_src <= 0.0 and cid not in seed_cids:
+                    continue
 
             # 1. Forward outgoing traversal along allowed relations
             next_level_targets: List[str] = []
@@ -1055,15 +1188,36 @@ class SpreadingActivationRetriever:
                 for rel, targets in node.edges.items():
                     if allow_all or rel in relations:
                         for target_cid in targets:
+                            # PoP-RAG epistemic gate on target if cached
+                            tgt_cached = node_cache.get(target_cid)
+                            tgt_factor = 1.0
+                            if tgt_cached is not None and hasattr(tgt_cached, "truth_status"):
+                                tgt_factor = self.poprag_gating.compute_gate_factor(
+                                    tgt_cached.truth_status,
+                                    getattr(tgt_cached, "confidence", 1.0),
+                                    query_polarity,
+                                )
+                                if tgt_factor <= 0.0:
+                                    continue
+                            step_act = next_act * tgt_factor
+                            if step_act < threshold:
+                                continue
                             old_act = activations.get(target_cid, 0.0)
-                            if next_act > old_act:
-                                activations[target_cid] = next_act
+                            if step_act > old_act:
+                                activations[target_cid] = step_act
                                 queue.append((target_cid, depth + 1))
                                 if target_cid not in node_cache:
                                     next_level_targets.append(target_cid)
 
             if next_level_targets:
-                fetched_targets = page_table.fetch_nodes(next_level_targets)
+                if hasattr(page_table, "fetch_nodes"):
+                    fetched_targets = page_table.fetch_nodes(next_level_targets)
+                elif hasattr(page_table, "get_node"):
+                    fetched_targets = [page_table.get_node(t) for t in next_level_targets]
+                elif hasattr(page_table, "nodes"):
+                    fetched_targets = [page_table.nodes.get(t) for t in next_level_targets]
+                else:
+                    fetched_targets = []
                 for t_cid, t_node in zip(next_level_targets, fetched_targets):
                     node_cache[t_cid] = t_node
 
@@ -1167,13 +1321,33 @@ class SpreadingActivationRetriever:
                         for r_cid, r_node in zip(reverse_cids_to_fetch, fetched_rev):
                             node_cache[r_cid] = r_node
 
-        # 3. Filter admitted nodes above threshold
-        admitted_cids = {cid for cid, act in activations.items() if act >= threshold}
+        # 3. Filter admitted nodes above threshold and prune contradictions under PoP-RAG
+        admitted_cids = set()
+        for cid, act in activations.items():
+            if act < threshold:
+                continue
+            nd = node_cache.get(cid)
+            if nd is not None and hasattr(nd, "truth_status"):
+                gate_val = self.poprag_gating.compute_gate_factor(
+                    nd.truth_status,
+                    getattr(nd, "confidence", 1.0),
+                    query_polarity,
+                )
+                if gate_val <= 0.0 and cid not in seed_cids:
+                    continue
+            admitted_cids.add(cid)
 
         # Ensure all admitted nodes are in cache
         missing_admitted = [cid for cid in admitted_cids if cid not in node_cache]
         if missing_admitted:
-            fetched_missing = page_table.fetch_nodes(missing_admitted)
+            if hasattr(page_table, "fetch_nodes"):
+                fetched_missing = page_table.fetch_nodes(missing_admitted)
+            elif hasattr(page_table, "get_node"):
+                fetched_missing = [page_table.get_node(m) for m in missing_admitted]
+            elif hasattr(page_table, "nodes"):
+                fetched_missing = [page_table.nodes.get(m) for m in missing_admitted]
+            else:
+                fetched_missing = []
             for m_cid, m_node in zip(missing_admitted, fetched_missing):
                 node_cache[m_cid] = m_node
 
@@ -1183,15 +1357,19 @@ class SpreadingActivationRetriever:
             if node is None:
                 continue
 
-            cloned_node = QuantaNode(
-                vector=node.vector.copy(),
-                anchor=node.anchor,
-                literal=node.literal,
-                parent_cid=node.parent_cid,
-            )
-            cloned_node.edges = {k: list(v) for k, v in node.edges.items()}
-            cloned_node._cid_cache = getattr(node, "_cid_cache", None) or cid
-            cloned_node._canonical_cid_cache = getattr(node, "_canonical_cid_cache", None) or cid
+            if hasattr(node, "clone"):
+                cloned_node = node.clone()
+            else:
+                cloned_node = QuantaNode(
+                    vector=node.vector.copy(),
+                    anchor=node.anchor,
+                    literal=node.literal,
+                    parent_cid=node.parent_cid,
+                )
+                cloned_node.edges = {k: list(v) for k, v in node.edges.items()}
+                cloned_node._cid_cache = getattr(node, "_cid_cache", None) or cid
+                cloned_node._canonical_cid_cache = getattr(node, "_canonical_cid_cache", None) or cid
+            cloned_node.salience = float(activations.get(cid, getattr(node, "salience", 1.0)))
             subgraph.add_node(cloned_node)
 
         # 4. Set primary root CID: prioritize event node with highest activation
@@ -1727,6 +1905,8 @@ class SpreadingActivationRetriever:
         max_depth: int = 2,
         decay: Optional[float] = None,
         threshold: Optional[float] = None,
+        algorithm: Optional[str] = None,
+        query_polarity: str = "positive",
     ) -> QuantaGraph:
         """Compiles query, identifies seed nodes via SIMD search, and returns the activated sub-graph."""
         seeds = self.find_seed_nodes(query, page_table, top_k=top_k)
@@ -1755,6 +1935,8 @@ class SpreadingActivationRetriever:
             max_depth=effective_depth,
             decay=eff_decay,
             threshold=eff_threshold,
+            algorithm=algorithm,
+            query_polarity=query_polarity,
         )
         if q_text:
             setattr(subgraph, "query_text", q_text)
@@ -1770,6 +1952,8 @@ class SpreadingActivationRetriever:
         max_depth: int = 2,
         decay: Optional[float] = None,
         threshold: Optional[float] = None,
+        algorithm: Optional[str] = None,
+        query_polarity: str = "positive",
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
         detected_depth = self.detect_query_hop_depth(query) if query else 2
@@ -1792,6 +1976,8 @@ class SpreadingActivationRetriever:
             max_depth=effective_depth,
             decay=eff_decay,
             threshold=eff_threshold,
+            algorithm=algorithm,
+            query_polarity=query_polarity,
         )
         return self.format_context_for_llm(
             subgraph=subgraph,

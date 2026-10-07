@@ -414,7 +414,16 @@ class PageTable(MutableMapping):
                     edges TEXT NOT NULL,
                     created_at REAL NOT NULL,
                     access_count INTEGER DEFAULT 0,
-                    last_accessed REAL NOT NULL
+                    last_accessed REAL NOT NULL,
+                    passage_id TEXT,
+                    span_start INTEGER,
+                    span_end INTEGER,
+                    salience REAL DEFAULT 1.0,
+                    truth_status TEXT DEFAULT 'TRUE',
+                    confidence REAL DEFAULT 1.0,
+                    evidence_source TEXT DEFAULT 'direct_observation',
+                    node_type TEXT,
+                    concept_code INTEGER
                 );
                 CREATE TABLE IF NOT EXISTS subgraphs (
                     cid TEXT PRIMARY KEY,
@@ -428,6 +437,27 @@ class PageTable(MutableMapping):
                 CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at);
                 """
             )
+            # Ensure new columns exist if table was already created
+            try:
+                cur = self._conn.cursor()
+                cur.execute("PRAGMA table_info(nodes)")
+                existing_cols = {row[1] for row in cur.fetchall()}
+                col_defs = [
+                    ("passage_id", "TEXT"),
+                    ("span_start", "INTEGER"),
+                    ("span_end", "INTEGER"),
+                    ("salience", "REAL DEFAULT 1.0"),
+                    ("truth_status", "TEXT DEFAULT 'TRUE'"),
+                    ("confidence", "REAL DEFAULT 1.0"),
+                    ("evidence_source", "TEXT DEFAULT 'direct_observation'"),
+                    ("node_type", "TEXT"),
+                    ("concept_code", "INTEGER"),
+                ]
+                for col_name, col_type in col_defs:
+                    if col_name not in existing_cols:
+                        self._conn.execute(f"ALTER TABLE nodes ADD COLUMN {col_name} {col_type}")
+            except Exception:
+                pass
 
     INDEX_STOPWORDS = {
         "the", "a", "an", "in", "on", "at", "by", "for", "with", "from", "that", "this",
@@ -526,10 +556,23 @@ class PageTable(MutableMapping):
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO nodes 
-                (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed)
-                VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT access_count FROM nodes WHERE cid = ?), 0), ?)
+                (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed,
+                 passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT access_count FROM nodes WHERE cid = ?), 0), ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, cid, now),
+                (
+                    cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, cid, now,
+                    getattr(node, "passage_id", None),
+                    getattr(node, "span_start", None),
+                    getattr(node, "span_end", None),
+                    float(getattr(node, "salience", 1.0)),
+                    str(getattr(node, "truth_status", "TRUE")),
+                    float(getattr(node, "confidence", 1.0)),
+                    str(getattr(node, "evidence_source", "direct_observation")),
+                    getattr(node, "node_type", None),
+                    getattr(node, "concept_code", None),
+                ),
             )
             self.vector_index.add(cid, packed_vec)
 
@@ -566,15 +609,27 @@ class PageTable(MutableMapping):
                 anchor_id = self.interner.intern(node.anchor)
                 literal_str = json.dumps(node.literal) if node.literal is not None else None
                 edges_str = json.dumps(node.edges)
-                batch_rows.append((cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, 0, now))
+                batch_rows.append((
+                    cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, 0, now,
+                    getattr(node, "passage_id", None),
+                    getattr(node, "span_start", None),
+                    getattr(node, "span_end", None),
+                    float(getattr(node, "salience", 1.0)),
+                    str(getattr(node, "truth_status", "TRUE")),
+                    float(getattr(node, "confidence", 1.0)),
+                    str(getattr(node, "evidence_source", "direct_observation")),
+                    getattr(node, "node_type", None),
+                    getattr(node, "concept_code", None),
+                ))
                 batch_vecs.append((cid, packed_vec))
 
             with self._conn:
                 self._conn.executemany(
                     """
                     INSERT OR REPLACE INTO nodes 
-                    (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed,
+                     passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     batch_rows,
                 )
@@ -588,7 +643,8 @@ class PageTable(MutableMapping):
             cur = self._conn.cursor()
             cur.execute(
                 """
-                SELECT vector_bytes, anchor_id, literal, parent_cid, edges 
+                SELECT vector_bytes, anchor_id, literal, parent_cid, edges,
+                       passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code 
                 FROM nodes WHERE cid = ?
                 """,
                 (cid,),
@@ -602,7 +658,10 @@ class PageTable(MutableMapping):
                     return node
                 return None
 
-            vector_bytes, anchor_id, literal_str, parent_cid, edges_str = row
+            (
+                vector_bytes, anchor_id, literal_str, parent_cid, edges_str,
+                passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code
+            ) = row
             anchor = self.interner.resolve(anchor_id)
             literal = json.loads(literal_str) if literal_str is not None else None
             edges = json.loads(edges_str) if edges_str else {}
@@ -614,6 +673,15 @@ class PageTable(MutableMapping):
                 anchor=anchor,
                 literal=literal,
                 parent_cid=parent_cid,
+                passage_id=passage_id,
+                span_start=span_start,
+                span_end=span_end,
+                salience=float(salience) if salience is not None else 1.0,
+                truth_status=str(truth_status) if truth_status is not None else "TRUE",
+                confidence=float(confidence) if confidence is not None else 1.0,
+                evidence_source=str(evidence_source) if evidence_source is not None else "direct_observation",
+                node_type=node_type,
+                concept_code=concept_code,
             )
             node._cid_cache = cid
 
@@ -638,14 +706,18 @@ class PageTable(MutableMapping):
             placeholders = ",".join("?" for _ in cids)
             cur.execute(
                 f"""
-                SELECT cid, vector_bytes, anchor_id, literal, parent_cid, edges 
+                SELECT cid, vector_bytes, anchor_id, literal, parent_cid, edges,
+                       passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code 
                 FROM nodes WHERE cid IN ({placeholders})
                 """,
                 tuple(cids),
             )
             rows = cur.fetchall()
             for row in rows:
-                cid, vector_bytes, anchor_id, literal_str, parent_cid, edges_str = row
+                (
+                    cid, vector_bytes, anchor_id, literal_str, parent_cid, edges_str,
+                    passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code
+                ) = row
                 anchor = self.interner.resolve(anchor_id)
                 literal = json.loads(literal_str) if literal_str is not None else None
                 edges = json.loads(edges_str) if edges_str else {}
@@ -656,6 +728,15 @@ class PageTable(MutableMapping):
                     anchor=anchor,
                     literal=literal,
                     parent_cid=parent_cid,
+                    passage_id=passage_id,
+                    span_start=span_start,
+                    span_end=span_end,
+                    salience=float(salience) if salience is not None else 1.0,
+                    truth_status=str(truth_status) if truth_status is not None else "TRUE",
+                    confidence=float(confidence) if confidence is not None else 1.0,
+                    evidence_source=str(evidence_source) if evidence_source is not None else "direct_observation",
+                    node_type=node_type,
+                    concept_code=concept_code,
                 )
                 node._cid_cache = cid
                 nodes_dict[cid] = node
