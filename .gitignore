@@ -229,7 +229,8 @@ worktrees/
 
 # LoRA training models, GGUFs, and Unsloth cache
 unsloth_compiled_cache/
-models/
+/models/
+!src/models/
 data/training/
 
 # Scratch & temporary evaluation directories

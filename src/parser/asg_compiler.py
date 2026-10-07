@@ -1032,12 +1032,22 @@ def compile_to_binary_table(graph: QuantaGraph) -> Any:
         span_s = min(65535, max(0, node.span_start or 0))
         span_e = min(65535, max(0, node.span_end or 0))
 
-        # Concept code
+        # Concept code (ConceptNet mmap codebook or blake3 hash fallback)
         concept_code = 0
         if getattr(node, "concept_code", None) is not None:
             concept_code = int(node.concept_code) & 0xFFFF
         elif node.anchor:
-            concept_code = int(blake3.blake3(node.anchor.encode()).hexdigest()[:4], 16) & 0xFFFF
+            try:
+                from parser.mmap_grounder import MmapLexicalGrounder
+                grounder = MmapLexicalGrounder.get_default()
+                if grounder.is_available():
+                    resolved = grounder.resolve_concept_code(node.anchor)
+                    if resolved is not None:
+                        concept_code = int(resolved) & 0xFFFF
+            except Exception:
+                pass
+            if concept_code == 0:
+                concept_code = int(blake3.blake3(node.anchor.encode()).hexdigest()[:4], 16) & 0xFFFF
 
         # Belnap 2-bit lattice
         belnap = BelnapValue.from_str(node.truth_status)

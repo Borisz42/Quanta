@@ -13,6 +13,18 @@ Provides:
 
 from __future__ import annotations
 
+from verification.belnap_calibrator import (
+    BelnapLatticeMapper,
+    TemperatureCalibrator,
+    dequantize_confidence,
+    quantize_confidence,
+)
+from verification.clingo_dl_gate import (
+    ClingoDLGate,
+    DLValidationResult,
+    DifferenceConstraint,
+    DifferenceLogicSolver,
+)
 from verification.clingo_gate import (
     ClingoVerificationGate,
     MUCDiagnostic,
@@ -35,4 +47,13 @@ __all__ = [
     "ContradictionDetail",
     "LatticeInvarianceGate",
     "LatticeMeetResult",
+    "BelnapLatticeMapper",
+    "TemperatureCalibrator",
+    "quantize_confidence",
+    "dequantize_confidence",
+    "ClingoDLGate",
+    "DLValidationResult",
+    "DifferenceConstraint",
+    "DifferenceLogicSolver",
 ]
+

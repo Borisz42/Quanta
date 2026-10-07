@@ -63,6 +63,11 @@ Copy-paste any of the following commands into a new Antigravity session to begin
 > - **Adapter Mode (Approach B)**: Dynamic LoRA adapter attached via `--lora` in `llama-server`. Official Kev-4B models often provide task-specific LoRA weights (~30 MB).
 > - **Empirical Decision Protocol**: Approach A is implemented as the production default. Section 4 explicitly includes a dedicated **Empirical Comparative Experiment (`scripts/evaluate_kev_approaches.py`)** comparing Approach A (zero-shot logprob) vs Approach B (LoRA adapter) on gold valency, pragmatic, and temporal/causal benchmark datasets to measure whether the LoRA adapter accuracy delta justifies the operational overhead.
 
+> [!IMPORTANT]
+> **Single-Token Option Letter Strategy (`A`, `B`, `C`, `D`, `E`) for Prefill Logprob Scoring**:
+> - **The Multi-Token Fragmentation Problem:** Compound labels like `DIRECT_OBSERVATION` (4 tokens: `[' DIRECT', '_OBS', 'ERV', 'ATION']`) or `MECHANISM_LINK` (4 tokens: `[' ME', 'CHAN', 'ISM', '_LINK']`) cannot be evaluated atomically in a single next-token logprob step ($n_{\text{predict}}=1$). In addition to subword length bias, labels with identical prefix tokens (e.g., `DIRECT_OBSERVATION` vs `DIRECTIVE` both starting with `' DIRECT'`) collide in top-logprob space.
+> - **Single-Token Letter Mapping:** Kev-4B binds every classification candidate to a single-token option letter (`(A)`, `(B)`, `(C)`, `(D)`, `(E)`). In the prompt, the full definition of each class is articulated in natural language, and the model's next-token logprobs are evaluated over atomic single tokens (`' A'`, `' B'`, `' C'`, etc.). A closed softmax over option letters yields calibrated posterior probabilities that map directly to typed ontological enums without subword length distortion.
+
 ---
 
 ## Hardware Budgets & Throughput Comparison
@@ -266,17 +271,23 @@ Crucially, this session also implements an **Empirical Comparative Experiment** 
   - Connects directly to the unified `llama-server` on port 8888.
   - VRAM Footprint: **0.0 GB additional VRAM** (leverages shared 4B model in `llama-server`).
   - Supports dual evaluation backends:
-    - `mode="in_context_logprob"` (Approach A - Primary): Zero-shot structured prefill prompt with normalized logprob extraction across target label tokens.
+    - `mode="in_context_logprob"` (Approach A - Primary): Zero-shot structured prefill prompt with normalized single-token option letter logprobs (`A`, `B`, `C`, etc.).
     - `mode="lora_adapter"` (Approach B - Optional / Ablation): Requests routed with dynamic LoRA adapter attached via `llama-server` API (`--lora` / adapter slot).
+  - **Single-Token Option Letter Architecture (`A`, `B`, `C`, `D`, `E`):**
+    - Completely eliminates subword token fragmentation and prefix collisions (e.g. `DIRECT_OBSERVATION` = 4 tokens, `DIRECTIVE` vs `DIRECT_OBSERVATION` both starting with `' DIRECT'`).
+    - Explicitly articulates label definitions in prompt context while restricting the model's next-token logprob evaluation to atomic single tokens (`' A'`, `' B'`, `' C'`, etc.).
+    - Evaluates closed-form softmax across candidate letters via `_normalize_option_logprobs_to_probs` and maps probabilities losslessly back to typed ontological enums.
   - Pass 1: `score_valency_and_coreference(entities, events, text)`
-    - Submits prefill template: `"In the text '{text}', the semantic role of '{entity}' in event '{predicate}' is [AGENT/PATIENT/INSTRUMENT/NONE]:"`
-    - Extracts normalized logprobs across candidate token logits.
+    - Submits template: `"What is the semantic role of '{entity}' in event '{predicate}'? (A) AGENT (B) PATIENT (C) INSTRUMENT (D) NONE. Selected option [A/B/C/D]:"`
+    - Extracts logprobs across atomic tokens `A`, `B`, `C`, `D` and maps to `ValencyRole`.
   - Pass 2: `score_intent_and_epistemics(events, text)`
-    - Submits prefill template for speech-act intent (`informative`, `directive`, `commissive`, `expressive`).
-    - Submits prefill template for epistemic source (`direct_observation`, `deduction`, `hearsay`, `conjecture`).
+    - Submits template for speech-act intent: `(A) INFORMATIVE`, `(B) DIRECTIVE`, `(C) COMMISSIVE`, `(D) EXPRESSIVE`
+    - Submits template for epistemic source: `(A) DIRECT_OBSERVATION`, `(B) DEDUCTION`, `(C) HEARSAY`, `(D) CONJECTURE`
+    - Extracts logprobs across atomic tokens and maps to `SpeechActIntent` and `EpistemicSource`.
   - Pass 3: `score_allen_and_pearl_relations(event_pairs, text)`
-    - Evaluates Allen temporal interval (`MEETS`, `BEFORE`, `OVERLAPS`, `DURING`, `NONE`).
-    - Evaluates Pearl causal link (`MECHANISM_LINK`, `ENABLING_CONDITION`, `NONE`).
+    - Submits template for Allen temporal interval: `(A) MEETS`, `(B) BEFORE`, `(C) OVERLAPS`, `(D) DURING`, `(E) NONE`
+    - Submits template for Pearl causal link: `(A) MECHANISM_LINK`, `(B) ENABLING_CONDITION`, `(C) NONE`
+    - Extracts logprobs across atomic tokens and maps to `AllenTemporalRelation` and `PearlCausalLink`.
   - Parallel batch dispatch using `asyncio` or `httpx` connection pool.
 
 #### [NEW] `scripts/evaluate_kev_approaches.py`
