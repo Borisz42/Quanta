@@ -1,13 +1,13 @@
 # QUANTA Fast Skeleton Transducer
 # GBNF Grammar for Constrained Decoding of Surface Skeletons (Flat JSON)
 
-root ::= ws "{" ws "\"entities\"" ws ":" ws entity_list ws "," ws "\"events\"" ws ":" ws event_list ws "}" ws
+root ::= ws "{" ws "\"entities\"" ws ":" ws entity-list ws "," ws "\"events\"" ws ":" ws event-list ws "}" ws
 
-entity_list ::= "[" ws (entity (ws "," ws entity)*)? ws "]"
+entity-list ::= "[" ws (entity (ws "," ws entity)*)? ws "]"
 entity ::= "{" ws "\"id\"" ws ":" ws string ws "," ws "\"text\"" ws ":" ws string (ws "," ws "\"category\"" ws ":" ws string)? ws "}"
 
-event_list ::= "[" ws (event (ws "," ws event)*)? ws "]"
+event-list ::= "[" ws (event (ws "," ws event)*)? ws "]"
 event ::= "{" ws "\"id\"" ws ":" ws string ws "," ws "\"pred\"" ws ":" ws string (ws "," ws "\"subj\"" ws ":" ws (string | "null"))? (ws "," ws "\"obj\"" ws ":" ws (string | "null"))? ws "}"
 
 string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\""
-ws ::= [ \t\n\r]*
+ws ::= [ ]?

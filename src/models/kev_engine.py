@@ -20,6 +20,7 @@ Key Features:
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 import json
@@ -220,6 +221,16 @@ def _extract_event_info(ev: Any) -> Tuple[str, str]:
         pred = ev.get("predicate") or ev.get("pred") or ev.get("verb") or "action"
         return str(eid), str(pred)
     return str(ev), str(ev)
+
+
+def _extract_event_candidates(ev: Any) -> Tuple[Optional[str], Optional[str]]:
+    """Extract candidate (subject_ent_id, object_ent_id) from SkeletonEvent or dict."""
+    subj = getattr(ev, "subject_ent_id", None)
+    obj = getattr(ev, "object_ent_id", None)
+    if isinstance(ev, dict):
+        subj = subj or ev.get("subject_ent_id") or ev.get("subj")
+        obj = obj or ev.get("object_ent_id") or ev.get("obj")
+    return (str(subj) if subj else None, str(obj) if obj else None)
 
 
 OPTION_LETTERS: List[str] = ["A", "B", "C", "D", "E", "F", "G", "H"]
@@ -592,9 +603,12 @@ class KevDecisionEngine:
             base_url
             or os.environ.get("LLAMA_SERVER_BASE_URL")
             or os.environ.get("UNSLOTH_BASE_URL")
-            or "http://localhost:8888"
+            or "http://127.0.0.1:8888"
         ).rstrip("/")
-        # If url ends with /v1, strip it for native llama.cpp /completion endpoint
+        # Avoid Windows 11 IPv6 localhost DNS resolution delay
+        if "://localhost:" in raw_url:
+            raw_url = raw_url.replace("://localhost:", "://127.0.0.1:")
+        # If url ends with /v1, strip it for server_base
         if raw_url.endswith("/v1"):
             self.server_base = raw_url[:-3]
         else:
@@ -614,6 +628,7 @@ class KevDecisionEngine:
         self._server_available: Optional[bool] = None
         self._last_health_check_time: float = 0.0
         self._health_check_interval: float = 5.0
+        self._completion_endpoint: Optional[str] = None
 
     @property
     def vram_overhead_mb(self) -> float:
@@ -622,55 +637,87 @@ class KevDecisionEngine:
             return 30.0  # ~30MB for dynamic LoRA weights in GPU
         return 0.0  # Shared zero-shot weights require 0.0 MB additional VRAM
 
-    def check_health(self, force_refresh: bool = False) -> bool:
-        """Check if llama-server endpoint is reachable with caching."""
+    def check_health(self, force_refresh: bool = False, timeout: float = 0.5) -> bool:
+        """Check if llama-server / unsloth endpoint is reachable with caching."""
         now = time.perf_counter()
         if not force_refresh and self._server_available is not None and (now - self._last_health_check_time < self._health_check_interval):
             return self._server_available
 
         self._last_health_check_time = now
         try:
-            resp = self.session.get(f"{self.server_base}/health", timeout=0.05)
-            self._server_available = (resp.status_code == 200)
-            return self._server_available
+            resp = self.session.get(f"{self.server_base}/health", timeout=timeout)
+            if resp.status_code == 200:
+                self._server_available = True
+                return True
+        except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout):
+            self._server_available = False
+            return False
         except Exception:
             pass
 
         try:
-            resp = self.session.get(f"{self.server_base}/v1/models", timeout=0.05)
-            self._server_available = (resp.status_code == 200)
-            return self._server_available
+            resp = self.session.get(f"{self.server_base}/v1/models", timeout=timeout)
+            if resp.status_code == 200:
+                models = resp.json().get("data", [])
+                loaded_models = [m for m in models if m.get("loaded", True) is not False]
+                self._server_available = len(loaded_models) > 0
+                return self._server_available
         except Exception:
-            self._server_available = False
-            return False
+            pass
+
+        self._server_available = False
+        return False
 
     def _query_completion_logprobs(
         self,
         prompt: str,
         target_labels: Sequence[str],
     ) -> Tuple[Dict[str, float], float]:
-        """Submit prefill prompt to llama-server /completion and extract next-token logprobs.
-        
-        Returns:
-            (raw_token_logprobs, latency_ms)
-        """
+        """Submit prefill prompt to llama-server /completion or /v1/completions and extract next-token logprobs."""
         # Fast path if server is known to be offline and fallback is enabled
         if self.fallback_to_mock and not self.check_health():
             self._last_fallback_used = True
             return {}, 0.05
 
-        payload: Dict[str, Any] = {
-            "prompt": prompt,
-            "n_predict": 1,
-            "n_probs": max(10, len(target_labels) + 4),
-            "temperature": 0.0,
-            "cache_prompt": True,
-        }
+        if self._completion_endpoint is None:
+            # Determine whether native /completion or OpenAI-compatible /v1/completions is active
+            try:
+                r_native = self.session.post(
+                    f"{self.server_base}/completion",
+                    json={"prompt": "ping", "n_predict": 1},
+                    timeout=1.0,
+                )
+                if r_native.status_code == 200:
+                    self._completion_endpoint = f"{self.server_base}/completion"
+            except Exception:
+                pass
+            if self._completion_endpoint is None:
+                self._completion_endpoint = f"{self.server_base}/v1/completions"
+
+        is_openai = "/v1/" in self._completion_endpoint
+        n_logprobs = max(10, len(target_labels) + 4)
+
+        if is_openai:
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "prompt": prompt,
+                "max_tokens": 1,
+                "logprobs": n_logprobs,
+                "temperature": 0.0,
+            }
+        else:
+            payload = {
+                "prompt": prompt,
+                "n_predict": 1,
+                "n_probs": n_logprobs,
+                "temperature": 0.0,
+                "cache_prompt": True,
+            }
 
         if self.mode == "lora_adapter" and self.lora_adapter_id:
             payload["lora"] = [{"id": self.lora_adapter_id, "scale": 1.0}]
 
-        url = f"{self.server_base}/completion"
+        url = self._completion_endpoint
         last_err: Optional[Exception] = None
         t0 = time.perf_counter()
 
@@ -684,6 +731,8 @@ class KevDecisionEngine:
                     return logprobs_dict, latency_ms
                 else:
                     last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
+                    if resp.status_code in (400, 404):
+                        break
             except Exception as e:
                 last_err = e
             if attempt < self.max_retries:
@@ -699,14 +748,16 @@ class KevDecisionEngine:
         raise RuntimeError(f"Failed to query llama-server completion at {url}: {last_err}") from last_err
 
     def _parse_logprobs_from_response(self, data: Dict[str, Any]) -> Dict[str, float]:
-        """Extract token-to-logprob mapping from llama.cpp /completion response."""
+        """Extract token-to-logprob mapping from llama.cpp /completion or /v1/completions response."""
         res: Dict[str, float] = {}
 
-        # 1. Native llama.cpp: completion_probabilities -> array of items with 'probs'
+        # 1. Native llama.cpp: completion_probabilities -> array of items with 'probs' or 'top_logprobs'
         comp_probs = data.get("completion_probabilities")
         if comp_probs and isinstance(comp_probs, list) and len(comp_probs) > 0:
             first_step = comp_probs[0]
-            probs_list = first_step.get("probs", [])
+            probs_list = first_step.get("probs") or first_step.get("top_logprobs") or []
+            if not probs_list and "token" in first_step:
+                probs_list = [first_step]
             for item in probs_list:
                 tok = item.get("tok_str") or item.get("token") or ""
                 prob = item.get("prob")
@@ -715,21 +766,53 @@ class KevDecisionEngine:
                 else:
                     logp = item.get("logprob", -12.0)
                 res[tok.strip().upper()] = float(logp)
-            return res
+            if res:
+                return res
 
-        # 2. OpenAI completions format choices[0].logprobs.top_logprobs
+        # 2. OpenAI completions format choices[0].logprobs
         choices = data.get("choices", [])
         if choices and isinstance(choices, list) and len(choices) > 0:
             choice = choices[0]
             lp_block = choice.get("logprobs", {})
-            if lp_block:
+            if isinstance(lp_block, dict):
+                # Structure A: logprobs.content[0].top_logprobs (list of dicts with 'token' and 'logprob')
+                content_list = lp_block.get("content", [])
+                if content_list and isinstance(content_list, list) and len(content_list) > 0:
+                    first_item = content_list[0]
+                    top_lps = first_item.get("top_logprobs", [])
+                    for entry in top_lps:
+                        if isinstance(entry, dict):
+                            tok_str = entry.get("token") or ""
+                            lp_val = entry.get("logprob", -12.0)
+                            res[str(tok_str).strip().upper()] = float(lp_val)
+                    if res:
+                        return res
+
+                # Structure B: logprobs.top_logprobs[0] (dict or list)
                 top_lps = lp_block.get("top_logprobs", [])
                 if top_lps and isinstance(top_lps, list) and len(top_lps) > 0:
-                    for tok_str, lp_val in top_lps[0].items():
-                        res[tok_str.strip().upper()] = float(lp_val)
-                    return res
+                    first_step = top_lps[0]
+                    if isinstance(first_step, dict):
+                        for tok_str, lp_val in first_step.items():
+                            res[str(tok_str).strip().upper()] = float(lp_val)
+                        return res
+                    elif isinstance(first_step, list):
+                        for entry in first_step:
+                            if isinstance(entry, dict):
+                                tok_str = entry.get("token") or ""
+                                lp_val = entry.get("logprob", -12.0)
+                                res[str(tok_str).strip().upper()] = float(lp_val)
+                        return res
 
-        # 3. Direct content string fallback
+        # 3. Direct choice text fallback (e.g. LM Studio or models without logprob block)
+        if not res and choices:
+            text_val = str(choices[0].get("text", "")).strip().upper()
+            if text_val:
+                cleaned = text_val.replace("(", "").replace(")", "").replace("[", "").replace("]", "").strip()
+                if cleaned:
+                    res[cleaned[:1]] = 0.0
+
+        # 4. Direct content string fallback
         content = data.get("content", "").strip().upper()
         if content:
             res[content] = 0.0
@@ -755,45 +838,116 @@ class KevDecisionEngine:
         (B) PATIENT
         (C) INSTRUMENT
         (D) NONE
-        Selected option [A/B/C/D]:"
+        Choice: ["
         """
         clean_text = text.strip()
         results: List[ValencyScoringResult] = []
         target_labels = [r.value for r in ValencyRole]
         target_letters = [OPTION_LETTERS[i] for i in range(len(target_labels))]
 
+        # Collect candidate tasks for LLM evaluation vs heuristic NONE
+        eval_tasks: List[Tuple[str, str, str, str, str]] = []
+
         for ev in events:
             ev_id, pred = _extract_event_info(ev)
+            cand_subj, cand_obj = _extract_event_candidates(ev)
+            cand_ent_ids: Set[str] = set()
+            if cand_subj:
+                cand_ent_ids.add(cand_subj)
+            if cand_obj:
+                cand_ent_ids.add(cand_obj)
+
+            if len(entities) <= 3:
+                cand_ent_ids.update(_extract_entity_info(e)[0] for e in entities)
+            else:
+                pos_pred = clean_text.lower().find(pred.lower())
+                best_prec_id: Optional[str] = None
+                best_prec_dist = 999999
+                best_foll_id: Optional[str] = None
+                best_foll_dist = 999999
+
+                for ent in entities:
+                    ent_id, ent_txt = _extract_entity_info(ent)
+                    pos_ent = clean_text.lower().find(ent_txt.lower())
+                    if pos_ent == -1:
+                        continue
+                    if pos_pred != -1:
+                        if pos_ent < pos_pred and (pos_pred - pos_ent) < best_prec_dist:
+                            best_prec_dist = pos_pred - pos_ent
+                            best_prec_id = ent_id
+                        elif pos_ent >= pos_pred and (pos_ent - pos_pred) < best_foll_dist:
+                            best_foll_dist = pos_ent - pos_pred
+                            best_foll_id = ent_id
+                        # Prepositional instrument check (e.g. "using", "with", "via", "by")
+                        sub_ctx = clean_text[max(0, pos_ent - 15):pos_ent].lower()
+                        if any(w in sub_ctx for w in ("using", "with", "via", "by")):
+                            cand_ent_ids.add(ent_id)
+
+                if best_prec_id:
+                    cand_ent_ids.add(best_prec_id)
+                if best_foll_id:
+                    cand_ent_ids.add(best_foll_id)
+
+                if not cand_ent_ids and entities:
+                    cand_ent_ids.add(_extract_entity_info(entities[0])[0])
+
             for ent in entities:
                 ent_id, ent_txt = _extract_entity_info(ent)
-                prompt = (
-                    f"In the text: \"{clean_text}\"\n"
-                    f"What is the semantic role of '{ent_txt}' in event '{pred}'?\n"
-                    f"(A) AGENT (actor, initiator, performer)\n"
-                    f"(B) PATIENT (target, entity acted upon, recipient)\n"
-                    f"(C) INSTRUMENT (tool, device, medium used)\n"
-                    f"(D) NONE (no direct core thematic role)\n\n"
-                    f"Selected option [A/B/C/D]:"
-                )
+                if ent_id in cand_ent_ids:
+                    prompt = (
+                        f"Context: {clean_text}\n\n"
+                        f"What is the semantic role of '{ent_txt}' in event '{pred}'?\n"
+                        f"(A) AGENT (actor, initiator, performer)\n"
+                        f"(B) PATIENT (target, entity acted upon, recipient)\n"
+                        f"(C) INSTRUMENT (tool, device, medium used)\n"
+                        f"(D) NONE (no direct core thematic role)\n\n"
+                        f"Choice: ["
+                    )
+                    eval_tasks.append((ev_id, pred, ent_id, ent_txt, prompt))
+                else:
+                    # Pruned: assign NONE with high confidence directly
+                    none_probs = {r.value: (0.96 if r.value == ValencyRole.NONE.value else 0.04 / 3) for r in ValencyRole}
+                    results.append(
+                        ValencyScoringResult(
+                            entity_id=ent_id,
+                            event_id=ev_id,
+                            entity_text=ent_txt,
+                            predicate=pred,
+                            role=ValencyRole.NONE.value,
+                            confidence=0.96,
+                            probabilities=none_probs,
+                            raw_logprobs={letter: math.log(0.96 if letter == "D" else 0.013) for letter in OPTION_LETTERS[:4]},
+                        )
+                    )
 
+        # Dispatch candidate tasks concurrently
+        if eval_tasks:
+            def _eval_one(task: Tuple[str, str, str, str, str]) -> ValencyScoringResult:
+                ev_id, pred, ent_id, ent_txt, prompt = task
                 logprobs, _ = self._query_completion_logprobs(prompt, target_letters)
                 if not logprobs and self.fallback_to_mock:
                     role, conf, probs, raw_lps = self._mock.score_valency(ent_txt, pred, clean_text)
                 else:
                     role, conf, probs, raw_lps = _normalize_option_logprobs_to_probs(logprobs, target_labels)
-
-                results.append(
-                    ValencyScoringResult(
-                        entity_id=ent_id,
-                        event_id=ev_id,
-                        entity_text=ent_txt,
-                        predicate=pred,
-                        role=role,
-                        confidence=conf,
-                        probabilities=probs,
-                        raw_logprobs=raw_lps,
-                    )
+                return ValencyScoringResult(
+                    entity_id=ent_id,
+                    event_id=ev_id,
+                    entity_text=ent_txt,
+                    predicate=pred,
+                    role=role,
+                    confidence=conf,
+                    probabilities=probs,
+                    raw_logprobs=raw_lps,
                 )
+
+            max_w = min(self.concurrency_limit, len(eval_tasks), 8)
+            if max_w > 1 and not (self.fallback_to_mock and not self.check_health()):
+                with ThreadPoolExecutor(max_workers=max_w) as executor:
+                    scored = list(executor.map(_eval_one, eval_tasks))
+                results.extend(scored)
+            else:
+                for t in eval_tasks:
+                    results.append(_eval_one(t))
 
         return results
 
@@ -811,38 +965,65 @@ class KevDecisionEngine:
         Submits single-token option prompts for intent [A/B/C/D] and epistemic source [A/B/C/D].
         """
         clean_text = text.strip()
-        results: List[IntentEpistemicResult] = []
         intent_labels = [i.value for i in SpeechActIntent]
         epistemic_labels = [e.value for e in EpistemicSource]
         intent_letters = [OPTION_LETTERS[i] for i in range(len(intent_labels))]
         epistemic_letters = [OPTION_LETTERS[i] for i in range(len(epistemic_labels))]
 
+        if not events:
+            return []
+
+        # Prepare prompts with shared Context prefix for KV cache reuse
+        prompts: Dict[str, Tuple[str, str, str]] = {}
         for ev in events:
             ev_id, pred = _extract_event_info(ev)
-
-            # Intent query with single-token option IDs
-            prompt_intent = (
-                f"In the text: \"{clean_text}\"\n"
+            p_intent = (
+                f"Context: {clean_text}\n\n"
                 f"What is the speech-act intent of the statement containing '{pred}'?\n"
                 f"(A) INFORMATIVE (assertion, report, description)\n"
                 f"(B) DIRECTIVE (instruction, command, requirement)\n"
                 f"(C) COMMISSIVE (promise, commitment, guarantee)\n"
                 f"(D) EXPRESSIVE (evaluative reaction, exclamation, stance)\n\n"
-                f"Selected option [A/B/C/D]:"
+                f"Choice: ["
             )
-            lps_intent, _ = self._query_completion_logprobs(prompt_intent, intent_letters)
-
-            # Epistemic query with single-token option IDs
-            prompt_epistemic = (
-                f"In the text: \"{clean_text}\"\n"
+            p_epistemic = (
+                f"Context: {clean_text}\n\n"
                 f"What is the epistemic evidence source for '{pred}'?\n"
                 f"(A) DIRECT_OBSERVATION (empirical observation, sensor, measurement)\n"
                 f"(B) DEDUCTION (logical deduction, proof, calculation)\n"
                 f"(C) HEARSAY (indirect reporting, testimony, citation)\n"
                 f"(D) CONJECTURE (hypothesis, speculation, possibility)\n\n"
-                f"Selected option [A/B/C/D]:"
+                f"Choice: ["
             )
-            lps_epistemic, _ = self._query_completion_logprobs(prompt_epistemic, epistemic_letters)
+            prompts[ev_id] = (pred, p_intent, p_epistemic)
+
+        tasks: List[Tuple[str, str, str, List[str]]] = []
+        for ev_id, (pred, p_int, p_epi) in prompts.items():
+            tasks.append((ev_id, "intent", p_int, intent_letters))
+            tasks.append((ev_id, "epistemic", p_epi, epistemic_letters))
+
+        def _run_subtask(t: Tuple[str, str, str, List[str]]) -> Tuple[str, str, Dict[str, float]]:
+            ev_id, kind, p, ltrs = t
+            lps, _ = self._query_completion_logprobs(p, ltrs)
+            return (ev_id, kind, lps)
+
+        lps_results: Dict[str, Dict[str, Dict[str, float]]] = {ev_id: {} for ev_id in prompts}
+        max_w = min(self.concurrency_limit, len(tasks), 8)
+        if max_w > 1 and not (self.fallback_to_mock and not self.check_health()):
+            with ThreadPoolExecutor(max_workers=max_w) as executor:
+                sub_res = list(executor.map(_run_subtask, tasks))
+            for ev_id, kind, lps in sub_res:
+                lps_results[ev_id][kind] = lps
+        else:
+            for t in tasks:
+                ev_id, kind, lps = _run_subtask(t)
+                lps_results[ev_id][kind] = lps
+
+        results: List[IntentEpistemicResult] = []
+        for ev in events:
+            ev_id, pred = _extract_event_info(ev)
+            lps_intent = lps_results.get(ev_id, {}).get("intent", {})
+            lps_epistemic = lps_results.get(ev_id, {}).get("epistemic", {})
 
             if (not lps_intent or not lps_epistemic) and self.fallback_to_mock:
                 intent, i_conf, i_probs, epistemic, e_conf, e_probs, raw_lps = (
@@ -883,39 +1064,69 @@ class KevDecisionEngine:
         Submits single-token option prompts for Allen intervals [A/B/C/D/E] and Pearl causal links [A/B/C].
         """
         clean_text = text.strip()
-        results: List[RelationScoringResult] = []
         allen_labels = [a.value for a in AllenTemporalRelation]
         pearl_labels = [p.value for p in PearlCausalLink]
         allen_letters = [OPTION_LETTERS[i] for i in range(len(allen_labels))]
         pearl_letters = [OPTION_LETTERS[i] for i in range(len(pearl_labels))]
 
-        for ev1, ev2 in event_pairs:
+        if not event_pairs:
+            return []
+
+        pair_prompts: Dict[Tuple[str, str], Tuple[str, str, str, str]] = {}
+        for pair in event_pairs:
+            ev1, ev2 = pair
             ev1_id, p1 = _extract_event_info(ev1)
             ev2_id, p2 = _extract_event_info(ev2)
-
-            # Allen temporal query with single-token option IDs
             prompt_allen = (
-                f"In the text: \"{clean_text}\"\n"
+                f"Context: {clean_text}\n\n"
                 f"What is the temporal interval relation between event '{p1}' and event '{p2}'?\n"
                 f"(A) MEETS (immediate sequential contact)\n"
                 f"(B) BEFORE (first event precedes second event)\n"
                 f"(C) OVERLAPS (events partially overlap in time)\n"
                 f"(D) DURING (event occurs during the other event)\n"
                 f"(E) NONE (unrelated or no temporal ordering)\n\n"
-                f"Selected option [A/B/C/D/E]:"
+                f"Choice: ["
             )
-            lps_allen, _ = self._query_completion_logprobs(prompt_allen, allen_letters)
-
-            # Pearl causal query with single-token option IDs
             prompt_pearl = (
-                f"In the text: \"{clean_text}\"\n"
+                f"Context: {clean_text}\n\n"
                 f"What is the causal link from event '{p1}' to event '{p2}'?\n"
                 f"(A) MECHANISM_LINK (direct physical or chemical cause)\n"
                 f"(B) ENABLING_CONDITION (prerequisite or enabling factor)\n"
                 f"(C) NONE (no causal dependency)\n\n"
-                f"Selected option [A/B/C]:"
+                f"Choice: ["
             )
-            lps_pearl, _ = self._query_completion_logprobs(prompt_pearl, pearl_letters)
+            pair_prompts[(ev1_id, ev2_id)] = (p1, p2, prompt_allen, prompt_pearl)
+
+        tasks3: List[Tuple[Tuple[str, str], str, str, List[str]]] = []
+        for pkey, (p1, p2, p_allen, p_pearl) in pair_prompts.items():
+            tasks3.append((pkey, "allen", p_allen, allen_letters))
+            tasks3.append((pkey, "pearl", p_pearl, pearl_letters))
+
+        def _run_subtask3(t: Tuple[Tuple[str, str], str, str, List[str]]) -> Tuple[Tuple[str, str], str, Dict[str, float]]:
+            pkey, kind, p, ltrs = t
+            lps, _ = self._query_completion_logprobs(p, ltrs)
+            return (pkey, kind, lps)
+
+        lps_results3: Dict[Tuple[str, str], Dict[str, Dict[str, float]]] = {pkey: {} for pkey in pair_prompts}
+        max_w = min(self.concurrency_limit, len(tasks3), 8)
+        if max_w > 1 and not (self.fallback_to_mock and not self.check_health()):
+            with ThreadPoolExecutor(max_workers=max_w) as executor:
+                sub_res3 = list(executor.map(_run_subtask3, tasks3))
+            for pkey, kind, lps in sub_res3:
+                lps_results3[pkey][kind] = lps
+        else:
+            for t in tasks3:
+                pkey, kind, lps = _run_subtask3(t)
+                lps_results3[pkey][kind] = lps
+
+        results3: List[RelationScoringResult] = []
+        for pair in event_pairs:
+            ev1, ev2 = pair
+            ev1_id, p1 = _extract_event_info(ev1)
+            ev2_id, p2 = _extract_event_info(ev2)
+            pkey = (ev1_id, ev2_id)
+            lps_allen = lps_results3.get(pkey, {}).get("allen", {})
+            lps_pearl = lps_results3.get(pkey, {}).get("pearl", {})
 
             if (not lps_allen or not lps_pearl) and self.fallback_to_mock:
                 allen, a_conf, a_probs, pearl, p_conf, p_probs, raw_lps = (
@@ -926,7 +1137,7 @@ class KevDecisionEngine:
                 pearl, p_conf, p_probs, lps_p = _normalize_option_logprobs_to_probs(lps_pearl, pearl_labels)
                 raw_lps = {**lps_a, **lps_p}
 
-            results.append(
+            results3.append(
                 RelationScoringResult(
                     source_event_id=ev1_id,
                     target_event_id=ev2_id,
@@ -942,7 +1153,7 @@ class KevDecisionEngine:
                 )
             )
 
-        return results
+        return results3
 
     # -----------------------------------------------------------------------
     # End-to-End Evaluation Across All 3 Passes

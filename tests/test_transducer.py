@@ -477,7 +477,8 @@ def test_create_transducer_factory():
     assert isinstance(gguf_t, LocalGGUFTransducer)
 
     auto_t = create_transducer("auto")
-    assert isinstance(auto_t, (MockTransducer, LMStudioTransducer))
+    from parser.unsloth_transducer import UnslothTransducer
+    assert isinstance(auto_t, (MockTransducer, LMStudioTransducer, UnslothTransducer))
 
     with pytest.raises(ValueError):
         create_transducer("invalid_backend")

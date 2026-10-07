@@ -148,7 +148,7 @@ class UnslothServerManager:
             }
 
     def is_service_responsive(self, timeout: float = 8.0) -> bool:
-        """Checks if the server responds on /health or /v1/models."""
+        """Checks if the server responds on /health or /v1/models with an active loaded model."""
         try:
             with httpx.Client(timeout=timeout) as client:
                 # 1. Native llama-server /health endpoint
@@ -160,7 +160,11 @@ class UnslothServerManager:
                     pass
                 # 2. OpenAI-compatible /v1/models endpoint
                 r = client.get(f"{self.api_url}/models")
-                return r.status_code == 200
+                if r.status_code == 200:
+                    models = r.json().get("data", [])
+                    loaded_models = [m for m in models if m.get("loaded", True) is not False]
+                    return len(loaded_models) > 0
+                return False
         except Exception:
             return False
 

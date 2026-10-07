@@ -1118,16 +1118,21 @@ class UnslothTransducer(BaseDiscourseTransducer):
         super().__init__(system_prompt=system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT)
         self.mode = mode
         self._allow_fixtures = allow_fixtures
-        self.base_url = (
+        raw_base = (
             base_url
             or os.environ.get("UNSLOTH_BASE_URL")
-            or "http://localhost:8888/v1"
+            or "http://127.0.0.1:8888/v1"
         ).rstrip("/")
+        if "://localhost:" in raw_base:
+            raw_base = raw_base.replace("://localhost:", "://127.0.0.1:")
+        self.base_url = raw_base
         fallback_candidate = (
             fallback_base_url
             if fallback_base_url is not None
-            else os.environ.get("UNSLOTH_FALLBACK_URL", "http://localhost:1234/v1")
+            else os.environ.get("UNSLOTH_FALLBACK_URL")
         )
+        if fallback_candidate and "://localhost:" in fallback_candidate:
+            fallback_candidate = fallback_candidate.replace("://localhost:", "://127.0.0.1:")
         self.fallback_base_url = fallback_candidate.rstrip("/") if fallback_candidate else None
         self.timeout = timeout
         self.max_retries = max_retries
@@ -1186,26 +1191,26 @@ class UnslothTransducer(BaseDiscourseTransducer):
             return False
         self._grammar_warmed = True
         target = base_url or self.base_url
-        if self.check_health(target):
-            try:
-                headers = self._get_headers()
-                test_payload = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": "ping"}],
-                    "max_tokens": 1,
-                    "grammar": self.grammar_content,
-                    "grammar_hash": self.grammar_hash,
-                }
-                resp = self.session.post(
-                    f"{target.rstrip('/')}/chat/completions",
-                    headers=headers,
-                    json=test_payload,
-                    timeout=2.0,
-                )
-                return resp.status_code in (200, 400)
-            except Exception:
-                pass
-        return True
+        if not self.check_health(target):
+            return False
+        try:
+            headers = self._get_headers()
+            test_payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+                "grammar": self.grammar_content,
+                "grammar_hash": self.grammar_hash,
+            }
+            resp = self.session.post(
+                f"{target.rstrip('/')}/chat/completions",
+                headers=headers,
+                json=test_payload,
+                timeout=2.0,
+            )
+            return resp.status_code in (200, 400)
+        except Exception:
+            return False
 
     def _get_headers(self) -> Dict[str, str]:
         """Compose request headers, omitting Authorization for keyless local endpoints."""

@@ -263,8 +263,8 @@ def test_skeleton_gbnf_grammar_exists_and_valid():
 
     content = gbnf_path.read_text(encoding="utf-8")
     assert "root ::=" in content
-    assert "entity_list ::=" in content
-    assert "event_list ::=" in content
+    assert ("entity_list ::=" in content) or ("entity-list ::=" in content)
+    assert ("event_list ::=" in content) or ("event-list ::=" in content)
 
 
 # ---------------------------------------------------------------------------

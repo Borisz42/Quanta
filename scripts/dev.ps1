@@ -12,8 +12,11 @@
 
 param (
     [Parameter(Position = 0, Mandatory = $false)]
-    [ValidateSet("serve", "serve-mcp", "test-mcp", "test-proxy", "interactive-mcp", "status", "benchmark", "benchmark-quick", "benchmark-publish", "demo", "test", "test-verbose", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
-    [string]$Target = "help"
+    [ValidateSet("serve", "serve-mcp", "test-mcp", "test-proxy", "interactive-mcp", "status", "benchmark", "benchmark-quick", "benchmark-publish", "demo", "demo-svm", "test", "test-verbose", "lint", "export", "gather-artifacts", "init", "sync-hf", "help")]
+    [string]$Target = "help",
+
+    [Parameter(Mandatory = $false)]
+    [string]$Mode = "auto"
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,6 +63,10 @@ switch ($Target) {
     "demo" {
         Write-Host "Running QUANTA Context Expansion System Demonstration..." -ForegroundColor Cyan
         python scripts/demonstrate_context_expansion.py
+    }
+    "demo-svm" {
+        Write-Host "Running QUANTA Semantic Virtual Memory Live Pipeline Demonstration (Mode: $Mode)..." -ForegroundColor Cyan
+        python scripts/demonstrate_svm_pipeline.py --mode $Mode
     }
     "test" {
         Write-Host "Running QUANTA test suite..." -ForegroundColor Cyan
@@ -109,5 +116,6 @@ switch ($Target) {
         Write-Host "    test            - Run pytest suite"
         Write-Host "    test-verbose    - Run verbose pytest suite"
         Write-Host "    demo            - Run context expansion demonstration"
+        Write-Host "    demo-svm        - Run Semantic Virtual Memory live pipeline demonstration"
     }
 }

@@ -107,6 +107,27 @@ def _normalize_entity_key(name: str) -> str:
     return k
 
 
+def _locate_node_span_in_chunk(node: QuantaNode, text: str) -> Tuple[int, int]:
+    """Locates the character span (start, end) of a node within the passage text."""
+    lbl = ""
+    if isinstance(node.literal, str) and len(node.literal.strip()) >= 2:
+        lbl = node.literal.strip()
+    elif isinstance(node.literal, dict):
+        lbl = str(node.literal.get("name") or node.literal.get("label") or node.literal.get("text") or "").strip()
+    elif node.anchor:
+        clean = node.anchor
+        if clean.startswith("cn:en:"):
+            clean = clean[6:]
+        clean = re.sub(r"\s*\([nav]\)$", "", clean).replace("_", " ").strip()
+        if len(clean) >= 2:
+            lbl = clean
+    if lbl:
+        s_idx = text.find(lbl)
+        if s_idx >= 0:
+            return (s_idx, s_idx + len(lbl))
+    return (0, len(text))
+
+
 class CognitivePipeline:
     """Production-grade Neuro-Symbolic Cognitive Pipeline for QUANTA.
 
@@ -208,12 +229,19 @@ class CognitivePipeline:
 
         if skeleton_transducer is not None:
             self.skeleton_transducer = skeleton_transducer
-        elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "sexpr_mock"):
+        elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
             self.skeleton_transducer = MockSkeletonTransducer()
         else:
             self.skeleton_transducer = SkeletonTransducer(fallback_to_mock=True)
 
-        self.kev_engine = kev_engine or KevDecisionEngine(fallback_to_mock=True)
+        if kev_engine is not None:
+            self.kev_engine = kev_engine
+        elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
+            self.kev_engine = KevDecisionEngine(base_url="mock", fallback_to_mock=True)
+            self.kev_engine._server_available = False
+            self.kev_engine._last_health_check_time = time.perf_counter()
+        else:
+            self.kev_engine = KevDecisionEngine(fallback_to_mock=True)
         self.belnap_mapper = belnap_mapper or BelnapLatticeMapper()
         self.clingo_dl_gate = clingo_dl_gate or ClingoDLGate()
         self.concept_grounder = MmapLexicalGrounder()
@@ -706,6 +734,26 @@ class CognitivePipeline:
 
         # 5. Ingest into Virtual Page Table and Active Canvas
         doc_heading = chunks[0].chapter_title if (chunks and chunks[0].chapter_title) else None
+
+        # Register chunks in PassageStore if available
+        if hasattr(self, "passage_store") and self.passage_store is not None:
+            for idx, chk in enumerate(chunks):
+                pid = chk.chunk_id or f"chunk_{len(self.passage_store) + 1}"
+                self.passage_store.add_passage(
+                    PassageRecord(
+                        passage_id=pid,
+                        doc_id=chapter_id or "doc_01",
+                        char_span=(0, len(chk.text)),
+                        text=chk.text,
+                    )
+                )
+                for node in graph.nodes.values():
+                    if not getattr(node, "passage_id", None):
+                        node.passage_id = pid
+                    s_span = _locate_node_span_in_chunk(node, chk.text)
+                    node.span_start = s_span[0]
+                    node.span_end = s_span[1]
+
         for node in graph.nodes.values():
             if doc_heading and not node.parent_cid:
                 node.parent_cid = doc_heading
@@ -719,6 +767,10 @@ class CognitivePipeline:
 
         # 6. Fold into episode Merkle node
         fold_node = fold_discourse_episode(graph.copy(), chunk_id=chunks[0].chunk_id)
+        if hasattr(self, "passage_store") and self.passage_store is not None and chunks:
+            fold_node.passage_id = chunks[0].chunk_id
+            fold_node.span_start = 0
+            fold_node.span_end = len(chunks[0].text)
         if isinstance(fold_node.literal, dict):
             fold_node.literal["text"] = chunks[0].text
             if doc_heading:
@@ -987,9 +1039,26 @@ class CognitivePipeline:
                     if m_doc:
                         doc_heading = m_doc.group(1).strip()
 
+                # Register chunk in PassageStore if available
+                pid = chk.chunk_id or f"chunk_{len(self.passage_store) + 1 if hasattr(self, 'passage_store') and self.passage_store is not None else 1}"
+                if hasattr(self, "passage_store") and self.passage_store is not None:
+                    self.passage_store.add_passage(
+                        PassageRecord(
+                            passage_id=pid,
+                            doc_id=chapter_id or "doc_01",
+                            char_span=(0, len(chk.text)),
+                            text=chk.text,
+                        )
+                    )
+
                 for node in g.nodes.values():
                     if doc_heading and not node.parent_cid:
                         node.parent_cid = doc_heading
+                    if not getattr(node, "passage_id", None):
+                        node.passage_id = pid
+                    s_span = _locate_node_span_in_chunk(node, chk.text)
+                    node.span_start = s_span[0]
+                    node.span_end = s_span[1]
                     self.page_table.store_node(node)
                     self.active_canvas.put(node)
 
@@ -999,6 +1068,9 @@ class CognitivePipeline:
 
                 # Fold discourse episode into 32-byte Merkle fold node
                 fold_node = fold_discourse_episode(g, chunk_id=chk.chunk_id)
+                fold_node.passage_id = pid
+                fold_node.span_start = 0
+                fold_node.span_end = len(chk.text)
                 if isinstance(fold_node.literal, dict):
                     fold_node.literal["text"] = chk.text
                     if doc_heading:
@@ -1257,6 +1329,7 @@ class CognitivePipeline:
             max_depth=effective_depth,
             decay=eff_decay,
             threshold=threshold,
+            passage_store=self.passage_store,
         )
 
     def answer_query(

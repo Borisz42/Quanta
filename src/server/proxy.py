@@ -46,7 +46,7 @@ logger = logging.getLogger("quanta.server.proxy")
 @dataclass
 class QuantaProxyConfig:
     """Runtime configuration for QUANTA OpenAI Reverse Proxy."""
-    backend_url: str = field(default_factory=lambda: os.getenv("QUANTA_BACKEND_URL", "http://localhost:8888/v1"))
+    backend_url: str = field(default_factory=lambda: os.getenv("QUANTA_BACKEND_URL", "http://127.0.0.1:8888/v1"))
     compression_threshold: int = field(default_factory=lambda: int(os.getenv("QUANTA_COMPRESSION_THRESHOLD", "2000")))
     max_context_tokens: int = field(default_factory=lambda: int(os.getenv("QUANTA_MAX_CONTEXT_TOKENS", "2048")))
     context_format: str = "english"  # 'english' or 'sexpr'
@@ -541,7 +541,9 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 else:
                     # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
                     adaptive_budget = min(cfg.max_context_tokens, 450)
-                    if dialogue_history and not has_single_query_context:
+                    if has_single_query_context and raw_tokens > 0:
+                        adaptive_budget = min(adaptive_budget, max(50, int(raw_tokens * 0.45)))
+                    elif dialogue_history and not has_single_query_context:
                         pruned_toks = estimate_messages_tokens(dialogue_history)
                         if pruned_toks > 0:
                             adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))

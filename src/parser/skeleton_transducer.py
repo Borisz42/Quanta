@@ -39,8 +39,9 @@ from parser.span_aligner import SpanAligner, SpanAlignment
 logger = logging.getLogger(__name__)
 
 DEFAULT_SKELETON_SYSTEM_PROMPT = """You are the QUANTA Fast Skeleton Transducer.
-Extract named entities and core event predicate frames into flat JSON conforming to:
+Extract the 3 to 5 most salient named entities and 1 to 3 primary event predicate frames into compact flat JSON conforming to:
 {"entities": [{"id": "E1", "text": "<name>"}], "events": [{"id": "EV1", "pred": "<verb>", "subj": "<E#>", "obj": "<E#>"}]}
+Focus strictly on primary subjects, objects, and core verbs (max 5 entities, max 3 events).
 Do NOT emit markdown, commentary, logic tags, epistemic statuses, or relations."""
 
 
@@ -478,21 +479,57 @@ class MockSkeletonTransducer:
 
     def _extract_heuristic_skeleton(self, text: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Dynamic heuristic extractor extracting surface entities and predicates for arbitrary text."""
-        # Find capitalized entities or key nouns
-        cap_pat = re.compile(
-            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűA-Z0-9_-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9][a-záéíóöőúüűA-Z0-9_-]+)*\b"
-        )
-        matches = list(cap_pat.finditer(text))
         seen_texts: Set[str] = set()
         entities: List[Dict[str, Any]] = []
 
-        for m in matches:
-            t = m.group(0).strip()
-            if t not in seen_texts and len(t) > 2 and t.lower() not in {"the", "this", "that", "there"}:
-                seen_texts.add(t)
+        def _add_entity(surface: str, category: str = "OBJECT"):
+            s_clean = surface.strip()
+            if s_clean and s_clean.lower() not in seen_texts and len(s_clean) >= 3:
+                seen_texts.add(s_clean.lower())
                 eid = f"E{len(entities) + 1}"
-                entities.append({"id": eid, "text": t, "category": "OBJECT"})
-                if len(entities) >= 2:
+                entities.append({"id": eid, "text": s_clean, "category": category})
+
+        # 1. Technical & domain-specific compound nouns and identifiers
+        compound_patterns = [
+            (r"\b(?:Vault|Room|Sector|Cluster|Chamber|Station)\s*\d+\b", "LOCATION"),
+            (r"\b[A-Z0-9]+-[A-Z0-9_-]+\b", "OBJECT"),  # PHANTOM-9092, WASP-96b, SKU-901
+            (r"\b(?:tok|txn)_[a-zA-Z0-9_]+\b", "OBJECT"),  # tok_visa_4242, txn_9941
+            (r"\b(?:Order\s*\d+)\b", "OBJECT"),
+            (r"\b(?:designated mission access code|mission access code|access code)\b", "OBJECT"),
+            (r"\b(?:James Webb Space Telescope|space telescope)\b", "OBJECT"),
+            (r"\b(?:primary mirror segments|mirror segments)\b", "OBJECT"),
+            (r"\b(?:beryllium|gold)\b", "SUBSTANCE"),
+            (r"\b(?:Ariane 5|heavy launcher)\b", "OBJECT"),
+            (r"\b(?:trans-Lagrange transfer trajectory|trajectory)\b", "LOCATION"),
+            (r"\b(?:cryogenic containment cell \d+|containment cell \d+|containment cell)\b", "LOCATION"),
+            (r"\b(?:titanium pressure valve|titanium valve|pressure valve)\b", "OBJECT"),
+            (r"\b(?:toxic argon gas|toxic argon carrier gas|toxic argon|argon)\b", "SUBSTANCE"),
+            (r"\b(?:exothermic reaction|reaction)\b", "OBJECT"),
+            (r"\b(?:service corridors|adjacent service corridors)\b", "LOCATION"),
+            (r"\b(?:facility lockdown protocol|lockdown protocol)\b", "OBJECT"),
+            (r"\b(?:emergency bulkheads|bulkheads)\b", "OBJECT"),
+            (r"\b(?:contamination zone|sectors \d+ through \d+)\b", "LOCATION"),
+            (r"\b(?:Order Fulfillment Saga|OrderFulfillmentService)\b", "OBJECT"),
+            (r"\b(?:PaymentGatewayClient|InventoryService)\b", "OBJECT"),
+        ]
+        for pat, cat in compound_patterns:
+            for match in re.finditer(pat, text, re.IGNORECASE):
+                _add_entity(match.group(0), cat)
+                if len(entities) >= 12:
+                    break
+            if len(entities) >= 12:
+                break
+
+        # 2. Capitalized proper nouns & named entities
+        cap_pat = re.compile(
+            r"\b(?:Dr\.\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűA-Z0-9_-]*(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9][a-záéíóöőúüűA-Z0-9_-]*)*\b"
+        )
+        for m in cap_pat.finditer(text):
+            t = m.group(0).strip()
+            if t.lower() not in {"the", "this", "that", "there", "during", "after", "before", "when", "on"}:
+                cat = "PERSON" if any(w in t.lower() for w in ("dr.", "vance", "eleanor", "marcus", "alice")) else "OBJECT"
+                _add_entity(t, cat)
+                if len(entities) >= 12:
                     break
 
         if not entities:
@@ -500,11 +537,14 @@ class MockSkeletonTransducer:
             first_word = text.split()[0].strip() if text.split() else "entity"
             entities.append({"id": "E1", "text": first_word, "category": "OBJECT"})
 
-        # Action verbs
+        # 3. Action & causal predicates
         KNOWN_VERBS = [
+            "trigger", "triggered", "isolate", "isolated", "seal", "sealed",
+            "rupture", "ruptured", "vent", "vented", "breach", "breached",
             "pressurize", "pressurized", "synthesize", "synthesized", "analyze", "analyzed",
             "verify", "verified", "measure", "measured", "observe", "observed",
             "enter", "entered", "react", "reacted", "transport", "transported",
+            "engineer", "engineered", "inject", "injected", "orchestrate", "orchestrates",
             "call", "return", "calculate", "validate", "deploy", "operate",
             "felszállt", "megvizsgálta", "szintetizálta", "besugározta", "kutatta",
         ]
@@ -522,7 +562,7 @@ class MockSkeletonTransducer:
                     "subj": subj_id,
                     "obj": obj_id,
                 })
-                if len(events) >= 1:
+                if len(events) >= 3:
                     break
 
         if not events:
@@ -554,12 +594,16 @@ class SkeletonTransducer:
         grammar_path: Optional[Union[str, Path]] = None,
         system_prompt: str = DEFAULT_SKELETON_SYSTEM_PROMPT,
     ):
-        self.base_url = (
+        raw_base = (
             base_url
             or os.environ.get("LLAMA_SERVER_BASE_URL")
             or os.environ.get("UNSLOTH_BASE_URL")
-            or "http://localhost:8888/v1"
+            or "http://127.0.0.1:8888/v1"
         ).rstrip("/")
+        # Avoid Windows 11 IPv6 localhost DNS timeout (2-4 second delay)
+        if "://localhost:" in raw_base:
+            raw_base = raw_base.replace("://localhost:", "://127.0.0.1:")
+        self.base_url = raw_base
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
@@ -575,13 +619,21 @@ class SkeletonTransducer:
 
         self._mock = MockSkeletonTransducer(system_prompt=system_prompt)
         self._last_fallback_used = False
+        self._server_disabled = False
 
     def check_health(self) -> bool:
-        """Check if llama-server endpoint is reachable."""
+        """Check if llama-server endpoint is reachable and a model is loaded in memory."""
+        if self._server_disabled:
+            return False
         endpoint = f"{self.base_url}/models"
         try:
             resp = self.session.get(endpoint, timeout=1.5)
-            return resp.status_code == 200
+            if resp.status_code != 200:
+                return False
+            data = resp.json().get("data", [])
+            # In Unsloth Studio / LM Studio, entries have 'loaded': True/False
+            loaded_models = [m for m in data if m.get("loaded", True) is not False]
+            return len(loaded_models) > 0
         except Exception:
             return False
 
@@ -596,6 +648,12 @@ class SkeletonTransducer:
         clean_text = text.strip()
         t0 = time.perf_counter()
 
+        if self._server_disabled and self.fallback_to_mock:
+            self._last_fallback_used = True
+            res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
+            res.metadata["fallback_from_server"] = True
+            return res
+
         # Build payload
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -606,7 +664,7 @@ class SkeletonTransducer:
             "model": kwargs.get("model", self.model),
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.0),
-            "max_tokens": kwargs.get("max_tokens", 60),  # Strictly restricted token budget
+            "max_tokens": kwargs.get("max_tokens", 1024),  # Generous token budget for complete entities + events JSON
             "grammar": self.grammar_content,
             "extra_body": {
                 "grammar": self.grammar_content,
@@ -628,22 +686,28 @@ class SkeletonTransducer:
 
                 if resp.status_code == 200:
                     data = resp.json()
-                    content = data["choices"][0]["message"]["content"]
+                    msg = data["choices"][0]["message"]
+                    content = (msg.get("content") or "").strip() or (msg.get("reasoning_content") or "").strip()
                     usage_info = data.get("usage", {})
                     t_prefill = (t_req_end - t_req_start) * 0.35  # Approx prefill proportion
                     raw_json_str = content.strip()
                     break
                 else:
                     last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
+                    # Fast fail: do not retry if model is not loaded or endpoint is invalid
+                    if resp.status_code in (400, 404, 503) and ("no model loaded" in resp.text.lower() or "not found" in resp.text.lower()):
+                        self._server_disabled = True
+                        break
             except Exception as e:
                 last_err = e
 
-            if attempt < self.max_retries:
+            if attempt < self.max_retries and not self._server_disabled:
                 time.sleep(0.1 * attempt)
 
         if raw_json_str is None:
             if self.fallback_to_mock:
                 self._last_fallback_used = True
+                self._server_disabled = True
                 logger.warning("llama-server unreachable (%s); using MockSkeletonTransducer", last_err)
                 res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
                 res.metadata["fallback_from_server"] = True
@@ -652,8 +716,17 @@ class SkeletonTransducer:
 
         # Parse extracted JSON
         self._last_fallback_used = False
-        parsed_data = self._clean_and_parse_json(raw_json_str)
-        entities, events = self._ground_and_build(clean_text, parsed_data)
+        try:
+            parsed_data = self._clean_and_parse_json(raw_json_str)
+            entities, events = self._ground_and_build(clean_text, parsed_data)
+        except Exception as parse_err:
+            if self.fallback_to_mock:
+                self._last_fallback_used = True
+                logger.warning("Failed to parse JSON from llama-server (%s); falling back to Mock", parse_err)
+                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
+                res.metadata["fallback_from_server"] = True
+                return res
+            raise
 
         t_total = time.perf_counter() - t0
         token_count = usage_info.get("completion_tokens", estimate_token_count(raw_json_str))

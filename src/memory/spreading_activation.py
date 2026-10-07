@@ -1012,13 +1012,15 @@ class SpreadingActivationRetriever:
         while pruning contradictory paths (Belnap 00_2) and dampening unverified facts (11_2).
         """
         if isinstance(graph_or_page_table, QuantaGraph):
-            return self.hipporag.retrieve_subgraph(
+            res_graph = self.hipporag.retrieve_subgraph(
                 seed_cids=seed_cids,
                 graph=graph_or_page_table,
                 top_k=top_k,
                 threshold=threshold,
                 query_polarity=query_polarity,
             )
+            setattr(res_graph, "query_seeds", list(seed_cids))
+            return res_graph
 
         # PageTable input: build local QuantaGraph of k-hop neighborhood around seeds
         pt = graph_or_page_table
@@ -1063,13 +1065,15 @@ class SpreadingActivationRetriever:
                         local_graph.add_node(f_node)
             frontier = next_frontier
 
-        return self.hipporag.retrieve_subgraph(
+        res_graph = self.hipporag.retrieve_subgraph(
             seed_cids=seed_cids,
             graph=local_graph,
             top_k=top_k,
             threshold=threshold,
             query_polarity=query_polarity,
         )
+        setattr(res_graph, "query_seeds", list(seed_cids))
+        return res_graph
 
     def traverse_subgraph(
         self,
@@ -1405,6 +1409,7 @@ class SpreadingActivationRetriever:
         elif seed_cids:
             subgraph.root_cid = seed_cids[0]
 
+        setattr(subgraph, "query_seeds", list(seed_cids))
         setattr(subgraph, "activations", activations)
         return subgraph
 
@@ -1971,6 +1976,7 @@ class SpreadingActivationRetriever:
             algorithm=algorithm,
             query_polarity=query_polarity,
         )
+        setattr(subgraph, "query_seeds", seed_cids)
         if q_text:
             setattr(subgraph, "query_text", q_text)
         return subgraph

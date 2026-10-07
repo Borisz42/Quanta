@@ -170,6 +170,38 @@ def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
     return res
 
 
+def _window_to_token_budget(text: str, max_tokens: int, target_char: int = 0) -> str:
+    """Windows text to fit within max_tokens, centered around target_char if positive."""
+    if not text:
+        return ""
+    max_words = max(1, int(max_tokens / 1.33))
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+
+    if target_char <= 0:
+        return _truncate_to_token_budget(text, max_tokens)
+
+    # Find word index closest to target_char
+    cum_chars = 0
+    target_idx = 0
+    for idx, w in enumerate(words):
+        cum_chars += len(w) + 1
+        if cum_chars >= target_char:
+            target_idx = idx
+            break
+
+    half = max_words // 2
+    start_idx = max(0, target_idx - half)
+    end_idx = min(len(words), start_idx + max_words)
+    start_idx = max(0, end_idx - max_words)
+
+    window_words = words[start_idx:end_idx]
+    prefix = "... " if start_idx > 0 else ""
+    suffix = " ..." if end_idx < len(words) else ""
+    return prefix + " ".join(window_words) + suffix
+
+
 # =============================================================================
 # BipartiteProjector
 # =============================================================================
@@ -228,7 +260,8 @@ class BipartiteProjector:
 
         passage_scores: Dict[str, float] = {}
         passage_nodes: Dict[str, List[QuantaNode]] = {}
-        passage_spans: Dict[str, List[Tuple[int, int]]] = {}
+        passage_spans: Dict[str, List[Tuple[float, Tuple[int, int]]]] = {}
+        query_seeds: Set[str] = set(getattr(subgraph, "query_seeds", []))
 
         # 1. Iterate over all semantic nodes in subgraph
         for cid, node in subgraph.nodes.items():
@@ -243,7 +276,8 @@ class BipartiteProjector:
                 act_map.get(getattr(node, "canonical_cid", ""), getattr(node, "salience", 1.0))
             )
             conf = getattr(node, "confidence", 1.0)
-            weight = float(p_val * conf)
+            seed_bonus = 3.0 if (cid in query_seeds or (not query_seeds and p_val >= 0.99)) else 1.0
+            weight = float(p_val * conf * seed_bonus)
 
             # Discover all passage IDs grounded to this semantic node
             grounded_pids: Set[str] = set()
@@ -282,25 +316,26 @@ class BipartiteProjector:
                 s_start = getattr(node, "span_start", None)
                 s_end = getattr(node, "span_end", None)
                 if s_start is not None and s_end is not None:
-                    passage_spans.setdefault(pid, []).append((int(s_start), int(s_end)))
+                    passage_spans.setdefault(pid, []).append((weight, (int(s_start), int(s_end))))
 
         # Fallback for episodic fold nodes when PassageStore is empty or unpopulated
-        fold_nodes = [
-            n for n in subgraph.nodes.values()
-            if (n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:")))
-            or (isinstance(n.literal, dict) and n.literal.get("type") == "discourse_episode_fold")
-        ]
         fallback_texts: Dict[str, str] = {}
-        for fn in fold_nodes:
-            if isinstance(fn.literal, dict):
-                p_text = fn.literal.get("text")
-                d_tag = fn.parent_cid or fn.literal.get("chapter_title") or fn.cid[:8]
-                if p_text:
-                    fallback_texts[str(d_tag)] = str(p_text)
-                    if d_tag not in passage_scores:
-                        fn_act = act_map.get(fn.cid, getattr(fn, "salience", 1.0))
-                        passage_scores[str(d_tag)] = float(fn_act)
-                        passage_nodes.setdefault(str(d_tag), []).append(fn)
+        if store is None or len(store) == 0 or len(passage_scores) == 0:
+            fold_nodes = [
+                n for n in subgraph.nodes.values()
+                if (n.anchor and (n.anchor.startswith("merkle:") or n.anchor.startswith("fold:")))
+                or (isinstance(n.literal, dict) and n.literal.get("type") == "discourse_episode_fold")
+            ]
+            for fn in fold_nodes:
+                if isinstance(fn.literal, dict):
+                    p_text = fn.literal.get("text")
+                    d_tag = getattr(fn, "passage_id", None) or fn.parent_cid or fn.literal.get("chapter_title") or fn.cid[:8]
+                    if p_text:
+                        fallback_texts[str(d_tag)] = str(p_text)
+                        if d_tag not in passage_scores:
+                            fn_act = act_map.get(fn.cid, getattr(fn, "salience", 1.0))
+                            passage_scores[str(d_tag)] = float(fn_act)
+                            passage_nodes.setdefault(str(d_tag), []).append(fn)
 
         # 2. Materialize ProjectedPassage records
         projected_passages: List[ProjectedPassage] = []
@@ -335,7 +370,14 @@ class BipartiteProjector:
                     char_span = (0, len(combined))
 
             contributing = [n.cid for n in passage_nodes.get(pid, [])]
-            spans = passage_spans.get(pid, [])
+            spans_with_weight = passage_spans.get(pid, [])
+            spans_sorted = [span for _, span in sorted(spans_with_weight, key=lambda x: x[0], reverse=True)]
+            unique_spans: List[Tuple[int, int]] = []
+            seen_spans: Set[Tuple[int, int]] = set()
+            for sp in spans_sorted:
+                if sp not in seen_spans:
+                    seen_spans.add(sp)
+                    unique_spans.append(sp)
 
             projected_passages.append(
                 ProjectedPassage(
@@ -345,7 +387,7 @@ class BipartiteProjector:
                     score=total_score,
                     char_span=char_span,
                     contributing_node_cids=contributing,
-                    activated_spans=spans,
+                    activated_spans=unique_spans,
                 )
             )
 
@@ -622,8 +664,10 @@ class DualStreamContextAssembler:
                 blocks.append(block_text)
                 accumulated_words += block_words
             elif len(blocks) == 1:
-                # First passage exceeds budget: include with clean truncation
-                truncated_content = _truncate_to_token_budget(content, max(1, int(max_tokens / 1.33) - 10))
+                # First passage exceeds budget: window around activated semantic span if present
+                target_char = p.activated_spans[0][0] if (hasattr(p, "activated_spans") and p.activated_spans) else 0
+                budget_tokens = max(10, int(max_tokens - accumulated_words * 1.33 - 10))
+                truncated_content = _window_to_token_budget(content, budget_tokens, target_char=target_char)
                 blocks.append(f"{header}\n{truncated_content}")
                 break
             else:

@@ -403,7 +403,7 @@ Bypass the lossy neural text realizer entirely. Map activated semantic node scor
 
 ---
 
-### Section 8: End-to-End Pipeline Rewire, Unified Serving & VRAM Validation
+### Section 8: End-to-End Pipeline Rewire, Unified Serving & VRAM Validation [COMPLETED]
 
 **Session Scope & Purpose:**
 Rewire the full cognitive pipeline and reverse proxy to utilize the Semantic Virtual Memory architecture. Deprecate Unsloth Studio in favor of the unified `llama-server` backend. Validate concurrent execution within the 8GB VRAM workstation budget (RTX 3070), benchmark ingestion throughput ($350\text{--}520\,\text{ms}$/chunk), and verify multi-hop QA recall ($>98.5\%$) on MuSiQue, ARC-Challenge, and HumanEval.

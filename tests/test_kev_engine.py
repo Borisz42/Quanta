@@ -35,14 +35,20 @@ from parser.skeleton_transducer import SkeletonEntity, SkeletonEvent
 
 @pytest.fixture
 def kev_engine_a():
-    """Default Approach A engine (zero-shot in-context logprob)."""
-    return KevDecisionEngine(mode="in_context_logprob", fallback_to_mock=True)
+    """Default Approach A engine (zero-shot in-context logprob, offline mock for deterministic unit testing)."""
+    engine = KevDecisionEngine(base_url="http://127.0.0.1:58999", mode="in_context_logprob", fallback_to_mock=True)
+    engine._server_available = False
+    engine._last_health_check_time = time.perf_counter()
+    return engine
 
 
 @pytest.fixture
 def kev_engine_b():
-    """Ablation Approach B engine (LoRA adapter)."""
-    return KevDecisionEngine(mode="lora_adapter", fallback_to_mock=True)
+    """Ablation Approach B engine (LoRA adapter, offline mock for deterministic unit testing)."""
+    engine = KevDecisionEngine(base_url="http://127.0.0.1:58999", mode="lora_adapter", fallback_to_mock=True)
+    engine._server_available = False
+    engine._last_health_check_time = time.perf_counter()
+    return engine
 
 
 # ---------------------------------------------------------------------------

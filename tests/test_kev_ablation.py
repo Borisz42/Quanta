@@ -12,16 +12,19 @@ from pathlib import Path
 import sys
 import pytest
 
-repo_root = Path(__file__).resolve().parents[1]
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
+import importlib.util
 
-from scripts.evaluate_kev_approaches import (
-    evaluate_kev_approaches,
-    generate_relation_benchmark,
-    generate_speech_epistemic_benchmark,
-    generate_thematic_valency_benchmark,
-)
+repo_root = Path(__file__).resolve().parents[1]
+_script_path = repo_root / "scripts" / "evaluate_kev_approaches.py"
+_spec = importlib.util.spec_from_file_location("evaluate_kev_approaches", _script_path)
+_mod = importlib.util.module_from_spec(_spec)
+sys.modules["evaluate_kev_approaches"] = _mod
+_spec.loader.exec_module(_mod)
+
+evaluate_kev_approaches = _mod.evaluate_kev_approaches
+generate_relation_benchmark = _mod.generate_relation_benchmark
+generate_speech_epistemic_benchmark = _mod.generate_speech_epistemic_benchmark
+generate_thematic_valency_benchmark = _mod.generate_thematic_valency_benchmark
 
 
 def test_gold_dataset_generation():
@@ -49,7 +52,7 @@ def test_gold_dataset_generation():
 def test_ablation_evaluation_execution_and_thresholds(tmp_path):
     """Run full comparative ablation sweep and verify strict Section 4 quality bars."""
     results = evaluate_kev_approaches(
-        server_url=None,
+        server_url="http://127.0.0.1:58999",
         output_dir=tmp_path,
         num_samples_valency=100,
         num_samples_speech=50,

@@ -259,6 +259,7 @@ def test_unsloth_graceful_fallback_when_offline():
     # Point to an unassigned local port
     transducer = UnslothTransducer(
         base_url="http://127.0.0.1:58999/v1",
+        fallback_base_url="",
         timeout=0.2,
         max_retries=1,
         fallback_to_mock=True,
