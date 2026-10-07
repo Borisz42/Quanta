@@ -19,6 +19,12 @@ from memory.page_table import (
 from memory.hipporag_ppr import HippoRAGRetriever
 from memory.poprag_gating import PoPRAGGating
 from memory.passage_store import PassageRecord, PassageStore
+from memory.context_assembler import (
+    BipartiteProjector,
+    DualStreamContext,
+    DualStreamContextAssembler,
+    ProjectedPassage,
+)
 from memory.spreading_activation import SpreadingActivationRetriever
 from memory.world_state import (
     EntityStateRecord,
@@ -28,7 +34,10 @@ from memory.world_state import (
 
 __all__ = [
     "ActiveCanvas",
+    "BipartiteProjector",
     "CanonicalNodeInterner",
+    "DualStreamContext",
+    "DualStreamContextAssembler",
     "EntityStateRecord",
     "GlobalKnowledgeBase",
     "HippoRAGRetriever",
@@ -36,6 +45,7 @@ __all__ = [
     "PassageRecord",
     "PassageStore",
     "PoPRAGGating",
+    "ProjectedPassage",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
     "SpreadingActivationRetriever",

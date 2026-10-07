@@ -34,8 +34,12 @@ from core.types import (
     RegisterValue,
     StructuralValue,
 )
+import warnings
+
+from memory.context_assembler import DualStreamContextAssembler
 from memory.hipporag_ppr import HippoRAGRetriever
 from memory.page_table import PageTable, SimdHammingIndex
+from memory.passage_store import PassageStore
 from memory.poprag_gating import PoPRAGGating
 from parser.schema import (
     DiscourseExtractionResult,
@@ -309,6 +313,8 @@ class SpreadingActivationRetriever:
         convergence_tol: float = 1e-6,
         hipporag: Optional[HippoRAGRetriever] = None,
         poprag_gating: Optional[PoPRAGGating] = None,
+        context_assembler: Optional[DualStreamContextAssembler] = None,
+        passage_store: Optional[PassageStore] = None,
     ):
         """Initialize the SpreadingActivationRetriever.
 
@@ -322,6 +328,8 @@ class SpreadingActivationRetriever:
             convergence_tol: Convergence tolerance for HippoRAG power iteration (default 1e-6).
             hipporag: Optional HippoRAGRetriever instance.
             poprag_gating: Optional PoPRAGGating instance.
+            context_assembler: Optional DualStreamContextAssembler for realization bypass.
+            passage_store: Optional PassageStore holding raw passage text nodes.
         """
         self.realizer = realizer or EnglishRealizer()
         self.decay = decay
@@ -335,6 +343,10 @@ class SpreadingActivationRetriever:
             alpha=self.alpha,
             convergence_tol=self.convergence_tol,
             gating=self.poprag_gating,
+        )
+        self.passage_store = passage_store
+        self.context_assembler = context_assembler or DualStreamContextAssembler(
+            passage_store=self.passage_store
         )
 
     # -------------------------------------------------------------------------
@@ -1406,18 +1418,22 @@ class SpreadingActivationRetriever:
         format: str = "english",
         max_tokens: int = 500,
         query_text: str = "",
+        passage_store: Optional[PassageStore] = None,
     ) -> str:
         """Formats the retrieved sub-graph into a compact prompt string for host LLMs.
 
         Supports:
-        - "english": Honest compositional natural language sentences generated via EnglishRealizer.
+        - "english" / "dual_stream" / "svm": Dual-stream context representation assembled via
+          DualStreamContextAssembler (Stream 1: Logical Briefing Block, Stream 2: Top-K Raw Source Passages).
         - "sexpr": Dense, canonical GBNF-constrained S-expressions for symbolic coprocessors.
+        - "legacy_english" / "prose": Deprecated EnglishRealizer synthetic text synthesis.
 
         Args:
             subgraph: Retrieved QuantaGraph ASG sub-graph.
-            format: Output format ('english' or 'sexpr').
+            format: Output format ('english', 'dual_stream', 'sexpr', 'legacy_english').
             max_tokens: Maximum token budget (cleanly truncates at boundaries).
             query_text: Optional raw query text for distractor filtering.
+            passage_store: Optional PassageStore holding raw passage records.
 
         Returns:
             Context string ready for LLM prompt prefix injection.
@@ -1426,16 +1442,33 @@ class SpreadingActivationRetriever:
             return ""
 
         effective_query = query_text or getattr(subgraph, "query_text", "")
-
+        effective_store = passage_store or self.passage_store
         fmt_lower = format.lower().strip()
 
         if fmt_lower == "sexpr":
             return self._format_sexpr_context(subgraph, max_tokens=max_tokens)
-        else:
+        elif fmt_lower in ("legacy_english", "prose"):
             return self._format_english_context(subgraph, max_tokens=max_tokens, query_text=effective_query)
+        else:
+            return self.context_assembler.format_context(
+                subgraph=subgraph,
+                passage_store=effective_store,
+                max_tokens=max_tokens,
+                query_text=effective_query,
+            )
 
     def _format_english_context(self, subgraph: QuantaGraph, max_tokens: int, query_text: str = "") -> str:
-        """Realizes the sub-graph into natural English sentences."""
+        """[DEPRECATED] Realizes the sub-graph into synthetic English sentences via EnglishRealizer.
+
+        Deprecated under QUANTA SVM architecture in favor of DualStreamContextAssembler
+        (Bipartite Passage Projection and Realization Bypass).
+        """
+        warnings.warn(
+            "_format_english_context is deprecated under QUANTA SVM architecture. "
+            "Use DualStreamContextAssembler for realization bypass.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         event_nodes = [
             n for n in subgraph.nodes.values()
             if not (n.anchor and n.anchor.startswith("merkle:"))
@@ -1954,6 +1987,7 @@ class SpreadingActivationRetriever:
         threshold: Optional[float] = None,
         algorithm: Optional[str] = None,
         query_polarity: str = "positive",
+        passage_store: Optional[PassageStore] = None,
     ) -> str:
         """End-to-end context retrieval: Query String -> SIMD Seeds -> Spreading Activation -> LLM Context."""
         detected_depth = self.detect_query_hop_depth(query) if query else 2
@@ -1979,11 +2013,13 @@ class SpreadingActivationRetriever:
             algorithm=algorithm,
             query_polarity=query_polarity,
         )
+        effective_store = passage_store or getattr(page_table, "passage_store", None) or self.passage_store
         return self.format_context_for_llm(
             subgraph=subgraph,
             format=format,
             max_tokens=max_tokens,
             query_text=query,
+            passage_store=effective_store,
         )
 
 
