@@ -55,6 +55,44 @@ from verification.clingo_gate import (
     MUCRepairManager,
     RepairResult,
 )
+from core.binary_node import (
+    BelnapValue,
+    BinaryNodeTable,
+    EpistemicSource as BinaryEpistemicSource,
+    QuantaSemanticNodeStruct,
+    SpeechActIntent as BinarySpeechActIntent,
+)
+from memory.context_assembler import (
+    BipartiteProjector,
+    DualStreamContext,
+    DualStreamContextAssembler,
+)
+from memory.hipporag_ppr import HippoRAGRetriever
+from memory.passage_store import PassageRecord, PassageStore
+from memory.poprag_gating import PoPRAGGating
+from models.kev_engine import (
+    AllenTemporalRelation,
+    EpistemicSource as KevEpistemicSource,
+    IntentEpistemicResult,
+    KevChunkEvaluation,
+    KevDecisionEngine,
+    MockKevEngine,
+    PearlCausalLink,
+    RelationScoringResult,
+    SpeechActIntent as KevSpeechActIntent,
+    ValencyRole,
+    ValencyScoringResult,
+)
+from parser.mmap_grounder import MmapLexicalGrounder
+from parser.skeleton_transducer import (
+    MockSkeletonTransducer,
+    SkeletonEntity,
+    SkeletonEvent,
+    SkeletonExtractionResult,
+    SkeletonTransducer,
+)
+from verification.belnap_calibrator import BelnapLatticeMapper
+from verification.clingo_dl_gate import ClingoDLGate
 
 logger = logging.getLogger("quanta.pipeline.cognitive")
 
@@ -95,6 +133,12 @@ class CognitivePipeline:
         fol_emitter: Optional[FOLEmitter] = None,
         code_emitter: Optional[CodeEmitter] = None,
         max_repair_attempts: int = 2,
+        passage_store: Optional[PassageStore] = None,
+        binary_table: Optional[BinaryNodeTable] = None,
+        skeleton_transducer: Optional[Any] = None,
+        kev_engine: Optional[Any] = None,
+        belnap_mapper: Optional[BelnapLatticeMapper] = None,
+        clingo_dl_gate: Optional[ClingoDLGate] = None,
         **transducer_kwargs,
     ):
         """Initialize the unified Neuro-Symbolic Cognitive Pipeline."""
@@ -158,10 +202,33 @@ class CognitivePipeline:
         self.code_emitter = code_emitter or CodeEmitter()
         self.query_answerer = GraphQueryAnswerer(realizer=self.realizer)
 
-        # 9. Spreading-Activation Context Retriever
-        self.retriever = SpreadingActivationRetriever(realizer=self.realizer)
+        # 10. Semantic Virtual Memory (SVM) Dual-Node Storage & Ingestion Engines (Section 8)
+        self.passage_store = passage_store or PassageStore(db_path=page_table_path)
+        self.binary_table = binary_table or BinaryNodeTable()
 
-        # 10. Merkle Book State
+        if skeleton_transducer is not None:
+            self.skeleton_transducer = skeleton_transducer
+        elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "sexpr_mock"):
+            self.skeleton_transducer = MockSkeletonTransducer()
+        else:
+            self.skeleton_transducer = SkeletonTransducer(fallback_to_mock=True)
+
+        self.kev_engine = kev_engine or KevDecisionEngine(fallback_to_mock=True)
+        self.belnap_mapper = belnap_mapper or BelnapLatticeMapper()
+        self.clingo_dl_gate = clingo_dl_gate or ClingoDLGate()
+        self.concept_grounder = MmapLexicalGrounder()
+
+        # 11. Spreading-Activation Context Retriever & HippoRAG / PoP-RAG / Dual-Stream Context Assembler
+        self.retriever = SpreadingActivationRetriever(
+            realizer=self.realizer,
+            passage_store=self.passage_store,
+        )
+        self.hipporag = getattr(self.retriever, "hipporag", None)
+        self.poprag_gating = getattr(self.retriever, "poprag_gating", None)
+        self.context_assembler = getattr(self.retriever, "context_assembler", None) or DualStreamContextAssembler(passage_store=self.passage_store)
+        self.bipartite_projector = getattr(self.context_assembler, "projector", None) or BipartiteProjector(passage_store=self.passage_store)
+
+        # 12. Merkle Book State
         self.merkle_book = HierarchicalMerkleBook()
 
     def reset(self, clear_page_table: bool = True) -> None:
@@ -178,11 +245,348 @@ class CognitivePipeline:
         if clear_page_table and hasattr(self, "page_table") and self.page_table is not None:
             self.page_table.clear()
             self.page_table.attach_active_canvas(self.active_canvas)
+        if clear_page_table and hasattr(self, "passage_store") and self.passage_store is not None:
+            self.passage_store.clear()
+        if hasattr(self, "binary_table") and self.binary_table is not None:
+            self.binary_table = BinaryNodeTable()
         if hasattr(self, "fault_handler") and self.fault_handler is not None:
             self.fault_handler.page_table = self.page_table
             self.fault_handler.canvas = self.active_canvas
         if hasattr(self, "episodic_entity_registry"):
             self.episodic_entity_registry.clear()
+
+    def ingest_document(
+        self,
+        text: str,
+        doc_id: str = "doc_01",
+        passage_id: Optional[str] = None,
+        validate: bool = True,
+        chapter_id: Optional[str] = None,
+    ) -> QuantaGraph:
+        """Ingest raw document chunk into Semantic Virtual Memory (SVM).
+
+        Executes the 6-step ingestion cycle (Section 8 Master Plan):
+        1. Register chunk in PassageStore (V_passage, immutable raw text spans).
+        2. Run SkeletonTransducer to extract entities and S-V-O event frames via llama-server.
+        3. Run KevDecisionEngine 3-pass prefill scoring via llama-server:
+           - Pass 1: Thematic valency classification (AGENT, PATIENT, INSTRUMENT)
+           - Pass 2: Speech-act intent and epistemic source
+           - Pass 3: Allen temporal intervals and Pearl causal DAG links
+        4. Apply BelnapLatticeMapper and SIMD concept grounding (ConceptNet codebook).
+        5. Validate via ClingoDLGate (difference logic and causal acyclicity).
+        6. Commit to dual-node QuantaGraph and 128-byte BinaryNodeTable.
+        """
+        if not text or not text.strip():
+            empty_graph = QuantaGraph()
+            setattr(empty_graph, "extraction_result", DiscourseExtractionResult())
+            return empty_graph
+
+        # Multi-chunk splitting for long text (> 600 words)
+        words = text.strip().split()
+        if len(words) > 600 and hasattr(self.chunker, "chunk_text"):
+            chunks = self.chunker.chunk_text(text, chapter_id=chapter_id or doc_id)
+            if len(chunks) > 1:
+                last_g = None
+                for idx, c in enumerate(chunks):
+                    sub_pid = f"{passage_id or doc_id}_c{idx+1}"
+                    last_g = self.ingest_document(
+                        c.text,
+                        doc_id=doc_id,
+                        passage_id=sub_pid,
+                        validate=validate,
+                        chapter_id=chapter_id,
+                    )
+                return last_g or QuantaGraph()
+
+        # Step 1: Register in PassageStore
+        pid = passage_id or f"P_{doc_id}_{int(time.time() * 1000)}"
+        passage_rec = self.passage_store.add_passage(
+            PassageRecord(
+                passage_id=pid,
+                doc_id=doc_id,
+                char_span=(0, len(text)),
+                text=text,
+            )
+        )
+
+        # Step 2: Skeleton Transduction
+        if hasattr(self.skeleton_transducer, "transduce"):
+            try:
+                skeleton_res = self.skeleton_transducer.transduce(text, passage_id=pid, doc_id=doc_id)
+            except TypeError:
+                skeleton_res = self.skeleton_transducer.transduce(text)
+        elif callable(self.skeleton_transducer):
+            skeleton_res = self.skeleton_transducer(text)
+        else:
+            skeleton_res = MockSkeletonTransducer().transduce(text, passage_id=pid, doc_id=doc_id)
+
+        # Step 3: Kev-4B 3-pass Prefill Scoring
+        kev_eval = self.kev_engine.evaluate_chunk(
+            entities=skeleton_res.entities,
+            events=skeleton_res.events,
+            text=text,
+        )
+
+        # Step 4: Belnap Lattice Mapping & SIMD Concept Grounding
+        ent_concept_codes: Dict[str, int] = {}
+        for ent in skeleton_res.entities:
+            code = self.concept_grounder.resolve_concept_code(ent.surface_text)
+            if code is not None:
+                ent_concept_codes[ent.id] = code
+
+        ev_concept_codes: Dict[str, int] = {}
+        for ev in skeleton_res.events:
+            code = self.concept_grounder.resolve_concept_code(ev.predicate)
+            if code is not None:
+                ev_concept_codes[ev.id] = code
+
+        # Step 5: ClingoDLGate Difference Logic Verification
+        if validate and self.clingo_dl_gate is not None:
+            try:
+                dl_res = self.clingo_dl_gate.validate(
+                    events=skeleton_res.events,
+                    relations=kev_eval.relations,
+                )
+                if not dl_res.is_valid:
+                    logger.warning("ClingoDLGate detected temporal/causal conflicts: %s", dl_res.errors)
+            except Exception as dl_err:
+                logger.debug("ClingoDLGate validation check: %s", dl_err)
+
+        # Step 6: Commit to Dual-Node QuantaGraph and 128-Byte BinaryNodeTable
+        graph = QuantaGraph()
+        ent_cid_map: Dict[str, str] = {}
+        ev_cid_map: Dict[str, str] = {}
+
+        # 1. Entity nodes
+        for ent in skeleton_res.entities:
+            ent_node = QuantaNode(
+                anchor=ent.surface_text,
+                literal=ent.surface_text,
+                passage_id=pid,
+                span_start=ent.char_span[0],
+                span_end=ent.char_span[1],
+                confidence=float(ent.confidence),
+                concept_code=ent_concept_codes.get(ent.id, 0),
+            )
+            cat_upper = (ent.category or "OBJECT").upper()
+            if cat_upper == "PERSON":
+                ent_node.set_slot("TYPE_HUMAN", 1)
+                ent_node.set_slot("ROLE_AGENT_CAPABLE", 1)
+            elif cat_upper == "LOCATION":
+                ent_node.set_slot("TYPE_LOCATION", 1)
+            elif cat_upper == "SUBSTANCE":
+                ent_node.set_slot("TYPE_SUBSTANCE", 1)
+            else:
+                ent_node.set_slot("TYPE_INANIMATE_PHYSICAL", 1)
+
+            ent_node.compute_canonical_cid()
+            graph.add_node(ent_node)
+            graph.add_passage_anchor(ent_node.canonical_cid, pid, ent.char_span[0], ent.char_span[1])
+            ent_cid_map[ent.id] = ent_node.canonical_cid
+
+            # Append to 128-byte Binary Table
+            node_id = len(self.binary_table) + 1
+            pid_hash = abs(hash(pid)) % (2**32 - 1)
+            struct = QuantaSemanticNodeStruct.create(
+                node_id=node_id,
+                passage_id=pid_hash,
+                span_start=ent.char_span[0],
+                span_end=ent.char_span[1],
+                concept_code=ent_concept_codes.get(ent.id, 0),
+                belnap_lattice=BelnapValue.TRUE,
+                confidence=int(round(ent.confidence * 255)),
+                intent_band5=1,
+                epistemic_band6=1,
+            )
+            self.binary_table.append(struct)
+            self.binary_table.register_node_cid(node_id, ent_node.canonical_cid)
+            self.page_table.store_node(ent_node)
+            self.active_canvas.put(ent_node)
+
+        # 2. Event nodes & valency links
+        valency_role_map: Dict[Tuple[str, str], ValencyScoringResult] = {
+            (v.entity_id, v.event_id): v for v in kev_eval.valencies
+        }
+        ie_map: Dict[str, IntentEpistemicResult] = {
+            ie.event_id: ie for ie in kev_eval.intent_epistemics
+        }
+
+        for ev in skeleton_res.events:
+            ie_res = ie_map.get(ev.id)
+            intent_str = ie_res.intent if ie_res else "INFORMATIVE"
+            epistemic_str = ie_res.epistemic_source if ie_res else "DIRECT_OBSERVATION"
+            intent_val = BinarySpeechActIntent.from_str(intent_str)
+            epistemic_val = BinaryEpistemicSource.from_str(epistemic_str)
+
+            ev_node = QuantaNode(
+                anchor=ev.predicate,
+                literal=ev.predicate,
+                passage_id=pid,
+                span_start=ev.char_span[0],
+                span_end=ev.char_span[1],
+                confidence=float(ev.confidence),
+                concept_code=ev_concept_codes.get(ev.id, 0),
+                evidence_source=epistemic_str.lower(),
+                truth_status="TRUE",
+            )
+            ev_node.set_slot("TYPE_EVENT", 1)
+            ev_node.compute_canonical_cid()
+            graph.add_node(ev_node)
+            graph.add_passage_anchor(ev_node.canonical_cid, pid, ev.char_span[0], ev.char_span[1])
+            ev_cid_map[ev.id] = ev_node.canonical_cid
+
+            # Bind thematic valencies from Kev Pass 1
+            for ent in skeleton_res.entities:
+                v_res = valency_role_map.get((ent.id, ev.id))
+                role = v_res.role if v_res else None
+                if not role or role == "NONE":
+                    if ev.subject_ent_id == ent.id:
+                        role = "AGENT"
+                    elif ev.object_ent_id == ent.id:
+                        role = "PATIENT"
+
+                if role == "AGENT" and ent.id in ent_cid_map:
+                    graph.add_edge(ev_node.canonical_cid, "VAL_X1_AGENT", ent_cid_map[ent.id])
+                elif role == "PATIENT" and ent.id in ent_cid_map:
+                    graph.add_edge(ev_node.canonical_cid, "VAL_X2_PATIENT", ent_cid_map[ent.id])
+                elif role == "INSTRUMENT" and ent.id in ent_cid_map:
+                    graph.add_edge(ev_node.canonical_cid, "VAL_X5_INSTRUMENT", ent_cid_map[ent.id])
+
+            # Append to 128-byte Binary Table
+            node_id = len(self.binary_table) + 1
+            pid_hash = abs(hash(pid)) % (2**32 - 1)
+            struct = QuantaSemanticNodeStruct.create(
+                node_id=node_id,
+                passage_id=pid_hash,
+                span_start=ev.char_span[0],
+                span_end=ev.char_span[1],
+                concept_code=ev_concept_codes.get(ev.id, 0),
+                belnap_lattice=BelnapValue.TRUE,
+                confidence=int(round(ev.confidence * 255)),
+                intent_band5=intent_val,
+                epistemic_band6=epistemic_val,
+            )
+            self.binary_table.append(struct)
+            self.binary_table.register_node_cid(node_id, ev_node.canonical_cid)
+            self.page_table.store_node(ev_node)
+            self.active_canvas.put(ev_node)
+
+        # 3. Allen temporal and Pearl causal relations from Kev Pass 3
+        for rel in kev_eval.relations:
+            src_cid = ev_cid_map.get(rel.source_event_id)
+            tgt_cid = ev_cid_map.get(rel.target_event_id)
+            if not src_cid or not tgt_cid:
+                continue
+
+            allen_belnap = self.belnap_mapper.map_probability(rel.allen_confidence)
+            if rel.allen_relation != "NONE" and allen_belnap != BelnapValue.CONTRADICTION:
+                edge_label = f"TEMP_ALLEN_{rel.allen_relation.upper()}"
+                graph.add_edge(src_cid, edge_label, tgt_cid)
+
+            pearl_belnap = self.belnap_mapper.map_probability(rel.pearl_confidence)
+            if rel.pearl_relation != "NONE" and pearl_belnap != BelnapValue.CONTRADICTION:
+                edge_label = "CAUSAL_MECHANISM_LINK" if rel.pearl_relation == "MECHANISM_LINK" else "ENABLING_CONDITION"
+                graph.add_edge(src_cid, edge_label, tgt_cid)
+
+        # Set primary root CID
+        if ev_cid_map:
+            graph.root_cid = next(iter(ev_cid_map.values()))
+        elif ent_cid_map:
+            graph.root_cid = next(iter(ent_cid_map.values()))
+
+        # Merkle episodic fold
+        fold_node = fold_discourse_episode(graph.copy(), chunk_id=pid)
+        if isinstance(fold_node.literal, dict):
+            fold_node.literal["text"] = text
+            fold_node.literal["doc_id"] = doc_id
+        self.page_table.store_node(fold_node)
+        self.active_canvas.put(fold_node)
+        ch_id = chapter_id or doc_id
+        self.merkle_book.add_chunk_node(fold_node, chapter_id=ch_id)
+
+        # Attach metadata
+        setattr(graph, "skeleton_result", skeleton_res)
+        setattr(graph, "kev_evaluation", kev_eval)
+        setattr(graph, "passage_id", pid)
+        setattr(graph, "doc_id", doc_id)
+
+        legacy_extraction = skeleton_res.to_extraction_result() if hasattr(skeleton_res, "to_extraction_result") else DiscourseExtractionResult(
+            chunk_id=pid,
+            entities=[e.to_extracted_entity() for e in skeleton_res.entities if hasattr(e, "to_extracted_entity")],
+            events=[ev.to_extracted_event() for ev in skeleton_res.events if hasattr(ev, "to_extracted_event")],
+        )
+        setattr(graph, "extraction_result", legacy_extraction)
+
+        return graph
+
+    def query_memory(
+        self,
+        query: str,
+        max_tokens: int = 500,
+        top_k: int = 10,
+        max_depth: int = 2,
+        format: str = "dual_stream",
+        query_polarity: str = "positive",
+    ) -> Union[DualStreamContext, str]:
+        """Queries the Semantic Virtual Memory using HippoRAG 2 PPR, PoP-RAG gating, and bipartite projection.
+
+        Workflow (Section 8 Master Plan):
+        1. Compile query seeds and constraints.
+        2. Execute HippoRAG 2 PPR with PoP-RAG gating.
+        3. Run bipartite projection to rank raw source passages:
+           Score(v_p) = sum_{v_s in N(v_p)} p(v_s) * conf(v_s)
+        4. Return dual-stream context block:
+           Stream 1: Logical Briefing Block (verified causal/temporal paths and valency frames)
+           Stream 2: Top-K Raw Source Passages (verbatim spans with 100% lexical fidelity)
+        """
+        if not query or not query.strip():
+            empty_ctx = DualStreamContext(
+                logical_briefing="",
+                passage_stream="",
+                full_context="",
+                passages=[],
+                token_count_estimate=0,
+            )
+            return empty_ctx if format in ("dual_stream", "object") else ""
+
+        # Step 1 & 2: Compile seeds & Execute HippoRAG 2 PPR with PoP-RAG gating
+        subgraph = self.retriever.retrieve_subgraph_for_query(
+            query=query,
+            page_table=self.page_table,
+            top_k=top_k,
+            max_depth=max_depth,
+            query_polarity=query_polarity,
+            algorithm="hipporag",
+        )
+
+        # Fallback if no nodes found: check active canvas
+        if (subgraph is None or not subgraph.nodes) and hasattr(self, "active_canvas") and self.active_canvas.nodes:
+            subgraph = QuantaGraph()
+            for n in self.active_canvas.nodes.values():
+                subgraph.add_node(n)
+            if self.active_canvas.nodes:
+                subgraph.root_cid = next(iter(self.active_canvas.nodes.keys()))
+
+        # Step 3 & 4: Bipartite Projection and Dual-Stream Context Assembly
+        dual_ctx = self.context_assembler.assemble_dual_stream_context(
+            subgraph=subgraph,
+            passage_store=self.passage_store,
+            max_tokens=max_tokens,
+            query_text=query,
+            activations=getattr(subgraph, "activations", None),
+        )
+
+        fmt_lower = str(format).lower().strip()
+        if fmt_lower in ("dual_stream", "object"):
+            return dual_ctx
+        elif fmt_lower in ("str", "string", "full", "english", "svm"):
+            return dual_ctx.full_context
+        elif fmt_lower == "sexpr":
+            return self.retriever.format_context_for_llm(
+                subgraph, format="sexpr", max_tokens=max_tokens, query_text=query, passage_store=self.passage_store
+            )
+        else:
+            return dual_ctx.full_context
 
     def process(
         self,
@@ -832,6 +1236,16 @@ class CognitivePipeline:
             effective_depth = max(max_depth, 3)
             if max_tokens <= 600:
                 effective_max_tokens = 1200
+
+        if format.lower() in ("dual_stream", "svm"):
+            res = self.query_memory(
+                query=query,
+                max_tokens=effective_max_tokens,
+                top_k=top_k,
+                max_depth=effective_depth,
+                format="str",
+            )
+            return str(res)
 
         eff_decay = decay if decay is not None else (0.85 if effective_depth >= 3 else None)
         return self.retriever.retrieve_context(

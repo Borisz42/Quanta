@@ -35,6 +35,7 @@ logger = logging.getLogger("quanta.server.unsloth_manager")
 DEFAULT_BACKEND_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8888
 DEFAULT_MODEL_ID = "unsloth/Qwen3.5-4B-MTP-GGUF"
+DEFAULT_MODEL_PATH = "models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"
 
 
 class ChatResponse(dict):
@@ -51,18 +52,20 @@ class ChatResponse(dict):
 
 
 class UnslothServerManager:
-    """Manages Unsloth Studio / llama-server lifecycle, GPU telemetry, and hardware policy."""
+    """Manages unified llama-server / Unsloth backend lifecycle, GPU telemetry, and hardware policy."""
 
     def __init__(
         self,
         host: str = DEFAULT_BACKEND_HOST,
         port: int = DEFAULT_BACKEND_PORT,
         target_model: str = DEFAULT_MODEL_ID,
+        model_path: Optional[str] = None,
         allow_cpu_offload: Optional[bool] = None,
     ):
         self.host = host
         self.port = port
         self.target_model = target_model
+        self.model_path = model_path or os.getenv("QUANTA_MODEL_PATH", DEFAULT_MODEL_PATH)
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_url = f"{self.base_url}/v1"
         self._allow_cpu_offload = allow_cpu_offload
@@ -145,21 +148,43 @@ class UnslothServerManager:
             }
 
     def is_service_responsive(self, timeout: float = 8.0) -> bool:
-        """Checks if the server responds on /v1/models."""
+        """Checks if the server responds on /health or /v1/models."""
         try:
             with httpx.Client(timeout=timeout) as client:
+                # 1. Native llama-server /health endpoint
+                try:
+                    r_h = client.get(f"{self.base_url}/health")
+                    if r_h.status_code == 200:
+                        return True
+                except Exception:
+                    pass
+                # 2. OpenAI-compatible /v1/models endpoint
                 r = client.get(f"{self.api_url}/models")
                 return r.status_code == 200
         except Exception:
             return False
 
+    def check_health(self, timeout: float = 5.0) -> Dict[str, Any]:
+        """Queries /health endpoint for server readiness."""
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                r = client.get(f"{self.base_url}/health")
+                if r.status_code == 200:
+                    try:
+                        return r.json()
+                    except Exception:
+                        return {"status": "ok", "code": 200}
+        except Exception as e:
+            return {"status": "offline", "error": str(e)}
+        return {"status": "offline"}
+
     def ensure_unsloth_service_running(self, timeout: float = 30.0) -> bool:
-        """Ensures that the Unsloth server is responsive, launching it in background if down."""
+        """Ensures that the unified llama-server / Unsloth backend is responsive, launching it in background if down."""
         if self.is_service_responsive(timeout=5.0):
-            logger.info("Unsloth service is already running on %s", self.base_url)
+            logger.info("Unified LLM service is already running on %s", self.base_url)
             return True
 
-        logger.info("Unsloth service not responsive on %s. Initiating auto-wakeup...", self.base_url)
+        logger.info("Unified LLM service not responsive on %s. Initiating auto-wakeup...", self.base_url)
 
         # Enforce GPU policy prior to starting server
         self.enforce_gpu_policy()
@@ -167,71 +192,86 @@ class UnslothServerManager:
         # Locate startup candidates
         launched = False
 
-        # Candidate 1: unsloth studio CLI
-        unsloth_bin = shutil.which("unsloth") or shutil.which("unsloth.exe") or str(Path(os.path.expanduser("~")) / ".unsloth" / "studio" / "bin" / "unsloth.exe")
-        if unsloth_bin and Path(unsloth_bin).exists():
-            try:
-                cmd = [
-                    unsloth_bin,
-                    "studio",
-                    "-H",
-                    str(self.host),
-                    "-p",
-                    str(self.port),
-                ]
-                creationflags = 0
-                if sys.platform == "win32":
-                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        # Candidate 1: standalone hardware-accelerated llama-server.exe
+        llama_candidates = [
+            Path(r"C:\Users\PC\.unsloth\llama.cpp\build\bin\Release\llama-server.exe"),
+            Path(shutil.which("llama-server.exe") or ""),
+            Path(shutil.which("llama-server") or ""),
+            Path(os.path.expanduser("~")) / ".unsloth" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
+            Path("bin/llama-server.exe"),
+            Path("llama.cpp/llama-server.exe"),
+        ]
+        for candidate in llama_candidates:
+            if candidate and candidate.exists():
+                try:
+                    cmd = [
+                        str(candidate),
+                        "-m",
+                        str(self.model_path),
+                        "--port",
+                        str(self.port),
+                        "--host",
+                        str(self.host),
+                        "-ngl",
+                        "99",
+                        "-c",
+                        "8192",
+                        "-fa",
+                    ]
+                    creationflags = 0
+                    if sys.platform == "win32":
+                        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
-                self._server_process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=creationflags,
-                )
-                time.sleep(0.5)
-                if self._server_process.poll() is None:
-                    launched = True
-                    logger.info("Spawned Unsloth Studio process (PID: %s)", self._server_process.pid)
-            except Exception as e:
-                logger.warning("Failed to spawn unsloth studio: %s", e)
-
-        # Candidate 2: direct llama-server.exe if candidate 1 fails
-        if not launched:
-            llama_candidates = [
-                Path(r"C:\Users\PC\.unsloth\llama.cpp\build\bin\Release\llama-server.exe"),
-                Path(shutil.which("llama-server") or ""),
-            ]
-            for candidate in llama_candidates:
-                if candidate and candidate.exists():
-                    try:
-                        cmd = [
-                            str(candidate),
-                            "--port",
-                            str(self.port),
-                            "--host",
-                            str(self.host),
-                            "-ngl",
-                            "-1",  # Offload all layers to GPU
-                        ]
-                        creationflags = 0
-                        if sys.platform == "win32":
-                            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-
-                        self._server_process = subprocess.Popen(
-                            cmd,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            creationflags=creationflags,
-                        )
+                    self._server_process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=creationflags,
+                    )
+                    time.sleep(0.5)
+                    if self._server_process.poll() is None:
                         launched = True
-                        logger.info("Spawned llama-server fallback (PID: %s)", self._server_process.pid)
+                        logger.info("Spawned standalone llama-server process (PID: %s)", self._server_process.pid)
                         break
-                    except Exception as e:
-                        logger.warning("Failed to spawn llama-server: %s", e)
+                except Exception as e:
+                    logger.warning("Failed to spawn llama-server candidate %s: %s", candidate, e)
+
+        # Candidate 2: unsloth studio CLI fallback if standalone binary not found
+        if not launched:
+            unsloth_bin = (
+                shutil.which("unsloth")
+                or shutil.which("unsloth.exe")
+                or str(Path(os.path.expanduser("~")) / ".unsloth" / "studio" / "bin" / "unsloth.exe")
+            )
+            if unsloth_bin and Path(unsloth_bin).exists():
+                try:
+                    cmd = [
+                        unsloth_bin,
+                        "studio",
+                        "-H",
+                        str(self.host),
+                        "-p",
+                        str(self.port),
+                    ]
+                    creationflags = 0
+                    if sys.platform == "win32":
+                        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+
+                    self._server_process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=creationflags,
+                    )
+                    time.sleep(0.5)
+                    if self._server_process.poll() is None:
+                        launched = True
+                        logger.info("Spawned Unsloth Studio fallback process (PID: %s)", self._server_process.pid)
+                except Exception as e:
+                    logger.warning("Failed to spawn unsloth studio: %s", e)
 
         if not launched:
-            logger.error("Could not find suitable server executable to launch Unsloth service.")
+            logger.error("Could not find suitable server executable to launch llama-server service.")
             return False
 
         # Poll until service responds
@@ -239,11 +279,13 @@ class UnslothServerManager:
         while time.time() - t0 < timeout:
             time.sleep(1.0)
             if self.is_service_responsive(timeout=2.0):
-                logger.info("Unsloth service successfully awakened and verified on %s", self.base_url)
+                logger.info("Unified LLM service successfully awakened and verified on %s", self.base_url)
                 return True
 
-        logger.error("Unsloth service failed to respond within %.1f seconds.", timeout)
+        logger.error("Unified LLM service failed to respond within %.1f seconds.", timeout)
         return False
+
+    ensure_service_running = ensure_unsloth_service_running
 
     def is_model_loaded(self, model_id: Optional[str] = None) -> bool:
         """Checks if the target model is currently loaded in GPU VRAM."""
@@ -367,3 +409,31 @@ class UnslothServerManager:
             "gpu_telemetry": telemetry,
             "raw_response": data,
         })
+
+    def completion(
+        self,
+        prompt: str,
+        n_predict: int = 1,
+        temperature: float = 0.0,
+        n_probs: int = 10,
+        timeout: float = 30.0,
+    ) -> Dict[str, Any]:
+        """Executes a completion call with logprobs to the unified llama-server backend (/completion).
+
+        Used by Kev-4B non-autoregressive decision engine for in-context logprob scoring.
+        """
+        payload = {
+            "prompt": prompt,
+            "n_predict": n_predict,
+            "temperature": temperature,
+            "n_probs": n_probs,
+        }
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(f"{self.base_url}/completion", json=payload)
+            if resp.status_code != 200:
+                raise RuntimeError(f"llama-server /completion returned status {resp.status_code}: {resp.text}")
+            return resp.json()
+
+
+# Alias for Semantic Virtual Memory naming parity
+LlamaServerManager = UnslothServerManager

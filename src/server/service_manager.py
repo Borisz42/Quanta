@@ -96,13 +96,8 @@ class QuantaServiceManager:
     # -------------------------------------------------------------------------
 
     def is_base_llm_running(self, timeout: float = 10.0) -> bool:
-        """Checks if the Base LLM server is responsive."""
-        try:
-            with httpx.Client(timeout=timeout) as client:
-                r = client.get(f"{self.base_url}/models")
-                return r.status_code == 200
-        except Exception:
-            return False
+        """Checks if the Base LLM server (llama-server) is responsive."""
+        return self.unsloth_mgr.is_service_responsive(timeout=timeout)
 
     def is_model_loaded(self, model_id: Optional[str] = None) -> bool:
         """Checks if target model is loaded in VRAM on the Base LLM server."""
@@ -139,12 +134,18 @@ class QuantaServiceManager:
             except Exception:
                 pass
 
+        base_root = self.base_url.replace("/v1", "")
         return {
             "base_llm": {
                 "url": self.base_url,
+                "backend_type": "llama-server",
                 "running": base_running,
                 "model_id": self.target_model,
                 "model_loaded": model_loaded,
+                "dual_routing": {
+                    "chat_completions": f"{self.base_url}/chat/completions",
+                    "completion_logprobs": f"{base_root}/completion",
+                },
             },
             "quanta_proxy": {
                 "url": self.quanta_url,

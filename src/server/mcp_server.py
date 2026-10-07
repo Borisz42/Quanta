@@ -252,7 +252,7 @@ class MCPServer:
     # -------------------------------------------------------------------------
 
     def _tool_ingest_document(self, arguments: Dict[str, Any]) -> str:
-        """Executes quanta_ingest_document tool."""
+        """Executes quanta_ingest_document tool with dual-node SVM bipartite reporting."""
         content = arguments.get("content", "")
         doc_id = arguments.get("doc_id", "doc_01")
 
@@ -261,24 +261,42 @@ class MCPServer:
 
         t0 = time.perf_counter()
         try:
-            # Ingest through cognitive pipeline with streaming Merkle folding
-            graph = self.pipeline.process(content, chapter_id=doc_id)
+            # Ingest through cognitive pipeline with SVM dual-node storage
+            if hasattr(self.pipeline, "ingest_document"):
+                graph = self.pipeline.ingest_document(content, doc_id=doc_id)
+            else:
+                graph = self.pipeline.process(content, chapter_id=doc_id)
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
             node_count = self.pipeline.page_table.count_nodes() if hasattr(self.pipeline.page_table, "count_nodes") else len(self.pipeline.page_table)
-            root_cid = graph.root.compute_cid() if (graph and graph.root) else "none"
+            root_cid = graph.root.compute_cid() if (graph and graph.root) else (getattr(graph, "root_cid", "none") or "none")
 
-            if node_count == 0:
-                return (
-                    f"Warning: Ingestion of document '{doc_id}' completed in {elapsed_ms:.2f} ms "
-                    f"but 0 nodes were stored in PageTable. Please check document syntax or transducer."
-                )
+            # Bipartite graph statistics
+            ps = getattr(self.pipeline, "passage_store", None)
+            total_passages = len(ps) if ps is not None else 0
+            bipartite_anchors = len(graph.node_to_passage) if hasattr(graph, "node_to_passage") else 0
+            bt = getattr(self.pipeline, "binary_table", None)
+            binary_nodes = len(bt) if bt is not None else 0
+
+            # Collect grounded passage span mappings
+            span_mappings = []
+            if hasattr(graph, "node_to_passage") and graph.node_to_passage:
+                for n_cid, (p_id, s_start, s_end) in list(graph.node_to_passage.items())[:6]:
+                    node = graph.get_node(n_cid)
+                    anchor_txt = node.anchor if node else n_cid[:8]
+                    span_mappings.append(f"  * Node [{anchor_txt}]: {p_id} @ [{s_start}:{s_end}]")
+
+            span_report = ("\n- Grounded Passage Spans:\n" + "\n".join(span_mappings)) if span_mappings else ""
 
             return (
-                f"Successfully ingested document '{doc_id}' into QUANTA memory in {elapsed_ms:.2f} ms.\n"
+                f"Successfully ingested document '{doc_id}' into QUANTA Semantic Virtual Memory in {elapsed_ms:.2f} ms.\n"
                 f"- Graph Nodes Created: {len(graph.nodes) if graph else 0}\n"
                 f"- Graph Merkle Root CID: {root_cid}\n"
+                f"- Bipartite Provenance Links (E_ground): {bipartite_anchors}\n"
+                f"- Total Passage Records (V_passage): {total_passages}\n"
+                f"- 128-Byte Binary Node Table Entries: {binary_nodes}\n"
                 f"- Total PageTable Interned Nodes: {node_count}"
+                f"{span_report}"
             )
         except Exception as e:
             logger.exception("Error ingesting document '%s' in MCP: %s", doc_id, e)
@@ -295,6 +313,11 @@ class MCPServer:
         if hasattr(self.pipeline, "merkle_book"):
             from core.asg import HierarchicalMerkleBook
             self.pipeline.merkle_book = HierarchicalMerkleBook()
+        if hasattr(self.pipeline, "passage_store"):
+            self.pipeline.passage_store.clear()
+        if hasattr(self.pipeline, "binary_table"):
+            from core.binary_node import BinaryNodeTable
+            self.pipeline.binary_table = BinaryNodeTable()
 
         # Reset SQLite PageTable if in-memory
         if hasattr(self.pipeline, "page_table") and getattr(self.pipeline.page_table, "db_path", None) == ":memory:":
@@ -310,18 +333,22 @@ class MCPServer:
         canvas_len = len(self.pipeline.active_canvas) if hasattr(self.pipeline, "active_canvas") else 0
         canvas_cap = self.pipeline.active_canvas.capacity if hasattr(self.pipeline, "active_canvas") else 512
         vector_count = len(pt.vector_index) if hasattr(pt, "vector_index") else 0
+        ps = getattr(self.pipeline, "passage_store", None)
+        bt = getattr(self.pipeline, "binary_table", None)
 
         stats = {
             "total_page_table_nodes": node_count,
             "vector_index_size": vector_count,
             "active_canvas_usage": f"{canvas_len}/{canvas_cap} nodes",
+            "passage_store_count": len(ps) if ps is not None else 0,
+            "binary_table_count": len(bt) if bt is not None else 0,
             "global_kb_mounted": self.global_kb is not None,
             "has_merkle_book": hasattr(self.pipeline, "merkle_book"),
         }
         return json.dumps(stats, indent=2)
 
     def _tool_query_memory(self, arguments: Dict[str, Any]) -> str:
-        """Executes quanta_query_memory tool."""
+        """Executes quanta_query_memory tool with dual-stream context and passage span reporting."""
         query = arguments.get("query", "")
         max_tokens = int(arguments.get("max_tokens", 500))
         format_type = str(arguments.get("format", "english"))
@@ -329,11 +356,25 @@ class MCPServer:
         if not query or not query.strip():
             return "Error: Query string cannot be empty."
 
-        context = self.pipeline.retrieve_context(
-            query=query,
-            format=format_type,
-            max_tokens=max_tokens,
-        )
+        # Query via SVM query_memory or retrieve_context
+        if hasattr(self.pipeline, "query_memory"):
+            raw_ctx = self.pipeline.query_memory(query, max_tokens=max_tokens, format="dual_stream")
+            if hasattr(raw_ctx, "full_context"):
+                context = raw_ctx.full_context
+                # Report bipartite passage mappings if available
+                if raw_ctx.passages:
+                    passage_info = []
+                    for p in raw_ctx.passages[:4]:
+                        passage_info.append(f"  * Passage {p.passage_id} (Doc: {p.doc_id}, Score: {p.score:.2f}) @ span {p.char_span}")
+                    context = f"{context}\n\n[Bipartite Retrieved Passages]\n" + "\n".join(passage_info)
+            else:
+                context = str(raw_ctx)
+        else:
+            context = self.pipeline.retrieve_context(
+                query=query,
+                format=format_type,
+                max_tokens=max_tokens,
+            )
 
         if not context or not context.strip():
             if self.global_kb is not None:

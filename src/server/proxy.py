@@ -331,6 +331,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
     async def health():
         uptime = time.time() - stats["start_time"]
         node_count = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+        passage_count = len(pipeline.passage_store) if hasattr(pipeline, "passage_store") else 0
+        binary_nodes = len(pipeline.binary_table) if hasattr(pipeline, "binary_table") else 0
         return {
             "status": "healthy",
             "uptime_seconds": round(uptime, 2),
@@ -338,6 +340,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             "compressed_requests": stats["compressed_requests"],
             "tokens_saved_estimate": stats["tokens_saved"],
             "stored_nodes": node_count,
+            "passages_stored": passage_count,
+            "binary_table_nodes": binary_nodes,
             "backend_url": cfg.backend_url,
             "compression_threshold": cfg.compression_threshold,
         }
@@ -537,14 +541,27 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 else:
                     # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
                     adaptive_budget = min(cfg.max_context_tokens, 450)
+                    if dialogue_history and not has_single_query_context:
+                        pruned_toks = estimate_messages_tokens(dialogue_history)
+                        if pruned_toks > 0:
+                            adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))
                     effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
 
-                retrieved_context = await asyncio.to_thread(
-                    pipeline.retrieve_context,
-                    query=user_query,
-                    format=format_type,
-                    max_tokens=effective_max_tokens,
-                )
+                if format_type in ("dual_stream", "svm"):
+                    raw_ctx = await asyncio.to_thread(
+                        pipeline.query_memory,
+                        query=user_query,
+                        format="dual_stream",
+                        max_tokens=effective_max_tokens,
+                    )
+                    retrieved_context = getattr(raw_ctx, "full_context", str(raw_ctx))
+                else:
+                    retrieved_context = await asyncio.to_thread(
+                        pipeline.retrieve_context,
+                        query=user_query,
+                        format=format_type,
+                        max_tokens=effective_max_tokens,
+                    )
             except Exception as e:
                 logger.warning("Error retrieving context from PageTable: %s", e)
                 retrieved_context = ""
@@ -557,12 +574,19 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             elif system_messages and not doc_from_system:
                 system_content_parts.append(system_messages[-1].content or "")
 
-            if retrieved_context and retrieved_context.strip():
-                context_header = (
-                    f"=== [QUANTA NEURO-SYMBOLIC VERIFIED CONTEXT] ===\n"
-                    f"{retrieved_context.strip()}\n"
-                    f"================================================="
-                )
+            if retrieved_context and str(retrieved_context).strip():
+                if format_type in ("dual_stream", "svm"):
+                    context_header = (
+                        f"=== [QUANTA SEMANTIC VIRTUAL MEMORY DUAL-STREAM CONTEXT] ===\n"
+                        f"{str(retrieved_context).strip()}\n"
+                        f"============================================================"
+                    )
+                else:
+                    context_header = (
+                        f"=== [QUANTA NEURO-SYMBOLIC VERIFIED CONTEXT] ===\n"
+                        f"{str(retrieved_context).strip()}\n"
+                        f"================================================="
+                    )
                 system_content_parts.append(context_header)
 
             merged_system_content = "\n\n".join(part for part in system_content_parts if part).strip()
