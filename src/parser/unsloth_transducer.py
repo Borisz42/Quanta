@@ -36,6 +36,14 @@ from parser.schema import (
     ExtractedRelation,
 )
 from parser.sexpr_parser import parse_sexpr, to_sexpr
+from parser.skeleton_transducer import (
+    MockSkeletonTransducer,
+    SkeletonEntity,
+    SkeletonEvent,
+    SkeletonExtractionResult,
+    SkeletonTransducer,
+    estimate_token_count,
+)
 from parser.transducer import (
     BaseDiscourseTransducer,
     CANONICAL_ELEANOR_VANCE_FIXTURE,
@@ -331,10 +339,13 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         fixtures: Optional[Dict[str, Union[str, DiscourseExtractionResult]]] = None,
         system_prompt: str = DEFAULT_UNSLOTH_SYSTEM_PROMPT,
         allow_fixtures: bool = True,
+        mode: str = "legacy",
     ):
         super().__init__(system_prompt=system_prompt)
+        self.mode = mode
         self.allow_fixtures = allow_fixtures
         self.fixtures: Dict[str, DiscourseExtractionResult] = {}
+        self._mock_skeleton = MockSkeletonTransducer()
 
         # Register canonical gold-standard fixtures
         self.register_fixture("eleanor_vance", CANONICAL_ELEANOR_VANCE_FIXTURE)
@@ -460,6 +471,25 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         else:
             self.repair_fixtures[key] = fixture
 
+    def transduce_skeleton(
+        self,
+        text: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        chunk_id: Optional[str] = None,
+        chunk_text: Optional[str] = None,
+        **kwargs,
+    ) -> SkeletonExtractionResult:
+        """Extract stripped skeleton entity-event frame directly."""
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
+        return self._mock_skeleton.transduce(
+            content,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            **kwargs,
+        )
+
     def transduce_raw(
         self,
         text: Optional[str] = None,
@@ -469,10 +499,19 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
-        """Return raw S-expression string conforming to GBNF grammar."""
+        """Return raw S-expression or skeleton JSON string conforming to GBNF grammar."""
         content = text if text is not None else chunk_text
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
+        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
+        if target_mode == "skeleton":
+            skel_res = self.transduce_skeleton(
+                text=content,
+                active_entities=active_entities,
+                chunk_id=chunk_id,
+                **kwargs,
+            )
+            return skel_res.to_skeleton_json()
         res = self.transduce(
             text=content,
             active_entities=active_entities,
@@ -496,6 +535,24 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
         t0 = time.perf_counter()
+        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
+        if target_mode == "skeleton":
+            skel_res = self.transduce_skeleton(
+                text=content,
+                active_entities=active_entities,
+                chunk_id=chunk_id,
+                **kwargs,
+            )
+            res = skel_res.to_discourse_result()
+            latency = time.perf_counter() - t0
+            res.metadata["latency_sec"] = latency
+            res.metadata["prefill_latency_sec"] = skel_res.metadata.get("prefill_latency_sec", latency * 0.35)
+            res.metadata["decoding_latency_sec"] = skel_res.metadata.get("decoding_latency_sec", latency * 0.65)
+            res.metadata["decoding_token_count"] = skel_res.metadata.get("decoding_token_count", estimate_token_count(skel_res.to_json()))
+            res.metadata["mode"] = "skeleton"
+            res.metadata["skeleton_result"] = skel_res
+            return res
+
         norm_text = " ".join(content.split()).strip()
 
         matched: Optional[DiscourseExtractionResult] = None
@@ -556,6 +613,10 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             result = self._synthesize_dynamic(content, chunk_id, active_entities)
         latency = time.perf_counter() - t0
         result.metadata["latency_sec"] = latency
+        result.metadata["prefill_latency_sec"] = latency * 0.35
+        result.metadata["decoding_latency_sec"] = latency * 0.65
+        result.metadata["decoding_token_count"] = estimate_token_count(to_sexpr(result))
+        result.metadata["mode"] = "legacy"
         result.metadata["backend"] = "mock_unsloth"
         result.metadata["model"] = "mock-unsloth-slm"
         result.metadata["dynamic_transduction"] = True
@@ -1052,8 +1113,10 @@ class UnslothTransducer(BaseDiscourseTransducer):
         mock_transducer: Optional[MockUnslothTransducer] = None,
         fallback_base_url: Optional[str] = None,
         allow_fixtures: bool = True,
+        mode: str = "legacy",
     ):
         super().__init__(system_prompt=system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT)
+        self.mode = mode
         self._allow_fixtures = allow_fixtures
         self.base_url = (
             base_url
@@ -1072,7 +1135,11 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.api_key = api_key
         self.session = session or requests.Session()
         self.fallback_to_mock = fallback_to_mock
-        self._mock = mock_transducer or MockUnslothTransducer(system_prompt=self.system_prompt, allow_fixtures=allow_fixtures)
+        self._mock = mock_transducer or MockUnslothTransducer(
+            system_prompt=self.system_prompt,
+            allow_fixtures=allow_fixtures,
+            mode=mode,
+        )
         self._last_fallback_used = False
 
         # 1. Load GBNF Grammar & Pre-Warm State Machine
@@ -1085,9 +1152,19 @@ class UnslothTransducer(BaseDiscourseTransducer):
         # 2. Model resolution (lazy default to prevent eager network calls during init)
         self.model = resolve_model_name(model)
 
+        # 3. Skeleton Transducer for Fast Skeleton Extraction
+        self._skeleton = SkeletonTransducer(
+            base_url=self.base_url,
+            model=self.model,
+            timeout=timeout,
+            fallback_to_mock=fallback_to_mock,
+        )
+
     def set_model(self, model: str) -> str:
         """Set active model profile at runtime, resolving aliases and presets."""
         self.model = resolve_model_name(model)
+        if hasattr(self, "_skeleton") and self._skeleton is not None:
+            self._skeleton.model = self.model
         return self.model
 
     @staticmethod
@@ -1254,6 +1331,25 @@ class UnslothTransducer(BaseDiscourseTransducer):
 
         return payload
 
+    def transduce_skeleton(
+        self,
+        text: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        chunk_id: Optional[str] = None,
+        chunk_text: Optional[str] = None,
+        **kwargs,
+    ) -> SkeletonExtractionResult:
+        """Extract stripped skeleton entity-event frame directly."""
+        content = text if text is not None else chunk_text
+        if content is None:
+            raise ValueError("Must provide either 'text' or 'chunk_text'")
+        return self._skeleton.transduce(
+            text=content,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            **kwargs,
+        )
+
     def transduce_raw(
         self,
         text: Optional[str] = None,
@@ -1263,10 +1359,20 @@ class UnslothTransducer(BaseDiscourseTransducer):
         chunk_text: Optional[str] = None,
         **kwargs,
     ) -> str:
-        """Send inference request to Unsloth server and return raw S-expression string."""
+        """Send inference request to server and return raw S-expression or skeleton JSON string."""
         content = text if text is not None else chunk_text
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
+
+        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
+        if target_mode == "skeleton":
+            skel_res = self.transduce_skeleton(
+                text=content,
+                active_entities=active_entities,
+                chunk_id=chunk_id,
+                **kwargs,
+            )
+            return skel_res.to_skeleton_json()
 
         headers = self._get_headers()
         payload = self._build_payload(
@@ -1350,6 +1456,24 @@ class UnslothTransducer(BaseDiscourseTransducer):
             raise ValueError("Must provide either 'text' or 'chunk_text'")
 
         t0 = time.perf_counter()
+        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
+        if target_mode == "skeleton":
+            skel_res = self.transduce_skeleton(
+                text=content,
+                active_entities=active_entities,
+                chunk_id=chunk_id,
+                **kwargs,
+            )
+            res = skel_res.to_discourse_result()
+            latency = time.perf_counter() - t0
+            res.metadata["latency_sec"] = latency
+            res.metadata["prefill_latency_sec"] = skel_res.metadata.get("prefill_latency_sec", latency * 0.35)
+            res.metadata["decoding_latency_sec"] = skel_res.metadata.get("decoding_latency_sec", latency * 0.65)
+            res.metadata["decoding_token_count"] = skel_res.metadata.get("decoding_token_count", estimate_token_count(skel_res.to_json()))
+            res.metadata["mode"] = "skeleton"
+            res.metadata["skeleton_result"] = skel_res
+            return res
+
         try:
             self._last_fallback_used = False
             raw_sexpr = self.transduce_raw(
@@ -1365,6 +1489,10 @@ class UnslothTransducer(BaseDiscourseTransducer):
                 result.chunk_id = chunk_id
             latency = time.perf_counter() - t0
             result.metadata["latency_sec"] = latency
+            result.metadata["prefill_latency_sec"] = latency * 0.35
+            result.metadata["decoding_latency_sec"] = latency * 0.65
+            result.metadata["decoding_token_count"] = estimate_token_count(raw_sexpr)
+            result.metadata["mode"] = "legacy"
             if self._last_fallback_used:
                 result.metadata["backend"] = "mock_unsloth"
                 result.metadata["fallback_from_unsloth"] = True
