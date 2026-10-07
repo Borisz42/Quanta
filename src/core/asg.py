@@ -49,6 +49,8 @@ class QuantaNode:
         "truth_status",
         "confidence",
         "evidence_source",
+        "node_type",
+        "concept_code",
     )
 
     _default_interner: Optional[Any] = None
@@ -69,6 +71,8 @@ class QuantaNode:
         truth_status: str = "TRUE",
         confidence: float = 1.0,
         evidence_source: str = "direct_observation",
+        node_type: Optional[str] = None,
+        concept_code: Optional[int] = None,
     ):
         raw_vec = semantic_vector if vector is None else vector
         if raw_vec is None:
@@ -111,6 +115,8 @@ class QuantaNode:
         self.truth_status: str = str(truth_status)
         self.confidence: float = float(confidence)
         self.evidence_source: str = str(evidence_source)
+        self.node_type: Optional[str] = node_type
+        self.concept_code: Optional[int] = concept_code
 
     def invalidate_cache(self):
         """Invalidates cached CID and canonical CID."""
@@ -386,6 +392,8 @@ class QuantaNode:
             "truth_status": self.truth_status,
             "confidence": self.confidence,
             "evidence_source": self.evidence_source,
+            "node_type": self.node_type,
+            "concept_code": self.concept_code,
         }
         return d
 
@@ -412,6 +420,8 @@ class QuantaNode:
             truth_status=str(data.get("truth_status", "TRUE")),
             confidence=float(data.get("confidence", 1.0)),
             evidence_source=str(data.get("evidence_source", "direct_observation")),
+            node_type=data.get("node_type"),
+            concept_code=data.get("concept_code"),
         )
         return node
 
@@ -522,6 +532,8 @@ class QuantaGraph:
                 truth_status=node.truth_status,
                 confidence=node.confidence,
                 evidence_source=node.evidence_source,
+                node_type=node.node_type,
+                concept_code=node.concept_code,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
             new_node.register_binding = node.register_binding
@@ -998,6 +1010,16 @@ class QuantaGraph:
     def aggregate_vector(self) -> QuantaVector:
         """Returns the aggregated whole-tree proposition vector."""
         return self.to_proposition_vector()
+
+    def to_binary_table(self):
+        """Compiles this graph into a 128-byte aligned BinaryNodeTable."""
+        from parser.asg_compiler import compile_to_binary_table
+        return compile_to_binary_table(self)
+
+    def to_record_dsl(self, passage_store: Optional[Any] = None) -> str:
+        """Serializes this graph into Canonical Record DSL text."""
+        from parser.record_dsl import serialize_to_record_dsl
+        return serialize_to_record_dsl(self, passage_store=passage_store)
 
     def __len__(self) -> int:
         return len(self._node_list)

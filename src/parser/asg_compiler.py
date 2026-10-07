@@ -15,9 +15,11 @@ quaternary Abstract Syntax Graphs (QuantaGraph / QuantaNode) with:
 
 from __future__ import annotations
 
+import ctypes
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import blake3
 
 from core.asg import QuantaGraph, QuantaNode
 from core.slots import (
@@ -260,6 +262,8 @@ class ASGCompiler:
             cid = graph.add_node(node)
             entity_nodes[ent.id] = node
             graph.register_bindings[cid] = f"VAR_SLOT_X{i % 8}"
+            if node.passage_id and node.span_start is not None and node.span_end is not None:
+                graph.add_passage_anchor(cid, node.passage_id, node.span_start, node.span_end)
 
         # 4. Event compilation (Phase 4.3)
         entity_cids = {ent_id: node.cid for ent_id, node in entity_nodes.items()}
@@ -306,8 +310,10 @@ class ASGCompiler:
                     node.set_slot(slot_name, 1)
 
             node.compute_cid()
-            graph.add_node(node)
+            cid = graph.add_node(node)
             event_nodes[ev.id] = node
+            if node.passage_id and node.span_start is not None and node.span_end is not None:
+                graph.add_passage_anchor(cid, node.passage_id, node.span_start, node.span_end)
 
         # 5. Wire Thematic Valencies from events to entities and sub-clauses
         for ev in extraction_result.events:
@@ -549,11 +555,35 @@ class ASGCompiler:
             node.set_slot("LJB_SUO_AT_LEAST_ONE", 1)
             node.set_slot("GRAPH_VARIABLE_BIND", 1)
 
+        # Provenance and SVM fields
+        node.node_type = "entity"
+        if getattr(entity, "properties", None):
+            props = entity.properties
+            if "passage_id" in props and props["passage_id"]:
+                node.passage_id = str(props["passage_id"])
+            if "char_span" in props and props["char_span"]:
+                span = props["char_span"]
+                node.span_start = int(span[0])
+                node.span_end = int(span[1])
+            if "salience" in props:
+                node.salience = float(props["salience"])
+            if "confidence" in props:
+                node.confidence = float(props["confidence"])
+            if "concept_code" in props:
+                node.concept_code = int(props["concept_code"])
+
         node.compute_cid()
         if self.interner is not None:
             interned = self.interner.intern_node(node)
             interned.register_binding = reg_slot
             interned.edges.clear()
+            interned.node_type = node.node_type
+            interned.passage_id = node.passage_id
+            interned.span_start = node.span_start
+            interned.span_end = node.span_end
+            interned.salience = node.salience
+            interned.confidence = node.confidence
+            interned.concept_code = node.concept_code
             return interned
         return node
 
@@ -789,6 +819,27 @@ class ASGCompiler:
         if t_end is not None:
             setattr(node, "time_end", t_end)
 
+        # Provenance and SVM fields
+        node.node_type = "event"
+        if getattr(event, "arguments", None):
+            args = event.arguments
+            if "passage_id" in args and args["passage_id"]:
+                node.passage_id = str(args["passage_id"])
+            if "char_span" in args and args["char_span"]:
+                span = args["char_span"]
+                node.span_start = int(span[0])
+                node.span_end = int(span[1])
+            if "salience" in args:
+                node.salience = float(args["salience"])
+            if "confidence" in args:
+                node.confidence = float(args["confidence"])
+            if "concept_code" in args:
+                node.concept_code = int(args["concept_code"])
+            if "epistemic" in args and args["epistemic"]:
+                node.evidence_source = str(args["epistemic"])
+        if getattr(event, "val", None):
+            node.truth_status = str(event.val)
+
         node.compute_cid()
         return node
 
@@ -835,8 +886,210 @@ class ASGCompiler:
         if src_node and tgt_node:
             graph.add_edge(src_node.cid, edge_type, tgt_node.cid)
 
+    def compile_record_dsl(
+        self,
+        dsl_text: str,
+        passage_store: Optional[Any] = None,
+        validate: bool = True,
+    ) -> QuantaGraph:
+        """Compiles Record DSL text into a QuantaGraph using this compiler instance."""
+        return compile_record_dsl(dsl_text, passage_store=passage_store, validate=validate, compiler=self)
+
+    def compile_to_binary_table(self, graph: QuantaGraph) -> Any:
+        """Compiles a QuantaGraph into a 128-byte aligned BinaryNodeTable."""
+        return compile_to_binary_table(graph)
+
+
+def compile_record_dsl(
+    dsl_text: str,
+    passage_store: Optional[Any] = None,
+    validate: bool = True,
+    compiler: Optional[ASGCompiler] = None,
+) -> QuantaGraph:
+    """Compiles Canonical Record DSL text into a content-addressed QuantaGraph.
+
+    Args:
+        dsl_text: Record DSL source string.
+        passage_store: Optional PassageStore to persist parsed passage blocks into.
+        validate: Whether to run Clingo ASP validation on the resulting graph.
+        compiler: Optional custom ASGCompiler instance.
+
+    Returns:
+        Fully compiled QuantaGraph with populated bipartite passage indices.
+    """
+    from parser.record_dsl import parse_record_dsl
+
+    doc = parse_record_dsl(dsl_text)
+
+    # 1. Register passages in passage_store if provided
+    if passage_store is not None:
+        for p in doc.passages:
+            passage_store.add_passage(p.to_passage_record())
+
+    # 2. Convert AST to DiscourseExtractionResult
+    extraction_result = doc.to_extraction_result()
+
+    # 3. Compile using ASGCompiler
+    active_compiler = compiler or ASGCompiler()
+    graph = active_compiler.compile(extraction_result, validate=validate)
+
+    # 4. Ensure bipartite anchors are attached from AST definitions
+    entity_nodes = getattr(graph, "entity_nodes", {})
+    event_nodes = getattr(graph, "event_nodes", {})
+
+    for ent_block in doc.entities:
+        if ent_block.passage_id and ent_block.char_span:
+            node = entity_nodes.get(ent_block.id)
+            if node is not None:
+                node.bind_passage(
+                    ent_block.passage_id,
+                    ent_block.char_span[0],
+                    ent_block.char_span[1],
+                    confidence=ent_block.confidence,
+                )
+                node.salience = ent_block.salience
+                graph.add_passage_anchor(
+                    node.cid,
+                    ent_block.passage_id,
+                    ent_block.char_span[0],
+                    ent_block.char_span[1],
+                )
+
+    for ev_block in doc.events:
+        if ev_block.passage_id and ev_block.char_span:
+            node = event_nodes.get(ev_block.id)
+            if node is not None:
+                node.bind_passage(
+                    ev_block.passage_id,
+                    ev_block.char_span[0],
+                    ev_block.char_span[1],
+                    confidence=ev_block.confidence,
+                )
+                node.salience = ev_block.salience
+                node.truth_status = ev_block.val
+                if ev_block.epistemic:
+                    node.evidence_source = ev_block.epistemic
+                graph.add_passage_anchor(
+                    node.cid,
+                    ev_block.passage_id,
+                    ev_block.char_span[0],
+                    ev_block.char_span[1],
+                )
+
+    return graph
+
+
+def compile_to_binary_table(graph: QuantaGraph) -> Any:
+    """Compiles a QuantaGraph into a 128-byte aligned BinaryNodeTable.
+
+    Maps each QuantaNode into a 128-byte C-compatible QuantaSemanticNodeStruct:
+    - 32-bit integer node IDs (1-indexed)
+    - 32-bit passage IDs
+    - 16-bit start/end character offsets
+    - 16-bit ConceptNet concept code
+    - 2-bit Belnap truth lattice code
+    - 8-bit normalized confidence
+    - 8-bit speech-act intent enum
+    - 8-bit epistemic evidence source enum
+    - 4x 32-bit outgoing edge target IDs
+    - 94 bytes padding (cache-line and 64-byte aligned)
+    """
+    from core.binary_node import (
+        BinaryNodeTable,
+        QuantaSemanticNodeStruct,
+        BelnapValue,
+        SpeechActIntent,
+        EpistemicSource,
+    )
+
+    table = BinaryNodeTable()
+
+    # 1. Map each node's CID to a unique 1-indexed uint32 node_id
+    cid_to_node_id: Dict[str, int] = {}
+    for idx, node in enumerate(graph._node_list):
+        cid_to_node_id[node.cid] = idx + 1
+
+    # 2. Passage string ID to uint32 map
+    passage_id_map: Dict[str, int] = {}
+
+    def parse_passage_id(pid: Optional[str]) -> int:
+        if not pid:
+            return 0
+        if pid in passage_id_map:
+            return passage_id_map[pid]
+        clean = pid.lstrip("P").lstrip("p")
+        if clean.isdigit():
+            val = int(clean) & 0xFFFFFFFF
+        else:
+            val = int(blake3.blake3(pid.encode()).hexdigest()[:8], 16) & 0xFFFFFFFF
+        passage_id_map[pid] = val
+        return val
+
+    # 3. Convert each QuantaNode into a 128-byte QuantaSemanticNodeStruct
+    for idx, node in enumerate(graph._node_list):
+        node_id = cid_to_node_id[node.cid]
+        p_id = parse_passage_id(node.passage_id)
+        span_s = min(65535, max(0, node.span_start or 0))
+        span_e = min(65535, max(0, node.span_end or 0))
+
+        # Concept code
+        concept_code = 0
+        if getattr(node, "concept_code", None) is not None:
+            concept_code = int(node.concept_code) & 0xFFFF
+        elif node.anchor:
+            concept_code = int(blake3.blake3(node.anchor.encode()).hexdigest()[:4], 16) & 0xFFFF
+
+        # Belnap 2-bit lattice
+        belnap = BelnapValue.from_str(node.truth_status)
+
+        # Confidence (0-255 uint8)
+        conf_u8 = int(round(max(0.0, min(1.0, float(node.confidence))) * 255))
+
+        # Intent (Band 5)
+        intent = SpeechActIntent.from_node(node)
+
+        # Epistemic (Band 6)
+        epistemic = EpistemicSource.from_str(node.evidence_source)
+
+        # Outgoing edges: up to 4 targets
+        outgoing_targets: List[int] = []
+        for rel_name, targets in node.edges.items():
+            for target_cid in targets:
+                if target_cid in cid_to_node_id:
+                    outgoing_targets.append(cid_to_node_id[target_cid])
+                if len(outgoing_targets) == 4:
+                    break
+            if len(outgoing_targets) == 4:
+                break
+
+        while len(outgoing_targets) < 4:
+            outgoing_targets.append(0)
+
+        edge_array = (ctypes.c_uint32 * 4)(*outgoing_targets)
+
+        struct_node = QuantaSemanticNodeStruct(
+            node_id=node_id,
+            passage_id=p_id,
+            span_start=span_s,
+            span_end=span_e,
+            concept_code=concept_code,
+            belnap_lattice=belnap,
+            confidence=conf_u8,
+            intent_band5=intent,
+            epistemic_band6=epistemic,
+            outgoing_edges=edge_array,
+        )
+
+        table.append(struct_node)
+        table.register_node_cid(node_id, node.cid)
+
+    table.passage_id_map = passage_id_map
+    return table
+
 
 __all__ = [
     "ASGCompiler",
     "ASGCompilationError",
+    "compile_record_dsl",
+    "compile_to_binary_table",
 ]

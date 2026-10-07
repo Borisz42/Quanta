@@ -27,7 +27,25 @@ from parser.transducer import (
     MockTransducer,
     create_transducer,
 )
-from parser.asg_compiler import ASGCompiler, ASGCompilationError
+from parser.asg_compiler import (
+    ASGCompiler,
+    ASGCompilationError,
+    compile_record_dsl,
+    compile_to_binary_table,
+)
+from parser.record_dsl import (
+    PassageBlock,
+    EntityBlock,
+    EventBlock,
+    RelationBlock,
+    RecordDSLDocument,
+    RecordDSLSyntaxError,
+    RecordDSLLexer,
+    RecordDSLParser,
+    RecordDSLSerializer,
+    parse_record_dsl,
+    serialize_to_record_dsl,
+)
 from parser.sexpr_parser import (
     SExprTokenType,
     SExprToken,
@@ -110,6 +128,19 @@ __all__ = [
     "GraphStitcher",
     "stitch",
     "stitch_to_graph",
+    "compile_record_dsl",
+    "compile_to_binary_table",
+    "PassageBlock",
+    "EntityBlock",
+    "EventBlock",
+    "RelationBlock",
+    "RecordDSLDocument",
+    "RecordDSLSyntaxError",
+    "RecordDSLLexer",
+    "RecordDSLParser",
+    "RecordDSLSerializer",
+    "parse_record_dsl",
+    "serialize_to_record_dsl",
 ]
 
 

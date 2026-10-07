@@ -41,6 +41,15 @@ from core.artifacts import (
     resolve_artifact_path,
     ARTIFACT_REGISTRY,
 )
+from core.binary_node import (
+    BelnapValue,
+    SpeechActIntent,
+    EpistemicSource,
+    QuantaSemanticNodeStruct,
+    QuantaSemanticNode,
+    NODE_DTYPE,
+    BinaryNodeTable,
+)
 
 __all__ = [
     "BandContract",
@@ -78,4 +87,11 @@ __all__ = [
     "audit_artifacts",
     "resolve_artifact_path",
     "ARTIFACT_REGISTRY",
+    "BelnapValue",
+    "SpeechActIntent",
+    "EpistemicSource",
+    "QuantaSemanticNodeStruct",
+    "QuantaSemanticNode",
+    "NODE_DTYPE",
+    "BinaryNodeTable",
 ]
