@@ -42,6 +42,13 @@ class QuantaNode:
         "register_binding",
         "time_start",
         "time_end",
+        "passage_id",
+        "span_start",
+        "span_end",
+        "salience",
+        "truth_status",
+        "confidence",
+        "evidence_source",
     )
 
     _default_interner: Optional[Any] = None
@@ -55,6 +62,13 @@ class QuantaNode:
         parent_cid: Optional[str] = None,
         concept_label: Optional[str] = None,
         semantic_vector: Optional[Union[QuantaVector, Sequence[int], bytes, Dict[Union[int, str], int]]] = None,
+        passage_id: Optional[str] = None,
+        span_start: Optional[int] = None,
+        span_end: Optional[int] = None,
+        salience: float = 1.0,
+        truth_status: str = "TRUE",
+        confidence: float = 1.0,
+        evidence_source: str = "direct_observation",
     ):
         raw_vec = semantic_vector if vector is None else vector
         if raw_vec is None:
@@ -90,6 +104,13 @@ class QuantaNode:
         self.register_binding: Optional[str] = None
         self.time_start: Optional[Union[int, float]] = None
         self.time_end: Optional[Union[int, float]] = None
+        self.passage_id: Optional[str] = passage_id
+        self.span_start: Optional[int] = span_start
+        self.span_end: Optional[int] = span_end
+        self.salience: float = float(salience)
+        self.truth_status: str = str(truth_status)
+        self.confidence: float = float(confidence)
+        self.evidence_source: str = str(evidence_source)
 
     def invalidate_cache(self):
         """Invalidates cached CID and canonical CID."""
@@ -163,6 +184,39 @@ class QuantaNode:
         if target_cid not in self.edges[relation]:
             self.edges[relation].append(target_cid)
         self.invalidate_cache()
+
+    def bind_passage(
+        self,
+        passage_id: str,
+        span_start: int,
+        span_end: int,
+        confidence: float = 1.0,
+    ) -> None:
+        """Binds this semantic node to an immutable passage text span.
+        
+        Args:
+            passage_id: Passage identifier in the PassageStore.
+            span_start: Starting character offset.
+            span_end: Ending character offset.
+            confidence: Provenance confidence score [0.0, 1.0].
+        """
+        self.passage_id = passage_id
+        self.span_start = span_start
+        self.span_end = span_end
+        self.confidence = float(confidence)
+
+    def get_grounded_text(self, passage_store: Any) -> Optional[str]:
+        """Retrieves grounded verbatim passage text span from the passage store.
+        
+        Args:
+            passage_store: PassageStore instance.
+            
+        Returns:
+            Verbatim text substring or None if ungrounded / passage not found.
+        """
+        if self.passage_id is None:
+            return None
+        return passage_store.get_text_span(self.passage_id, self.span_start, self.span_end)
 
     def compute_cid(
         self,
@@ -317,7 +371,7 @@ class QuantaNode:
         """Serializes node to dictionary format."""
         from core.slots import get_slot_by_index
         readable_slots = {get_slot_by_index(k).name: int(v) for k, v in self.vector.active_slots().items()}
-        return {
+        d: Dict[str, Any] = {
             "cid": self.cid,
             "parent_cid": self.parent_cid,
             "anchor": self.anchor,
@@ -325,7 +379,15 @@ class QuantaNode:
             "edges": self.edges,
             "active_slots": readable_slots,
             "packed_bytes_hex": self.vector.to_bytes().hex(),
+            "passage_id": self.passage_id,
+            "span_start": self.span_start,
+            "span_end": self.span_end,
+            "salience": self.salience,
+            "truth_status": self.truth_status,
+            "confidence": self.confidence,
+            "evidence_source": self.evidence_source,
         }
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> QuantaNode:
@@ -343,6 +405,13 @@ class QuantaNode:
             anchor=data.get("anchor"),
             literal=data.get("literal"),
             parent_cid=data.get("parent_cid"),
+            passage_id=data.get("passage_id"),
+            span_start=data.get("span_start"),
+            span_end=data.get("span_end"),
+            salience=float(data.get("salience", 1.0)),
+            truth_status=str(data.get("truth_status", "TRUE")),
+            confidence=float(data.get("confidence", 1.0)),
+            evidence_source=str(data.get("evidence_source", "direct_observation")),
         )
         return node
 
@@ -352,13 +421,17 @@ class QuantaNode:
 
 
 class QuantaGraph:
-    """Abstract Syntax Graph representing interconnected QuantaNodes with Merkle folding."""
+    """Abstract Syntax Graph representing interconnected QuantaNodes with Merkle folding and bipartite passage grounding."""
 
     def __init__(self, root_cid: Optional[str] = None):
         self._node_list: List[QuantaNode] = []
         self._cid_to_node: Dict[str, QuantaNode] = {}
         self.root_cid: Optional[str] = root_cid
         self.register_bindings: Dict[str, str] = {}
+        # Bipartite index: passage_id -> set of semantic node CIDs
+        self.passage_to_nodes: Dict[str, Set[str]] = {}
+        # Bipartite index: semantic node CID -> (passage_id, span_start, span_end)
+        self.node_to_passage: Dict[str, Tuple[str, int, int]] = {}
 
     @property
     def nodes(self) -> Dict[str, QuantaNode]:
@@ -376,7 +449,48 @@ class QuantaGraph:
         self._cid_to_node[cid] = node
         if set_as_root or self.root_cid is None:
             self.root_cid = cid
+        if node.passage_id is not None:
+            s_start = node.span_start if node.span_start is not None else 0
+            s_end = node.span_end if node.span_end is not None else 0
+            self.passage_to_nodes.setdefault(node.passage_id, set()).add(cid)
+            self.node_to_passage[cid] = (node.passage_id, s_start, s_end)
         return cid
+
+    def add_passage_anchor(
+        self,
+        node_cid: str,
+        passage_id: str,
+        span_start: int,
+        span_end: int,
+    ) -> None:
+        """Anchors a semantic node to a specific passage text span."""
+        node = self.get_node(node_cid)
+        if node is None:
+            raise KeyError(f"Node CID '{node_cid}' not found in graph")
+        node.bind_passage(passage_id, span_start, span_end)
+        actual_cid = node.cid
+        self.passage_to_nodes.setdefault(passage_id, set()).add(actual_cid)
+        self.node_to_passage[actual_cid] = (passage_id, span_start, span_end)
+        if node_cid != actual_cid:
+            self.passage_to_nodes[passage_id].add(node_cid)
+            self.node_to_passage[node_cid] = (passage_id, span_start, span_end)
+
+    def get_nodes_for_passage(self, passage_id: str) -> List[QuantaNode]:
+        """Retrieves all semantic nodes grounded in the given passage."""
+        cids = self.passage_to_nodes.get(passage_id, set())
+        matched_nodes: List[QuantaNode] = []
+        seen = set()
+        for cid in sorted(cids):
+            node = self.get_node(cid)
+            if node is not None and id(node) not in seen:
+                seen.add(id(node))
+                matched_nodes.append(node)
+        for node in self._node_list:
+            if node.passage_id == passage_id and id(node) not in seen:
+                seen.add(id(node))
+                matched_nodes.append(node)
+                self.passage_to_nodes.setdefault(passage_id, set()).add(node.cid)
+        return matched_nodes
 
     def get_node(self, cid: str) -> Optional[QuantaNode]:
         """Retrieves node by CID (supporting current CIDs, canonical CIDs, and historical alias CIDs)."""
@@ -394,17 +508,36 @@ class QuantaGraph:
         """Create a deep copy of the QuantaGraph and its QuantaNodes."""
         cloned = QuantaGraph(root_cid=self.root_cid)
         cloned.register_bindings = dict(self.register_bindings)
+        old_to_new_node = {}
         for node in self._node_list:
             new_node = QuantaNode(
                 vector=node.vector.copy(),
                 anchor=node.anchor,
                 literal=node.literal,
                 parent_cid=node.parent_cid,
+                passage_id=node.passage_id,
+                span_start=node.span_start,
+                span_end=node.span_end,
+                salience=node.salience,
+                truth_status=node.truth_status,
+                confidence=node.confidence,
+                evidence_source=node.evidence_source,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
             new_node.register_binding = node.register_binding
+            new_node.time_start = node.time_start
+            new_node.time_end = node.time_end
             cloned.add_node(new_node)
+            old_to_new_node[id(node)] = new_node
+
+        # Preserve historical alias mappings in _cid_to_node
+        for cid_key, orig_node in self._cid_to_node.items():
+            if id(orig_node) in old_to_new_node:
+                cloned._cid_to_node[cid_key] = old_to_new_node[id(orig_node)]
+
         cloned.root_cid = self.root_cid
+        cloned.passage_to_nodes = {k: set(v) for k, v in self.passage_to_nodes.items()}
+        cloned.node_to_passage = dict(self.node_to_passage)
         for attr in ("extraction_result", "validation", "chunk_id", "entity_nodes", "event_nodes"):
             if hasattr(self, attr):
                 setattr(cloned, attr, getattr(self, attr))
@@ -466,6 +599,12 @@ class QuantaGraph:
         for old_cid, new_cid in replacements.items():
             if old_cid in self._cid_to_node:
                 self._cid_to_node[new_cid] = self._cid_to_node[old_cid]
+            if old_cid in self.node_to_passage:
+                val = self.node_to_passage[old_cid]
+                self.node_to_passage[new_cid] = val
+                pid = val[0]
+                if pid in self.passage_to_nodes:
+                    self.passage_to_nodes[pid].add(new_cid)
         for n in self._node_list:
             self._cid_to_node[n.cid] = n
 
@@ -581,8 +720,18 @@ class QuantaGraph:
                 anchor=node.anchor,
                 literal=node.literal,
                 parent_cid=node.parent_cid,
+                passage_id=node.passage_id,
+                span_start=node.span_start,
+                span_end=node.span_end,
+                salience=node.salience,
+                truth_status=node.truth_status,
+                confidence=node.confidence,
+                evidence_source=node.evidence_source,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
+            new_node.register_binding = node.register_binding
+            new_node.time_start = node.time_start
+            new_node.time_end = node.time_end
             sub_graph.add_node(new_node)
 
         sub_merkle_cid = sub_graph.compute_merkle_root()
@@ -675,11 +824,29 @@ class QuantaGraph:
                 anchor=sub_node.anchor,
                 literal=sub_node.literal,
                 parent_cid=sub_node.parent_cid,
+                passage_id=sub_node.passage_id,
+                span_start=sub_node.span_start,
+                span_end=sub_node.span_end,
+                salience=sub_node.salience,
+                truth_status=sub_node.truth_status,
+                confidence=sub_node.confidence,
+                evidence_source=sub_node.evidence_source,
             )
             new_node.edges = {k: list(v) for k, v in sub_node.edges.items()}
+            new_node.register_binding = sub_node.register_binding
+            new_node.time_start = sub_node.time_start
+            new_node.time_end = sub_node.time_end
             if new_node not in self._node_list:
                 self._node_list.append(new_node)
-            self._cid_to_node[new_node.compute_cid()] = new_node
+            cid = new_node.compute_cid()
+            self._cid_to_node[cid] = new_node
+            if new_node.passage_id is not None:
+                self.passage_to_nodes.setdefault(new_node.passage_id, set()).add(cid)
+                self.node_to_passage[cid] = (
+                    new_node.passage_id,
+                    new_node.span_start or 0,
+                    new_node.span_end or 0,
+                )
 
         # 3. Rewire incoming edges from main graph pointing to pointer_node_cid to restored_root_cid
         if self.root_cid == pointer_node_cid:
@@ -764,6 +931,8 @@ class QuantaGraph:
             "root_cid": self.root_cid,
             "merkle_root": self.compute_merkle_root(),
             "nodes": {cid: node.to_dict() for cid, node in current_nodes.items()},
+            "passage_to_nodes": {k: sorted(list(v)) for k, v in self.passage_to_nodes.items()},
+            "node_to_passage": {k: list(v) for k, v in self.node_to_passage.items()},
         }
 
     @classmethod
@@ -773,6 +942,10 @@ class QuantaGraph:
         for cid, node_dict in data.get("nodes", {}).items():
             node = QuantaNode.from_dict(node_dict)
             graph.add_node(node)
+        if "passage_to_nodes" in data:
+            graph.passage_to_nodes = {k: set(v) for k, v in data["passage_to_nodes"].items()}
+        if "node_to_passage" in data:
+            graph.node_to_passage = {k: tuple(v) for k, v in data["node_to_passage"].items()}
         return graph
 
     def to_json(self, indent: int = 2) -> str:

@@ -16,6 +16,7 @@ from memory.page_table import (
     batch_quaternary_hamming,
     topk_hamming_search,
 )
+from memory.passage_store import PassageRecord, PassageStore
 from memory.spreading_activation import SpreadingActivationRetriever
 from memory.world_state import (
     EntityStateRecord,
@@ -29,6 +30,8 @@ __all__ = [
     "EntityStateRecord",
     "GlobalKnowledgeBase",
     "PageTable",
+    "PassageRecord",
+    "PassageStore",
     "SemanticPageFaultHandler",
     "SimdHammingIndex",
     "SpreadingActivationRetriever",
