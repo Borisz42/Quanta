@@ -482,7 +482,7 @@ class MockKevEngine:
         elif has_deduction_keyword:
             epistemic = EpistemicSource.DEDUCTION.value
             epistemic_p = 0.96
-        elif any(w in ctx for w in ["reported", "said", "stated", "according to", "cited", "claimed", "testified", "delivery will arrive"]):
+        elif any(w in ctx for w in ["reported", "said", "stated", "according to", "cited", "claimed", "testified", "allegedly", "alleged", "delivery will arrive"]):
             epistemic = EpistemicSource.HEARSAY.value
             epistemic_p = 0.95
         elif is_hedged:
@@ -638,6 +638,7 @@ class KevDecisionEngine:
         max_retries: int = 2,
         fallback_to_mock: bool = True,
         concurrency_limit: int = 16,
+        use_gating: bool = False,
     ):
         raw_url = (
             base_url
@@ -661,6 +662,8 @@ class KevDecisionEngine:
         self.max_retries = max_retries
         self.fallback_to_mock = fallback_to_mock
         self.concurrency_limit = concurrency_limit
+        self.use_gating = use_gating or (mode == "tiered")
+        self._gater = None
 
         self.session = requests.Session()
         from requests.adapters import HTTPAdapter
@@ -674,6 +677,17 @@ class KevDecisionEngine:
         self._last_health_check_time: float = 0.0
         self._health_check_interval: float = 5.0
         self._completion_endpoint: Optional[str] = None
+
+    @property
+    def gater(self):
+        """Lazy access to KevAmbiguityGater."""
+        if self._gater is None:
+            try:
+                from models.kev_gating import KevAmbiguityGater
+            except ImportError:
+                from src.models.kev_gating import KevAmbiguityGater
+            self._gater = KevAmbiguityGater()
+        return self._gater
 
     @property
     def vram_overhead_mb(self) -> float:
@@ -1004,6 +1018,69 @@ class KevDecisionEngine:
 
         return results
 
+    def score_valency_candidates(
+        self,
+        candidates: Sequence[Tuple[Any, Any]],
+        text: str,
+    ) -> List[ValencyScoringResult]:
+        """Score a specific list of ambiguous (entity, event) candidate pairs."""
+        if not candidates:
+            return []
+
+        clean_text = text.strip()
+        target_labels = [r.value for r in ValencyRole]
+        target_letters = [OPTION_LETTERS[i] for i in range(len(target_labels))]
+        is_direct = self.mode in ("regular_kev_lora", "direct_label_lora")
+
+        eval_tasks: List[Tuple[str, str, str, str, str]] = []
+        for ent, ev in candidates:
+            ent_id, ent_txt = _extract_entity_info(ent)
+            ev_id, pred = _extract_event_info(ev)
+            if is_direct:
+                prompt = f"Context: {clean_text}\nRole of '{ent_txt}' in '{pred}': "
+            else:
+                prompt = (
+                    f"Context: {clean_text}\n\n"
+                    f"What is the semantic role of '{ent_txt}' in event '{pred}'?\n"
+                    f"(A) AGENT (actor, initiator, performer)\n"
+                    f"(B) PATIENT (target, entity acted upon, recipient)\n"
+                    f"(C) INSTRUMENT (tool, device, medium used)\n"
+                    f"(D) NONE (no direct core thematic role)\n\n"
+                    f"Choice: ["
+                )
+            eval_tasks.append((ev_id, pred, ent_id, ent_txt, prompt))
+
+        def _eval_one(task: Tuple[str, str, str, str, str]) -> ValencyScoringResult:
+            ev_id, pred, ent_id, ent_txt, prompt = task
+            target_tokens = target_labels if is_direct else target_letters
+            logprobs, _ = self._query_completion_logprobs(prompt, target_tokens)
+            if not logprobs and self.fallback_to_mock:
+                role, conf, probs, raw_lps = self._mock.score_valency(ent_txt, pred, clean_text)
+            elif is_direct:
+                role, conf, probs = _normalize_logprobs_to_probs(logprobs, target_labels)
+                raw_lps = logprobs
+            else:
+                role, conf, probs, raw_lps = _normalize_option_logprobs_to_probs(logprobs, target_labels)
+            return ValencyScoringResult(
+                entity_id=ent_id,
+                event_id=ev_id,
+                entity_text=ent_txt,
+                predicate=pred,
+                role=role,
+                confidence=conf,
+                probabilities=probs,
+                raw_logprobs=raw_lps,
+            )
+
+        max_w = min(self.concurrency_limit, len(eval_tasks))
+        if max_w > 1 and not (self.fallback_to_mock and not self.check_health()):
+            with ThreadPoolExecutor(max_workers=max_w) as executor:
+                results = list(executor.map(_eval_one, eval_tasks))
+        else:
+            results = [_eval_one(t) for t in eval_tasks]
+
+        return results
+
     # -----------------------------------------------------------------------
     # Pass 2: Theory of Mind Speech-Act Intent and Epistemic Source
     # -----------------------------------------------------------------------
@@ -1237,13 +1314,82 @@ class KevDecisionEngine:
         text: str,
         event_pairs: Optional[Sequence[Tuple[Any, Any]]] = None,
         parallel_passes: bool = True,
+        use_gating: Optional[bool] = None,
     ) -> KevChunkEvaluation:
-        """Execute all 3 non-autoregressive decision passes for a text chunk."""
+        """Execute non-autoregressive decision passes for a text chunk.
+        
+        If use_gating is True (or engine initialized with use_gating=True/mode='tiered'),
+        executes Tier 1 deterministic fast-path gating to resolve canonical SVO frames
+        in < 0.1 ms and only dispatches ambiguous slots to Kev-4B / mock engine.
+        """
         # Pre-check health status to avoid counting initial network handshake in prefill latency
         if self.fallback_to_mock and self._server_available is None:
             self.check_health()
 
         t_total_start = time.perf_counter()
+
+        if use_gating is None:
+            use_gating = getattr(self, "use_gating", False)
+
+        if use_gating:
+            plan = self.gater.analyze(entities, events, text, event_pairs=event_pairs)
+            if plan.is_fully_fast_path:
+                total_ms = (time.perf_counter() - t_total_start) * 1000.0
+                return KevChunkEvaluation(
+                    valencies=plan.fast_path_valencies,
+                    intent_epistemics=plan.fast_path_intents,
+                    relations=plan.fast_path_relations,
+                    pass1_latency_ms=0.0,
+                    pass2_latency_ms=0.0,
+                    pass3_latency_ms=0.0,
+                    total_latency_ms=total_ms,
+                    mode=f"{self.mode}_gated_fastpath",
+                    vram_overhead_mb=self.vram_overhead_mb,
+                )
+
+            # Evaluate only ambiguous items
+            valencies: List[ValencyScoringResult] = list(plan.fast_path_valencies)
+            t1_ms = 0.0
+            if plan.ambiguous_valency_candidates:
+                t1_0 = time.perf_counter()
+                scored_val = self.score_valency_candidates(plan.ambiguous_valency_candidates, text)
+                valencies.extend(scored_val)
+                t1_ms = (time.perf_counter() - t1_0) * 1000.0
+
+            intent_epistemics: List[IntentEpistemicResult] = list(plan.fast_path_intents)
+            t2_ms = 0.0
+            if plan.ambiguous_events:
+                t2_0 = time.perf_counter()
+                scored_int = self.score_intent_and_epistemics(plan.ambiguous_events, text)
+                intent_epistemics.extend(scored_int)
+                t2_ms = (time.perf_counter() - t2_0) * 1000.0
+
+            relations: List[RelationScoringResult] = list(plan.fast_path_relations)
+            t3_ms = 0.0
+            if plan.candidate_relation_pairs:
+                t3_0 = time.perf_counter()
+                scored_rel = self.score_allen_and_pearl_relations(plan.candidate_relation_pairs, text)
+                relations.extend(scored_rel)
+                t3_ms = (time.perf_counter() - t3_0) * 1000.0
+
+            # Deterministic ordering matching entity and event definitions
+            ent_order = {_extract_entity_info(e)[0]: i for i, e in enumerate(entities)}
+            ev_order = {_extract_event_info(ev)[0]: i for i, ev in enumerate(events)}
+            valencies.sort(key=lambda v: (ev_order.get(v.event_id, 999), ent_order.get(v.entity_id, 999)))
+            intent_epistemics.sort(key=lambda ie: ev_order.get(ie.event_id, 999))
+
+            total_ms = (time.perf_counter() - t_total_start) * 1000.0
+            return KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=intent_epistemics,
+                relations=relations,
+                pass1_latency_ms=t1_ms,
+                pass2_latency_ms=t2_ms,
+                pass3_latency_ms=t3_ms,
+                total_latency_ms=total_ms,
+                mode=f"{self.mode}_gated",
+                vram_overhead_mb=self.vram_overhead_mb,
+            )
 
         # Pass 3: automatically generate adjacent event pairs if not supplied
         if event_pairs is None:

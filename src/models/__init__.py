@@ -13,11 +13,17 @@ from models.kev_engine import (
     ValencyRole,
     ValencyScoringResult,
 )
+from models.kev_gating import (
+    GatedDecisionPlan,
+    KevAmbiguityGater,
+)
 
 __all__ = [
     "AllenTemporalRelation",
     "EpistemicSource",
+    "GatedDecisionPlan",
     "IntentEpistemicResult",
+    "KevAmbiguityGater",
     "KevChunkEvaluation",
     "KevDecisionEngine",
     "MockKevEngine",
