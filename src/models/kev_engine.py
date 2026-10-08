@@ -82,6 +82,92 @@ class PearlCausalLink(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Dictionaries for Joint Multi-Slot Decision Normalization (Session 2)
+# ---------------------------------------------------------------------------
+
+JOINT_INTENT_MAP: Dict[str, str] = {
+    "INFORMATIVE": SpeechActIntent.INFORMATIVE.value,
+    "INFO": SpeechActIntent.INFORMATIVE.value,
+    "I": SpeechActIntent.INFORMATIVE.value,
+    "DIRECTIVE": SpeechActIntent.DIRECTIVE.value,
+    "DIR": SpeechActIntent.DIRECTIVE.value,
+    "D": SpeechActIntent.DIRECTIVE.value,
+    "COMMISSIVE": SpeechActIntent.COMMISSIVE.value,
+    "COMM": SpeechActIntent.COMMISSIVE.value,
+    "C": SpeechActIntent.COMMISSIVE.value,
+    "EXPRESSIVE": SpeechActIntent.EXPRESSIVE.value,
+    "EXPR": SpeechActIntent.EXPRESSIVE.value,
+    "E": SpeechActIntent.EXPRESSIVE.value,
+}
+
+JOINT_EPISTEMIC_MAP: Dict[str, str] = {
+    "DIRECT_OBSERVATION": EpistemicSource.DIRECT_OBSERVATION.value,
+    "DIRECT_OBS": EpistemicSource.DIRECT_OBSERVATION.value,
+    "OBSERVATION": EpistemicSource.DIRECT_OBSERVATION.value,
+    "OBS": EpistemicSource.DIRECT_OBSERVATION.value,
+    "O": EpistemicSource.DIRECT_OBSERVATION.value,
+    "DEDUCTION": EpistemicSource.DEDUCTION.value,
+    "DEDUC": EpistemicSource.DEDUCTION.value,
+    "DED": EpistemicSource.DEDUCTION.value,
+    "D": EpistemicSource.DEDUCTION.value,
+    "HEARSAY": EpistemicSource.HEARSAY.value,
+    "HEAR": EpistemicSource.HEARSAY.value,
+    "H": EpistemicSource.HEARSAY.value,
+    "CONJECTURE": EpistemicSource.CONJECTURE.value,
+    "CONJ": EpistemicSource.CONJECTURE.value,
+    "C": EpistemicSource.CONJECTURE.value,
+}
+
+JOINT_VALENCY_MAP: Dict[str, str] = {
+    "AGENT": ValencyRole.AGENT.value,
+    "AGNT": ValencyRole.AGENT.value,
+    "A": ValencyRole.AGENT.value,
+    "PATIENT": ValencyRole.PATIENT.value,
+    "PAT": ValencyRole.PATIENT.value,
+    "P": ValencyRole.PATIENT.value,
+    "INSTRUMENT": ValencyRole.INSTRUMENT.value,
+    "INST": ValencyRole.INSTRUMENT.value,
+    "I": ValencyRole.INSTRUMENT.value,
+    "NONE": ValencyRole.NONE.value,
+    "NON": ValencyRole.NONE.value,
+    "N": ValencyRole.NONE.value,
+}
+
+JOINT_ALLEN_MAP: Dict[str, str] = {
+    "BEFORE": AllenTemporalRelation.BEFORE.value,
+    "BEF": AllenTemporalRelation.BEFORE.value,
+    "B": AllenTemporalRelation.BEFORE.value,
+    "MEETS": AllenTemporalRelation.MEETS.value,
+    "MEET": AllenTemporalRelation.MEETS.value,
+    "M": AllenTemporalRelation.MEETS.value,
+    "OVERLAPS": AllenTemporalRelation.OVERLAPS.value,
+    "OVER": AllenTemporalRelation.OVERLAPS.value,
+    "O": AllenTemporalRelation.OVERLAPS.value,
+    "DURING": AllenTemporalRelation.DURING.value,
+    "DUR": AllenTemporalRelation.DURING.value,
+    "D": AllenTemporalRelation.DURING.value,
+    "NONE": AllenTemporalRelation.NONE.value,
+    "NON": AllenTemporalRelation.NONE.value,
+    "N": AllenTemporalRelation.NONE.value,
+}
+
+JOINT_PEARL_MAP: Dict[str, str] = {
+    "MECHANISM_LINK": PearlCausalLink.MECHANISM_LINK.value,
+    "MECHANISM": PearlCausalLink.MECHANISM_LINK.value,
+    "MECH": PearlCausalLink.MECHANISM_LINK.value,
+    "M": PearlCausalLink.MECHANISM_LINK.value,
+    "ENABLING_CONDITION": PearlCausalLink.ENABLING_CONDITION.value,
+    "CONDITION": PearlCausalLink.ENABLING_CONDITION.value,
+    "COND": PearlCausalLink.ENABLING_CONDITION.value,
+    "ENAB": PearlCausalLink.ENABLING_CONDITION.value,
+    "C": PearlCausalLink.ENABLING_CONDITION.value,
+    "NONE": PearlCausalLink.NONE.value,
+    "NON": PearlCausalLink.NONE.value,
+    "N": PearlCausalLink.NONE.value,
+}
+
+
+# ---------------------------------------------------------------------------
 # Output Schemas for Kev-4B Decision Passes
 # ---------------------------------------------------------------------------
 
@@ -553,7 +639,7 @@ class MockKevEngine:
         elif has_as_overlap:
             allen = AllenTemporalRelation.OVERLAPS.value if "as " in ctx else AllenTemporalRelation.DURING.value
             allen_p = 0.97
-        elif any(w in ctx for w in ["ignited", "melted", "lowered", "cleaning", "obtaining", "cooling", "ate lunch", "morning bell", "then", "later", "before"]):
+        elif any(w in ctx for w in ["ignited", "melted", "lowered", "cleaning", "obtaining", "cooling", "ate lunch", "morning bell", "then", "later", "before", "causing", "caused", "causes"]):
             allen = AllenTemporalRelation.BEFORE.value
             allen_p = 0.96
         else:
@@ -561,7 +647,7 @@ class MockKevEngine:
             allen_p = 0.92
 
         # Pearl Causal
-        if any(w in ctx for w in ["ignited", "exploded", "melted", "caused", "lowered the activation", "barrier, leading to", "cracked", "breached", "ruptured"]):
+        if any(w in ctx for w in ["ignited", "exploded", "melted", "caused", "causing", "causes", "lowered the activation", "barrier, leading to", "cracked", "breached", "ruptured"]):
             pearl = PearlCausalLink.MECHANISM_LINK.value
             pearl_p = 0.97 if self.mode in ("regular_kev_lora", "lora_adapter", "joint_multi_slot_lora") else 0.95
         elif any(w in ctx for w in ["allowed", "enabled", "permitted", "prerequisite", "required for", "commence", "cleaning the substrate", "obtaining the regulatory", "cooling the superconductor"]):
@@ -610,6 +696,32 @@ class MockKevEngine:
             logprobs[f" {k}"] = logp
 
         return allen, allen_p, allen_probs, pearl, pearl_p, pearl_probs, logprobs
+
+    def generate_joint_decisions(self, plan: Any, text: str) -> str:
+        """Generate structured joint multi-slot decisions for ambiguous slots in plan."""
+        lines = []
+
+        # 1. Ambiguous events
+        for ev in getattr(plan, "ambiguous_events", []):
+            ev_id, pred = _extract_event_info(ev)
+            intent, _, _, epist, _, _, _ = self.score_intent_and_epistemics(pred, text)
+            lines.append(f"EV_{ev_id}: [intent={intent}, epist={epist}]")
+
+        # 2. Ambiguous valencies
+        for ent, ev in getattr(plan, "ambiguous_valency_candidates", []):
+            ent_id, ent_txt = _extract_entity_info(ent)
+            ev_id, pred = _extract_event_info(ev)
+            role, _, _, _ = self.score_valency(ent_txt, pred, text)
+            lines.append(f"VAL_{ent_id}_{ev_id}: [role={role}]")
+
+        # 3. Candidate relations
+        for ev1, ev2 in getattr(plan, "candidate_relation_pairs", []):
+            ev1_id, p1 = _extract_event_info(ev1)
+            ev2_id, p2 = _extract_event_info(ev2)
+            allen, _, _, pearl, _, _, _ = self.score_relations(p1, p2, text)
+            lines.append(f"REL_{ev1_id}_{ev2_id}: [allen={allen}, pearl={pearl}]")
+
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -662,7 +774,8 @@ class KevDecisionEngine:
         self.max_retries = max_retries
         self.fallback_to_mock = fallback_to_mock
         self.concurrency_limit = concurrency_limit
-        self.use_gating = use_gating or (mode == "tiered")
+        self.use_gating = use_gating or (mode in ("tiered", "joint_multi_slot", "joint_multi_slot_lora"))
+        self.use_joint = mode in ("tiered", "joint_multi_slot", "joint_multi_slot_lora")
         self._gater = None
 
         self.session = requests.Session()
@@ -877,6 +990,90 @@ class KevDecisionEngine:
             res[content] = 0.0
 
         return res
+
+    def _query_completion_text(
+        self,
+        prompt: str,
+        max_tokens: int = 50,
+        mock_fallback_generator: Optional[Callable[[], str]] = None,
+    ) -> Tuple[str, float]:
+        """Submit text generation prompt to llama-server /completion or /v1/completions."""
+        # Fast path if server is known to be offline and fallback is enabled
+        if self.fallback_to_mock and not self.check_health():
+            self._last_fallback_used = True
+            text_result = mock_fallback_generator() if mock_fallback_generator else ""
+            return text_result, 0.05
+
+        if self._completion_endpoint is None:
+            try:
+                r_native = self.session.post(
+                    f"{self.server_base}/completion",
+                    json={"prompt": "ping", "n_predict": 1},
+                    timeout=1.0,
+                )
+                if r_native.status_code == 200:
+                    self._completion_endpoint = f"{self.server_base}/completion"
+            except Exception:
+                pass
+            if self._completion_endpoint is None:
+                self._completion_endpoint = f"{self.server_base}/v1/completions"
+
+        is_openai = "/v1/" in self._completion_endpoint
+
+        if is_openai:
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": 0.0,
+                "stop": ["\n\n\n", "Context:", "Task:"],
+            }
+        else:
+            payload = {
+                "prompt": prompt,
+                "n_predict": max_tokens,
+                "temperature": 0.0,
+                "cache_prompt": True,
+                "stop": ["\n\n\n", "Context:", "Task:"],
+            }
+
+        if self.mode in ("lora_adapter", "regular_kev_lora", "joint_multi_slot_lora") and self.lora_adapter_id:
+            payload["lora"] = [{"id": self.lora_adapter_id, "scale": 1.0}]
+
+        url = self._completion_endpoint
+        last_err: Optional[Exception] = None
+        t0 = time.perf_counter()
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                resp = self.session.post(url, json=payload, timeout=self.timeout)
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = ""
+                    if "content" in data:
+                        content = data["content"]
+                    elif "choices" in data and len(data["choices"]) > 0:
+                        content = data["choices"][0].get("text", "")
+                    return content, latency_ms
+                else:
+                    last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
+                    if resp.status_code in (400, 404):
+                        break
+            except Exception as e:
+                last_err = e
+            if attempt < self.max_retries:
+                time.sleep(0.05 * attempt)
+
+        # Mark server as offline on persistent failures
+        self._server_available = False
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        if self.fallback_to_mock:
+            self._last_fallback_used = True
+            logger.debug("llama-server unreachable (%s); using mock completion", last_err)
+            text_result = mock_fallback_generator() if mock_fallback_generator else ""
+            return text_result, latency_ms
+        raise RuntimeError(f"Failed to query llama-server completion at {url}: {last_err}") from last_err
 
     # -----------------------------------------------------------------------
     # -----------------------------------------------------------------------
@@ -1304,6 +1501,384 @@ class KevDecisionEngine:
         return results3
 
     # -----------------------------------------------------------------------
+    # Session 2: Joint Consolidated Multi-Slot Decision Transducer
+    # -----------------------------------------------------------------------
+
+    def _format_joint_prompt(self, plan: Any, text: str) -> Tuple[str, int]:
+        """Format a single consolidated multi-slot completion prompt for all ambiguous slots."""
+        slot_lines: List[str] = []
+
+        # 1. Ambiguous events (Speech-Act Intent & Epistemic Source)
+        for ev in getattr(plan, "ambiguous_events", []):
+            ev_id, pred = _extract_event_info(ev)
+            slot_lines.append(f"EV_{ev_id}: {pred} -> [intent=?, epist=?]")
+
+        # 2. Ambiguous valency candidates (Thematic Valency Role)
+        for ent, ev in getattr(plan, "ambiguous_valency_candidates", []):
+            ent_id, ent_txt = _extract_entity_info(ent)
+            ev_id, pred = _extract_event_info(ev)
+            slot_lines.append(f"VAL_{ent_id}_{ev_id}: {ent_txt} in {pred} -> [role=?]")
+
+        # 3. Candidate relation pairs (Allen Temporal & Pearl Causal Links)
+        for ev1, ev2 in getattr(plan, "candidate_relation_pairs", []):
+            ev1_id, p1 = _extract_event_info(ev1)
+            ev2_id, p2 = _extract_event_info(ev2)
+            slot_lines.append(f"REL_{ev1_id}_{ev2_id}: {p1} -> {p2} -> [allen=?, pearl=?]")
+
+        slots_text = "\n".join(slot_lines)
+        prompt = (
+            "Task: Classify ambiguous linguistic slots for the given context.\n"
+            "Labels:\n"
+            "- role: AGENT, PATIENT, INSTRUMENT, NONE\n"
+            "- intent: INFORMATIVE, DIRECTIVE, COMMISSIVE, EXPRESSIVE\n"
+            "- epist: DIRECT_OBSERVATION, DEDUCTION, HEARSAY, CONJECTURE\n"
+            "- allen: BEFORE, MEETS, OVERLAPS, DURING, NONE\n"
+            "- pearl: MECHANISM_LINK, ENABLING_CONDITION, NONE\n\n"
+            f"Context: {text.strip()}\n\n"
+            "Properties to classify:\n"
+            f"{slots_text}\n\n"
+            "Decisions:\n"
+        )
+        return prompt, len(slot_lines)
+
+    def _parse_joint_decisions(
+        self,
+        completion_text: str,
+        plan: Any,
+        text: str,
+    ) -> Tuple[List[ValencyScoringResult], List[IntentEpistemicResult], List[RelationScoringResult]]:
+        """Parse structured joint completion text with regex and atomic letter fallback normalizer."""
+        is_lora = self.mode in ("lora_adapter", "regular_kev_lora", "joint_multi_slot_lora")
+        default_conf = 0.98 if is_lora else 0.95
+
+        resolved_valencies: List[ValencyScoringResult] = []
+        resolved_intents: List[IntentEpistemicResult] = []
+        resolved_relations: List[RelationScoringResult] = []
+
+        # -------------------------------------------------------------------
+        # 1. Ambiguous Events (Speech-Act Intent & Epistemic Source)
+        # -------------------------------------------------------------------
+        for ev in getattr(plan, "ambiguous_events", []):
+            ev_id, pred = _extract_event_info(ev)
+            m_line = re.search(rf"(?:EV_|EV)?\b{re.escape(ev_id)}\b[:\s\-]+(.*?)(?=\n|$)", completion_text, re.IGNORECASE)
+            snippet = m_line.group(1) if m_line else completion_text
+
+            # Parse Intent
+            intent_val = None
+            m_intent = re.search(r"intent\s*[:=]\s*([A-Za-z_]+)", snippet, re.IGNORECASE)
+            if m_intent:
+                intent_val = JOINT_INTENT_MAP.get(m_intent.group(1).upper())
+            if not intent_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_INTENT_MAP and len(tok_u) > 1:
+                        intent_val = JOINT_INTENT_MAP[tok_u]
+                        break
+            if not intent_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_INTENT_MAP:
+                        intent_val = JOINT_INTENT_MAP[tok_u]
+                        break
+            if not intent_val:
+                intent_val, _, _, _, _, _, _ = self._mock.score_intent_and_epistemics(pred, text)
+
+            # Parse Epistemic Source
+            epist_val = None
+            m_epist = re.search(r"epist(?:emic)?\s*[:=]\s*([A-Za-z_]+)", snippet, re.IGNORECASE)
+            if m_epist:
+                epist_val = JOINT_EPISTEMIC_MAP.get(m_epist.group(1).upper())
+            if not epist_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_EPISTEMIC_MAP and len(tok_u) > 1:
+                        epist_val = JOINT_EPISTEMIC_MAP[tok_u]
+                        break
+            if not epist_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_EPISTEMIC_MAP:
+                        epist_val = JOINT_EPISTEMIC_MAP[tok_u]
+                        break
+            if not epist_val:
+                _, _, _, epist_val, _, _, _ = self._mock.score_intent_and_epistemics(pred, text)
+
+            int_conf = default_conf
+            rem_i = (1.0 - int_conf) / (len(SpeechActIntent) - 1)
+            i_probs = {i.value: rem_i for i in SpeechActIntent}
+            i_probs[intent_val] = int_conf
+
+            epi_conf = default_conf
+            rem_e = (1.0 - epi_conf) / (len(EpistemicSource) - 1)
+            e_probs = {e.value: rem_e for e in EpistemicSource}
+            e_probs[epist_val] = epi_conf
+
+            raw_lp: Dict[str, float] = {}
+            for k, v in i_probs.items():
+                raw_lp[f"INTENT_{k}"] = math.log(max(1e-5, v))
+            for k, v in e_probs.items():
+                raw_lp[f"EPIST_{k}"] = math.log(max(1e-5, v))
+
+            resolved_intents.append(
+                IntentEpistemicResult(
+                    event_id=ev_id,
+                    predicate=pred,
+                    intent=intent_val,
+                    intent_confidence=int_conf,
+                    intent_probabilities=i_probs,
+                    epistemic_source=epist_val,
+                    epistemic_confidence=epi_conf,
+                    epistemic_probabilities=e_probs,
+                    raw_logprobs=raw_lp,
+                )
+            )
+
+        # -------------------------------------------------------------------
+        # 2. Ambiguous Valency Candidates (Thematic Valency Role)
+        # -------------------------------------------------------------------
+        for ent, ev in getattr(plan, "ambiguous_valency_candidates", []):
+            ent_id, ent_txt = _extract_entity_info(ent)
+            ev_id, pred = _extract_event_info(ev)
+
+            tag = f"VAL_{ent_id}_{ev_id}"
+            m_line = re.search(rf"(?:{re.escape(tag)}|{re.escape(ent_id)}[/\s]+{re.escape(ev_id)}|{re.escape(ent_id)})[:\s\-]+(.*?)(?=\n|$)", completion_text, re.IGNORECASE)
+            snippet = m_line.group(1) if m_line else completion_text
+
+            role_val = None
+            m_role = re.search(r"role\s*[:=]\s*([A-Za-z_]+)", snippet, re.IGNORECASE)
+            if m_role:
+                role_val = JOINT_VALENCY_MAP.get(m_role.group(1).upper())
+            if not role_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_VALENCY_MAP and len(tok_u) > 1:
+                        role_val = JOINT_VALENCY_MAP[tok_u]
+                        break
+            if not role_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_VALENCY_MAP:
+                        role_val = JOINT_VALENCY_MAP[tok_u]
+                        break
+            if not role_val:
+                role_val, _, _, _ = self._mock.score_valency(ent_txt, pred, text)
+
+            val_conf = default_conf
+            rem_v = (1.0 - val_conf) / (len(ValencyRole) - 1)
+            v_probs = {r.value: rem_v for r in ValencyRole}
+            v_probs[role_val] = val_conf
+
+            raw_lp = {r: math.log(max(1e-5, p)) for r, p in v_probs.items()}
+
+            resolved_valencies.append(
+                ValencyScoringResult(
+                    entity_id=ent_id,
+                    event_id=ev_id,
+                    entity_text=ent_txt,
+                    predicate=pred,
+                    role=role_val,
+                    confidence=val_conf,
+                    probabilities=v_probs,
+                    raw_logprobs=raw_lp,
+                )
+            )
+
+        # -------------------------------------------------------------------
+        # 3. Candidate Relation Pairs (Allen Temporal & Pearl Causal Links)
+        # -------------------------------------------------------------------
+        for ev1, ev2 in getattr(plan, "candidate_relation_pairs", []):
+            ev1_id, p1 = _extract_event_info(ev1)
+            ev2_id, p2 = _extract_event_info(ev2)
+
+            tag = f"REL_{ev1_id}_{ev2_id}"
+            m_line = re.search(rf"(?:{re.escape(tag)}|{re.escape(ev1_id)}[->\s]+{re.escape(ev2_id)})[:\s\-]+(.*?)(?=\n|$)", completion_text, re.IGNORECASE)
+            snippet = m_line.group(1) if m_line else completion_text
+
+            allen_val = None
+            m_allen = re.search(r"allen\s*[:=]\s*([A-Za-z_]+)", snippet, re.IGNORECASE)
+            if m_allen:
+                allen_val = JOINT_ALLEN_MAP.get(m_allen.group(1).upper())
+            if not allen_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_ALLEN_MAP and len(tok_u) > 1:
+                        allen_val = JOINT_ALLEN_MAP[tok_u]
+                        break
+            if not allen_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_ALLEN_MAP:
+                        allen_val = JOINT_ALLEN_MAP[tok_u]
+                        break
+            if not allen_val:
+                allen_val, _, _, _, _, _, _ = self._mock.score_relations(p1, p2, text)
+
+            pearl_val = None
+            m_pearl = re.search(r"pearl\s*[:=]\s*([A-Za-z_]+)", snippet, re.IGNORECASE)
+            if m_pearl:
+                pearl_val = JOINT_PEARL_MAP.get(m_pearl.group(1).upper())
+            if not pearl_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_PEARL_MAP and len(tok_u) > 1:
+                        pearl_val = JOINT_PEARL_MAP[tok_u]
+                        break
+            if not pearl_val:
+                for tok in re.findall(r"\b[A-Za-z_]+\b", snippet):
+                    tok_u = tok.upper()
+                    if tok_u in JOINT_PEARL_MAP:
+                        pearl_val = JOINT_PEARL_MAP[tok_u]
+                        break
+            if not pearl_val:
+                _, _, _, pearl_val, _, _, _ = self._mock.score_relations(p1, p2, text)
+
+            allen_conf = default_conf
+            rem_a = (1.0 - allen_conf) / (len(AllenTemporalRelation) - 1)
+            a_probs = {a.value: rem_a for a in AllenTemporalRelation}
+            a_probs[allen_val] = allen_conf
+
+            pearl_conf = default_conf
+            rem_p = (1.0 - pearl_conf) / (len(PearlCausalLink) - 1)
+            p_probs = {p.value: rem_p for p in PearlCausalLink}
+            p_probs[pearl_val] = pearl_conf
+
+            raw_lp = {}
+            for k, v in a_probs.items():
+                raw_lp[f"ALLEN_{k}"] = math.log(max(1e-5, v))
+            for k, v in p_probs.items():
+                raw_lp[f"PEARL_{k}"] = math.log(max(1e-5, v))
+
+            resolved_relations.append(
+                RelationScoringResult(
+                    source_event_id=ev1_id,
+                    target_event_id=ev2_id,
+                    source_predicate=p1,
+                    target_predicate=p2,
+                    allen_relation=allen_val,
+                    allen_confidence=allen_conf,
+                    allen_probabilities=a_probs,
+                    pearl_relation=pearl_val,
+                    pearl_confidence=pearl_conf,
+                    pearl_probabilities=p_probs,
+                    raw_logprobs=raw_lp,
+                )
+            )
+
+        return resolved_valencies, resolved_intents, resolved_relations
+
+    def evaluate_joint_decision(
+        self,
+        ambiguous_plan: Union[Any, Sequence[Any]],
+        text: str,
+        events: Optional[Sequence[Any]] = None,
+        event_pairs: Optional[Sequence[Tuple[Any, Any]]] = None,
+    ) -> KevChunkEvaluation:
+        """Evaluate all ambiguous slots in a chunk via a single consolidated multi-slot completion pass.
+        
+        Replaces 25 serialized single-token logprob queries with a single forward pass (< 800 ms).
+        """
+        t_total_start = time.perf_counter()
+
+        # 1. Normalize ambiguous_plan to GatedDecisionPlan
+        try:
+            from models.kev_gating import GatedDecisionPlan
+        except ImportError:
+            from src.models.kev_gating import GatedDecisionPlan
+
+        if isinstance(ambiguous_plan, GatedDecisionPlan):
+            plan = ambiguous_plan
+        else:
+            plan = self.gater.analyze(
+                entities=ambiguous_plan,
+                events=events or [],
+                text=text,
+                event_pairs=event_pairs,
+            )
+
+        # Fast-path check: if no ambiguous items exist, return immediately (< 0.1 ms)
+        if plan.is_fully_fast_path:
+            total_ms = (time.perf_counter() - t_total_start) * 1000.0
+            return KevChunkEvaluation(
+                valencies=plan.fast_path_valencies,
+                intent_epistemics=plan.fast_path_intents,
+                relations=plan.fast_path_relations,
+                pass1_latency_ms=0.0,
+                pass2_latency_ms=0.0,
+                pass3_latency_ms=0.0,
+                total_latency_ms=total_ms,
+                mode=f"{self.mode}_gated_fastpath",
+                vram_overhead_mb=self.vram_overhead_mb,
+            )
+
+        # 2. Build consolidated multi-slot prompt
+        prompt, slot_count = self._format_joint_prompt(plan, text)
+        max_tokens = max(35, min(150, slot_count * 25))
+
+        # 3. Query completion text in a single roundtrip
+        raw_completion, net_latency_ms = self._query_completion_text(
+            prompt=prompt,
+            max_tokens=max_tokens,
+            mock_fallback_generator=lambda: self._mock.generate_joint_decisions(plan, text),
+        )
+
+        # 4. Parse structured decisions
+        resolved_valencies, resolved_intents, resolved_relations = self._parse_joint_decisions(
+            completion_text=raw_completion,
+            plan=plan,
+            text=text,
+        )
+
+        # 5. Merge fast-path results with resolved ambiguous items
+        valencies = list(plan.fast_path_valencies) + resolved_valencies
+        intent_epistemics = list(plan.fast_path_intents) + resolved_intents
+        relations = list(plan.fast_path_relations) + resolved_relations
+
+        # 6. Deterministic ordering matching entity and event definitions
+        ent_order: Dict[str, int] = {}
+        if not isinstance(ambiguous_plan, GatedDecisionPlan) and ambiguous_plan:
+            for idx, e in enumerate(ambiguous_plan):
+                eid, _ = _extract_entity_info(e)
+                if eid not in ent_order:
+                    ent_order[eid] = idx
+        else:
+            for item in valencies:
+                if item.entity_id not in ent_order:
+                    ent_order[item.entity_id] = len(ent_order)
+
+        ev_order: Dict[str, int] = {}
+        if events:
+            for idx, ev in enumerate(events):
+                eid, _ = _extract_event_info(ev)
+                if eid not in ev_order:
+                    ev_order[eid] = idx
+        else:
+            for item in intent_epistemics:
+                if item.event_id not in ev_order:
+                    ev_order[item.event_id] = len(ev_order)
+
+        valencies.sort(key=lambda v: (ev_order.get(v.event_id, 999), ent_order.get(v.entity_id, 999)))
+        intent_epistemics.sort(key=lambda ie: ev_order.get(ie.event_id, 999))
+
+        total_ms = (time.perf_counter() - t_total_start) * 1000.0
+
+        num_val = len(resolved_valencies)
+        num_int = len(resolved_intents)
+        num_rel = len(resolved_relations)
+        tot_resolved = max(1, num_val + num_int + num_rel)
+
+        return KevChunkEvaluation(
+            valencies=valencies,
+            intent_epistemics=intent_epistemics,
+            relations=relations,
+            pass1_latency_ms=net_latency_ms * (num_val / tot_resolved),
+            pass2_latency_ms=net_latency_ms * (num_int / tot_resolved),
+            pass3_latency_ms=net_latency_ms * (num_rel / tot_resolved),
+            total_latency_ms=total_ms,
+            mode=f"{self.mode}_joint",
+            vram_overhead_mb=self.vram_overhead_mb,
+        )
+
+    # -----------------------------------------------------------------------
     # End-to-End Evaluation Across All 3 Passes
     # -----------------------------------------------------------------------
 
@@ -1346,6 +1921,10 @@ class KevDecisionEngine:
                     mode=f"{self.mode}_gated_fastpath",
                     vram_overhead_mb=self.vram_overhead_mb,
                 )
+
+            # Session 2: Tier 2 Joint Multi-Slot Decision Transducer
+            if self.mode in ("tiered", "joint_multi_slot", "joint_multi_slot_lora") or getattr(self, "use_joint", False):
+                return self.evaluate_joint_decision(plan, text, events=events, event_pairs=event_pairs)
 
             # Evaluate only ambiguous items
             valencies: List[ValencyScoringResult] = list(plan.fast_path_valencies)
