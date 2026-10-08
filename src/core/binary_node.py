@@ -11,6 +11,7 @@ import ctypes
 from enum import IntEnum
 import os
 from pathlib import Path
+import threading
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
@@ -393,67 +394,74 @@ class BinaryNodeTable:
             self._buffer = bytearray(initial_capacity * QuantaSemanticNodeStruct.NODE_SIZE)
             self._is_mmap = False
 
+        self._lock = threading.RLock()
         self.cid_to_node_id: Dict[str, int] = {}
         self.node_id_to_cid: Dict[int, str] = {}
         self.passage_id_map: Dict[str, int] = {}
 
     def register_node_cid(self, node_id: int, cid: str):
         """Associates a 32-bit integer node_id with its 256-bit BLAKE3 CID."""
-        self.cid_to_node_id[cid] = int(node_id)
-        self.node_id_to_cid[int(node_id)] = cid
+        with self._lock:
+            self.cid_to_node_id[cid] = int(node_id)
+            self.node_id_to_cid[int(node_id)] = cid
 
     def get_cid(self, node_id: int) -> Optional[str]:
         """Resolves CID from node_id."""
-        return self.node_id_to_cid.get(int(node_id))
+        with self._lock:
+            return self.node_id_to_cid.get(int(node_id))
 
     def get_node_id(self, cid: str) -> Optional[int]:
         """Resolves node_id from CID."""
-        return self.cid_to_node_id.get(cid)
+        with self._lock:
+            return self.cid_to_node_id.get(cid)
 
     def __len__(self) -> int:
         """Returns the number of 128-byte node structs in the table."""
-        if self._is_mmap:
-            return len(self._buffer)
-        return len(self._buffer) // QuantaSemanticNodeStruct.NODE_SIZE
+        with self._lock:
+            if self._is_mmap:
+                return len(self._buffer)
+            return len(self._buffer) // QuantaSemanticNodeStruct.NODE_SIZE
 
     def __getitem__(self, index: Union[int, slice]) -> Union[QuantaSemanticNodeStruct, List[QuantaSemanticNodeStruct]]:
         """O(1) random access to a 128-byte node struct."""
-        n = len(self)
-        if isinstance(index, slice):
-            indices = range(*index.indices(n))
-            return [self[i] for i in indices]
+        with self._lock:
+            n = len(self)
+            if isinstance(index, slice):
+                indices = range(*index.indices(n))
+                return [self[i] for i in indices]
 
-        idx = int(index)
-        if idx < 0:
-            idx += n
-        if idx < 0 or idx >= n:
-            raise IndexError(f"BinaryNodeTable index {index} out of bounds for size {n}")
+            idx = int(index)
+            if idx < 0:
+                idx += n
+            if idx < 0 or idx >= n:
+                raise IndexError(f"BinaryNodeTable index {index} out of bounds for size {n}")
 
-        offset = idx * QuantaSemanticNodeStruct.NODE_SIZE
-        if self._is_mmap:
-            node_bytes = self._buffer[idx].tobytes()
-            return QuantaSemanticNodeStruct.from_bytes(node_bytes)
-        return QuantaSemanticNodeStruct.from_buffer(self._buffer, offset)
+            offset = idx * QuantaSemanticNodeStruct.NODE_SIZE
+            if self._is_mmap:
+                node_bytes = self._buffer[idx].tobytes()
+                return QuantaSemanticNodeStruct.from_bytes(node_bytes)
+            return QuantaSemanticNodeStruct.from_buffer(self._buffer, offset)
 
     def __setitem__(self, index: int, node: Union[QuantaSemanticNodeStruct, bytes]):
         """O(1) in-place overwrite of a 128-byte node struct."""
-        idx = int(index)
-        n = len(self)
-        if idx < 0:
-            idx += n
-        if idx < 0 or idx >= n:
-            raise IndexError(f"BinaryNodeTable index {index} out of bounds for size {n}")
+        with self._lock:
+            idx = int(index)
+            n = len(self)
+            if idx < 0:
+                idx += n
+            if idx < 0 or idx >= n:
+                raise IndexError(f"BinaryNodeTable index {index} out of bounds for size {n}")
 
-        offset = idx * QuantaSemanticNodeStruct.NODE_SIZE
-        raw_bytes = bytes(node) if isinstance(node, QuantaSemanticNodeStruct) else bytes(node)
-        if len(raw_bytes) != QuantaSemanticNodeStruct.NODE_SIZE:
-            raise ValueError(f"Expected 128 bytes, got {len(raw_bytes)}")
+            offset = idx * QuantaSemanticNodeStruct.NODE_SIZE
+            raw_bytes = bytes(node) if isinstance(node, QuantaSemanticNodeStruct) else bytes(node)
+            if len(raw_bytes) != QuantaSemanticNodeStruct.NODE_SIZE:
+                raise ValueError(f"Expected 128 bytes, got {len(raw_bytes)}")
 
-        if self._is_mmap:
-            rec = np.frombuffer(raw_bytes, dtype=NODE_DTYPE)[0]
-            self._buffer[idx] = rec
-        else:
-            self._buffer[offset : offset + QuantaSemanticNodeStruct.NODE_SIZE] = raw_bytes
+            if self._is_mmap:
+                rec = np.frombuffer(raw_bytes, dtype=NODE_DTYPE)[0]
+                self._buffer[idx] = rec
+            else:
+                self._buffer[offset : offset + QuantaSemanticNodeStruct.NODE_SIZE] = raw_bytes
 
     def append(self, node: Union[QuantaSemanticNodeStruct, bytes, Dict[str, Any]]) -> int:
         """Appends a 128-byte node struct to the table.
@@ -476,22 +484,57 @@ class BinaryNodeTable:
         else:
             raise TypeError(f"Unsupported node type: {type(node)}")
 
-        idx = len(self)
-        self._buffer.extend(raw)
-        return idx
+        with self._lock:
+            idx = len(self)
+            self._buffer.extend(raw)
+            return idx
 
     def extend(self, nodes: Iterable[Union[QuantaSemanticNodeStruct, bytes, Dict[str, Any]]]) -> List[int]:
         """Appends multiple nodes to the table."""
-        indices = []
-        for n in nodes:
-            indices.append(self.append(n))
-        return indices
+        with self._lock:
+            indices = []
+            for n in nodes:
+                indices.append(self.append(n))
+            return indices
+
+    def update_node(
+        self,
+        node_id: int,
+        belnap_lattice: Optional[Union[int, str, BelnapValue]] = None,
+        confidence: Optional[Union[int, float]] = None,
+        intent_band5: Optional[Union[int, str, SpeechActIntent]] = None,
+        epistemic_band6: Optional[Union[int, str, EpistemicSource]] = None,
+        add_edges: Optional[Sequence[int]] = None,
+    ) -> bool:
+        """In-place atomic update of a 128-byte node struct in the table."""
+        with self._lock:
+            idx = int(node_id) - 1
+            if idx < 0 or idx >= len(self):
+                return False
+            struct = self[idx]
+            if belnap_lattice is not None:
+                struct.belnap_lattice = BelnapValue.from_str(belnap_lattice)
+            if confidence is not None:
+                if isinstance(confidence, float):
+                    struct.confidence = int(round(max(0.0, min(1.0, confidence)) * 255))
+                else:
+                    struct.confidence = int(confidence) & 0xFF
+            if intent_band5 is not None:
+                struct.intent_band5 = SpeechActIntent.from_str(intent_band5)
+            if epistemic_band6 is not None:
+                struct.epistemic_band6 = EpistemicSource.from_str(epistemic_band6)
+            if add_edges:
+                for target_id in add_edges:
+                    struct.add_edge(int(target_id))
+            self[idx] = struct
+            return True
 
     def as_numpy(self) -> np.ndarray:
         """Returns zero-copy NumPy structured array view (dtype=NODE_DTYPE)."""
-        if self._is_mmap:
-            return self._buffer
-        return np.frombuffer(self._buffer, dtype=NODE_DTYPE)
+        with self._lock:
+            if self._is_mmap:
+                return self._buffer
+            return np.frombuffer(self._buffer, dtype=NODE_DTYPE)
 
     def filter_by_passage(self, passage_id: int) -> np.ndarray:
         """Vectorized scan returning row indices matching passage_id."""

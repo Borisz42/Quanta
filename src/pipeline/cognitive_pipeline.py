@@ -94,6 +94,7 @@ from parser.skeleton_transducer import (
 )
 from verification.belnap_calibrator import BelnapLatticeMapper
 from verification.clingo_dl_gate import ClingoDLGate
+from models.kev_async_worker import AsyncKevVerificationQueue, VerificationTask
 
 logger = logging.getLogger("quanta.pipeline.cognitive")
 
@@ -269,6 +270,21 @@ class CognitivePipeline:
         # 12. Merkle Book State
         self.merkle_book = HierarchicalMerkleBook()
 
+        # 13. Asynchronous Write-Ahead Kev Verification Queue (Section 4 Master Plan)
+        self.async_kev_worker: Optional[AsyncKevVerificationQueue] = None
+        async_worker_arg = transducer_kwargs.pop("async_kev_worker", None)
+        if async_worker_arg is not None:
+            self.async_kev_worker = async_worker_arg
+        elif self.kev_mode == "async":
+            self.async_kev_worker = AsyncKevVerificationQueue(
+                kev_engine=self.kev_engine,
+                page_table=self.page_table,
+                binary_table=self.binary_table,
+                belnap_mapper=self.belnap_mapper,
+                clingo_dl_gate=self.clingo_dl_gate,
+                max_workers=int(os.environ.get("QUANTA_ASYNC_KEV_WORKERS", "2")),
+            )
+
     def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
         if hasattr(self, "active_canvas") and self.active_canvas is not None:
@@ -292,6 +308,25 @@ class CognitivePipeline:
             self.fault_handler.canvas = self.active_canvas
         if hasattr(self, "episodic_entity_registry"):
             self.episodic_entity_registry.clear()
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.async_kev_worker.clear()
+
+    def flush_kev_queue(self, timeout: Optional[float] = None) -> bool:
+        """Flushes the asynchronous Kev verification queue, blocking until all background tasks complete."""
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            return self.async_kev_worker.flush(timeout=timeout)
+        return True
+
+    def prioritize_passage(self, passage_id: str) -> bool:
+        """Elevates an enqueued passage to high priority in the async verification queue."""
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            return self.async_kev_worker.prioritize(passage_id)
+        return False
+
+    def close(self) -> None:
+        """Stops background workers and closes resources."""
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.async_kev_worker.stop()
 
     def ingest_document(
         self,
@@ -493,6 +528,48 @@ class CognitivePipeline:
                 total_latency_ms=0.1,
                 mode="co_decoded",
             )
+        elif self.kev_mode == "async":
+            # Decoupled Write-Ahead mode: commit provisional Belnap values and enqueue background verification
+            valencies = []
+            for ev in skeleton_res.events:
+                if ev.subject_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.subject_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="AGENT",
+                        confidence=0.85,
+                        probabilities={"AGENT": 0.85},
+                    ))
+                if ev.object_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.object_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="PATIENT",
+                        confidence=0.85,
+                        probabilities={"PATIENT": 0.85},
+                    ))
+            kev_eval = KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=[
+                    IntentEpistemicResult(
+                        event_id=ev.id,
+                        predicate=ev.predicate,
+                        intent="INFORMATIVE",
+                        intent_confidence=0.85,
+                        intent_probabilities={"INFORMATIVE": 0.85},
+                        epistemic_source="DIRECT_OBSERVATION",
+                        epistemic_confidence=0.85,
+                        epistemic_probabilities={"DIRECT_OBSERVATION": 0.85},
+                    ) for ev in skeleton_res.events
+                ],
+                relations=[],
+                total_latency_ms=0.05,
+                mode="async_provisional",
+            )
         else:
             kev_eval = self.kev_engine.evaluate_chunk(
                 entities=skeleton_res.entities,
@@ -529,6 +606,8 @@ class CognitivePipeline:
         graph = QuantaGraph()
         ent_cid_map: Dict[str, str] = {}
         ev_cid_map: Dict[str, str] = {}
+        ent_node_ids: Dict[str, int] = {}
+        ev_node_ids: Dict[str, int] = {}
 
         # 1. Entity nodes
         for ent in skeleton_res.entities:
@@ -559,6 +638,7 @@ class CognitivePipeline:
 
             # Append to 128-byte Binary Table
             node_id = len(self.binary_table) + 1
+            ent_node_ids[ent.id] = node_id
             pid_hash = abs(hash(pid)) % (2**32 - 1)
             struct = QuantaSemanticNodeStruct.create(
                 node_id=node_id,
@@ -572,9 +652,10 @@ class CognitivePipeline:
                 epistemic_band6=1,
             )
             self.binary_table.append(struct)
-            self.binary_table.register_node_cid(node_id, ent_node.canonical_cid)
-            self.page_table.store_node(ent_node)
+            stored_ent_cid = self.page_table.store_node(ent_node)
+            self.binary_table.register_node_cid(node_id, stored_ent_cid)
             self.active_canvas.put(ent_node)
+            ent_cid_map[ent.id] = stored_ent_cid
 
         # 2. Event nodes & valency links
         valency_role_map: Dict[Tuple[str, str], ValencyScoringResult] = {
@@ -591,16 +672,20 @@ class CognitivePipeline:
             intent_val = BinarySpeechActIntent.from_str(intent_str)
             epistemic_val = BinaryEpistemicSource.from_str(epistemic_str)
 
+            ev_truth = "UNKNOWN" if self.kev_mode == "async" else "TRUE"
+            ev_conf = 0.85 if self.kev_mode == "async" else float(ev.confidence)
+            ev_source = "provisional" if self.kev_mode == "async" else epistemic_str.lower()
+
             ev_node = QuantaNode(
                 anchor=ev.predicate,
                 literal=ev.predicate,
                 passage_id=pid,
                 span_start=ev.char_span[0],
                 span_end=ev.char_span[1],
-                confidence=float(ev.confidence),
+                confidence=ev_conf,
                 concept_code=ev_concept_codes.get(ev.id, 0),
-                evidence_source=epistemic_str.lower(),
-                truth_status="TRUE",
+                evidence_source=ev_source,
+                truth_status=ev_truth,
             )
             ev_node.set_slot("TYPE_EVENT", 1)
             ev_node.compute_canonical_cid()
@@ -627,22 +712,27 @@ class CognitivePipeline:
 
             # Append to 128-byte Binary Table
             node_id = len(self.binary_table) + 1
+            ev_node_ids[ev.id] = node_id
             pid_hash = abs(hash(pid)) % (2**32 - 1)
+            belnap_lat = BelnapValue.UNKNOWN if self.kev_mode == "async" else BelnapValue.TRUE
+            conf_lat = int(round(0.85 * 255)) if self.kev_mode == "async" else int(round(ev.confidence * 255))
+
             struct = QuantaSemanticNodeStruct.create(
                 node_id=node_id,
                 passage_id=pid_hash,
                 span_start=ev.char_span[0],
                 span_end=ev.char_span[1],
                 concept_code=ev_concept_codes.get(ev.id, 0),
-                belnap_lattice=BelnapValue.TRUE,
-                confidence=int(round(ev.confidence * 255)),
+                belnap_lattice=belnap_lat,
+                confidence=conf_lat,
                 intent_band5=intent_val,
                 epistemic_band6=epistemic_val,
             )
             self.binary_table.append(struct)
-            self.binary_table.register_node_cid(node_id, ev_node.canonical_cid)
-            self.page_table.store_node(ev_node)
+            stored_ev_cid = self.page_table.store_node(ev_node)
+            self.binary_table.register_node_cid(node_id, stored_ev_cid)
             self.active_canvas.put(ev_node)
+            ev_cid_map[ev.id] = stored_ev_cid
 
         # 3. Allen temporal and Pearl causal relations from Kev Pass 3
         for rel in kev_eval.relations:
@@ -689,6 +779,21 @@ class CognitivePipeline:
             events=[ev.to_extracted_event() for ev in skeleton_res.events if hasattr(ev, "to_extracted_event")],
         )
         setattr(graph, "extraction_result", legacy_extraction)
+
+        # Dispatch background verification in async mode
+        if self.kev_mode == "async" and self.async_kev_worker is not None:
+            self.async_kev_worker.enqueue(
+                passage_id=pid,
+                doc_id=doc_id,
+                text=text,
+                entities=skeleton_res.entities,
+                events=skeleton_res.events,
+                ent_cid_map=ent_cid_map,
+                ev_cid_map=ev_cid_map,
+                ent_node_ids=ent_node_ids,
+                ev_node_ids=ev_node_ids,
+                graph=graph,
+            )
 
         return graph
 
@@ -797,6 +902,13 @@ class CognitivePipeline:
                 subgraph.add_node(n)
             if self.active_canvas.nodes:
                 subgraph.root_cid = next(iter(self.active_canvas.nodes.keys()))
+
+        # Prioritize background verification for any queried passages
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None and subgraph is not None:
+            for n in subgraph.nodes.values():
+                pid = getattr(n, "passage_id", None)
+                if pid:
+                    self.async_kev_worker.prioritize(pid)
 
         # Step 3 & 4: Bipartite Projection and Dual-Stream Context Assembly
         dual_ctx = self.context_assembler.assemble_dual_stream_context(

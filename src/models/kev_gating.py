@@ -134,6 +134,11 @@ INSTRUMENT_KEYWORDS: Set[str] = {
     "oscilloscope", "thermometer", "centrifuge", "chromatograph", "nanotube", "caliper"
 }
 
+INSTRUMENT_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(?:" + "|".join(INSTRUMENT_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # GatedDecisionPlan Container
@@ -326,10 +331,6 @@ class KevAmbiguityGater:
         candidate_relation_pairs: List[Tuple[Any, Any]] = []
         fast_path_relations: List[RelationScoringResult] = []
 
-        # Fast pre-check: if text has no modal hedges, all events are informative/direct-observation
-        has_any_hedges = self.has_modal_hedges(clean_text)
-        has_any_passive = self.is_passive_clause(clean_text)
-
         # Pre-extract entity metadata and pre-filter instruments once
         ent_positions = []
         for ent in entities:
@@ -341,7 +342,7 @@ class KevAmbiguityGater:
                 pre_ctx = clean_text[max(0, epos - 25):epos]
                 if self.has_instrument_prepositions(pre_ctx):
                     is_prep = True
-            is_inst = any(w in elower for w in INSTRUMENT_KEYWORDS)
+            is_inst = bool(INSTRUMENT_PATTERN.search(elower))
             ent_positions.append((ent, eid, etxt, epos, is_prep, is_inst))
 
         # -------------------------------------------------------------------

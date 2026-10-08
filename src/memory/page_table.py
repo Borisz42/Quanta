@@ -860,6 +860,113 @@ class PageTable(MutableMapping):
                                     node.edges[rel].append(t_cid)
             return len(edge_tuples)
 
+    def update_node_attributes(
+        self,
+        cid: str,
+        truth_status: Optional[str] = None,
+        confidence: Optional[float] = None,
+        evidence_source: Optional[str] = None,
+        edges: Optional[Dict[str, List[str]]] = None,
+    ) -> bool:
+        """Updates mutable attributes of a QuantaNode stored in SQLite and ActiveCanvas."""
+        with self._lock:
+            updates = []
+            params = []
+            if truth_status is not None:
+                updates.append("truth_status = ?")
+                params.append(str(truth_status))
+            if confidence is not None:
+                updates.append("confidence = ?")
+                params.append(float(confidence))
+            if evidence_source is not None:
+                updates.append("evidence_source = ?")
+                params.append(str(evidence_source))
+            if edges is not None:
+                updates.append("edges = ?")
+                params.append(json.dumps(edges))
+                for rel, targets in edges.items():
+                    for t in targets:
+                        self._reverse_edges[t].add((cid, rel))
+            if not updates:
+                return False
+            params.append(cid)
+            query = f"UPDATE nodes SET {', '.join(updates)} WHERE cid = ?"
+            with self._conn:
+                cur = self._conn.execute(query, tuple(params))
+                updated = cur.rowcount > 0
+
+            if updated and self.active_canvas is not None and hasattr(self.active_canvas, "has") and self.active_canvas.has(cid):
+                node = self.active_canvas.get(cid)
+                if node is not None:
+                    if truth_status is not None:
+                        node.truth_status = str(truth_status)
+                    if confidence is not None:
+                        node.confidence = float(confidence)
+                    if evidence_source is not None:
+                        node.evidence_source = str(evidence_source)
+                    if edges is not None:
+                        for rel, targets in edges.items():
+                            if rel not in node.edges:
+                                node.edges[rel] = []
+                            for t in targets:
+                                if t not in node.edges[rel]:
+                                    node.edges[rel].append(t)
+            return updated
+
+    def update_nodes_batch(
+        self,
+        updates: Sequence[Dict[str, Any]],
+    ) -> int:
+        """Batch updates mutable attributes across multiple nodes in a single transaction."""
+        if not updates:
+            return 0
+        with self._lock:
+            count = 0
+            with self._conn:
+                for item in updates:
+                    cid = item.get("cid")
+                    if not cid:
+                        continue
+                    cols = []
+                    params = []
+                    if "truth_status" in item and item["truth_status"] is not None:
+                        cols.append("truth_status = ?")
+                        params.append(str(item["truth_status"]))
+                    if "confidence" in item and item["confidence"] is not None:
+                        cols.append("confidence = ?")
+                        params.append(float(item["confidence"]))
+                    if "evidence_source" in item and item["evidence_source"] is not None:
+                        cols.append("evidence_source = ?")
+                        params.append(str(item["evidence_source"]))
+                    if "edges" in item and item["edges"] is not None:
+                        cols.append("edges = ?")
+                        params.append(json.dumps(item["edges"]))
+                        for rel, targets in item["edges"].items():
+                            for t in targets:
+                                self._reverse_edges[t].add((cid, rel))
+                    if cols:
+                        params.append(cid)
+                        cur = self._conn.execute(f"UPDATE nodes SET {', '.join(cols)} WHERE cid = ?", tuple(params))
+                        if cur.rowcount > 0:
+                            count += 1
+                    if self.active_canvas is not None and hasattr(self.active_canvas, "has") and self.active_canvas.has(cid):
+                        node = self.active_canvas.get(cid)
+                        if node is not None:
+                            if "truth_status" in item and item["truth_status"] is not None:
+                                node.truth_status = str(item["truth_status"])
+                            if "confidence" in item and item["confidence"] is not None:
+                                node.confidence = float(item["confidence"])
+                            if "evidence_source" in item and item["evidence_source"] is not None:
+                                node.evidence_source = str(item["evidence_source"])
+                            if "edges" in item and item["edges"] is not None:
+                                for rel, targets in item["edges"].items():
+                                    if rel not in node.edges:
+                                        node.edges[rel] = []
+                                    for t in targets:
+                                        if t not in node.edges[rel]:
+                                            node.edges[rel].append(t)
+            return count
+
     def clear(self) -> None:
         """Clears all stored nodes, subgraphs, vectors, and edge indices from PageTable."""
         with self._lock:
