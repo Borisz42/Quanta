@@ -317,18 +317,35 @@ class KevAmbiguityGater:
         candidate_relation_pairs: List[Tuple[Any, Any]] = []
         fast_path_relations: List[RelationScoringResult] = []
 
-        # Pre-extract entity metadata
-        ent_data = [_extract_entity_info(ent) for ent in entities]
-        ent_positions = [(ent, eid, etxt, text_lower.find(etxt.lower())) for ent, (eid, etxt) in zip(entities, ent_data)]
+        # Fast pre-check: if text has no modal hedges, all events are informative/direct-observation
+        has_any_hedges = self.has_modal_hedges(clean_text)
+        has_any_passive = self.is_passive_clause(clean_text)
+
+        # Pre-extract entity metadata and pre-filter instruments once
+        ent_positions = []
+        for ent in entities:
+            eid, etxt = _extract_entity_info(ent)
+            elower = etxt.lower()
+            epos = text_lower.find(elower)
+            is_prep = False
+            if epos != -1:
+                pre_ctx = clean_text[max(0, epos - 25):epos]
+                if self.has_instrument_prepositions(pre_ctx):
+                    is_prep = True
+            is_inst = any(w in elower for w in INSTRUMENT_KEYWORDS)
+            ent_positions.append((ent, eid, etxt, epos, is_prep, is_inst))
 
         # -------------------------------------------------------------------
         # Step 1: Speech-Act Intent & Epistemic Source Gating
         # -------------------------------------------------------------------
         for ev in events:
             ev_id, pred = _extract_event_info(ev)
-            clause = self._locate_clause_for_event(pred, clean_text, sentences)
+            is_hedged = False
+            if has_any_hedges:
+                clause = self._locate_clause_for_event(pred, clean_text, sentences)
+                is_hedged = self.has_modal_hedges(clause)
 
-            if self.has_modal_hedges(clause):
+            if is_hedged:
                 ambiguous_events.append(ev)
             else:
                 fast_path_intents.append(
@@ -350,15 +367,17 @@ class KevAmbiguityGater:
         for ev in events:
             ev_id, pred = _extract_event_info(ev)
             cand_subj, cand_obj = _extract_event_candidates(ev)
-            clause = self._locate_clause_for_event(pred, clean_text, sentences)
-            is_passive = self.is_passive_clause(clause)
+            is_passive = False
+            if has_any_passive:
+                clause = self._locate_clause_for_event(pred, clean_text, sentences)
+                is_passive = self.is_passive_clause(clause)
 
             # Heuristic candidate fallback
             if not cand_subj and not cand_obj and len(ent_positions) >= 2:
                 pos_pred = text_lower.find(pred.lower())
                 prec_ents = []
                 foll_ents = []
-                for _, eid, _, epos in ent_positions:
+                for _, eid, _, epos, _, _ in ent_positions:
                     if epos != -1 and pos_pred != -1:
                         if epos < pos_pred:
                             prec_ents.append((epos, eid))
@@ -369,18 +388,7 @@ class KevAmbiguityGater:
                 if foll_ents:
                     cand_obj = min(foll_ents, key=lambda x: x[0])[1]
 
-            for ent, ent_id, ent_txt, ent_pos in ent_positions:
-                ent_lower = ent_txt.lower()
-
-                # Instrumental preposition check
-                is_prepositional = False
-                if ent_pos != -1:
-                    pre_ctx = clean_text[max(0, ent_pos - 25):ent_pos]
-                    if self.has_instrument_prepositions(pre_ctx):
-                        is_prepositional = True
-
-                is_instrument_noun = any(w in ent_lower for w in INSTRUMENT_KEYWORDS)
-
+            for ent, ent_id, ent_txt, ent_pos, is_prepositional, is_instrument_noun in ent_positions:
                 if is_passive:
                     ambiguous_valency_candidates.append((ent, ev))
                 elif is_prepositional or (is_instrument_noun and ent_id != cand_subj):
