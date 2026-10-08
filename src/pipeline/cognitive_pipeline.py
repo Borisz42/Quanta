@@ -165,7 +165,7 @@ class CognitivePipeline:
         **transducer_kwargs,
     ):
         # Extract Kev-specific configuration from kwargs to avoid forwarding to legacy transducer
-        self.kev_mode = transducer_kwargs.pop("kev_mode", "regular_kev_lora")
+        self.kev_mode = transducer_kwargs.pop("kev_mode", "tiered")
         self.kev_concurrency = transducer_kwargs.pop("kev_concurrency", None)
 
         # 1. Chunker & Segmentation
@@ -244,7 +244,7 @@ class CognitivePipeline:
         if kev_engine is not None:
             self.kev_engine = kev_engine
         elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
-            self.kev_engine = KevDecisionEngine(base_url="mock", fallback_to_mock=True)
+            self.kev_engine = KevDecisionEngine(base_url="mock", fallback_to_mock=True, mode=self.kev_mode)
             self.kev_engine._server_available = False
         else:
             concurrency = self.kev_concurrency or int(os.environ.get("QUANTA_PARALLEL_SLOTS", "16"))
@@ -323,10 +323,6 @@ class CognitivePipeline:
             return self.async_kev_worker.prioritize(passage_id)
         return False
 
-    def close(self) -> None:
-        """Stops background workers and closes resources."""
-        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
-            self.async_kev_worker.stop()
 
     def ingest_document(
         self,
@@ -672,9 +668,19 @@ class CognitivePipeline:
             intent_val = BinarySpeechActIntent.from_str(intent_str)
             epistemic_val = BinaryEpistemicSource.from_str(epistemic_str)
 
-            ev_truth = "UNKNOWN" if self.kev_mode == "async" else "TRUE"
-            ev_conf = 0.85 if self.kev_mode == "async" else float(ev.confidence)
-            ev_source = "provisional" if self.kev_mode == "async" else epistemic_str.lower()
+            if self.kev_mode == "async":
+                ev_truth = "UNKNOWN"
+                ev_conf = 0.85
+                ev_source = "provisional"
+                belnap_lat = BelnapValue.UNKNOWN
+                conf_lat = int(round(0.85 * 255))
+            else:
+                kev_post = float(ie_res.epistemic_confidence) if ie_res else float(ev.confidence)
+                ev_conf = float(ev.confidence)
+                belnap_lat = self.belnap_mapper.map_probability(kev_post)
+                ev_truth = BelnapValue.to_str(belnap_lat)
+                ev_source = epistemic_str.lower()
+                conf_lat = int(round(kev_post * 255))
 
             ev_node = QuantaNode(
                 anchor=ev.predicate,
@@ -714,8 +720,6 @@ class CognitivePipeline:
             node_id = len(self.binary_table) + 1
             ev_node_ids[ev.id] = node_id
             pid_hash = abs(hash(pid)) % (2**32 - 1)
-            belnap_lat = BelnapValue.UNKNOWN if self.kev_mode == "async" else BelnapValue.TRUE
-            conf_lat = int(round(0.85 * 255)) if self.kev_mode == "async" else int(round(ev.confidence * 255))
 
             struct = QuantaSemanticNodeStruct.create(
                 node_id=node_id,
@@ -863,6 +867,7 @@ class CognitivePipeline:
         max_depth: int = 2,
         format: str = "dual_stream",
         query_polarity: str = "positive",
+        flush_async: bool = False,
     ) -> Union[DualStreamContext, str]:
         """Queries the Semantic Virtual Memory using HippoRAG 2 PPR, PoP-RAG gating, and bipartite projection.
 
@@ -875,6 +880,9 @@ class CognitivePipeline:
            Stream 1: Logical Briefing Block (verified causal/temporal paths and valency frames)
            Stream 2: Top-K Raw Source Passages (verbatim spans with 100% lexical fidelity)
         """
+        if flush_async and hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.flush_kev_queue()
+
         if not query or not query.strip():
             empty_ctx = DualStreamContext(
                 logical_briefing="",
@@ -1810,9 +1818,15 @@ class CognitivePipeline:
         return self.realizer.realize_graph(graph)
 
     def close(self):
-        """Release PageTable and EntityEngine resources."""
-        self.entity_engine.close()
-        self.page_table.close()
+        """Release PageTable, EntityEngine, and background worker resources."""
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.async_kev_worker.stop()
+        if hasattr(self, "entity_engine") and hasattr(self.entity_engine, "close"):
+            self.entity_engine.close()
+        if hasattr(self, "page_table") and hasattr(self.page_table, "close"):
+            self.page_table.close()
+        if hasattr(self, "passage_store") and hasattr(self.passage_store, "close"):
+            self.passage_store.close()
 
     def _invoke_transducer_chunk(
         self,

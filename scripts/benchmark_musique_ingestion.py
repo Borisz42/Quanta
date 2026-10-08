@@ -420,11 +420,86 @@ This empirical study addresses the ingestion throughput bottleneck by:
     return results
 
 
+KEV_MODES = ["bypass", "regular_kev_lora", "tiered", "co_decoded", "async"]
+
+
+def run_kev_mode_comparison(kev_modes: List[str], backend_mode: str = "auto", corpus: str = "paragraphs", num_samples: int = 2) -> Dict[str, Any]:
+    """Session 5: comparative benchmark across unified kev_mode options."""
+    mgr = UnslothServerManager()
+    is_live = False
+    if backend_mode in ("auto", "live"):
+        is_live = mgr.is_service_responsive()
+    backend = "unsloth" if is_live else "mock"
+
+    question, answer, passages = load_musique_passages(corpus=corpus, sample_idx=0, num_samples=num_samples)
+    total_words = sum(len(p[2].split()) for p in passages)
+    print("=" * 80)
+    print(f"  KEV MODE COMPARISON | backend={backend} | {len(passages)} passages, {total_words} words")
+    print("=" * 80)
+
+    results: Dict[str, Any] = {}
+    for km in kev_modes:
+        pipe = CognitivePipeline(transducer_backend=backend, kev_mode=km, page_table_path=":memory:")
+        t0 = time.perf_counter()
+        pipe.ingest_passages_batch(passages, max_workers=16, validate=False)
+        dt = time.perf_counter() - t0
+        t1 = time.perf_counter()
+        flushed = pipe.flush_kev_queue(timeout=120.0)
+        flush_s = time.perf_counter() - t1
+        t2 = time.perf_counter()
+        ctx = pipe.query_memory(question, top_k=3, format="dual_stream")
+        ret_ms = (time.perf_counter() - t2) * 1000.0
+        ctx_text = " ".join(p.text for p in ctx.passages) + " " + (ctx.full_context or "")
+        hit = answer.lower() in ctx_text.lower()
+        results[km] = {
+            "ingest_s": dt,
+            "wps": total_words / max(0.001, dt),
+            "lat_ms": dt * 1000.0 / len(passages),
+            "flush_s": flush_s,
+            "flushed": flushed,
+            "nodes": len(pipe.binary_table),
+            "retrieval_ms": ret_ms,
+            "answer_hit": hit,
+        }
+        r = results[km]
+        print(f"  {km:<18} {r['wps']:>9.1f} w/s  {r['lat_ms']:>8.1f} ms/chunk  flush {flush_s:.2f}s  nodes {r['nodes']}  hit={hit}")
+        pipe.close()
+
+    out_dir = REPO_ROOT / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = "\n".join(
+        f"| `{km}` | {r['wps']:.1f} | {r['lat_ms']:.1f} | {r['ingest_s']:.3f} | {r['flush_s']:.3f} | {r['nodes']} | {r['retrieval_ms']:.2f} | {'PASS' if r['answer_hit'] else 'MISS'} |"
+        for km, r in results.items()
+    )
+    md = f"""# Tiered Kev Ingestion Benchmark
+
+**Date**: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+**Backend**: `{backend}`
+**Workload**: MuSiQue multi-passage ({len(passages)} passages, {total_words} words), 16 workers
+**Query**: "{question}" (gold: "{answer}")
+
+| kev_mode | Throughput (w/s) | Mean latency / chunk (ms) | Ingest time (s) | Async flush (s) | Binary nodes | Retrieval (ms) | Multi-hop answer in context |
+|---|---|---|---|---|---|---|---|
+{rows}
+
+Notes: `async` ingest time excludes background verification (see Async flush column). Belnap F1/ECE calibration is evaluated separately by `scripts/evaluate_kev_approaches.py`.
+"""
+    (out_dir / "tiered_kev_ingestion_benchmark.md").write_text(md, encoding="utf-8")
+    print(f"\n  [OK] Exported {out_dir / 'tiered_kev_ingestion_benchmark.md'}")
+    return results
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUANTA MuSiQue Multi-Passage Ingestion Benchmark")
-    parser.add_argument("--mode", choices=["auto", "mock", "live"], default="auto")
+    parser.add_argument("--mode", choices=["auto", "mock", "live", "all"] + KEV_MODES, default="auto")
+    parser.add_argument("--backend", choices=["auto", "mock", "live"], default="auto")
     parser.add_argument("--corpus", choices=["paragraphs", "sentences"], default="paragraphs")
     parser.add_argument("--num-samples", type=int, default=2)
     args = parser.parse_args()
 
-    run_benchmark(mode=args.mode, corpus=args.corpus, num_samples=args.num_samples)
+    if args.mode == "all":
+        run_kev_mode_comparison(KEV_MODES, args.backend, args.corpus, args.num_samples)
+    elif args.mode in KEV_MODES:
+        run_kev_mode_comparison([args.mode], args.backend, args.corpus, args.num_samples)
+    else:
+        run_benchmark(mode=args.mode, corpus=args.corpus, num_samples=args.num_samples)
