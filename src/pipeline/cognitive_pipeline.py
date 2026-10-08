@@ -234,9 +234,11 @@ class CognitivePipeline:
         if skeleton_transducer is not None:
             self.skeleton_transducer = skeleton_transducer
         elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
-            self.skeleton_transducer = MockSkeletonTransducer()
+            mock_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
+            self.skeleton_transducer = MockSkeletonTransducer(mode=mock_mode)
         else:
-            self.skeleton_transducer = SkeletonTransducer(fallback_to_mock=True)
+            trans_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
+            self.skeleton_transducer = SkeletonTransducer(fallback_to_mock=True, mode=trans_mode)
 
         if kev_engine is not None:
             self.kev_engine = kev_engine
@@ -346,15 +348,23 @@ class CognitivePipeline:
         )
 
         # Step 2: Skeleton Transduction
+        transduce_kwargs = {}
+        if self.kev_mode == "co_decoded":
+            transduce_kwargs["mode"] = "co_decoded"
+
         if hasattr(self.skeleton_transducer, "transduce"):
             try:
-                skeleton_res = self.skeleton_transducer.transduce(text, passage_id=pid, doc_id=doc_id)
+                skeleton_res = self.skeleton_transducer.transduce(text, passage_id=pid, doc_id=doc_id, **transduce_kwargs)
             except TypeError:
-                skeleton_res = self.skeleton_transducer.transduce(text)
+                try:
+                    skeleton_res = self.skeleton_transducer.transduce(text, **transduce_kwargs)
+                except TypeError:
+                    skeleton_res = self.skeleton_transducer.transduce(text)
         elif callable(self.skeleton_transducer):
             skeleton_res = self.skeleton_transducer(text)
         else:
-            skeleton_res = MockSkeletonTransducer().transduce(text, passage_id=pid, doc_id=doc_id)
+            mock_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
+            skeleton_res = MockSkeletonTransducer(mode=mock_mode).transduce(text, passage_id=pid, doc_id=doc_id)
 
         # Step 3: Kev-4B 3-pass Prefill Scoring
         if self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none"):
@@ -398,6 +408,90 @@ class CognitivePipeline:
                 relations=[],
                 total_latency_ms=0.1,
                 mode="bypass",
+            )
+        elif self.kev_mode == "co_decoded":
+            # Co-decoded single-pass mode: map co-decoded event tags directly into Kev decisions without secondary GPU calls
+            valencies = []
+            intent_epistemics = []
+            relations = []
+
+            for ev in skeleton_res.events:
+                if ev.subject_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.subject_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="AGENT",
+                        confidence=0.98,
+                        probabilities={"AGENT": 0.98},
+                    ))
+                if ev.object_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.object_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="PATIENT",
+                        confidence=0.98,
+                        probabilities={"PATIENT": 0.98},
+                    ))
+
+                # Intent & Epistemic Source
+                raw_intent = (ev.intent or "I").strip().upper()
+                raw_epist = (ev.epist or "O").strip().upper()
+                from models.kev_engine import (
+                    JOINT_ALLEN_MAP,
+                    JOINT_EPISTEMIC_MAP,
+                    JOINT_INTENT_MAP,
+                    JOINT_PEARL_MAP,
+                )
+                mapped_intent = JOINT_INTENT_MAP.get(raw_intent, KevSpeechActIntent.INFORMATIVE.value)
+                mapped_epist = JOINT_EPISTEMIC_MAP.get(raw_epist, KevEpistemicSource.DIRECT_OBSERVATION.value)
+
+                intent_epistemics.append(IntentEpistemicResult(
+                    event_id=ev.id,
+                    predicate=ev.predicate,
+                    intent=mapped_intent,
+                    intent_confidence=0.95,
+                    intent_probabilities={mapped_intent: 0.95},
+                    epistemic_source=mapped_epist,
+                    epistemic_confidence=0.95,
+                    epistemic_probabilities={mapped_epist: 0.95},
+                ))
+
+            # Relations between sequential events if co-decoded
+            from models.kev_engine import (
+                JOINT_ALLEN_MAP,
+                JOINT_PEARL_MAP,
+            )
+            for i in range(len(skeleton_res.events) - 1):
+                ev_curr = skeleton_res.events[i]
+                ev_next = skeleton_res.events[i + 1]
+                allen_tag = (ev_curr.allen or "N").strip().upper()
+                pearl_tag = (ev_curr.pearl or "N").strip().upper()
+                mapped_allen = JOINT_ALLEN_MAP.get(allen_tag, AllenTemporalRelation.NONE.value)
+                mapped_pearl = JOINT_PEARL_MAP.get(pearl_tag, PearlCausalLink.NONE.value)
+                if mapped_allen != AllenTemporalRelation.NONE.value or mapped_pearl != PearlCausalLink.NONE.value:
+                    relations.append(RelationScoringResult(
+                        source_event_id=ev_curr.id,
+                        target_event_id=ev_next.id,
+                        source_predicate=ev_curr.predicate,
+                        target_predicate=ev_next.predicate,
+                        allen_relation=mapped_allen,
+                        allen_confidence=0.95,
+                        allen_probabilities={mapped_allen: 0.95},
+                        pearl_relation=mapped_pearl,
+                        pearl_confidence=0.95,
+                        pearl_probabilities={mapped_pearl: 0.95},
+                    ))
+
+            kev_eval = KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=intent_epistemics,
+                relations=relations,
+                total_latency_ms=0.1,
+                mode="co_decoded",
             )
         else:
             kev_eval = self.kev_engine.evaluate_chunk(

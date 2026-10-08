@@ -43,9 +43,19 @@ Extract at most 3 core named entities and 1 main event predicate frame. Never ex
 Example input: "Alan Turing completed his degrees at Cambridge."
 Example output: {"entities": [{"id": "E1", "text": "Alan Turing"}, {"id": "E2", "text": "Cambridge"}], "events": [{"id": "EV1", "pred": "completed", "subj": "E1", "obj": "E2"}]}"""
 
+CO_DECODED_SKELETON_SYSTEM_PROMPT = """You are the QUANTA Co-Decoded Skeleton Transducer.
+Extract at most 3 core named entities and 1 main event predicate frame with compact single-letter Kev decisions.
+Enums:
+- intent: I (Informative), D (Directive), C (Commissive), E (Expressive)
+- epist: O (Direct Observation), D (Deduction), H (Hearsay), C (Conjecture)
+- allen: M (Meets), B (Before), O (Overlaps), D (During), N (None)
+- pearl: M (Mechanism), C (Condition), N (None)
+Example input: "Charles Babbage invented the Difference Engine."
+Example output: {"entities": [{"id": "E1", "text": "Charles Babbage"}, {"id": "E2", "text": "Difference Engine"}], "events": [{"id": "EV1", "pred": "invented", "subj": "E1", "obj": "E2", "intent": "I", "epist": "O", "allen": "B", "pearl": "M"}]}"""
 
-def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None) -> Path:
-    """Locate the skeleton_schema.gbnf grammar specification file."""
+
+def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None, filename: str = "skeleton_schema.gbnf") -> Path:
+    """Locate the skeleton_schema.gbnf or co_decoded_skeleton_schema.gbnf grammar specification file."""
     if custom_path is not None:
         p = Path(custom_path).resolve()
         if p.is_file():
@@ -54,16 +64,27 @@ def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None) -> Pat
 
     here = Path(__file__).resolve()
     candidates = [
-        here.parent.parent.parent / "data" / "grammar" / "skeleton_schema.gbnf",
-        Path.cwd() / "data" / "grammar" / "skeleton_schema.gbnf",
-        here.parent.parent / "data" / "grammar" / "skeleton_schema.gbnf",
+        here.parent.parent.parent / "data" / "grammar" / filename,
+        Path.cwd() / "data" / "grammar" / filename,
+        here.parent.parent / "data" / "grammar" / filename,
     ]
     for c in candidates:
         if c.is_file():
             return c.resolve()
 
-    require_artifacts("data/grammar/skeleton_schema.gbnf", component="SkeletonTransducer")
-    raise FileNotFoundError("Could not locate 'skeleton_schema.gbnf'. Ensure 'data/grammar/skeleton_schema.gbnf' exists.")
+    # Fallback to standard skeleton_schema.gbnf if specialized grammar not found
+    fallback = "skeleton_schema.gbnf"
+    candidates_fallback = [
+        here.parent.parent.parent / "data" / "grammar" / fallback,
+        Path.cwd() / "data" / "grammar" / fallback,
+        here.parent.parent / "data" / "grammar" / fallback,
+    ]
+    for c in candidates_fallback:
+        if c.is_file():
+            return c.resolve()
+
+    require_artifacts(f"data/grammar/{filename}", component="SkeletonTransducer")
+    raise FileNotFoundError(f"Could not locate '{filename}'. Ensure 'data/grammar/{filename}' exists.")
 
 
 def estimate_token_count(text: str) -> int:
@@ -130,7 +151,7 @@ class SkeletonEntity:
 
 @dataclass
 class SkeletonEvent:
-    """Represents an unlabelled event anchor and thematic SVO frame."""
+    """Represents an unlabelled event anchor and thematic SVO frame, with optional co-decoded Kev decisions."""
     id: str
     predicate: str
     char_span: Tuple[int, int]
@@ -139,9 +160,21 @@ class SkeletonEvent:
     byte_span: Optional[Tuple[int, int]] = None
     raw_text: Optional[str] = None
     confidence: float = 1.0
+    intent: Optional[str] = None
+    epist: Optional[str] = None
+    allen: Optional[str] = None
+    pearl: Optional[str] = None
+
+    @property
+    def epistemic(self) -> Optional[str]:
+        return self.epist
+
+    @epistemic.setter
+    def epistemic(self, value: Optional[str]) -> None:
+        self.epist = value
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "id": self.id,
             "predicate": self.predicate,
             "char_span": list(self.char_span),
@@ -151,6 +184,16 @@ class SkeletonEvent:
             "raw_text": self.raw_text,
             "confidence": self.confidence,
         }
+        if self.intent is not None:
+            d["intent"] = self.intent
+        if self.epist is not None:
+            d["epist"] = self.epist
+            d["epistemic"] = self.epist
+        if self.allen is not None:
+            d["allen"] = self.allen
+        if self.pearl is not None:
+            d["pearl"] = self.pearl
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> SkeletonEvent:
@@ -167,6 +210,10 @@ class SkeletonEvent:
             byte_span=byte_span,
             raw_text=data.get("raw_text"),
             confidence=float(data.get("confidence", 1.0)),
+            intent=data.get("intent"),
+            epist=data.get("epist", data.get("epistemic")),
+            allen=data.get("allen"),
+            pearl=data.get("pearl"),
         )
 
     def to_extracted_event(self) -> ExtractedEvent:
@@ -180,6 +227,10 @@ class SkeletonEvent:
                 "char_span": list(self.char_span),
                 "byte_span": list(self.byte_span) if self.byte_span else None,
                 "confidence": self.confidence,
+                **({"intent": self.intent} if self.intent else {}),
+                **({"epist": self.epist} if self.epist else {}),
+                **({"allen": self.allen} if self.allen else {}),
+                **({"pearl": self.pearl} if self.pearl else {}),
             },
         )
 
@@ -216,7 +267,7 @@ class SkeletonExtractionResult:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
 
     def to_skeleton_json(self) -> str:
-        """Returns minimal JSON skeleton conforming to skeleton_schema.gbnf."""
+        """Returns minimal JSON skeleton conforming to skeleton_schema.gbnf / co_decoded_skeleton_schema.gbnf."""
         return json.dumps({
             "entities": [{"id": e.id, "text": e.surface_text} for e in self.entities],
             "events": [
@@ -225,6 +276,10 @@ class SkeletonExtractionResult:
                     "pred": ev.predicate,
                     **({"subj": ev.subject_ent_id} if ev.subject_ent_id else {}),
                     **({"obj": ev.object_ent_id} if ev.object_ent_id else {}),
+                    **({"intent": ev.intent} if ev.intent else {}),
+                    **({"epist": ev.epist} if ev.epist else {}),
+                    **({"allen": ev.allen} if ev.allen else {}),
+                    **({"pearl": ev.pearl} if ev.pearl else {}),
                 }
                 for ev in self.events
             ],
@@ -335,8 +390,14 @@ class SkeletonExtractionResult:
 class MockSkeletonTransducer:
     """Deterministic, high-speed (<5ms) offline skeleton transducer for CI testing."""
 
-    def __init__(self, system_prompt: str = DEFAULT_SKELETON_SYSTEM_PROMPT):
-        self.system_prompt = system_prompt
+    def __init__(self, system_prompt: Optional[str] = None, mode: str = "standard"):
+        self.mode = mode
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        elif mode == "co_decoded":
+            self.system_prompt = CO_DECODED_SKELETON_SYSTEM_PROMPT
+        else:
+            self.system_prompt = DEFAULT_SKELETON_SYSTEM_PROMPT
         self.aligner = SpanAligner()
 
         # Known pre-seeded benchmark heuristics (primary S-V-O frames)
@@ -347,7 +408,10 @@ class MockSkeletonTransducer:
                     {"id": "E2", "text": "argon cylinder", "category": "OBJECT"},
                 ],
                 "events": [
-                    {"id": "EV1", "pred": "pressurize", "subj": "E1", "obj": "E2"},
+                    {
+                        "id": "EV1", "pred": "pressurize", "subj": "E1", "obj": "E2",
+                        "intent": "I", "epist": "O", "allen": "B", "pearl": "M",
+                    },
                 ],
             },
             "eleanor_vance": {
@@ -356,7 +420,10 @@ class MockSkeletonTransducer:
                     {"id": "E2", "text": "containment cell", "category": "LOCATION"},
                 ],
                 "events": [
-                    {"id": "EV1", "pred": "enter", "subj": "E1", "obj": "E2"},
+                    {
+                        "id": "EV1", "pred": "enter", "subj": "E1", "obj": "E2",
+                        "intent": "I", "epist": "O", "allen": "B", "pearl": "M",
+                    },
                 ],
             },
             "alice_auditor": {
@@ -365,7 +432,10 @@ class MockSkeletonTransducer:
                     {"id": "E2", "text": "auditor", "category": "PERSON"},
                 ],
                 "events": [
-                    {"id": "EV1", "pred": "remark", "subj": "E2", "obj": "E1"},
+                    {
+                        "id": "EV1", "pred": "remark", "subj": "E2", "obj": "E1",
+                        "intent": "I", "epist": "H", "allen": "N", "pearl": "N",
+                    },
                 ],
             },
         }
@@ -375,9 +445,11 @@ class MockSkeletonTransducer:
         text: str,
         chunk_id: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Deterministically extract skeleton entities and events with exact span alignment."""
+        effective_mode = mode or kwargs.get("mode") or self.mode
         t0 = time.perf_counter()
         clean_text = text.strip()
         lower = clean_text.lower()
@@ -394,7 +466,7 @@ class MockSkeletonTransducer:
             raw_entities = matched_spec["entities"]
             raw_events = matched_spec["events"]
         else:
-            raw_entities, raw_events = self._extract_heuristic_skeleton(clean_text)
+            raw_entities, raw_events = self._extract_heuristic_skeleton(clean_text, mode=effective_mode)
 
         # Ground spans via SpanAligner
         entities: List[SkeletonEntity] = []
@@ -432,6 +504,11 @@ class MockSkeletonTransducer:
                 c_span = (0, min(len(pred), len(clean_text)))
                 b_span = self.aligner.char_to_byte_span(clean_text, c_span)
 
+            intent_val = raw_ev.get("intent") if effective_mode == "co_decoded" else None
+            epist_val = (raw_ev.get("epist") or raw_ev.get("epistemic")) if effective_mode == "co_decoded" else None
+            allen_val = raw_ev.get("allen") if effective_mode == "co_decoded" else None
+            pearl_val = raw_ev.get("pearl") if effective_mode == "co_decoded" else None
+
             events.append(
                 SkeletonEvent(
                     id=raw_ev["id"],
@@ -442,6 +519,10 @@ class MockSkeletonTransducer:
                     byte_span=b_span,
                     raw_text=clean_text[c_span[0]:c_span[1]] if alignment else None,
                     confidence=alignment.confidence if alignment else 0.8,
+                    intent=intent_val,
+                    epist=epist_val,
+                    allen=allen_val,
+                    pearl=pearl_val,
                 )
             )
 
@@ -454,6 +535,10 @@ class MockSkeletonTransducer:
                     "pred": ev.predicate,
                     **({"subj": ev.subject_ent_id} if ev.subject_ent_id else {}),
                     **({"obj": ev.object_ent_id} if ev.object_ent_id else {}),
+                    **({"intent": ev.intent} if ev.intent else {}),
+                    **({"epist": ev.epist} if ev.epist else {}),
+                    **({"allen": ev.allen} if ev.allen else {}),
+                    **({"pearl": ev.pearl} if ev.pearl else {}),
                 }
                 for ev in events
             ],
@@ -473,10 +558,11 @@ class MockSkeletonTransducer:
                 "decoding_token_count": token_count,
                 "backend": "mock_skeleton",
                 "model": "qwen3.5-4b-skeleton",
+                "mode": effective_mode,
             },
         )
 
-    def _extract_heuristic_skeleton(self, text: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _extract_heuristic_skeleton(self, text: str, mode: str = "standard") -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Dynamic heuristic extractor extracting surface entities and predicates for arbitrary text."""
         seen_texts: Set[str] = set()
         entities: List[Dict[str, Any]] = []
@@ -573,6 +659,51 @@ class MockSkeletonTransducer:
                 "obj": None,
             })
 
+        if mode == "co_decoded":
+            # Infer co-decoded Kev decisions from linguistic cues
+            intent_code = "I"
+            if re.search(r"\b(?:please|ensure|must|should|command|order|isolate!|verify!)\b", text, re.IGNORECASE):
+                intent_code = "D"
+            elif re.search(r"\b(?:promise|guarantee|commit|pledge)\b", text, re.IGNORECASE):
+                intent_code = "C"
+            elif re.search(r"\b(?:alas|congratulations|wow|unfortunately|thank)\b", text, re.IGNORECASE):
+                intent_code = "E"
+
+            epist_code = "O"
+            if re.search(r"\b(?:allegedly|claimed|hearsay|reported|according to)\b", text, re.IGNORECASE):
+                epist_code = "H"
+            elif re.search(r"\b(?:deduced|concluded|therefore|thus|inferred)\b", text, re.IGNORECASE):
+                epist_code = "D"
+            elif re.search(r"\b(?:might|suggests|hypothesized|appears to|seems|probably|could)\b", text, re.IGNORECASE):
+                epist_code = "C"
+
+            allen_code = "N"
+            if re.search(r"\b(?:before|preceded|prior to)\b", text, re.IGNORECASE):
+                allen_code = "B"
+            elif re.search(r"\b(?:immediately|meets|adjacent|followed by)\b", text, re.IGNORECASE):
+                allen_code = "M"
+            elif re.search(r"\b(?:during|while|throughout)\b", text, re.IGNORECASE):
+                allen_code = "D"
+            elif re.search(r"\b(?:overlaps|overlapping|coinciding)\b", text, re.IGNORECASE):
+                allen_code = "O"
+            elif len(events) > 1:
+                allen_code = "B"
+
+            pearl_code = "N"
+            if re.search(r"\b(?:because|causing|caused|resulting in|catalyzed|leads to|triggering)\b", text, re.IGNORECASE):
+                pearl_code = "M"
+            elif re.search(r"\b(?:enabling|allowing|permits|condition for)\b", text, re.IGNORECASE):
+                pearl_code = "C"
+
+            if pearl_code in ("M", "C") and allen_code == "N":
+                allen_code = "B"
+
+            for ev in events:
+                ev["intent"] = intent_code
+                ev["epist"] = epist_code
+                ev["allen"] = allen_code
+                ev["pearl"] = pearl_code
+
         return entities, events
 
 
@@ -591,7 +722,8 @@ class SkeletonTransducer:
         max_retries: int = 2,
         fallback_to_mock: bool = True,
         grammar_path: Optional[Union[str, Path]] = None,
-        system_prompt: str = DEFAULT_SKELETON_SYSTEM_PROMPT,
+        system_prompt: Optional[str] = None,
+        mode: str = "standard",
     ):
         raw_base = (
             base_url
@@ -607,7 +739,14 @@ class SkeletonTransducer:
         self.timeout = timeout
         self.max_retries = max_retries
         self.fallback_to_mock = fallback_to_mock
-        self.system_prompt = system_prompt
+        self.mode = mode
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        elif mode == "co_decoded":
+            self.system_prompt = CO_DECODED_SKELETON_SYSTEM_PROMPT
+        else:
+            self.system_prompt = DEFAULT_SKELETON_SYSTEM_PROMPT
+
         self.session = requests.Session()
         from requests.adapters import HTTPAdapter
         adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64)
@@ -616,11 +755,12 @@ class SkeletonTransducer:
         self.aligner = SpanAligner()
 
         # Load GBNF Grammar
-        self.grammar_path = _locate_skeleton_gbnf(grammar_path)
+        target_grammar_file = "co_decoded_skeleton_schema.gbnf" if mode == "co_decoded" else "skeleton_schema.gbnf"
+        self.grammar_path = _locate_skeleton_gbnf(grammar_path, filename=target_grammar_file)
         self.grammar_content = self.grammar_path.read_text(encoding="utf-8")
         self.grammar_hash = hashlib.sha256(self.grammar_content.encode("utf-8")).hexdigest()
 
-        self._mock = MockSkeletonTransducer(system_prompt=system_prompt)
+        self._mock = MockSkeletonTransducer(system_prompt=self.system_prompt, mode=mode)
         self._last_fallback_used = False
         self._server_disabled = False
 
@@ -645,22 +785,33 @@ class SkeletonTransducer:
         text: str,
         chunk_id: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Extract skeleton entities and event anchors via llama-server with exact span groundings."""
+        effective_mode = mode or kwargs.get("mode") or self.mode
         clean_text = text.strip()
         t0 = time.perf_counter()
 
         if self._server_disabled and self.fallback_to_mock:
             self._last_fallback_used = True
-            res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
+            res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
             res.metadata["fallback_from_server"] = True
             return res
 
         # Build payload
+        if effective_mode == "co_decoded":
+            sys_prompt = kwargs.get("system_prompt") or (
+                self.system_prompt if self.mode == "co_decoded" else CO_DECODED_SKELETON_SYSTEM_PROMPT
+            )
+            user_prompt = f"Extract co-decoded skeleton with compact Kev enums:\n\n{clean_text}"
+        else:
+            sys_prompt = kwargs.get("system_prompt") or self.system_prompt
+            user_prompt = f"Extract skeleton:\n\n{clean_text}"
+
         messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"Extract skeleton:\n\n{clean_text}"},
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_prompt},
         ]
 
         payload: Dict[str, Any] = {
@@ -712,7 +863,7 @@ class SkeletonTransducer:
                 self._last_fallback_used = True
                 self._server_disabled = True
                 logger.warning("llama-server unreachable (%s); using MockSkeletonTransducer", last_err)
-                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
+                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
                 res.metadata["fallback_from_server"] = True
                 return res
             raise RuntimeError(f"Failed to extract skeleton from llama-server at {self.base_url}: {last_err}") from last_err
@@ -721,12 +872,12 @@ class SkeletonTransducer:
         self._last_fallback_used = False
         try:
             parsed_data = self._clean_and_parse_json(raw_json_str)
-            entities, events = self._ground_and_build(clean_text, parsed_data)
+            entities, events = self._ground_and_build(clean_text, parsed_data, mode=effective_mode)
         except Exception as parse_err:
             if self.fallback_to_mock:
                 self._last_fallback_used = True
                 logger.warning("Failed to parse JSON from llama-server (%s); falling back to Mock", parse_err)
-                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities)
+                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
                 res.metadata["fallback_from_server"] = True
                 return res
             raise
@@ -746,6 +897,7 @@ class SkeletonTransducer:
                 "decoding_token_count": token_count,
                 "backend": "llama_server",
                 "model": self.model,
+                "mode": effective_mode,
             },
         )
 
@@ -803,6 +955,7 @@ class SkeletonTransducer:
         self,
         source_text: str,
         data: Dict[str, Any],
+        mode: str = "standard",
     ) -> Tuple[List[SkeletonEntity], List[SkeletonEvent]]:
         """Ground extracted entity texts and predicates to exact character/byte spans."""
         raw_entities = data.get("entities", [])
@@ -843,6 +996,11 @@ class SkeletonTransducer:
                 c_span = (0, min(len(pred), len(source_text)))
                 b_span = self.aligner.char_to_byte_span(source_text, c_span)
 
+            intent_val = raw_ev.get("intent")
+            epist_val = raw_ev.get("epist", raw_ev.get("epistemic"))
+            allen_val = raw_ev.get("allen")
+            pearl_val = raw_ev.get("pearl")
+
             events.append(
                 SkeletonEvent(
                     id=str(raw_ev.get("id", f"EV{len(events) + 1}")),
@@ -853,6 +1011,10 @@ class SkeletonTransducer:
                     byte_span=b_span,
                     raw_text=source_text[c_span[0]:c_span[1]] if alignment else None,
                     confidence=alignment.confidence if alignment else 0.8,
+                    intent=intent_val,
+                    epist=epist_val,
+                    allen=allen_val,
+                    pearl=pearl_val,
                 )
             )
 

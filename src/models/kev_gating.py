@@ -200,6 +200,42 @@ class KevAmbiguityGater:
         self.fast_path_confidence = fast_path_confidence
         self.none_confidence = none_confidence
 
+        val_rem = (1.0 - self.fast_path_confidence) / 3.0
+        none_rem = (1.0 - self.none_confidence) / 3.0
+        int_rem = (1.0 - self.fast_path_confidence) / 3.0
+        epi_rem = (1.0 - self.fast_path_confidence) / 3.0
+
+        self._agent_probs = {
+            ValencyRole.AGENT.value: self.fast_path_confidence,
+            ValencyRole.PATIENT.value: val_rem,
+            ValencyRole.INSTRUMENT.value: val_rem,
+            ValencyRole.NONE.value: val_rem,
+        }
+        self._patient_probs = {
+            ValencyRole.PATIENT.value: self.fast_path_confidence,
+            ValencyRole.AGENT.value: val_rem,
+            ValencyRole.INSTRUMENT.value: val_rem,
+            ValencyRole.NONE.value: val_rem,
+        }
+        self._none_probs = {
+            ValencyRole.NONE.value: self.none_confidence,
+            ValencyRole.AGENT.value: none_rem,
+            ValencyRole.PATIENT.value: none_rem,
+            ValencyRole.INSTRUMENT.value: none_rem,
+        }
+        self._intent_probs = {
+            SpeechActIntent.INFORMATIVE.value: self.fast_path_confidence,
+            SpeechActIntent.DIRECTIVE.value: int_rem,
+            SpeechActIntent.COMMISSIVE.value: int_rem,
+            SpeechActIntent.EXPRESSIVE.value: int_rem,
+        }
+        self._epistemic_probs = {
+            EpistemicSource.DIRECT_OBSERVATION.value: self.fast_path_confidence,
+            EpistemicSource.DEDUCTION.value: epi_rem,
+            EpistemicSource.HEARSAY.value: epi_rem,
+            EpistemicSource.CONJECTURE.value: epi_rem,
+        }
+
     def has_modal_hedges(self, text: str) -> bool:
         """Detect modal hedges, uncertainty markers, directives, or expressives in text."""
         return bool(MODAL_HEDGE_PATTERN.search(text))
@@ -267,48 +303,21 @@ class KevAmbiguityGater:
 
         text_lower = clean_text.lower()
 
-        # Split text into sentences if punctuation exists
-        if "." in clean_text or "!" in clean_text or "?" in clean_text:
+        # Fast pre-check: if text has no modal hedges, all events are informative/direct-observation
+        has_any_hedges = self.has_modal_hedges(clean_text)
+        has_any_passive = self.is_passive_clause(clean_text)
+
+        # Split text into sentences only if needed for localized clause resolution
+        if (has_any_hedges or has_any_passive) and ("." in clean_text or "!" in clean_text or "?" in clean_text):
             sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean_text) if s.strip()] or [clean_text]
         else:
             sentences = [clean_text]
 
-        # Precompute probability distributions
-        val_rem = (1.0 - self.fast_path_confidence) / 3.0
-        none_rem = (1.0 - self.none_confidence) / 3.0
-        int_rem = (1.0 - self.fast_path_confidence) / 3.0
-        epi_rem = (1.0 - self.fast_path_confidence) / 3.0
-
-        agent_probs = {
-            ValencyRole.AGENT.value: self.fast_path_confidence,
-            ValencyRole.PATIENT.value: val_rem,
-            ValencyRole.INSTRUMENT.value: val_rem,
-            ValencyRole.NONE.value: val_rem,
-        }
-        patient_probs = {
-            ValencyRole.PATIENT.value: self.fast_path_confidence,
-            ValencyRole.AGENT.value: val_rem,
-            ValencyRole.INSTRUMENT.value: val_rem,
-            ValencyRole.NONE.value: val_rem,
-        }
-        none_probs = {
-            ValencyRole.NONE.value: self.none_confidence,
-            ValencyRole.AGENT.value: none_rem,
-            ValencyRole.PATIENT.value: none_rem,
-            ValencyRole.INSTRUMENT.value: none_rem,
-        }
-        intent_probs = {
-            SpeechActIntent.INFORMATIVE.value: self.fast_path_confidence,
-            SpeechActIntent.DIRECTIVE.value: int_rem,
-            SpeechActIntent.COMMISSIVE.value: int_rem,
-            SpeechActIntent.EXPRESSIVE.value: int_rem,
-        }
-        epistemic_probs = {
-            EpistemicSource.DIRECT_OBSERVATION.value: self.fast_path_confidence,
-            EpistemicSource.DEDUCTION.value: epi_rem,
-            EpistemicSource.HEARSAY.value: epi_rem,
-            EpistemicSource.CONJECTURE.value: epi_rem,
-        }
+        agent_probs = self._agent_probs
+        patient_probs = self._patient_probs
+        none_probs = self._none_probs
+        intent_probs = self._intent_probs
+        epistemic_probs = self._epistemic_probs
 
         fast_path_valencies: List[ValencyScoringResult] = []
         fast_path_intents: List[IntentEpistemicResult] = []

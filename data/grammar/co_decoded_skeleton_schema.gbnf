@@ -1,5 +1,5 @@
-# QUANTA Fast Skeleton Transducer
-# GBNF Grammar for Constrained Decoding of Surface Skeletons (Flat JSON)
+# QUANTA Co-Decoded Fast Skeleton Transducer
+# GBNF Grammar for Constrained Decoding of Surface Skeletons with Compact Kev Enums (Flat JSON)
 
 root ::= ws "{" ws "\"entities\"" ws ":" ws entity-list ws "," ws "\"events\"" ws ":" ws event-list ws "}" ws
 

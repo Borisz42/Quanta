@@ -504,7 +504,7 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
         target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode == "skeleton":
+        if target_mode in ("skeleton", "co_decoded"):
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
@@ -536,7 +536,7 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             raise ValueError("Must provide either 'text' or 'chunk_text'")
         t0 = time.perf_counter()
         target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode == "skeleton":
+        if target_mode in ("skeleton", "co_decoded"):
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
@@ -549,7 +549,7 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
             res.metadata["prefill_latency_sec"] = skel_res.metadata.get("prefill_latency_sec", latency * 0.35)
             res.metadata["decoding_latency_sec"] = skel_res.metadata.get("decoding_latency_sec", latency * 0.65)
             res.metadata["decoding_token_count"] = skel_res.metadata.get("decoding_token_count", estimate_token_count(skel_res.to_json()))
-            res.metadata["mode"] = "skeleton"
+            res.metadata["mode"] = target_mode
             res.metadata["skeleton_result"] = skel_res
             return res
 
@@ -1372,7 +1372,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
             raise ValueError("Must provide either 'text' or 'chunk_text'")
 
         target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode == "skeleton":
+        if target_mode in ("skeleton", "co_decoded"):
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
@@ -1464,7 +1464,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
 
         t0 = time.perf_counter()
         target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode == "skeleton":
+        if target_mode in ("skeleton", "co_decoded"):
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
@@ -1477,7 +1477,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
             res.metadata["prefill_latency_sec"] = skel_res.metadata.get("prefill_latency_sec", latency * 0.35)
             res.metadata["decoding_latency_sec"] = skel_res.metadata.get("decoding_latency_sec", latency * 0.65)
             res.metadata["decoding_token_count"] = skel_res.metadata.get("decoding_token_count", estimate_token_count(skel_res.to_json()))
-            res.metadata["mode"] = "skeleton"
+            res.metadata["mode"] = target_mode
             res.metadata["skeleton_result"] = skel_res
             return res
 
