@@ -39,10 +39,9 @@ from parser.span_aligner import SpanAligner, SpanAlignment
 logger = logging.getLogger(__name__)
 
 DEFAULT_SKELETON_SYSTEM_PROMPT = """You are the QUANTA Fast Skeleton Transducer.
-Extract the 3 to 5 most salient named entities and 1 to 3 primary event predicate frames into compact flat JSON conforming to:
-{"entities": [{"id": "E1", "text": "<name>"}], "events": [{"id": "EV1", "pred": "<verb>", "subj": "<E#>", "obj": "<E#>"}]}
-Focus strictly on primary subjects, objects, and core verbs (max 5 entities, max 3 events).
-Do NOT emit markdown, commentary, logic tags, epistemic statuses, or relations."""
+Extract at most 3 core named entities and 1 main event predicate frame. Never extract dates, honors, or adjectives.
+Example input: "Alan Turing completed his degrees at Cambridge."
+Example output: {"entities": [{"id": "E1", "text": "Alan Turing"}, {"id": "E2", "text": "Cambridge"}], "events": [{"id": "EV1", "pred": "completed", "subj": "E1", "obj": "E2"}]}"""
 
 
 def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None) -> Path:
@@ -588,7 +587,7 @@ class SkeletonTransducer:
         self,
         base_url: Optional[str] = None,
         model: str = "qwen3.5-4b",
-        timeout: float = 30.0,
+        timeout: float = 60.0,
         max_retries: int = 2,
         fallback_to_mock: bool = True,
         grammar_path: Optional[Union[str, Path]] = None,
@@ -610,6 +609,10 @@ class SkeletonTransducer:
         self.fallback_to_mock = fallback_to_mock
         self.system_prompt = system_prompt
         self.session = requests.Session()
+        from requests.adapters import HTTPAdapter
+        adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
         self.aligner = SpanAligner()
 
         # Load GBNF Grammar
@@ -763,7 +766,7 @@ class SkeletonTransducer:
         )
 
     def _clean_and_parse_json(self, raw_str: str) -> Dict[str, Any]:
-        """Strip fences and safely decode JSON structure."""
+        """Strip fences and safely decode JSON structure, with truncated auto-repair."""
         clean = raw_str.strip()
         clean = re.sub(r"<think>.*?</think>", "", clean, flags=re.DOTALL).strip()
         fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", clean)
@@ -772,11 +775,29 @@ class SkeletonTransducer:
         try:
             return json.loads(clean)
         except json.JSONDecodeError:
-            # Fallback extraction of JSON substring
-            match = re.search(r"\{[\s\S]*\}", clean)
-            if match:
+            pass
+
+        # Fallback 1: Extraction of clean JSON substring
+        match = re.search(r"\{[\s\S]*\}", clean)
+        if match:
+            try:
                 return json.loads(match.group(0))
-            raise
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback 2: Auto-repair truncated JSON by finding last valid closing brace
+        last_brace = clean.rfind("}")
+        if last_brace != -1:
+            candidate = clean[:last_brace + 1].strip()
+            open_sq = candidate.count("[") - candidate.count("]")
+            open_cr = candidate.count("{") - candidate.count("}")
+            candidate += ("]" * max(0, open_sq)) + ("}" * max(0, open_cr))
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+        raise json.JSONDecodeError("Could not parse or repair JSON from LLM output", clean, 0)
 
     def _ground_and_build(
         self,

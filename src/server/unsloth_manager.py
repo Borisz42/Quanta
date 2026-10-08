@@ -197,21 +197,40 @@ class UnslothServerManager:
         launched = False
 
         # Candidate 1: standalone hardware-accelerated llama-server.exe
+        parallel_slots = os.getenv("QUANTA_PARALLEL_SLOTS", "16")
+        model_file = Path(self.model_path)
+        if not model_file.exists():
+            for m_cand in [
+                Path(r"C:\Users\PC\.lmstudio\models\ggml-org\Kev-4B-GGUF\Kev-4B-Q4_K_M.gguf"),
+                Path(r"C:\Users\PC\.lmstudio\models\unsloth\Qwen3.5-4B-MTP-GGUF\Qwen3.5-4B-Q4_K_M.gguf"),
+                Path(os.path.expanduser("~")) / ".lmstudio" / "models" / "ggml-org" / "Kev-4B-GGUF" / "Kev-4B-Q4_K_M.gguf",
+                Path(os.path.expanduser("~")) / ".lmstudio" / "models" / "unsloth" / "Qwen3.5-4B-MTP-GGUF" / "Qwen3.5-4B-Q4_K_M.gguf",
+                Path("models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"),
+            ]:
+                if m_cand.exists():
+                    model_file = m_cand
+                    self.model_path = str(m_cand)
+                    break
+
         llama_candidates = [
+            Path(r"C:\Users\PC\.lmstudio\extensions\backends\llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.54.0\llama-server.exe"),
+            Path(r"C:\Users\PC\.lmstudio\extensions\backends\llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.53.0\llama-server.exe"),
+            Path(r"C:\Users\PC\.docker\bin\inference\llama-server.exe"),
             Path(r"C:\Users\PC\.unsloth\llama.cpp\build\bin\Release\llama-server.exe"),
             Path(shutil.which("llama-server.exe") or ""),
             Path(shutil.which("llama-server") or ""),
+            Path(os.path.expanduser("~")) / ".lmstudio" / "extensions" / "backends" / "llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.54.0" / "llama-server.exe",
             Path(os.path.expanduser("~")) / ".unsloth" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
             Path("bin/llama-server.exe"),
             Path("llama.cpp/llama-server.exe"),
         ]
         for candidate in llama_candidates:
-            if candidate and candidate.exists():
+            if candidate and candidate.exists() and model_file.exists():
                 try:
                     cmd = [
                         str(candidate),
                         "-m",
-                        str(self.model_path),
+                        str(model_file),
                         "--port",
                         str(self.port),
                         "--host",
@@ -219,8 +238,10 @@ class UnslothServerManager:
                         "-ngl",
                         "99",
                         "-c",
-                        "8192",
-                        "-fa",
+                        "16384",
+                        "-np",
+                        str(parallel_slots),
+                        "-cb",
                     ]
                     creationflags = 0
                     if sys.platform == "win32":

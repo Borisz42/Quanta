@@ -179,6 +179,11 @@ def run_live_demonstration(mode: str = "auto") -> Dict[str, Any]:
     is_live_server = False
     if mode in ("auto", "live"):
         is_live_server = mgr.is_service_responsive()
+        if not is_live_server:
+            print("  • llama-server is not currently responsive. Awakening unified background service...")
+            launched = mgr.ensure_unsloth_service_running(timeout=35.0)
+            if launched:
+                is_live_server = mgr.is_service_responsive()
 
     t_init_0 = time.perf_counter()
     if mode == "mock":
@@ -191,15 +196,16 @@ def run_live_demonstration(mode: str = "auto") -> Dict[str, Any]:
         )
     elif is_live_server:
         gpu_telemetry = mgr.get_gpu_telemetry()
-        backend_desc = f"Live llama-server (:8888) on {gpu_telemetry.get('name', 'NVIDIA GPU')} ({gpu_telemetry.get('used_mb', 0):.0f} MiB)"
+        backend_desc = f"Live llama-server (:8888, 16 parallel slots) on {gpu_telemetry.get('name', 'NVIDIA GPU')} ({gpu_telemetry.get('used_mb', 0):.0f} MiB)"
         print(f"  • Active Backend        : {ansi(backend_desc, '1;32')}")
         pipeline = CognitivePipeline(
             transducer_backend="unsloth",
             canvas_capacity=512,
+            kev_mode="regular_kev_lora",
         )
     else:
         if mode == "live":
-            print(ansi("  [ERROR] Live llama-server requested but not responsive on 127.0.0.1:8888. Aborting.", "1;31"))
+            print(ansi("  [ERROR] Live llama-server requested but failed to start or respond on 127.0.0.1:8888. Aborting.", "1;31"))
             sys.exit(1)
         backend_desc = "Deterministic High-Speed Neural Mock Transducer (Offline CI Safe)"
         print(f"  • Active Backend        : {ansi(backend_desc, '1;33')}")

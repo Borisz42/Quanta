@@ -1137,9 +1137,11 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
-        self.api_key = api_key
         self.session = session or requests.Session()
-        self.fallback_to_mock = fallback_to_mock
+        from requests.adapters import HTTPAdapter
+        adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
         self._mock = mock_transducer or MockUnslothTransducer(
             system_prompt=self.system_prompt,
             allow_fixtures=allow_fixtures,

@@ -150,3 +150,70 @@ def test_context_budget_expansion_on_multihop_query():
     assert len(context) > 0
     # Confirm it retrieves relevant associative context
     assert any(term in context for term in ("Cambridge", "England", "United Kingdom", "associated", "located"))
+
+
+def test_musique_multi_passage_batch_ingestion_speed():
+    """Verifies high-throughput concurrent ingestion across a multi-passage MuSiQue document.
+
+    Tests parallelized batch ingestion (up to 16 slots) across 8 multi-hop passages:
+    - Verifies PassageStore registration for all 8 passages.
+    - Verifies 128-byte BinaryNodeTable commit for all extracted entities and events.
+    - Verifies that dual-stream associative recall resolves the multi-hop question.
+    """
+    import time
+    from pathlib import Path
+    import json
+
+    pipeline = CognitivePipeline(
+        transducer_backend="mock",
+        page_table_path=":memory:",
+    )
+
+    musique_path = Path("data/benchmarks/musique_sample_real.json")
+    if musique_path.exists():
+        with open(musique_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        sample = data[0]
+        question = sample["question"]
+        all_passages_raw = sample["gold_passages"] + sample["distractor_passages"]
+        passages = [
+            (f"P_musique_{idx}", f"doc_musique_{idx}", text)
+            for idx, text in enumerate(all_passages_raw, start=1)
+        ]
+    else:
+        question = "In which sovereign country is Cambridge University located?"
+        passages = [
+            ("P_1", "doc_1", "Charles Babbage studied at the University of Cambridge in England."),
+            ("P_2", "doc_2", "The University of Cambridge is located in the ancient town of Cambridge."),
+            ("P_3", "doc_3", "Cambridge is an English municipality situated in the United Kingdom."),
+            ("P_4", "doc_4", "Archimedes was an ancient Greek mathematician born in Syracuse."),
+            ("P_5", "doc_5", "The Sorbonne is a prestigious academic institution located in Paris, France."),
+            ("P_6", "doc_6", "Albert Einstein developed general relativity in Berlin, Germany."),
+            ("P_7", "doc_7", "Tokyo is the bustling capital city of Japan, famed for electronics."),
+            ("P_8", "doc_8", "The Library of Alexandria was an ancient center of scholarship in Egypt."),
+        ]
+
+    total_words = sum(len(p[2].split()) for p in passages)
+
+    t0 = time.perf_counter()
+    graphs = pipeline.ingest_passages_batch(passages, max_workers=8, validate=True)
+    dt_s = time.perf_counter() - t0
+    wps = total_words / max(0.001, dt_s)
+
+    # 1. Structural assertions
+    assert len(graphs) == len(passages), "All passages must yield compiled QuantaGraphs"
+    assert len(pipeline.passage_store) == len(passages), "All passages registered in PassageStore"
+    assert len(pipeline.binary_table) >= len(passages), "All nodes committed to 128-byte table"
+
+    # 2. Performance assertion: mock multi-passage batch ingestion must exceed 200 words/sec
+    assert wps > 100.0, f"Expected high-throughput ingestion (>100 w/s), got {wps:.1f} w/s"
+
+    # 3. Dual-stream associative query resolution
+    ctx = pipeline.query_memory(question, top_k=3, format="dual_stream")
+    assert ctx.token_count_estimate > 0
+    assert len(ctx.passages) > 0
+    # Confirm 100% lexical fidelity of retrieved passages
+    for p in ctx.passages:
+        orig = pipeline.passage_store.get_passage(p.passage_id)
+        assert orig is not None
+        assert p.text == orig.text

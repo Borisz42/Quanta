@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+import os
 from pathlib import Path
 import re
 import time
@@ -162,7 +163,10 @@ class CognitivePipeline:
         clingo_dl_gate: Optional[ClingoDLGate] = None,
         **transducer_kwargs,
     ):
-        """Initialize the unified Neuro-Symbolic Cognitive Pipeline."""
+        # Extract Kev-specific configuration from kwargs to avoid forwarding to legacy transducer
+        self.kev_mode = transducer_kwargs.pop("kev_mode", "regular_kev_lora")
+        self.kev_concurrency = transducer_kwargs.pop("kev_concurrency", None)
+
         # 1. Chunker & Segmentation
         self.chunker = chunker or DiscourseChunker(min_words=50, max_words=400)
 
@@ -239,9 +243,13 @@ class CognitivePipeline:
         elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
             self.kev_engine = KevDecisionEngine(base_url="mock", fallback_to_mock=True)
             self.kev_engine._server_available = False
-            self.kev_engine._last_health_check_time = time.perf_counter()
         else:
-            self.kev_engine = KevDecisionEngine(fallback_to_mock=True)
+            concurrency = self.kev_concurrency or int(os.environ.get("QUANTA_PARALLEL_SLOTS", "16"))
+            self.kev_engine = KevDecisionEngine(
+                fallback_to_mock=True,
+                mode=self.kev_mode,
+                concurrency_limit=concurrency,
+            )
         self.belnap_mapper = belnap_mapper or BelnapLatticeMapper()
         self.clingo_dl_gate = clingo_dl_gate or ClingoDLGate()
         self.concept_grounder = MmapLexicalGrounder()
@@ -349,11 +357,54 @@ class CognitivePipeline:
             skeleton_res = MockSkeletonTransducer().transduce(text, passage_id=pid, doc_id=doc_id)
 
         # Step 3: Kev-4B 3-pass Prefill Scoring
-        kev_eval = self.kev_engine.evaluate_chunk(
-            entities=skeleton_res.entities,
-            events=skeleton_res.events,
-            text=text,
-        )
+        if self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none"):
+            # Direct Skeleton S-V-O valency assignment without external GPU logprob calls
+            valencies = []
+            for ev in skeleton_res.events:
+                if ev.subject_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.subject_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="AGENT",
+                        confidence=0.98,
+                        probabilities={"AGENT": 0.98},
+                    ))
+                if ev.object_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.object_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="PATIENT",
+                        confidence=0.98,
+                        probabilities={"PATIENT": 0.98},
+                    ))
+            kev_eval = KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=[
+                    IntentEpistemicResult(
+                        event_id=ev.id,
+                        predicate=ev.predicate,
+                        intent="INFORMATIVE",
+                        intent_confidence=0.95,
+                        intent_probabilities={"INFORMATIVE": 0.95},
+                        epistemic_source="DIRECT_OBSERVATION",
+                        epistemic_confidence=0.95,
+                        epistemic_probabilities={"DIRECT_OBSERVATION": 0.95},
+                    ) for ev in skeleton_res.events
+                ],
+                relations=[],
+                total_latency_ms=0.1,
+                mode="bypass",
+            )
+        else:
+            kev_eval = self.kev_engine.evaluate_chunk(
+                entities=skeleton_res.entities,
+                events=skeleton_res.events,
+                text=text,
+            )
 
         # Step 4: Belnap Lattice Mapping & SIMD Concept Grounding
         ent_concept_codes: Dict[str, int] = {}
@@ -546,6 +597,64 @@ class CognitivePipeline:
         setattr(graph, "extraction_result", legacy_extraction)
 
         return graph
+
+    def ingest_passages_batch(
+        self,
+        passages: Sequence[Union[Tuple[str, str, str], Dict[str, str]]],
+        max_workers: int = 16,
+        validate: bool = True,
+    ) -> List[QuantaGraph]:
+        """Ingests a collection of passages concurrently across parallel worker slots.
+
+        Enables high-throughput document ingestion (>200-300 words/sec) on multi-passage
+        and long multi-paragraph documents (such as MuSiQue or Wikipedia articles) by
+        parallelizing neural extraction across all available server slots (up to 16).
+
+        Args:
+            passages: Sequence of (passage_id, doc_id, text) tuples or dicts.
+            max_workers: Maximum concurrent workers (defaults to 16 matching llama-server slots).
+            validate: Whether to run difference logic verification.
+
+        Returns:
+            List of compiled and committed QuantaGraph instances.
+        """
+        if not passages:
+            return []
+
+        norm_passages = []
+        for p in passages:
+            if isinstance(p, dict):
+                pid = p.get("passage_id") or p.get("id") or f"P_{int(time.time() * 1000)}"
+                doc_id = p.get("doc_id") or "doc_batch"
+                text = p.get("text") or p.get("content") or ""
+            else:
+                pid, doc_id, text = p
+            norm_passages.append((pid, doc_id, text))
+
+        workers = min(max_workers, len(norm_passages))
+        if workers <= 1:
+            return [
+                self.ingest_document(text=text, doc_id=doc_id, passage_id=pid, validate=validate)
+                for pid, doc_id, text in norm_passages
+            ]
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        orig_concurrency = getattr(self.kev_engine, "concurrency_limit", 16)
+        try:
+            # Scale Kev per-passage concurrency so total in-flight requests match server slot capacity
+            if hasattr(self.kev_engine, "concurrency_limit"):
+                self.kev_engine.concurrency_limit = max(1, 16 // workers)
+
+            def _ingest_one(item: Tuple[str, str, str]) -> QuantaGraph:
+                pid, doc_id, text = item
+                return self.ingest_document(text=text, doc_id=doc_id, passage_id=pid, validate=validate)
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                return list(executor.map(_ingest_one, norm_passages))
+        finally:
+            if hasattr(self.kev_engine, "concurrency_limit"):
+                self.kev_engine.concurrency_limit = orig_concurrency
 
     def query_memory(
         self,

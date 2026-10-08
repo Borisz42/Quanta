@@ -280,11 +280,11 @@ class StringInternTable:
     Assigns stable integer IDs to frequent strings (anchors, predicates, relation labels).
     """
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, lock: Optional[threading.RLock] = None):
         self._conn = conn
         self._str_to_id: Dict[str, int] = {}
         self._id_to_str: Dict[int, str] = {}
-        self._lock = threading.RLock()
+        self._lock = lock if lock is not None else threading.RLock()
         self._init_schema()
 
     def _init_schema(self):
@@ -380,7 +380,7 @@ class PageTable(MutableMapping):
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._init_schema()
 
-        self.interner = StringInternTable(self._conn)
+        self.interner = StringInternTable(self._conn, lock=self._lock)
         self.vector_index = SimdHammingIndex()
         self._reverse_edges: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
         self._literal_index: Dict[str, Set[str]] = defaultdict(set)
@@ -533,50 +533,51 @@ class PageTable(MutableMapping):
 
     def store_node(self, node: QuantaNode) -> str:
         """Stores a QuantaNode in SQLite and registers it in the SIMD vector index."""
-        cid = node.compute_cid()
-        packed_vec = node.vector.to_bytes()
-        anchor_id = self.interner.intern(node.anchor)
-        literal_str = json.dumps(node.literal) if node.literal is not None else None
-        edges_str = json.dumps(node.edges)
-        now = time.time()
+        with self._lock:
+            cid = node.compute_cid()
+            packed_vec = node.vector.to_bytes()
+            anchor_id = self.interner.intern(node.anchor)
+            literal_str = json.dumps(node.literal) if node.literal is not None else None
+            edges_str = json.dumps(node.edges)
+            now = time.time()
 
-        for rel, targets in node.edges.items():
-            for t in targets:
-                self._reverse_edges[t].add((cid, rel))
-        is_fold = bool(
-            (node.anchor and (node.anchor.startswith("merkle:") or node.anchor.startswith("fold:")))
-            or (isinstance(node.literal, dict) and node.literal.get("type") == "discourse_episode_fold")
-        )
-        if node.literal and not is_fold:
-            self._index_literal(str(node.literal), cid)
-        if node.anchor and not is_fold:
-            self._index_literal(str(node.anchor), cid)
-
-        with self._lock, self._conn:
-            self._conn.execute(
-                """
-                INSERT OR REPLACE INTO nodes 
-                (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed,
-                 passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT access_count FROM nodes WHERE cid = ?), 0), ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, cid, now,
-                    getattr(node, "passage_id", None),
-                    getattr(node, "span_start", None),
-                    getattr(node, "span_end", None),
-                    float(getattr(node, "salience", 1.0)),
-                    str(getattr(node, "truth_status", "TRUE")),
-                    float(getattr(node, "confidence", 1.0)),
-                    str(getattr(node, "evidence_source", "direct_observation")),
-                    getattr(node, "node_type", None),
-                    getattr(node, "concept_code", None),
-                ),
+            for rel, targets in node.edges.items():
+                for t in targets:
+                    self._reverse_edges[t].add((cid, rel))
+            is_fold = bool(
+                (node.anchor and (node.anchor.startswith("merkle:") or node.anchor.startswith("fold:")))
+                or (isinstance(node.literal, dict) and node.literal.get("type") == "discourse_episode_fold")
             )
-            self.vector_index.add(cid, packed_vec)
+            if node.literal and not is_fold:
+                self._index_literal(str(node.literal), cid)
+            if node.anchor and not is_fold:
+                self._index_literal(str(node.anchor), cid)
 
-        return cid
+            with self._conn:
+                self._conn.execute(
+                    """
+                    INSERT OR REPLACE INTO nodes 
+                    (cid, vector_bytes, anchor_id, literal, parent_cid, edges, created_at, access_count, last_accessed,
+                     passage_id, span_start, span_end, salience, truth_status, confidence, evidence_source, node_type, concept_code)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT access_count FROM nodes WHERE cid = ?), 0), ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cid, packed_vec, anchor_id, literal_str, node.parent_cid, edges_str, now, cid, now,
+                        getattr(node, "passage_id", None),
+                        getattr(node, "span_start", None),
+                        getattr(node, "span_end", None),
+                        float(getattr(node, "salience", 1.0)),
+                        str(getattr(node, "truth_status", "TRUE")),
+                        float(getattr(node, "confidence", 1.0)),
+                        str(getattr(node, "evidence_source", "direct_observation")),
+                        getattr(node, "node_type", None),
+                        getattr(node, "concept_code", None),
+                    ),
+                )
+                self.vector_index.add(cid, packed_vec)
+
+            return cid
 
     def store_nodes(self, nodes: Iterable[QuantaNode]) -> List[str]:
         """Stores multiple QuantaNodes in a single fast SQLite transaction."""
