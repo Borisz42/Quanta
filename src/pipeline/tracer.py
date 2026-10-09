@@ -7,6 +7,7 @@ and Antigravity artifacts.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 import json
 import logging
@@ -44,6 +45,8 @@ class PipelineExecutionTracer:
         self.ablation_results: List[Dict[str, Any]] = []
         self.comparative_results: List[Dict[str, Any]] = []
         self.cold_start_results: List[Dict[str, Any]] = []
+        self.stage_timings: Dict[str, float] = {}
+        self.stage_gpu_calls: Dict[str, int] = {}
 
     @classmethod
     def get_instance(cls) -> "PipelineExecutionTracer":
@@ -59,6 +62,65 @@ class PipelineExecutionTracer:
         self.ablation_results.clear()
         self.comparative_results.clear()
         self.cold_start_results.clear()
+        self.stage_timings.clear()
+        self.stage_gpu_calls.clear()
+
+    # -------------------------------------------------------------------------
+    # Stage Telemetry Recorders (Phase 0)
+    # -------------------------------------------------------------------------
+
+    def record_stage_timing(
+        self,
+        stage: str,
+        duration_ms: float,
+        gpu_calls: int = 0,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        """Records a stage-level duration and GPU call count for Phase 0 telemetry."""
+        self.stage_timings[stage] = self.stage_timings.get(stage, 0.0) + duration_ms
+        if gpu_calls > 0:
+            self.stage_gpu_calls[stage] = self.stage_gpu_calls.get(stage, 0) + gpu_calls
+        self.events.append(
+            TraceEvent(
+                timestamp=time.time(),
+                stage=stage,
+                action="stage_timing",
+                metrics={"duration_ms": duration_ms, "gpu_calls": gpu_calls},
+                details=details or {},
+            )
+        )
+
+    @contextmanager
+    def measure_stage(
+        self,
+        stage: str,
+        gpu_calls: int = 0,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        """Context manager to measure duration of a pipeline stage in milliseconds."""
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            self.record_stage_timing(stage, dt_ms, gpu_calls=gpu_calls, details=details)
+
+    def get_stage_timings(self) -> Dict[str, float]:
+        """Returns snapshot of current stage timings in ms."""
+        return dict(self.stage_timings)
+
+    def get_gpu_calls(self) -> Dict[str, int]:
+        """Returns snapshot of GPU calls per stage."""
+        return dict(self.stage_gpu_calls)
+
+    def get_total_gpu_calls(self) -> int:
+        """Returns sum of all recorded GPU calls across stages."""
+        return sum(self.stage_gpu_calls.values())
+
+    def reset_stage_telemetry(self):
+        """Resets stage timings and GPU call counts without clearing other trace events."""
+        self.stage_timings.clear()
+        self.stage_gpu_calls.clear()
 
     # -------------------------------------------------------------------------
     # Event Recorders

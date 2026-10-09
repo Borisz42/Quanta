@@ -95,6 +95,7 @@ from parser.skeleton_transducer import (
 from verification.belnap_calibrator import BelnapLatticeMapper
 from verification.clingo_dl_gate import ClingoDLGate
 from models.kev_async_worker import AsyncKevVerificationQueue, VerificationTask
+from pipeline.tracer import PipelineExecutionTracer
 
 logger = logging.getLogger("quanta.pipeline.cognitive")
 
@@ -162,8 +163,10 @@ class CognitivePipeline:
         kev_engine: Optional[Any] = None,
         belnap_mapper: Optional[BelnapLatticeMapper] = None,
         clingo_dl_gate: Optional[ClingoDLGate] = None,
+        tracer: Optional[PipelineExecutionTracer] = None,
         **transducer_kwargs,
     ):
+        self.tracer = tracer or PipelineExecutionTracer.get_instance()
         # Extract Kev-specific configuration from kwargs to avoid forwarding to legacy transducer
         self.kev_mode = transducer_kwargs.pop("kev_mode", "co_decoded")
         self.kev_concurrency = transducer_kwargs.pop("kev_concurrency", None)
@@ -353,7 +356,10 @@ class CognitivePipeline:
         # Multi-chunk splitting for long text (> 600 words)
         words = text.strip().split()
         if len(words) > 600 and hasattr(self.chunker, "chunk_text"):
+            t_chunk0 = time.perf_counter()
             chunks = self.chunker.chunk_text(text, chapter_id=chapter_id or doc_id)
+            if self.tracer:
+                self.tracer.record_stage_timing("chunking", (time.perf_counter() - t_chunk0) * 1000.0, gpu_calls=0)
             if len(chunks) > 1:
                 last_g = None
                 for idx, c in enumerate(chunks):
@@ -379,6 +385,7 @@ class CognitivePipeline:
         )
 
         # Step 2: Skeleton Transduction
+        t_trans0 = time.perf_counter()
         transduce_kwargs = {}
         if self.kev_mode == "co_decoded":
             transduce_kwargs["mode"] = "co_decoded"
@@ -397,7 +404,17 @@ class CognitivePipeline:
             mock_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
             skeleton_res = MockSkeletonTransducer(mode=mock_mode).transduce(text, passage_id=pid, doc_id=doc_id)
 
+        if self.tracer:
+            st_name = self.skeleton_transducer.__class__.__name__ if self.skeleton_transducer else "Mock"
+            is_mock_trans = "Mock" in st_name or getattr(self.skeleton_transducer, "_is_mock", False)
+            self.tracer.record_stage_timing(
+                "transduction",
+                (time.perf_counter() - t_trans0) * 1000.0,
+                gpu_calls=0 if is_mock_trans else 1,
+            )
+
         # Step 3: Kev-4B 3-pass Prefill Scoring
+        t_kev0 = time.perf_counter()
         if self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none"):
             # Direct Skeleton S-V-O valency assignment without external GPU logprob calls
             valencies = []
@@ -573,6 +590,12 @@ class CognitivePipeline:
                 text=text,
             )
 
+        if self.tracer:
+            ke_name = self.kev_engine.__class__.__name__ if self.kev_engine else "Mock"
+            is_zero_gpu = self.kev_mode in ("bypass", "none", "off", "co_decoded", "async") or "Mock" in ke_name
+            gpu_kev = 0 if is_zero_gpu else getattr(kev_eval, "gpu_calls", 1)
+            self.tracer.record_stage_timing("Kev", (time.perf_counter() - t_kev0) * 1000.0, gpu_calls=gpu_kev)
+
         # Step 4: Belnap Lattice Mapping & SIMD Concept Grounding
         ent_concept_codes: Dict[str, int] = {}
         for ent in skeleton_res.entities:
@@ -587,6 +610,7 @@ class CognitivePipeline:
                 ev_concept_codes[ev.id] = code
 
         # Step 5: ClingoDLGate Difference Logic Verification
+        t_dl0 = time.perf_counter()
         if validate and self.clingo_dl_gate is not None:
             try:
                 dl_res = self.clingo_dl_gate.validate(
@@ -597,6 +621,9 @@ class CognitivePipeline:
                     logger.warning("ClingoDLGate detected temporal/causal conflicts: %s", dl_res.errors)
             except Exception as dl_err:
                 logger.debug("ClingoDLGate validation check: %s", dl_err)
+
+        if self.tracer:
+            self.tracer.record_stage_timing("Clingo-DL", (time.perf_counter() - t_dl0) * 1000.0, gpu_calls=0)
 
         # Step 6: Commit to Dual-Node QuantaGraph and 128-Byte BinaryNodeTable
         graph = QuantaGraph()
@@ -894,6 +921,7 @@ class CognitivePipeline:
             return empty_ctx if format in ("dual_stream", "object") else ""
 
         # Step 1 & 2: Compile seeds & Execute HippoRAG 2 PPR with PoP-RAG gating
+        t_ppr0 = time.perf_counter()
         subgraph = self.retriever.retrieve_subgraph_for_query(
             query=query,
             page_table=self.page_table,
@@ -902,6 +930,8 @@ class CognitivePipeline:
             query_polarity=query_polarity,
             algorithm="hipporag",
         )
+        if self.tracer:
+            self.tracer.record_stage_timing("PPR", (time.perf_counter() - t_ppr0) * 1000.0, gpu_calls=0)
 
         # Fallback if no nodes found: check active canvas
         if (subgraph is None or not subgraph.nodes) and hasattr(self, "active_canvas") and self.active_canvas.nodes:
@@ -919,6 +949,7 @@ class CognitivePipeline:
                     self.async_kev_worker.prioritize(pid)
 
         # Step 3 & 4: Bipartite Projection and Dual-Stream Context Assembly
+        t_ctx0 = time.perf_counter()
         dual_ctx = self.context_assembler.assemble_dual_stream_context(
             subgraph=subgraph,
             passage_store=self.passage_store,
@@ -926,6 +957,8 @@ class CognitivePipeline:
             query_text=query,
             activations=getattr(subgraph, "activations", None),
         )
+        if self.tracer:
+            self.tracer.record_stage_timing("context assembly", (time.perf_counter() - t_ctx0) * 1000.0, gpu_calls=0)
 
         fmt_lower = str(format).lower().strip()
         if fmt_lower in ("dual_stream", "object"):

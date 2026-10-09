@@ -419,6 +419,10 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         if not raw_messages:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="messages array cannot be empty")
 
+        tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
+        if tracer is not None:
+            tracer.reset_stage_telemetry()
+
         # 1. Measure incoming token footprint
         raw_tokens = estimate_messages_tokens(raw_messages)
 
@@ -442,8 +446,12 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         dialogue_history = [m for m in prior_messages if m.role != "system"]
 
         # Decompose single-turn bulky context if present
+        t_split_start = time.perf_counter()
         doc_from_user, isolated_question = decompose_query_context(raw_user_content)
         doc_from_system, clean_sys_inst = extract_context_from_system(system_messages)
+        t_split_ms = (time.perf_counter() - t_split_start) * 1000.0
+        if tracer is not None:
+            tracer.record_stage_timing("query split", t_split_ms, gpu_calls=0)
 
         has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
         user_query = isolated_question if doc_from_user else raw_user_content
@@ -687,6 +695,15 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             else max(cfg.timeout_seconds, 60.0 + (raw_tokens / 1000.0) * 3.0)
         )
 
+        t_ttc_ms = (time.perf_counter() - t0) * 1000.0
+        stage_timings = tracer.get_stage_timings() if tracer is not None else {}
+        total_gpu_calls = tracer.get_total_gpu_calls() if tracer is not None else 0
+        quanta_headers = {
+            "X-Quanta-TTC-Ms": f"{t_ttc_ms:.2f}",
+            "X-Quanta-Stage-Timings": json.dumps(stage_timings),
+            "X-Quanta-GPU-Calls": str(total_gpu_calls),
+        }
+
         if request.stream:
             return await _handle_streaming_response(
                 backend_url=cfg.backend_url,
@@ -698,6 +715,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 query=user_query,
                 context=retrieved_context,
                 timeout=effective_timeout,
+                tracer=tracer,
+                headers=quanta_headers,
             )
         else:
             return await _handle_unary_response(
@@ -712,6 +731,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 timeout=effective_timeout,
                 tracer=tracer,
                 quanta_meta=quanta_meta,
+                headers=quanta_headers,
             )
 
     return app
@@ -733,6 +753,7 @@ async def _handle_unary_response(
     timeout: float,
     tracer: Optional[PipelineExecutionTracer] = None,
     quanta_meta: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> JSONResponse:
     """Forwards non-streaming request to backend or returns local neuro-symbolic completion."""
     t0 = time.perf_counter()
@@ -750,6 +771,7 @@ async def _handle_unary_response(
                 if quanta_meta:
                     data["quanta_metadata"] = quanta_meta
                 if tracer is not None:
+                    tracer.record_stage_timing("reader end", dt_s * 1000.0, gpu_calls=1)
                     tracer.record_backend_call(
                         method="POST",
                         url=f"{backend_url.rstrip('/')}/chat/completions",
@@ -760,7 +782,11 @@ async def _handle_unary_response(
                         prompt_tokens=usage.get("prompt_tokens", 0),
                         details={"model": payload.get("model")},
                     )
-                return JSONResponse(content=data, status_code=200)
+                resp_headers = dict(headers or {})
+                if tracer is not None:
+                    resp_headers["X-Quanta-Stage-Timings"] = json.dumps(tracer.get_stage_timings())
+                    resp_headers["X-Quanta-GPU-Calls"] = str(tracer.get_total_gpu_calls())
+                return JSONResponse(content=data, status_code=200, headers=resp_headers)
             logger.warning("Downstream backend responded with status %d: %s", resp.status_code, resp.text)
     except Exception as exc:
         logger.info("Downstream backend unavailable (%s). Falling back to local QUANTA response.", exc)
@@ -771,8 +797,16 @@ async def _handle_unary_response(
     else:
         local_content = f"[QUANTA Local Response] Processed query: '{query}'"
 
+    if tracer is not None:
+        tracer.record_stage_timing("reader end", (time.perf_counter() - t0) * 1000.0, gpu_calls=0)
+
     prompt_toks = sum(estimate_tokens(m.get("content", "")) for m in payload.get("messages", []))
     comp_toks = estimate_tokens(local_content)
+
+    resp_headers = dict(headers or {})
+    if tracer is not None:
+        resp_headers["X-Quanta-Stage-Timings"] = json.dumps(tracer.get_stage_timings())
+        resp_headers["X-Quanta-GPU-Calls"] = str(tracer.get_total_gpu_calls())
 
     return JSONResponse(
         content={
@@ -802,6 +836,7 @@ async def _handle_unary_response(
             },
         },
         status_code=200,
+        headers=resp_headers,
     )
 
 
@@ -815,12 +850,16 @@ async def _handle_streaming_response(
     query: str,
     context: str,
     timeout: float,
+    tracer: Optional[PipelineExecutionTracer] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> StreamingResponse:
     """Streams response chunks via Server-Sent Events (SSE)."""
 
     async def event_generator() -> AsyncIterator[str]:
         # First attempt to stream from target backend
         upstream_success = False
+        t_stream_start = time.perf_counter()
+        first_token_recorded = False
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream(
@@ -833,7 +872,20 @@ async def _handle_streaming_response(
                         upstream_success = True
                         async for line in resp.aiter_lines():
                             if line:
+                                if not first_token_recorded and tracer is not None:
+                                    tracer.record_stage_timing(
+                                        "reader first token",
+                                        (time.perf_counter() - t_stream_start) * 1000.0,
+                                        gpu_calls=0,
+                                    )
+                                    first_token_recorded = True
                                 yield f"{line}\n\n"
+                        if tracer is not None:
+                            tracer.record_stage_timing(
+                                "reader end",
+                                (time.perf_counter() - t_stream_start) * 1000.0,
+                                gpu_calls=1,
+                            )
         except Exception as exc:
             logger.info("Streaming upstream failed (%s). Emitting local stream.", exc)
 
@@ -847,6 +899,13 @@ async def _handle_streaming_response(
             # Emit in tokens/words
             words = full_text.split(" ")
             for i, word in enumerate(words):
+                if not first_token_recorded and tracer is not None:
+                    tracer.record_stage_timing(
+                        "reader first token",
+                        (time.perf_counter() - t_stream_start) * 1000.0,
+                        gpu_calls=0,
+                    )
+                    first_token_recorded = True
                 chunk_text = word + (" " if i < len(words) - 1 else "")
                 chunk = {
                     "id": completion_id,
@@ -863,6 +922,13 @@ async def _handle_streaming_response(
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
                 await asyncio.sleep(0.01)
+
+            if tracer is not None:
+                tracer.record_stage_timing(
+                    "reader end",
+                    (time.perf_counter() - t_stream_start) * 1000.0,
+                    gpu_calls=0,
+                )
 
             # Final stop chunk
             final_chunk = {
@@ -881,14 +947,18 @@ async def _handle_streaming_response(
             yield f"data: {json.dumps(final_chunk)}\n\n"
             yield "data: [DONE]\n\n"
 
+    stream_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    if headers:
+        stream_headers.update(headers)
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=stream_headers,
     )
 
 
