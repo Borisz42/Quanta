@@ -40,7 +40,7 @@ DEFAULT_MODEL_PATH = "models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"
 
 
 class ChatResponse(dict):
-    """Chat completion result supporting both dictionary and 4-tuple unpacking."""
+    """Chat completion result supporting dictionary, attribute access, and 4-tuple unpacking."""
     def __iter__(self):
         yield self["content"]
         yield self["latency_s"]
@@ -49,7 +49,27 @@ class ChatResponse(dict):
 
     @property
     def content(self) -> str:
-        return self["content"]
+        return self.get("content", "")
+
+    @property
+    def latency_s(self) -> float:
+        return float(self.get("latency_s", 0.0))
+
+    @property
+    def prompt_tokens(self) -> int:
+        return int(self.get("prompt_tokens", 0))
+
+    @property
+    def completion_tokens(self) -> int:
+        return int(self.get("completion_tokens", 0))
+
+    @property
+    def tokens_per_sec(self) -> float:
+        return float(self.get("tokens_per_sec", 0.0))
+
+    @property
+    def gpu_telemetry(self) -> Dict[str, Any]:
+        return self.get("gpu_telemetry", {})
 
 
 class UnslothServerManager:
@@ -486,6 +506,27 @@ class UnslothServerManager:
             "gpu_telemetry": telemetry,
             "raw_response": data,
         })
+
+    def chat_completion(
+        self,
+        prompt_or_messages: Any,
+        model: Optional[str] = None,
+        max_tokens: int = 100,
+        temperature: float = 0.1,
+        timeout: float = 45.0,
+    ) -> ChatResponse:
+        """Convenience method accepting either a string prompt or a list of message dicts."""
+        if isinstance(prompt_or_messages, str):
+            messages = [{"role": "user", "content": prompt_or_messages}]
+        else:
+            messages = prompt_or_messages
+        return self.chat(
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+        )
 
     def completion(
         self,
