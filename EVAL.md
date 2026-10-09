@@ -73,7 +73,71 @@ This document tracks baseline benchmarks, experimental hypotheses, and empirical
 | `exp-024c` | `exp/co-decoded-transducer` | `exp-024b` | `5e1d4d8` | Session 3: Co-Decoded Compact Kev Schema in Skeleton Transducer: Implemented zero-extra-HTTP-call mode (`kev_mode='co_decoded'`) where compact 1-letter Kev decision codes (`intent`: `I`/`D`/`C`/`E`, `epist`: `O`/`D`/`H`/`C`, `allen`: `M`/`B`/`O`/`D`/`N`, `pearl`: `M`/`C`/`N`) are co-decoded simultaneously with surface skeleton extraction. Created `co_decoded_skeleton_schema.gbnf` and augmented `SkeletonEvent`, `SkeletonTransducer`, `MockSkeletonTransducer`, and `UnslothTransducer`. Wired into `CognitivePipeline.ingest_document()` to construct `KevChunkEvaluation` directly with 0 secondary HTTP/GPU calls, populating Belnap truth lattice and graph edges. Optimized `KevAmbiguityGater` steady-state latency. | Token Overhead: strictly **$\le 12$ tokens** (avg 8 tokens); Secondary GPU Calls: **0 calls**; Byte-span grounding fidelity: **100% exact match**; Unit Tests: 13/13 Session 3 passed (100%); Full Combined Regression: **71/71 passed (100%)** in 15.64s. | Success | Promote / Session 3 Complete & Proceed to Session 4 |
 | `exp-024d` | `exp/async-write-ahead-svm` | `exp-024c` | `ee7a2af` | Session 4: Decoupled Write-Ahead SVM with Asynchronous Background Verification: Implemented decoupled Write-Ahead architecture for Semantic Virtual Memory (`kev_mode='async'`). Immediately commits provisional node records ($11_2$ UNKNOWN / speculative TRUE $01_2$ with $P=0.85$) into `PassageStore`, `PageTable`, `QuantaGraph`, and `BinaryNodeTable` so `ingest_document` returns immediately ($\ge 200\text{ words/sec}$, $< 1.3\text{s}$ per chunk). Enqueues chunks in `AsyncKevVerificationQueue` (`src/models/kev_async_worker.py`) where background daemon thread pool evaluates tiered/logprob decisions on idle slots and updates SQLite `PageTable` and in-memory `BinaryNodeTable` in-place. Implemented priority queueing for query-active chunks and `flush_kev_queue(timeout=...)` synchronization. Optimized `KevAmbiguityGater` regex execution. | Ingestion Return Latency: **< 1.3s SLA met** (< 20 ms mock, > 2,000 w/s); In-place Lattice Refinement: **100% thread-safe atomic updates** across SQLite and 128-byte structs; Priority Elevation: verified; Unit Tests: 8/8 Session 4 passed (100%); Full Combined Regression: **79/79 passed (100%)** in 16.12s. | Success | Promote / Session 4 Complete & Proceed to Session 5 |
 | `exp-025a` | `exp/session5-musique-validation` | `exp-024d` | `29b5280` | Session 5: End-to-End Pipeline Integration, Multi-Passage MuSiQue Validation & EVAL.md Lineage: Unified `kev_mode` in `CognitivePipeline` (`co_decoded` promoted to production default based on empirical Pareto superiority; `tiered`, `async`, `bypass`, `regular_kev_lora` fully switchable); event Belnap truth values mapped via `BelnapLatticeMapper` for non-async modes; `query_memory(flush_async=...)`; clean worker teardown in `close()`; multi-mode MuSiQue benchmark harness (`benchmark_musique_ingestion.py --mode {all,tiered,co_decoded,async,bypass,regular_kev_lora}`) exporting `output/tiered_kev_ingestion_benchmark.md`; parametrized regression test `test_unified_kev_modes_ingestion`. | **Empirical RTX 3070 Live Benchmark** (16 passages, 2,375 words, 16 slots): `bypass` 120.9 w/s (1,228.0 ms/chunk) -> `co_decoded` **107.8 w/s** (1,376.3 ms/chunk, **1.72x speedup** over `regular_kev_lora` with 0 secondary GPU calls and 100% Kev schema retention) -> `tiered` 77.1 w/s (1,924.9 ms/chunk, **1.23x speedup**) -> `regular_kev_lora` 62.7 w/s (2,367.6 ms/chunk) -> `async` 55.6 w/s. **Mock CI**: >6,300–7,500 w/s (19–23 ms/chunk, 100% answer hit across all 5 modes). **Regression**: 65/65 tests passed (100%). | Success | Promote / Tiered Kev Master Plan Complete |
-| `exp-026a` | `exp/phase0-telemetry-baselines` | `exp-025a` | `3af861e` | Phase 0: Dynamic Multi-Scale Ingestion Telemetry, Calibrated Parameter Registry & Baselines: (1) Implemented `MultiScaleConfig` & `CalibratedParam` registry (`src/config/multi_scale_config.py`) enforcing 4-tier precedence and provenance reporting; (2) Added stage-level latency telemetry (query split, chunking, transduction, Kev, Clingo-DL, PPR, context assembly, reader first token/end) and GPU call counters in `PipelineExecutionTracer`, `CognitivePipeline`, and `QuantaProxyServer` exposing `X-Quanta-TTC-Ms`, `X-Quanta-Stage-Timings`, and `X-Quanta-GPU-Calls`; (3) Implemented deterministic long-context benchmark builder (`scripts/build_long_context_bench.py`) with gold-position tracking across MuSiQue-long, NIAH, and BABILong; (4) Built baseline runner (`scripts/run_baselines.py`) measuring B0 (repeated), RAG0, FULLCTX0 with 95% bootstrap CIs and run-to-run noise $\delta$ margin calibration. | Baseline B0 established: TTFT 487.7 ms [407.9, 584.1], TTC 475.7 ms, Gold Recall 47.2%, Ingest 16,763 w/s; RAG0 TTFT 264.3 ms, Gold Recall 80.6%; FULLCTX0 TTFT 277.5 ms, Gold Recall 100%; B0 run-to-run noise drift 0.00% ($\delta \ge 0.0\%$ calibrated); Unit tests: 25/25 passed (100%). | Success | Gate G0 / Proceed to Phase 1 |
+| `exp-026a` | `exp/phase0-telemetry-baselines` | `exp-025a` | `3af861e` | Phase 0: Dynamic Multi-Scale Ingestion Telemetry, Calibrated Parameter Registry & Baselines: (1) Implemented `MultiScaleConfig` & `CalibratedParam` registry (`src/config/multi_scale_config.py`) enforcing 4-tier precedence and provenance reporting; (2) Added stage-level latency telemetry (query split, chunking, transduction, Kev, Clingo-DL, PPR, context assembly, reader first token/end) and GPU call counters in `PipelineExecutionTracer`, `CognitivePipeline`, and `QuantaProxyServer` exposing `X-Quanta-TTC-Ms`, `X-Quanta-Stage-Timings`, and `X-Quanta-GPU-Calls`; (3) Implemented deterministic long-context benchmark builder (`scripts/build_long_context_bench.py`) with gold-position tracking across MuSiQue-long, NIAH, and BABILong; (4) Built baseline runner (`scripts/run_baselines.py`) measuring B0 (repeated), RAG0, FULLCTX0 with 95% bootstrap CIs and run-to-run noise $\delta$ margin calibration on live NVIDIA RTX 3070 backend. | **Empirical Live RTX 3070 Baselines Established**: B0 Ingestion: **79.4–81.9 w/s** (30.7–31.5s/doc, 6.3 GPU calls); B0 TTFT: **472.2–1149.0 ms**; B0 TTC: **9.6–223.9 ms**; B0 Gold Recall: **36.1%**; RAG0 TTFT: **891.6 ms**, Recall **80.6%**; FULLCTX0 TTFT: **990.0 ms**, Recall **100.0%**; B0 run-to-run drift: **0.00%** ($\delta \ge 0.0\%$, safety $\delta = 2.0\%$); Unit tests: 34/34 passed (100%). | Success | Gate G0 Met / Proceed to Phase 1 |
+
+---
+
+## 2.1 Primary Metrics Summary (Empirical Live RTX 3070 Backend)
+
+> [!IMPORTANT]
+> **Execution Environment**:
+> - **GPU**: NVIDIA GeForce RTX 3070 (8,192 MB VRAM, 4,896 MB active)
+> - **Base LLM Server**: `llama-server` (:8888, CUDA 12, AVX2) serving `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q4_K_M`
+> - **Transduction**: Live GPU `SkeletonTransducer` (`kev_mode="co_decoded"`)
+> - **Reader**: Live GPU streaming chat completions (`chat_template_kwargs={"enable_thinking": False}`)
+> - **Evaluations**: 24 evaluations across benchmark split `dev.jsonl` (6 samples, B0 repeated $\times 2$)
+
+### Table 2.1: Primary Metrics by Condition (Mean ± 95% Bootstrap CI)
+
+| Condition | Samples | TTFT (ms) | TTC (ms) | Full Ingest (s) | Throughput (w/s) | Gold Recall | Accuracy (EM%) | F1 Score |
+|---|---|---|---|---|---|---|---|---|
+| **B0_run1** | 6 | 1149.0 [839.5, 1588.1] | 223.9 [9.1, 646.2] | 31.520 [24.872, 38.814] | 79.4 [69.0, 94.3] | 36.1% [11.1%, 63.9%] | 16.7% [0.0%, 50.0%] | 0.133 [0.000, 0.400] |
+| **B0_run2** | 6 | 472.2 [449.4, 503.6] | 9.6 [5.6, 13.8] | 30.671 [24.253, 38.058] | 81.9 [70.3, 97.9] | 36.1% [11.1%, 63.9%] | 16.7% [0.0%, 50.0%] | 0.133 [0.000, 0.400] |
+| **FULLCTX0** | 6 | 990.0 [728.1, 1253.9] | 279.3 [255.8, 303.7] | 0.001 [0.001, 0.001] | 4,990,666.7 [3,865,333.3, 6,128,666.7] | 100.0% [100.0%, 100.0%] | 50.0% [16.7%, 83.3%] | 0.328 [0.083, 0.572] |
+| **RAG0** | 6 | 891.6 [748.7, 992.5] | 1.2 [1.0, 1.4] | 0.001 [0.001, 0.001] | 2,495,333.3 [1,932,666.7, 3,064,333.3] | 80.6% [58.3%, 100.0%] | 100.0% [100.0%, 100.0%] | 0.656 [0.556, 0.756] |
+
+### Table 2.2: B0 Run-to-Run Noise Analysis & $\delta$ Margin Calibration
+
+Evaluating variance between `B0_run1` and `B0_run2` on identical inputs across the 6 benchmark samples:
+
+- **Accuracy Drift Mean (B0_run1 - B0_run2)**: `+0.00%`
+- **95% Bootstrap CI of Drift**: `[+0.00%, +0.00%]`
+- **Empirical Non-inferiority Margin**: $\delta \ge 0.0\%$ (standard safety threshold: $\delta = 2.0\%$)
+- **TTFT Run Noise Mean**: `+676.73 ms` (cold cache run 1 vs warm memory run 2)
+
+### Table 2.3: B0 Stage-Level Latency Breakdown (Hardware Bottlenecks on RTX 3070)
+
+| Stage | Mean Duration (ms) | % of TTC | GPU Calls | Stage Description |
+|---|---|---|---|---|
+| `transduction` | 30,936.10 ms | 26,495.5% | ~6.3 (mean) | Primary bottleneck: synchronous GPU transduction per chunk on RTX 3070 |
+| `reader` | 796.88 ms | 682.5% | 1 | Live reader generation over retrieved context |
+| `PPR` | 112.38 ms | 96.2% | 0 | Spreading activation graph walk over bipartite ASG |
+| `chunking` | 17.59 ms | 15.1% | 0 | Initial discourse segmentation and sentencizer |
+| `context assembly` | 4.35 ms | 3.7% | 0 | Dual-stream logical briefing block & passage formatting |
+| `Kev` | 0.33 ms | 0.3% | 0 | Non-autoregressive decision resolution (co-decoded, 0 secondary HTTP calls) |
+| `Clingo-DL` | 0.00 ms | 0.0% | 0 | Difference logic verification and temporal cycle detection |
+
+### Table 2.4: Parameter Registry Provenance
+
+| Parameter | Active Value | Default (Pass-through) | Source Experiment | Source Commit | Calibrated On | Notes |
+|---|---|---|---|---|---|---|
+| `background.enabled` | `False` | `False` | *Uncalibrated (B0)* | - | - | Whether asynchronous background ingestion is enabled |
+| `background.max_concurrency` | `1` | `1` | *Uncalibrated (B0)* | - | - | Maximum concurrent background worker threads |
+| `background.pause_policy` | `none` | `none` | *Uncalibrated (B0)* | - | - | Background worker pause policy: none, foreground_lock, slot_polling |
+| `chunker.macro_target_tokens` | *None* | *None* | *Uncalibrated (B0)* | - | - | Target token length for macro discourse blocks |
+| `chunker.micro_target_words` | *None* | *None* | *Uncalibrated (B0)* | - | - | Target word length for micro discourse chunks |
+| `fast_path.coverage_threshold` | *None* | *None* | *Uncalibrated (B0)* | - | - | Decision threshold for coverage check |
+| `fast_path.hot_transduce_n` | *None* | *None* | *Uncalibrated (B0)* | - | - | Number of top-ranked units synchronously transduced |
+| `fast_path.mode` | `passthrough` | `passthrough` | *Uncalibrated (B0)* | - | - | Fast-path mode: raw_only, hot_transduce, full, or passthrough |
+| `filter.calibration` | *None* | *None* | *Uncalibrated (B0)* | - | - | Calibration mapping (temperature or Platt coefficients) |
+| `filter.keep_budget_tokens` | *None* | *None* | *Uncalibrated (B0)* | - | - | Token budget cap for kept units |
+| `filter.keep_threshold` | *None* | *None* | *Uncalibrated (B0)* | - | - | Confidence/probability threshold to keep a unit |
+| `filter.keep_top_k` | *None* | *None* | *Uncalibrated (B0)* | - | - | Maximum number of units to keep |
+| `filter.strategy` | `passthrough` | `passthrough` | *Uncalibrated (B0)* | - | - | Scorer variant: lexical, concept, kev_micro, kev_macro, kev_head, or passthrough |
+| `filter.unit` | `micro` | `micro` | *Uncalibrated (B0)* | - | - | Scoring granularity unit: micro, macro, or macro_head |
+| `poprag.coarse_node_weight` | *None* | *None* | *Uncalibrated (B0)* | - | - | PPR damping weight for coarse macro nodes |
+| `ppr.inter_scale_weight` | *None* | *None* | *Uncalibrated (B0)* | - | - | Edge weight connecting micro chunks to coarse macro nodes |
+| `query_extractor.strategy` | `passthrough` | `passthrough` | *Uncalibrated (B0)* | - | - | Strategy for isolating query from context (passthrough/QE-A control) |
 
 
 

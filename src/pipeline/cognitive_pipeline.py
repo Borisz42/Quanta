@@ -406,7 +406,7 @@ class CognitivePipeline:
 
         if self.tracer:
             st_name = self.skeleton_transducer.__class__.__name__ if self.skeleton_transducer else "Mock"
-            is_mock_trans = "Mock" in st_name or getattr(self.skeleton_transducer, "_is_mock", False)
+            is_mock_trans = "Mock" in st_name or getattr(self.skeleton_transducer, "_is_mock", False) or getattr(self.skeleton_transducer, "_last_fallback_used", False)
             self.tracer.record_stage_timing(
                 "transduction",
                 (time.perf_counter() - t_trans0) * 1000.0,

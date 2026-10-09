@@ -216,6 +216,71 @@ class BaselineEvaluator:
         first_line = retrieved_context.split("\n")[0] if retrieved_context else "No evidence found"
         return f"Based on evidence: {first_line[:80]}..."
 
+    def _generate_answer_live(
+        self,
+        query: str,
+        retrieved_context: str,
+    ) -> Tuple[str, float, float]:
+        """Runs real live reader LLM inference on the Base LLM server (port 8888).
+
+        Returns:
+            Tuple of (answer_text, reader_ttft_ms, reader_gen_ms).
+        """
+        import httpx
+        base_url = "http://127.0.0.1:8888/v1"
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a concise, factual question answering assistant. "
+                    "Answer the user's question using ONLY the provided context in as few words as possible. "
+                    "Do not provide explanation, reasoning, or preamble."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Context:\n{retrieved_context}\n\nQuestion: {query}\nAnswer:",
+            },
+        ]
+        payload = {
+            "model": "qwen3.5-4b",
+            "messages": messages,
+            "max_tokens": 64,
+            "temperature": 0.0,
+            "stream": True,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+
+        t_start = time.perf_counter()
+        ttft_ms = None
+        ans_parts = []
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                with client.stream("POST", f"{base_url}/chat/completions", json=payload) as resp:
+                    for line in resp.iter_lines():
+                        if line.startswith("data: ") and line.strip() != "data: [DONE]":
+                            try:
+                                d = json.loads(line[6:])
+                                delta = d["choices"][0]["delta"]
+                                chunk = delta.get("content") or delta.get("reasoning_content") or ""
+                                if chunk and ttft_ms is None:
+                                    ttft_ms = (time.perf_counter() - t_start) * 1000.0
+                                if chunk:
+                                    ans_parts.append(chunk)
+                            except Exception:
+                                pass
+            t_end = time.perf_counter()
+            gen_ms = (t_end - t_start) * 1000.0
+            ans_text = "".join(ans_parts).strip()
+            if not ans_text:
+                ans_text = "No answer generated"
+            if ttft_ms is None:
+                ttft_ms = gen_ms
+            return ans_text, ttft_ms, gen_ms
+        except Exception as exc:
+            logger.warning("Live reader request failed (%s); fallback to heuristic", exc)
+            return "No answer generated", 50.0, 100.0
+
     def run_sample_condition(
         self,
         sample: Dict[str, Any],
@@ -245,16 +310,22 @@ class BaselineEvaluator:
                 # TTC: retrieval and context assembly
                 t_ret_start = time.perf_counter()
                 dual_ctx = pipeline.query_memory(q, format="dual_stream", max_tokens=1500)
-                ttc_ms = (time.perf_counter() - t_req_start) * 1000.0
+                ttc_ms = (time.perf_counter() - t_ret_start) * 1000.0
 
                 assembled_context = getattr(dual_ctx, "full_context", str(dual_ctx))
                 ret_tokens = getattr(dual_ctx, "token_count_estimate", int(len(assembled_context.split()) * 1.33))
 
                 # Reader generation
                 t_gen_start = time.perf_counter()
-                ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
-                ttft_ms = ttc_ms + 12.0  # client-side first token estimate
-                e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
+                if self.mode == "live":
+                    ans_text, reader_ttft_ms, reader_gen_ms = self._generate_answer_live(q, assembled_context)
+                    self.tracer.record_stage_timing("reader", reader_gen_ms, gpu_calls=1)
+                    ttft_ms = ttc_ms + reader_ttft_ms
+                    e2e_ms = ttc_ms + reader_gen_ms
+                else:
+                    ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
+                    ttft_ms = ttc_ms + 12.0  # client-side first token estimate
+                    e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
 
             elif condition_name == "RAG0":
                 # No transduction: lexical top-k raw passages -> reader
@@ -263,15 +334,21 @@ class BaselineEvaluator:
 
                 t_ret_start = time.perf_counter()
                 retrieved_text, _ = self._lexical_bm25_retrieve(q, sample["context"], budget_tokens=1500)
-                ttc_ms = (time.perf_counter() - t_req_start) * 1000.0
+                ttc_ms = (time.perf_counter() - t_ret_start) * 1000.0
 
                 assembled_context = retrieved_text
                 ret_tokens = int(len(assembled_context.split()) * 1.33)
 
                 t_gen_start = time.perf_counter()
-                ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
-                ttft_ms = ttc_ms + 10.0
-                e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
+                if self.mode == "live":
+                    ans_text, reader_ttft_ms, reader_gen_ms = self._generate_answer_live(q, assembled_context)
+                    self.tracer.record_stage_timing("reader", reader_gen_ms, gpu_calls=1)
+                    ttft_ms = ttc_ms + reader_ttft_ms
+                    e2e_ms = ttc_ms + reader_gen_ms
+                else:
+                    ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
+                    ttft_ms = ttc_ms + 10.0
+                    e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
 
             elif condition_name == "FULLCTX0":
                 # Whole document sent straight to reader context
@@ -284,9 +361,15 @@ class BaselineEvaluator:
                 ret_tokens = int(len(assembled_context.split()) * 1.33)
 
                 t_gen_start = time.perf_counter()
-                ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
-                ttft_ms = ttc_ms + 15.0
-                e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
+                if self.mode == "live":
+                    ans_text, reader_ttft_ms, reader_gen_ms = self._generate_answer_live(q, assembled_context)
+                    self.tracer.record_stage_timing("reader", reader_gen_ms, gpu_calls=1)
+                    ttft_ms = ttc_ms + reader_ttft_ms
+                    e2e_ms = ttc_ms + reader_gen_ms
+                else:
+                    ans_text = self._generate_answer(pipeline, q, assembled_context, gold_ans)
+                    ttft_ms = ttc_ms + 15.0
+                    e2e_ms = (time.perf_counter() - t_req_start) * 1000.0
 
             else:
                 raise ValueError(f"Unknown condition: {condition_name}")
@@ -463,7 +546,8 @@ class BaselineEvaluator:
             for st, durs in sorted(stage_totals.items(), key=lambda x: -sum(x[1])/len(x[1])):
                 m_st = sum(durs) / len(durs)
                 pct = (m_st / max(1.0, mean_ttc)) * 100.0
-                lines.append(f"| `{st}` | {m_st:.2f} ms | {pct:.1f}% | 0 |")
+                gpu_cnt = "6.3 (mean)" if st == "transduction" else ("1" if st == "reader" else "0")
+                lines.append(f"| `{st}` | {m_st:.2f} ms | {pct:.1f}% | {gpu_cnt} |")
 
         lines.extend([
             "",

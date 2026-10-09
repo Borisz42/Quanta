@@ -320,8 +320,18 @@ class UnslothServerManager:
                 r = client.get(f"{self.api_url}/models")
                 if r.status_code == 200:
                     models = r.json().get("data", [])
-                    entry = next((m for m in models if m.get("id") == target), None)
-                    return bool(entry and entry.get("loaded"))
+                    entry = next(
+                        (
+                            m for m in models
+                            if m.get("id") == target
+                            or target in m.get("aliases", [])
+                            or target in m.get("id", "")
+                        ),
+                        None
+                    )
+                    if entry is not None:
+                        return entry.get("loaded", True) is not False
+                    return len(models) > 0 and not model_id
         except Exception:
             pass
         return False
