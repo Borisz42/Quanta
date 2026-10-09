@@ -68,18 +68,21 @@ class QuantaServiceManager:
         quanta_url: str = "http://127.0.0.1:8000/v1",
         target_model: str = "unsloth/Qwen3.5-4B-MTP-GGUF",
         target_variant: str = "Q5_K_M",
+        target_slots: int = 8,
         allow_cpu_offload: Optional[bool] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.quanta_url = quanta_url.rstrip("/")
         self.target_model = target_model
         self.target_variant = target_variant
+        self.target_slots = target_slots
         self.allow_cpu_offload = allow_cpu_offload
         self.unsloth_mgr = UnslothServerManager(
             host=self._extract_host(self.base_url),
             port=self._extract_port(self.base_url, default=8888),
             target_model=self.target_model,
             target_variant=self.target_variant,
+            target_slots=self.target_slots,
             allow_cpu_offload=self.allow_cpu_offload,
         )
         self._spawned_processes: List[subprocess.Popen] = []
@@ -127,6 +130,7 @@ class QuantaServiceManager:
         base_running = self.is_base_llm_running()
         model_loaded = self.is_model_loaded() if base_running else False
         loaded_variant = self.unsloth_mgr.get_loaded_variant(self.target_model) if base_running else None
+        active_slots = self.unsloth_mgr.get_active_slots() if base_running else self.target_slots
         proxy_running = self.is_proxy_running()
         gpu_telemetry = self.unsloth_mgr.get_gpu_telemetry()
 
@@ -150,6 +154,7 @@ class QuantaServiceManager:
                 "model_id": self.target_model,
                 "variant": self.target_variant,
                 "loaded_variant": loaded_variant,
+                "slots": active_slots,
                 "model_loaded": model_loaded,
                 "dual_routing": {
                     "chat_completions": f"{self.base_url}/chat/completions",
@@ -558,6 +563,7 @@ def main():
     start_p.add_argument("--base-url", type=str, default="http://127.0.0.1:8888/v1", help="Base LLM URL")
     start_p.add_argument("--quanta-url", type=str, default="http://127.0.0.1:8000/v1", help="QUANTA Proxy URL")
     start_p.add_argument("--variant", type=str, default="Q5_K_M", help="Target model quant variant (default: Q5_K_M)")
+    start_p.add_argument("--slots", type=int, default=8, help="Number of parallel decode slots (default: 8)")
 
     # Test MCP
     test_mcp_p = subparsers.add_parser("test-mcp", help="Run automated MCP tools self-test")
@@ -576,8 +582,10 @@ def main():
         base = status["base_llm"]
         base_st = format_ansi("ONLINE", "1;32") if base["running"] else format_ansi("OFFLINE", "1;31")
         loaded_quant = base.get("loaded_variant") or base.get("variant", "")
+        slots_count = base.get("slots")
+        slots_info = f", {slots_count} slots" if slots_count else ""
         quant_info = f", {loaded_quant}" if loaded_quant else ""
-        model_st = format_ansi(f"LOADED (VRAM{quant_info})", "1;32") if base["model_loaded"] else format_ansi("DORMANT/OFFLINE", "1;33")
+        model_st = format_ansi(f"LOADED (VRAM{quant_info}{slots_info})", "1;32") if base["model_loaded"] else format_ansi("DORMANT/OFFLINE", "1;33")
         print(f"  Base LLM Server (:8888)  : {base_st} ({base['url']})")
         print(f"  Target Model In VRAM     : {model_st} ({base['model_id']})")
 
@@ -603,6 +611,9 @@ def main():
         if getattr(args, "variant", None):
             mgr.target_variant = args.variant
             mgr.unsloth_mgr.target_variant = args.variant
+        if getattr(args, "slots", None):
+            mgr.target_slots = args.slots
+            mgr.unsloth_mgr.target_slots = args.slots
 
         if args.all or (not args.proxy and not args.llm):
             mgr.ensure_live_backend()

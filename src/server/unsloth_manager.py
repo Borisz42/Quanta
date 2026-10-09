@@ -36,6 +36,7 @@ DEFAULT_BACKEND_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8888
 DEFAULT_MODEL_ID = "unsloth/Qwen3.5-4B-MTP-GGUF"
 DEFAULT_MODEL_VARIANT = "Q5_K_M"
+DEFAULT_PARALLEL_SLOTS = 8
 DEFAULT_MODEL_PATH = "models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"
 
 
@@ -81,6 +82,7 @@ class UnslothServerManager:
         port: int = DEFAULT_BACKEND_PORT,
         target_model: str = DEFAULT_MODEL_ID,
         target_variant: str = DEFAULT_MODEL_VARIANT,
+        target_slots: int = DEFAULT_PARALLEL_SLOTS,
         model_path: Optional[str] = None,
         allow_cpu_offload: Optional[bool] = None,
     ):
@@ -88,6 +90,7 @@ class UnslothServerManager:
         self.port = port
         self.target_model = target_model
         self.target_variant = target_variant or os.getenv("QUANTA_MODEL_VARIANT", DEFAULT_MODEL_VARIANT)
+        self.target_slots = int(os.getenv("QUANTA_PARALLEL_SLOTS", str(target_slots or DEFAULT_PARALLEL_SLOTS)))
         self.model_path = model_path or os.getenv("QUANTA_MODEL_PATH", DEFAULT_MODEL_PATH)
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_url = f"{self.base_url}/v1"
@@ -397,6 +400,24 @@ class UnslothServerManager:
             pass
         return None
 
+    def get_active_slots(self) -> int:
+        """Queries the active parallel slot allocation from the backend (/props or /api/inference/status)."""
+        try:
+            with httpx.Client(timeout=3.0) as client:
+                props_r = client.get(f"{self.base_url}/props")
+                if props_r.status_code == 200:
+                    slots = props_r.json().get("total_slots")
+                    if slots:
+                        return int(slots)
+                st_r = client.get(f"{self.base_url}/api/inference/status")
+                if st_r.status_code == 200:
+                    slots = st_r.json().get("parallel_slots")
+                    if slots:
+                        return int(slots)
+        except Exception:
+            pass
+        return self.target_slots
+
     def ensure_model_loaded(
         self,
         model_id: Optional[str] = None,
@@ -404,10 +425,12 @@ class UnslothServerManager:
         timeout: float = 30.0,
         gguf_variant: Optional[str] = None,
         speculative_type: str = "mtp",
+        n_parallel: Optional[int] = None,
     ) -> bool:
-        """Verifies that the target model is loaded in GPU VRAM (with requested quant variant, default Q5_K_M)."""
+        """Verifies that the target model is loaded in GPU VRAM (with requested quant variant and parallel slots)."""
         target = model_id or self.target_model
         variant = gguf_variant or self.target_variant
+        slots = n_parallel or self.target_slots
 
         # Ensure service is running
         if not self.ensure_unsloth_service_running(timeout=timeout):
@@ -416,21 +439,24 @@ class UnslothServerManager:
         # Enforce GPU policy
         self.enforce_gpu_policy()
 
-        # Check model loaded state (including quant match)
+        # Check model loaded state (including quant match and slot match)
         if self.is_model_loaded(target, variant=variant):
-            logger.info("Model '%s' (%s) is verified loaded in VRAM.", target, variant)
-            return True
+            active_slots = self.get_active_slots()
+            if active_slots >= slots:
+                logger.info("Model '%s' (%s, %d slots) is verified loaded in VRAM.", target, variant, active_slots)
+                return True
 
-        # Not loaded or incorrect quant: trigger load request
+        # Not loaded or incorrect quant/slots: trigger load request
         try:
             with httpx.Client(timeout=5.0) as client:
-                logger.info("Model '%s' (%s) is dormant/variant mismatch. Sending POST /api/inference/load...", target, variant)
+                logger.info("Model '%s' (%s, %d slots) requires loading. Sending POST /api/inference/load...", target, variant, slots)
                 load_payload = {
                     "model_path": target,
                     "gpu_memory_mode": "auto",
                     "gpu_layers": gpu_layers,
                     "gguf_variant": variant,
                     "speculative_type": speculative_type,
+                    "n_parallel": slots,
                 }
                 load_resp = client.post(f"{self.base_url}/api/inference/load", json=load_payload, timeout=30.0)
                 if load_resp.status_code in (200, 202):
@@ -438,10 +464,10 @@ class UnslothServerManager:
                     while time.time() - t0 < timeout:
                         time.sleep(1.0)
                         if self.is_model_loaded(target, variant=variant):
-                            logger.info("Model '%s' (%s) successfully loaded into VRAM.", target, variant)
+                            logger.info("Model '%s' (%s, %d slots) successfully loaded into VRAM.", target, variant, self.get_active_slots())
                             return True
         except Exception as e:
-            logger.warning("Error verifying/loading model '%s' (%s): %s", target, variant, e)
+            logger.warning("Error verifying/loading model '%s' (%s, %d slots): %s", target, variant, slots, e)
 
         return False
 
