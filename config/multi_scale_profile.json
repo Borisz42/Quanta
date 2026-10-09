@@ -2,7 +2,7 @@
   "query_extractor.strategy": {
     "value": "QE-B",
     "source_exp": "exp-027a",
-    "source_commit": "HEAD",
+    "source_commit": "1c20c08",
     "calibrated_on": "long_context/test",
     "notes": "Gate G1 promoted winner: Mean F1 100.0%, Span 100.0%, Latency 0.797 ms"
   }
