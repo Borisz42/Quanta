@@ -165,7 +165,7 @@ class CognitivePipeline:
         **transducer_kwargs,
     ):
         # Extract Kev-specific configuration from kwargs to avoid forwarding to legacy transducer
-        self.kev_mode = transducer_kwargs.pop("kev_mode", "tiered")
+        self.kev_mode = transducer_kwargs.pop("kev_mode", "co_decoded")
         self.kev_concurrency = transducer_kwargs.pop("kev_concurrency", None)
 
         # 1. Chunker & Segmentation
