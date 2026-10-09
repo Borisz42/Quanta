@@ -77,6 +77,14 @@ from parser.graph_stitcher import (
     stitch_to_graph,
 )
 
+from parser.task_boundary_extractor import (
+    ExtractedTaskIntent,
+    TaskBoundaryExtractor,
+    decompose_query_context,
+    extract_context_from_system,
+    extract_target_entities,
+)
+
 __all__ = [
     "WordNetLexicalGrounder",
     "GroundedLexicalConcept",
@@ -141,7 +149,13 @@ __all__ = [
     "RecordDSLSerializer",
     "parse_record_dsl",
     "serialize_to_record_dsl",
+    "ExtractedTaskIntent",
+    "TaskBoundaryExtractor",
+    "decompose_query_context",
+    "extract_context_from_system",
+    "extract_target_entities",
 ]
+
 
 
 

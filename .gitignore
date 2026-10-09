@@ -190,6 +190,8 @@ output/*
 !output/publication/**
 !output/submissions/
 !output/submissions/**
+!output/multi_scale/
+!output/multi_scale/**
 !output/.gitkeep
 /data/*
 !/data/.gitkeep

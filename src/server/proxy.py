@@ -148,71 +148,13 @@ def _dump_model(obj: Any, **kwargs) -> Dict[str, Any]:
     return dict(obj)
 
 
-def decompose_query_context(text: Optional[str]) -> Tuple[Optional[str], str]:
-    """Decomposes a single bulky user query into (context_document, core_question).
-
-    Handles:
-    - Explicit section delimiters:
-      'Context:\n...\n\nQuestion: ...'
-      'Documentation:\n...\n\nQuery: ...'
-      'Source:\n...\n\nQuestion: ...'
-      'Eredeti forrásdokumentumok:\n...\n\nKérdés: ...'
-    - Text blocks where context precedes a terminal question sentence or paragraph.
-    """
-    if not text or not text.strip():
-        return None, ""
-
-    clean = text.strip()
-
-    # 1. Explicit delimiter patterns
-    explicit_patterns = [
-        r"(?:===+\s*|#{1,6}\s*|\*{1,2})?(?:(?:Document\s+)?Context|Documentation|Background|Source|Passages?|Forrás(?:dokumentumok)?|Szöveg|Eredeti forrásdokumentumok)(?:\*{1,2}|===+)?\s*:\s*\n*([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
-        r"([\s\S]*?)\n\s*(?:Question|Query|Prompt|Kérdés)\s*:\s*\n*([\s\S]*)",
-    ]
-    for pat in explicit_patterns:
-        m = re.search(pat, clean, re.IGNORECASE)
-        if m:
-            doc = m.group(1).strip()
-            q = m.group(2).strip()
-            if len(doc.split()) >= 15:
-                return doc, q
-
-    # 2. Paragraph split heuristic if text has context (> 20 words) and ends with interrogative sentence
-    paras = [p.strip() for p in clean.split("\n\n") if p.strip()]
-    if len(paras) >= 2 and len(clean.split()) >= 20:
-        last_para = paras[-1]
-        if "?" in last_para or any(last_para.lower().startswith(w) for w in ("what", "who", "where", "why", "when", "how", "compare", "mi", "mit", "milyen", "melyik", "hová", "hol")):
-            doc = "\n\n".join(paras[:-1]).strip()
-            return doc, last_para
-
-    # 3. Sentence split heuristic if ending sentence is an interrogative
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
-    if len(sents) >= 3 and len(clean.split()) >= 20:
-        last_sent = sents[-1]
-        if last_sent.endswith("?") or any(last_sent.lower().startswith(w) for w in ("what", "who", "where", "why", "when", "how", "compare", "mi", "mit", "milyen", "melyik", "hová", "hol")):
-            doc = " ".join(sents[:-1]).strip()
-            return doc, last_sent
-
-    return None, clean
-
-
-def extract_context_from_system(messages: Sequence[ChatMessage]) -> Tuple[Optional[str], Optional[str]]:
-    """Extracts background context from a system message if present (e.g. 'Context:\n...' or 'Document context:\n...')."""
-    for m in messages:
-        if m.role == "system" and m.content:
-            text = m.content.strip()
-            pat = (
-                r"(?:===+\s*|#{1,6}\s*|\*{1,2})?"
-                r"(?:(?:Document\s+)?Context|Documentation|Source|Passages?|Forrás(?:dokumentumok)?)"
-                r"(?:\*{1,2}|===+)?\s*:\s*\n*([\s\S]*)"
-            )
-            match = re.search(pat, text, re.IGNORECASE)
-            if match:
-                doc = match.group(1).strip()
-                instruction = text[:match.start()].strip()
-                if len(doc.split()) >= 15:
-                    return doc, instruction
-    return None, None
+# Decompose & context extraction utilities imported from parser.task_boundary_extractor (§Phase 1)
+from parser.task_boundary_extractor import (
+    ExtractedTaskIntent,
+    TaskBoundaryExtractor,
+    decompose_query_context,
+    extract_context_from_system,
+)
 
 
 # -----------------------------------------------------------------------------

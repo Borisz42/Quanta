@@ -1782,7 +1782,7 @@ class CognitivePipeline:
 
         # 1. Attempt decomposition if context_document is not explicitly provided
         if doc is None:
-            from server.proxy import decompose_query_context
+            from parser.task_boundary_extractor import decompose_query_context
             extracted_doc, candidate_q = decompose_query_context(query_text)
             if extracted_doc:
                 doc = extracted_doc
