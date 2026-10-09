@@ -1,538 +1,454 @@
-# Dynamic Multi-Scale Ingestion & Task-Aware Kev Gating Master Plan (`multi_scale_plan.md`)
+# Dynamic Multi-Scale Ingestion — Experiment-Driven Master Plan (`multi_scale_plan.md`)
 
-## Architectural Overview
+> **Revision 2.** Replaces the original 8-section linear plan (commit `bcfb3e2`). Why it changed:
+> - The original assumed that "3-pass Kev on every chunk" is the bottleneck. Since exp-025a the production default is `kev_mode="co_decoded"`, which makes **zero** secondary Kev calls. The real cost is skeleton transduction: about 1.2–1.4 s/chunk and about 108 words/s with 16 slots, measured on the RTX 3070.
+> - Its latency, accuracy and threshold numbers were estimates, not measurements.
+> - Parts of it duplicated existing code: `decompose_query_context` in `src/server/proxy.py` and `AsyncKevVerificationQueue` in `src/models/kev_async_worker.py`.
+> - It rewired a method that does not exist (`ingest_and_query_streaming`).
 
-This master plan extends the QUANTA Semantic Virtual Memory (SVM) architecture with **Dynamic Multi-Scale Ingestion**. Instead of processing massive input contexts uniformly through high-overhead micro-scale S-expression transduction, 3-pass Kev relational logprob scoring, and Clingo difference-logic verification, the ingestion engine introduces a **hierarchical coarse-to-fine gating pipeline**:
+---
 
-1. **Task Boundary & Intent Extraction:** Intercepts long prompts and identifies the user prompt's instruction/question target $\mathbf{q}$ from the head or tail boundaries before chunking.
-2. **Two-Tier Chunk Hierarchy:** Context is parsed into coarse macro-blocks ($1{,}000\text{--}2{,}000$ tokens) mapped via zero-copy SIMD concept codebooks ($0.32\,\mu\text{s}$ per concept), alongside micro-blocks ($150\text{--}350$ words).
+## 0. Core Principles
 
+1. **Measure before optimizing.** Phase 0 measures the current pipeline (baseline **B0**) before any feature work starts. Every later target is a value **relative to B0**.
+2. **No hardcoded numbers.** Every threshold, weight, block size, budget and SLA is a **calibrated parameter** (see §1). When it has not been calibrated yet, its default is *pass-through*: the feature is off and behaviour matches B0 exactly. Nothing is invented.
+3. **Each number has a source experiment.** A calibrated value is stored together with the experiment ID and commit SHA that produced it. If a value has no source experiment, it is not used.
+4. **Stacked bushes, not a noodle** (AGENTS.md). Each phase runs a small group of 2–4 competing variants, compares them on held-out data, and promotes one winner at a **decision gate**. A gate can also decide to **stop** a line of work.
+5. **Reuse before rebuilding.** Extend the existing proxy query parser, the async Kev queue, the HippoRAG/PoP-RAG modules and `PipelineExecutionTracer` instead of writing parallel copies.
+6. **Calibrate and test on separate data.** Thresholds are fitted on a **dev** split. Verdicts are reported on a **test** split that is never used for fitting.
 
-3. **Kev-4B Coarse Relevance Gating:** Evaluates each macro-block against $\mathbf{q}$ in a single non-autoregressive prefill logprob pass ($20\text{--}35\,\text{ms}$) over single-token letters `(A) CRITICAL`, `(B) BACKGROUND`, `(C) IRRELEVANT`.
+---
 
+## 1. Calibrated Parameter Registry (cross-cutting, built in Phase 0)
 
-4. **Selective High-Precision Transduction:** Chunks scoring `CRITICAL` undergo full micro-scale transduction (Skeleton Transduction, 3-pass Kev valency/causal scoring, and Clingo-DL verification). `BACKGROUND` chunks register solely as lightweight concept-annotated passage nodes ($V_{\text{passage}}$).
+#### [NEW] `src/config/multi_scale_config.py`
+- `CalibratedParam` dataclass with these fields:
+  - `name`
+  - `value`
+  - `default_passthrough`
+  - `source_exp: Optional[str]`
+  - `source_commit: Optional[str]`
+  - `calibrated_on: Optional[str]` (dataset/split)
+  - `notes`
+- `MultiScaleConfig`, which loads in this order:
+  1. built-in pass-through defaults
+  2. `config/multi_scale_profile.json`, written only by the calibration scripts
+  3. environment variables (`QUANTA_MS_<PARAM>`)
+  4. per-request proxy headers
+- `MultiScaleConfig.provenance_report()` outputs a Markdown table of every parameter and where its value came from. That table goes into every EVAL.md entry.
+- Calibration scripts write the profile via `MultiScaleConfig.write_calibrated(name, value, source_exp, ...)`. Humans don't edit the JSON by hand.
 
+#### [NEW] `tests/test_multi_scale_config.py`
+- With no profile loaded, every feature flag resolves to pass-through.
+- Loading follows the precedence order above.
+- A profile entry with no `source_exp` is rejected.
 
-5. **Multi-Scale HippoRAG 2 & PoP-RAG Spreading Activation:** Personalized PageRank propagates activation seamlessly across both macro-concept nodes and micro-event DAGs, with PoP-RAG damping unverified paths.
+**Parameters that will live in the registry** (none has a value yet):
 
+| Parameter | Phase that calibrates it |
+|---|---|
+| `query_extractor.strategy` | 1 |
+| `chunker.macro_target_tokens`, `chunker.micro_target_words` | 2 |
+| `filter.strategy`, `filter.unit` (micro / macro / macro-head) | 2 |
+| `filter.keep_threshold` / `filter.keep_top_k` / `filter.keep_budget_tokens` | 2 |
+| `filter.calibration` (temperature / Platt coefficients) | 2 |
+| `fast_path.mode` (raw-only / hot-transduce / full) | 3 |
+| `fast_path.hot_transduce_n` | 3 |
+| `fast_path.coverage_threshold` | 3 |
+| `ppr.inter_scale_weight`, `poprag.coarse_node_weight` | 4 |
+| `background.enabled`, `background.pause_policy`, `background.max_concurrency` | 5 |
+| `targets.*` (latency/accuracy SLAs used by tests) | Gate G0 |
 
-6. **Speculative Early Answering & Background Queue:** The downstream model generates the initial answer immediately upon resolving hot subgraph paths. Full ingestion of remaining cold chunks proceeds asynchronously in the background (or terminates early in evaluation/test harnesses).
+---
 
+## 2. Metric Definitions (fixed before any run)
+
+All metrics come from one harness so every phase compares like with like.
+
+| Metric | Definition |
+|---|---|
+| **TTFT** | Time from proxy request receipt to the first streamed token from the reader backend |
+| **TTC** | Time-to-context: request receipt until the reader prompt is fully assembled (excludes reader generation) |
+| **E2E** | Request receipt to the last answer token |
+| **Full-ingest time** | Wall-clock time to fully ingest the document (synchronous + background) |
+| **Throughput** | Ingested words per second |
+| **GPU calls / request** | Number of llama-server HTTP calls, broken down by stage |
+| **Gold recall@budget** | Fraction of gold supporting passages (MuSiQue) or needle spans (NIAH) kept by the filter under a given token budget |
+| **Answer accuracy** | EM / token-F1 (MuSiQue), needle hit rate (NIAH), task accuracy (BABILong) |
+| **Peak VRAM** | Maximum `nvidia-smi` memory use during the run |
+
+**Statistics:**
+- Report every metric as mean ± 95% bootstrap CI.
+- Compare variants **paired** (same samples, same seeds).
+- **Non-inferiority** in accuracy means the CI of (variant − B0) lies entirely above −δ. **δ** is the non-inferiority margin, chosen at Gate G0 (see §Phase 0).
+
+---
+
+## 3. Phase & Gate Overview
+
+```mermaid
+flowchart TD
+    P0["Phase 0: Telemetry + Benchmark Harness + Baselines (B0, RAG0, FULLCTX0)"] --> G0{"Gate G0: set delta, relative targets, length grid"}
+    G0 --> P1["Phase 1: Query Extraction (refactor + variants)"]
+    P1 --> G1{"G1: extractor promoted?"}
+    G1 --> P2["Phase 2: Relevance Filter Bush (lexical / concept / Kev-micro / Kev-macro / Kev-head)"]
+    P2 --> G2{"G2: winner on recall-vs-cost frontier"}
+    G2 --> P3["Phase 3: Fast-Path Mode Bush (raw-only / hot-transduce N / full)"]
+    P3 --> G3{"G3: does the graph improve the first answer?"}
+    G3 -->|"graph helps multi-hop"| P4["Phase 4: Multi-Scale Graph + PPR (conditional)"]
+    G3 -->|"graph adds nothing to the first answer"| P5
+    P4 --> G4{"G4: coarse nodes beat no-coarse?"}
+    G4 --> P5["Phase 5: Background Completion (extend async queue)"]
+    P5 --> G5{"G5: follow-up gain without foreground slowdown?"}
+    G5 --> P6["Phase 6: Integration + Final Paired Evaluation vs B0"]
 ```
- Raw Discourse / Prompt (10k-100k tokens)
-                     │
-                     ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 0: Task Boundary & Intent Scanner               │
-  │  Extracts user instruction anchor q from Head / Tail   │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 1: Macro-Blocker & SIMD Mmap Concept Harvester  │
-  │  1,000–2,000 token blocks + 0.32µs ConceptNet codebook │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 2: Kev-4B Coarse Relevance Gater (llama-server) │
-  │  1-Pass Prefill Logprob Scoring: [A] CRIT / [B] BG / [C] IRR │
-  └──────────┬─────────────────────────────────┬───────────┘
-             │ [CRITICAL]                      │ [BACKGROUND / IRR]
-             ▼                                 ▼
-  ┌──────────────────────────────┐  ┌──────────────────────┐
-  │ Stage 3: Full Micro Ingestion│  │ Coarse Registration  │
-  │ - Skeleton Transducer (40tok)│  │ - V_passage Nodes    │
-  │ - 3-Pass Kev-4B (Relational) │  │ - Concept Anchors    │
-  │ - Clingo-DL Verification     │  │                      │
-  └──────────────┬───────────────┘  └──────────┬───────────┘
-                 │                             │
-                 └──────────────┬──────────────┘
-                                ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 4: Multi-Scale HippoRAG 2 + PoP-RAG PPR         │
-  │  Spreading activation over hybrid Macro/Micro topology │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 5: Fast-Path Answer Generation (Low TTFT)       │
-  │  Emit response using hot subgraph + pristine spans     │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │  Stage 6: Asynchronous Ingestion Worker (Background)   │
-  │  Processes remaining background chunks while idle      │
-  └────────────────────────────────────────────────────────┘
 
+Experiment IDs continue from the last recorded node: `exp-026*` (Phase 0) through `exp-031*` (Phase 6). Every node is created with `.\orx.ps1 create-experiment` or `git worktree add ..\exp-<name> -b exp/<name>`, and recorded in [EVAL.md](EVAL.md) together with the `provenance_report()` output.
+
+---
+
+## Phase 0 — Measurement Harness & Baselines (`exp-026*`)
+
+**Goal:** know how the current system actually performs on long contexts before changing it.
+
+### 0.1 Stage-level telemetry
+#### [MODIFY] `src/pipeline/cognitive_pipeline.py`, `src/server/proxy.py`
+- Use the existing `PipelineExecutionTracer` to emit per-stage timings for:
+  - query split
+  - chunking
+  - transduction
+  - Kev
+  - Clingo-DL
+  - PPR
+  - context assembly
+  - reader first token
+  - reader end
+- Count GPU calls per stage.
+- Expose the totals in response headers so the harness can read them without parsing logs:
+  - `X-Quanta-TTC-Ms`
+  - `X-Quanta-Stage-Timings` (JSON)
+  - `X-Quanta-GPU-Calls`
+- TTFT is measured **client-side** by the harness (first SSE chunk), not inside the proxy.
+
+### 0.2 Long-context benchmark builder
+#### [NEW] `scripts/build_long_context_bench.py`
+- **MuSiQue-long:** take items from `data/benchmarks/musique_sample_real.json`. Pad them with distractor paragraphs from other items until they reach each target length in the **length grid**. Record the gold paragraph positions.
+- **NIAH:** a synthetic needle placed at configurable depths across the length grid. Needle depth is a recorded variable, so recall can be analyzed by position.
+- **BABILong:** reuse the `babilong` suite from `src/benchmarks/paired_evaluator.py` if it can be generated at the required lengths. Otherwise generate it the same way as NIAH.
+- Write deterministic dev/test splits (seeded) to `data/benchmarks/long_context/{dev,test}.jsonl`.
+- The length grid and samples per cell are CLI arguments, chosen at Gate G0 after a pilot run. Start the pilot with a small grid. The defaults in the script describe the pilot only and carry no claim about the final run.
+
+### 0.3 Baseline runner
+#### [NEW] `scripts/run_baselines.py` (reuses `PairedEvaluator` HTTP plumbing)
+Runs three reference conditions on the same samples:
+
+| ID | Condition | Why it is needed |
+|---|---|---|
+| **B0** | Current production path (`co_decoded`, full synchronous ingestion → PPR → dual-stream context) | The baseline every target is relative to |
+| **RAG0** | No transduction: lexical top-k raw passages → reader | Shows how much the graph adds over plain retrieval. If B0 ≈ RAG0, the multi-scale graph phases need justification. |
+| **FULLCTX0** | Whole document sent straight to the reader (only where it fits the reader context) | Upper/lower reference for accuracy at short lengths |
+
+- Runs B0 **twice** (two seeds, or the same seed twice) to measure **run-to-run noise**. That noise is the input for choosing δ.
+- Output: `output/multi_scale/baseline_report.md` plus raw JSONL per sample.
+
+#### [NEW] `tests/test_long_context_bench.py`
+- Builder determinism (same seed gives the same files).
+- Gold-position bookkeeping is correct.
+- The harness runs end-to-end in mock mode (`transducer_backend="mock"`).
+
+### Gate G0 — set the targets (user decision, recorded in EVAL.md)
+Using the B0/RAG0/FULLCTX0 results:
+1. **δ (accuracy non-inferiority margin):** chosen by the user, informed by B0's run-to-run noise CI. δ should not be smaller than that noise.
+2. **Relative latency targets:** expressed as a fraction of B0 TTFT per length bucket, chosen from the measured B0 stage breakdown. For example, if transduction is X% of B0 TTFT, the best possible gain from skipping it is bounded by X%. Targets are written to the profile as `targets.*` with `source_exp = exp-026*`.
+3. **Length grid and sample sizes** for the remaining phases, based on the pilot's variance and runtime.
+4. **Go / no-go:** if RAG0 already matches B0 accuracy at far lower TTFT, re-scope Phases 3–4 with the user before continuing.
+
+---
+
+## Phase 1 — Query Extraction (`exp-027*`)
+
+**Goal:** reliably isolate the question/instruction `q` from long prompts, as a single shared module.
+
+#### [NEW] `src/parser/task_boundary_extractor.py`
+- Move `decompose_query_context` and `extract_context_from_system` out of `src/server/proxy.py` into this module, unchanged. The proxy imports them from here, so the refactor itself changes no behaviour.
+- `ExtractedTaskIntent` dataclass with these fields:
+  - `query_text`
+  - `context_text`
+  - `boundary_location` (`HEAD` / `TAIL` / `SYSTEM` / `EXPLICIT` / `FALLBACK`)
+  - `char_span`
+  - `target_entities`
+  - `strategy_used`
+- `TaskBoundaryExtractor(strategy=config.query_extractor.strategy)`. Strategy variants:
+  - **QE-A:** the existing heuristics, unchanged (control)
+  - **QE-B:** QE-A plus head-directive detection ("You are…", "Your task…") and imperative/question-density scoring over head and tail windows. The window sizes are parameters.
+  - **QE-C** (optional): structured chat-message awareness, i.e. prefer the last user message when the request has separate roles
+
+#### [NEW] `scripts/evaluate_query_extractor.py`
+- Labelled set: MuSiQue-long, NIAH, BABILong prompts (all with known questions), plus a small hand-made set of head-directive and mixed-format prompts.
+- Metrics: exact query-span match, token-F1 versus the gold question, latency distribution.
+
+#### [NEW] `tests/test_task_boundary_extractor.py`
+- Refactor parity: QE-A output is identical to the old proxy functions on the existing proxy tests.
+- Head, tail, system and explicit-delimiter cases.
+
+**Gate G1:** promote the variant with the best span-F1 on test. Its latency is recorded, not required to meet a preset number. Write `query_extractor.strategy` to the profile.
+
+---
+
+## Phase 2 — Relevance Filter Bush (`exp-028*`) — the key experiment
+
+**Goal:** find the cheapest way to discard irrelevant text **without losing gold evidence**, including evidence in the middle of a block.
+
+### 2.1 Hierarchical chunker (shared by all variants)
+#### [NEW] `src/parser/multi_scale_chunker.py`
+- `MacroBlock` dataclass with these fields:
+  - `macro_id`
+  - `char_span`
+  - `text`
+  - `micro_chunks: List[DiscourseChunk]`
+  - `concept_codes`
+  - `surface_entities`
+- `HierarchicalChunker(macro_target_tokens, micro_target_words)`. Both sizes come from the config. The micro level reuses `DiscourseChunker`.
+- Concept profiling goes through the existing `MmapLexicalGrounder.resolve_concept_code`. Its cost is measured and reported, not assumed.
+
+#### [MODIFY] `src/parser/chunker.py`
+- Add `parent_macro_id: Optional[str] = None` to `DiscourseChunk`, and include it in `to_dict`/`from_dict`.
+
+### 2.2 Filter variants
+#### [NEW] `src/retrieval/relevance_filter.py`
+A common interface: `score(intent, units) -> List[ScoredUnit]`, followed by a keep policy (threshold / top-k / token budget, all from the config).
+
+| Variant | Unit | Scorer | GPU calls |
+|---|---|---|---|
+| **F-A** | micro | Lexical BM25 vs `q` | 0 |
+| **F-B** | micro | Concept-code overlap via `MmapLexicalGrounder` | 0 |
+| **F-C** | micro | Kev-4B single-token letter logprob (one prefill per micro-chunk, batched across slots) | n_micro |
+| **F-D** | macro (full text) | Kev-4B letter logprob over the whole block | n_macro |
+| **F-E** | macro (head only) | The original plan's design: concept keywords + first part of the block. Kept as a variant to test the mid-block-miss risk. | n_macro |
+| **F-F** (only if justified) | cascade | Cheapest good scorer prefilters, then the best Kev scorer re-ranks | varies |
+
+#### [MODIFY] `src/models/kev_engine.py`
+- Add `score_relevance(intent, text) -> Dict[label, prob]` on top of the existing `/completion` + `n_probs` logprob path, reusing its letter normalization.
+- The label set and prompt template are variant parameters, not constants.
+- Raw logprobs are returned. Calibration is applied separately from the profile, so it can be re-fitted without code changes.
+
+### 2.3 Calibration & evaluation
+#### [NEW] `scripts/evaluate_relevance_filter.py`
+For each variant on **dev**:
+- Sweep the keep policy to trace a **gold-recall vs. kept-tokens vs. latency** curve.
+- For logprob variants, fit calibration (temperature or Platt) and store the coefficients.
+- Break recall down by **needle/gold depth within the block**, which directly tests the F-E concern.
+
+Then re-measure the chosen operating points on **test**.
+
+#### [NEW] `tests/test_relevance_filter.py`
+- Keep-policy semantics (threshold / top-k / budget).
+- Calibration round-trips through the profile.
+- Logprob parsing on simulated `n_probs` responses.
+- Pass-through mode keeps everything.
+
+**Gate G2:** choose the operating point with the lowest cost (TTC/GPU calls) whose **downstream answer accuracy** is non-inferior to B0 within δ. Check this with a short downstream run, because recall alone is a proxy. Write the `filter.*` and `chunker.*` values to the profile with `source_exp`. If no variant reaches non-inferiority, **stop** and review with the user.
+
+---
+
+## Phase 3 — Fast-Path Mode Bush (`exp-029*`)
+
+**Goal:** settle the main design question: should the first answer **wait for graph construction**, or answer from filtered raw text and build the graph afterwards?
+
+#### [NEW] `src/memory/fast_path_assembler.py`
+- `FastPathAssembler(mode, hot_transduce_n, coverage_threshold)`, all from the config.
+- It reuses `DualStreamContextAssembler`. When the graph is empty, stream 1 (logical briefing) is simply omitted.
+- `FastPathCoverageEvaluator.check_coverage(...)` returns a coverage score. The decision threshold is a calibrated parameter (pass-through means always take the full path).
+
+| Variant | First-answer context | Synchronous transduction |
+|---|---|---|
+| **M-A raw-only** | Filtered raw spans only | none |
+| **M-B hot-transduce(N)** | Graph briefing from the top-N filtered chunks + raw spans | N chunks (N swept) |
+| **M-C full** | B0 behaviour applied to the filtered set | all kept chunks |
+| **M-D coverage-adaptive** (if M-A/M-B differ by task type) | M-A when coverage ≥ threshold, else M-B | adaptive |
+
+#### [MODIFY] `src/pipeline/cognitive_pipeline.py`
+- Add `answer_long_context(prompt, config) -> FastPathResult`, a new orchestration method built from existing parts:
+  1. extractor
+  2. chunker
+  3. filter
+  4. selective `ingest_document`
+  5. PPR
+  6. assembler
+- `process_and_answer_single_query` and the proxy call it **only when** `config.fast_path.mode` is set. Otherwise the behaviour is unchanged.
+
+#### [NEW] `scripts/evaluate_fast_path.py`
+- Paired runs on test across the length grid. Output: a TTFT vs. accuracy **Pareto plot** per task family (MuSiQue multi-hop, NIAH retrieval, BABILong state tracking).
+
+#### [NEW] `tests/test_fast_path_assembler.py`
+- Each mode builds the expected context structure.
+- Pass-through mode matches B0 output on mock fixtures.
+
+**Gate G3:**
+- Choose `fast_path.mode` (and `hot_transduce_n`) from the Pareto frontier, subject to non-inferiority within δ and the G0 relative latency targets. The default may differ per task family if the data supports it.
+- Decide whether Phase 4 is needed: **only proceed** if graph-backed modes (M-B/M-C) beat M-A on multi-hop accuracy by more than the noise.
+
+---
+
+## Phase 4 — Multi-Scale Graph & PPR (`exp-030*`, conditional on G3)
+
+**Goal:** test whether coarse (macro/unprocessed) passage nodes connected to the fine-grained graph improve multi-hop retrieval.
+
+#### [MODIFY] `src/memory/passage_store.py`
+- `PassageRecord` stays **immutable**. Add the new attributes as fields with defaults:
+  - `granularity` (`MACRO` / `MICRO`)
+  - `parent_macro_id`
+  - `concept_codes`
+- Ingestion status changes over time, so it goes in a separate mutable table `passage_ingestion_state(passage_id, status, updated_at)`, with statuses `COARSE_ONLY` / `PENDING` / `FULL`.
+- Add a SQLite schema migration that also handles existing DBs.
+
+#### [MODIFY] `src/core/asg.py`
+- `QuantaGraph.add_concept_anchor(passage_id, concept_code)`.
+- `QuantaNode` can reference both a micro passage and its parent macro passage.
+- `upgrade_passage(passage_id, subgraph)` merges a newly transduced subgraph without invalidating existing edges.
+- First check whether `BinaryNodeTable`'s 128-byte layout has room for a parent-passage reference. If it doesn't, keep the reference in the side table rather than changing the struct.
+
+#### [MODIFY] `src/memory/hipporag_ppr.py`, `src/memory/poprag_gating.py`
+- The inter-scale edge weight and the coarse-node damping weight are config parameters (pass-through means no coarse nodes, i.e. current behaviour).
+- Combine them with the existing Belnap gating (`00₂` CONTRADICTION → 0) rather than replacing it.
+
+| Variant | Description |
+|---|---|
+| **G-A** | No coarse nodes (G3 winner as-is; control) |
+| **G-B** | Coarse nodes + concept anchors; `inter_scale_weight` / `coarse_node_weight` swept on dev |
+| **G-C** (optional) | G-B with on-demand upgrade: PPR-activated coarse nodes are transduced before answering |
+
+#### [NEW] `scripts/evaluate_multi_scale_ppr.py`
+- Multi-hop accuracy on MuSiQue-long.
+- PPR latency **as a function of graph size**, measured as a scaling curve rather than checked against a fixed SLA.
+
+#### [NEW] `tests/test_multi_scale_asg.py`, `tests/test_multi_scale_hipporag.py`
+- Mixed-graph construction.
+- In-place upgrade keeps existing edges.
+- Migration on a legacy DB.
+- Pass-through PPR output equals current output.
+
+**Gate G4:** promote G-B/G-C only if multi-hop accuracy improves beyond noise with acceptable TTC cost. Otherwise **stop** this branch and record the negative result.
+
+---
+
+## Phase 5 — Background Completion (`exp-031*`)
+
+**Goal:** finish ingesting the deferred chunks while the system is idle, so later turns benefit, without slowing down foreground requests.
+
+#### [MODIFY] `src/models/kev_async_worker.py`
+- Generalize `AsyncKevVerificationQueue` into a queue that can run **transduction + Kev + Clingo-DL** for deferred chunks. Today it only does Kev verification, while transduction is the dominant cost.
+- Keep the existing `prioritize` / `flush` / `clear` API and its tests.
+- Priority = calibrated filter score from Phase 2.
+- Pause policies (variants, chosen by config):
+  - **BG-A:** none
+  - **BG-B:** in-process foreground lock (the pipeline marks foreground calls)
+  - **BG-C:** poll llama-server `/slots` and pause when the number of busy slots goes above a configured limit
+- `QUANTA_BACKGROUND_INGESTION` (`0`/`off` default in tests/CI, `1`/`on`) stops the background worker entirely when off. Thread teardown is enforced in `CognitivePipeline.close()` and `reset()`.
+
+#### [NEW] `scripts/evaluate_background_ingestion.py`
+- **Multi-turn** protocol: turn 1 = long document + question; turns 2..k = follow-up questions on other parts of the document.
+- Measures:
+  - foreground TTFT degradation with background on vs. off
+  - follow-up accuracy and latency
+  - peak VRAM
+
+#### [NEW] `tests/test_background_ingestor.py`
+- Off-switch leaves no threads running.
+- Items are processed in priority order.
+- Pause/resume works under simulated foreground load.
+- An upgrade lands in the graph and the passage-state table.
+
+**Gate G5:** enable background completion by default only if follow-up accuracy or latency improves and foreground TTFT degradation stays within the G0 tolerance. Choose the pause policy from the measured contention.
+
+---
+
+## Phase 6 — Integration & Final Paired Evaluation (`exp-032*`)
+
+#### [MODIFY] `src/server/proxy.py`
+- Route long prompts through `CognitivePipeline.answer_long_context` when the profile enables it.
+- Per-request override headers:
+  - `X-Quanta-Fast-Path-Mode`
+  - `X-Quanta-Background-Ingest`
+  - `X-Quanta-Profile` (`calibrated` / `passthrough`)
+- Telemetry headers:
+  - `X-Quanta-TTC-Ms`
+  - `X-Quanta-Stage-Timings`
+  - `X-Quanta-Units-Scored`
+  - `X-Quanta-Units-Kept`
+  - `X-Quanta-Hot-Transduced`
+  - `X-Quanta-Deferred`
+
+#### [NEW] `scripts/evaluate_dynamic_ingestion.py`
+- Final paired comparison on the **test** split: B0 vs. RAG0 vs. the promoted configuration, across the full G0 length grid and all three task families.
+- Outputs `output/multi_scale/final_report.md` with:
+  - relative TTFT/TTC/E2E versus B0 (with CIs)
+  - accuracy deltas versus δ
+  - GPU calls/request
+  - peak VRAM
+  - the full `provenance_report()`
+
+#### [NEW] `tests/test_dynamic_ingestion_pipeline.py`
+- Mock end-to-end run.
+- Pass-through profile matches B0 output exactly.
+- With the calibrated profile, the assertions read their targets from `targets.*` in the profile (no literal SLAs in test code). These tests are skipped when the profile is uncalibrated.
+
+---
+
+## Verification Commands (Windows PowerShell)
+
+```powershell
+# Always-on regression (mock, background ingestion disabled)
+$env:QUANTA_BACKGROUND_INGESTION = "0"
+pytest tests/ -v
+
+# Phase 0
+python scripts/build_long_context_bench.py --pilot
+python scripts/run_baselines.py --split dev --conditions B0,RAG0,FULLCTX0 --repeat-b0 2
+
+# Phase 1
+pytest tests/test_task_boundary_extractor.py -v
+python scripts/evaluate_query_extractor.py --split test
+
+# Phase 2
+pytest tests/test_multi_scale_chunker.py tests/test_relevance_filter.py -v
+python scripts/evaluate_relevance_filter.py --split dev --variants F-A,F-B,F-C,F-D,F-E --calibrate
+python scripts/evaluate_relevance_filter.py --split test --from-profile
+
+# Phase 3
+pytest tests/test_fast_path_assembler.py -v
+python scripts/evaluate_fast_path.py --split test --modes M-A,M-B,M-C
+
+# Phase 4 (only if G3 says go)
+pytest tests/test_multi_scale_asg.py tests/test_multi_scale_hipporag.py -v
+python scripts/evaluate_multi_scale_ppr.py --split dev --sweep
+
+# Phase 5
+pytest tests/test_background_ingestor.py -v
+python scripts/evaluate_background_ingestion.py --split test --policies BG-A,BG-B,BG-C
+
+# Phase 6
+pytest tests/test_dynamic_ingestion_pipeline.py -v
+python scripts/evaluate_dynamic_ingestion.py --split test --profile calibrated
 ```
+
+Manual checks (live RTX 3070):
+1. `nvidia-smi` during a foreground request with background ingestion on. Record the peak VRAM and compare it with B0.
+2. With `QUANTA_BACKGROUND_INGESTION=0`, confirm that no worker threads remain after `pytest` finishes.
 
 ---
 
 ## Session Starter Commands
 
-Copy-paste any of the following commands into a new Antigravity session to execute that implementation phase sequentially:
-
-* `Start working on Section 1 in @multi_scale_plan.md: Task Boundary Scanner & Intent Extraction Engine`
-* `Start working on Section 2 in @multi_scale_plan.md: Hierarchical Macro-Chunker & Mmap Concept Profiler`
-* `Start working on Section 3 in @multi_scale_plan.md: Kev-4B Coarse Relevance Gater & Single-Token Logprob Scorer`
-* `Start working on Section 4 in @multi_scale_plan.md: Multi-Scale Dual-Node ASG & Macro/Micro Graph Topology`
-* `Start working on Section 5 in @multi_scale_plan.md: Multi-Scale HippoRAG 2 PPR & PoP-RAG Activation Traversal`
-* `Start working on Section 6 in @multi_scale_plan.md: Speculative Fast-Path Context Assembly & TTFT Bypass`
-* `Start working on Section 7 in @multi_scale_plan.md: Asynchronous Background Ingestion Queue & Early Termination Guards`
-* `Start working on Section 8 in @multi_scale_plan.md: End-to-End Pipeline Rewire, Proxy Telemetry & Paired Evaluation Suite`
-
----
-
-## Hardware Budgets & Throughput Targets (RTX 3070 8GB)
-
-| Ingestion Parameter | Legacy Monolithic Ingestion
-
- | Redesigned SVM Master Plan
-
- | Dynamic Multi-Scale Ingestion (This Plan) |
-| --- | --- | --- | --- |
-| **VRAM Consumption** | $\sim 6.3\,\text{GB}$<br> | $\sim 4.8\,\text{GB}$ (Shared 4B)
-
- | **$\sim 4.8\,\text{GB}$ (Strictly Shared 4B)** |
-| **Initial TTFT (10k tokens)** | $8{,}500\text{--}12{,}000\,\text{ms}$ | $3{,}500\text{--}5{,}200\,\text{ms}$<br> | **$550\text{--}850\,\text{ms}$ ($6\times\text{ to }10\times$ faster)** |
-| **Initial TTFT (50k tokens)** | $42{,}500\,\text{ms}$<br> | $17{,}500\text{--}26{,}000\,\text{ms}$ | **$1{,}200\text{--}1{,}900\,\text{ms}$ ($12\times\text{ to }15\times$ faster)** |
-| **Prefill Ingestion Passes** | Full 3-pass Kev on all 150 chunks
-
- | Full 3-pass Kev on all 150 chunks
-
- | **5–8 macro prefill passes + 6–10 micro passes** |
-| **Background Ingestion** | None (Synchronous blocking) | None (Synchronous blocking) | **Non-blocking background thread / event loop** |
-| **Evaluation Mode Behavior** | Mandatory full ingestion | Mandatory full ingestion | **Immediate stop upon fast-path answer emission** |
-
----
-
-### Section 1: Task Boundary Scanner & Intent Extraction Engine
-
-**Session Scope & Purpose:**
-In real-world prompts, long documents, and conversational turns, the active query or instruction almost never resides in the middle of a 20,000-word payload; it is situated either at the absolute beginning (pre-prompt directive) or the absolute end (closing query/instruction). This session builds a lightweight, sub-5ms heuristic and regex boundary parser that isolates the actual instruction target $\mathbf{q}$ and its epistemic focus before running any chunking or model inference.
-
-#### [NEW] `src/parser/task_boundary_extractor.py`
-
-* Implements `ExtractedTaskIntent` dataclass:
-* `query_text: str`
-* `boundary_location: Literal["HEAD", "TAIL", "ISOLATED"]`
-* `char_span: Tuple[int, int]`
-* `target_entities: List[str]`
-* `epistemic_goal: Literal["FACTUAL", "TEMPORAL", "CAUSAL", "AGGREGATION", "ACTION"]`
-
-
-* Implements `TaskBoundaryExtractor`:
-* `scan_prompt_boundaries(text: str, head_token_limit: int = 500, tail_token_limit: int = 500) -> ExtractedTaskIntent`
-* Heuristic detection:
-* Scans trailing paragraphs for interrogative syntax (`?`, `"Explain..."`, `"What is..."`, `"Calculate..."`, `"Based on the above..."`).
-* Scans leading sections for system role directives (`"You are...", "Your task is to..."`).
-* If ambiguous, extracts candidate sentences with highest question-particle and imperative verb density.
-
-
-* Fallback: If no localized question is found, falls back to the final non-empty block.
-
-
-
-#### [NEW] `tests/test_task_boundary_extractor.py`
-
-* Test prompt extraction with instructions located at the beginning (prompt framing).
-* Test extraction with instructions appended after 50,000 characters of background text (tail query).
-* Test extraction on standard benchmarks (MuSiQue question at tail, NIAH needle question, HumanEval docstring prompt).
-
-
-* Benchmark boundary scanning latency ($< 3.0\,\text{ms}$ execution time across 100k characters).
-
----
-
-### Section 2: Hierarchical Macro-Chunker & Mmap Concept Profiler
-
-**Session Scope & Purpose:**
-Establish a two-tier segmentation hierarchy. The existing `DiscourseChunker` segments text into $150\text{--}350$ word micro-chunks for fine-grained predicate extraction. This session implements a coarse `MacroChunker` that segments discourse into $1{,}000\text{--}2{,}000$ token macro-blocks, and pairs it with the zero-copy memory-mapped codebook (`data/concept_codebook.bin`) to harvest bag-of-concept vectors in sub-0.5ms without running neural models.
-
-#### [NEW] `src/parser/multi_scale_chunker.py`
-
-* Implements `MacroBlock` dataclass:
-* `macro_id: str` (e.g. `"MB01"`)
-* `char_span: Tuple[int, int]`
-* `text: str`
-* `concept_codes: List[int]` (ConceptNet 16-bit concept IDs extracted via mmap)
-
-
-* `surface_entities: List[str]`
-* `micro_chunks: List[DiscourseChunk]` (Child micro-chunks ready for deferred processing)
-
-
-* Implements `HierarchicalChunker`:
-* `segment_document(text: str, macro_target_tokens: int = 1500, micro_target_words: int = 250) -> List[MacroBlock]`
-* Preserves hierarchical parent-child span alignment: each micro-chunk points to its parent `macro_id`.
-* Integrates with `MmapLexicalGrounder` to profile every macro-block's salient concept signatures in $< 0.5\,\text{ms}$.
-
-
-
-
-
-#### [MODIFY] `src/parser/chunker.py`
-
-* Add parent reference pointer to `DiscourseChunk`:
-* `parent_macro_id: Optional[str] = None`
-* `is_ingested_full: bool = False`
-
-
-
-#### [NEW] `tests/test_multi_scale_chunker.py`
-
-* Test hierarchical parent-child span invariants across synthetic documents.
-* Verify macro-chunk size distributions remain within $[1000, 2000]$ token limits.
-* Benchmark SIMD mmap concept profiling across 20 macro-blocks ($< 5.0\,\text{ms}$ total CPU time).
-
----
-
-### Section 3: Kev-4B Coarse Relevance Gater & Single-Token Logprob Scorer
-
-**Session Scope & Purpose:**
-Implement the coarse gating head in `KevDecisionEngine`. Given the isolated user query anchor $\mathbf{q}$ and a macro-block's concept profile/header, Kev-4B evaluates relevance non-autoregressively using a single prefill logprob pass ($n_{\text{predict}}=1$) via `llama-server` `/completion`. Using the atomic single-token option letter strategy (`A`, `B`, `C`), this evaluates relevance in $20\text{--}35\,\text{ms}$ per macro-block without generating tokens.
-
-#### [MODIFY] `src/models/kev_engine.py`
-
-* Add `score_macro_block_relevance`:
-```python
-async def score_macro_block_relevance(
-    self,
-    task_intent: ExtractedTaskIntent,
-    macro_block: MacroBlock,
-) -> Tuple[str, float]:
-    """
-    Scores macro-block relevance against query anchor using 1-token logprob prefill.
-    Returns (label, calibrated_probability) where label in {"CRITICAL", "BACKGROUND", "IRRELEVANT"}.
-    """
-
-```
-
-
-* Structured prefill template:
-```text
-Context Summary: {concept_keywords}
-Passage Excerpt: {first_250_tokens_of_macro_block}
-Question: {task_intent.query_text}
-
-How relevant is this context to answering the question?
-(A) CRITICAL: Contains direct evidence or causal mechanisms needed to answer.
-(B) BACKGROUND: Contains contextual or tangential background information.
-(C) IRRELEVANT: Completely unrelated topic or distractor.
-
-Classification [A/B/C]:
-
-```
-
-
-* Reads normalized next-token logprobs for `' A'`, `' B'`, `' C'` and computes closed-form softmax probabilities.
-
-
-* Threshold mapping:
-* $P(\text{CRITICAL}) \ge 0.50 \implies \text{CRITICAL}$ (Triggers immediate micro-ingestion)
-* $P(\text{BACKGROUND}) \ge 0.40$ or $0.20 \le P(\text{CRITICAL}) < 0.50 \implies \text{BACKGROUND}$ (Registers coarse-only)
-* Otherwise $\implies \text{IRRELEVANT}$ (Skipped or registered as cold passage node)
-
-
-
-#### [NEW] `scripts/evaluate_macro_gater.py`
-
-* Test relevance classification accuracy, latency, and calibration on synthetic and MuSiQue distractor passages (gold bridge vs. distractor passages).
-
-
-* Assert Macro F1 $\ge 90\%$ on distinguishing critical bridge context from unrelated distractors.
-
-#### [NEW] `tests/test_kev_macro_gater.py`
-
-* Test logprob extraction across simulated responses for `A`, `B`, `C` candidates.
-
-
-* Verify that batch evaluation of 8 macro-blocks completes within $< 250\,\text{ms}$ on `llama-server`.
-
-
-
----
-
-### Section 4: Multi-Scale Dual-Node ASG & Macro/Micro Graph Topology
-
-**Session Scope & Purpose:**
-Adapt the dual-node bipartite graph topology ($V_{\text{passage}}$, $V_{\text{semantic}}$) to support multi-scale representations. Cold chunks must not pollute the graph with millions of unneeded syntactic nodes, yet their information must remain reachable during spreading activation. This session implements a multi-scale ASG schema where macro-blocks exist as coarse passage nodes tied to concept clusters, while hot chunks unfold into fine-grained event-predicate DAGs.
-
-#### [MODIFY] `src/memory/passage_store.py`
-
-* Add `granularity` and `hierarchy` attributes to `PassageRecord`:
-
-
-* `granularity: Literal["MACRO", "MICRO"] = "MICRO"`
-* `parent_macro_id: Optional[str] = None`
-* `concept_codes: List[int] = field(default_factory=list)`
-* `ingestion_status: Literal["COARSE_ONLY", "PENDING_BACKGROUND", "FULLY_INGESTED"]`
-
-
-
-#### [MODIFY] `src/core/asg.py`
-
-* Support multi-scale node linking in `QuantaGraph`:
-
-
-* Introduce `add_macro_concept_anchor(macro_passage_id: str, concept_code: int)`
-* Allow `QuantaNode` instances to bind to both a micro-passage and its parent macro-passage.
-* Implement dynamic subgraph unfolding: when a macro-block is later upgraded to full precision in the background, its child micro-nodes seamlessly merge into the active graph without invalidating existing edges.
-
-
-
-#### [NEW] `tests/test_multi_scale_asg.py`
-
-* Test graph construction with a mixture of coarse macro-passage anchors and fine-grained event DAGs.
-* Test in-place graph expansion when an existing `COARSE_ONLY` passage is upgraded to `FULLY_INGESTED`.
-* Validate binary table consistency and 128-byte struct generation for hybrid nodes.
-
-
-
----
-
-### Section 5: Multi-Scale HippoRAG 2 PPR & PoP-RAG Activation Traversal
-
-**Session Scope & Purpose:**
-Extend Personalized PageRank (PPR) spreading activation to propagate energy across a hybrid multi-scale topology. When a query is issued, activation seeds spread through fine-grained Allen/Pearl causal edges on hot chunks, but can also traverse coarse concept-codebook bridges into background macro-blocks if multi-hop evidence requires it. PoP-RAG epistemic weights dampen unverified paths.
-
-#### [MODIFY] `src/memory/hipporag_ppr.py`
-
-* Update `HippoRAGRetriever` transition matrix construction:
-* Add transition weights between macro-concept nodes and fine-grained entity nodes.
-* Set inter-scale scaling factor $\gamma_{\text{scale}} = 0.65$: coarse connections transmit lower energy than validated micro-causal edges to prioritize verified facts while maintaining global connectivity.
-
-
-* Vectorized power iteration over hybrid adjacency matrices:
-
-$$\mathbf{p}^{(t+1)} = (1 - \alpha) \mathbf{W}_{\text{multi}} \mathbf{p}^{(t)} + \alpha \mathbf{p}^{(0)}$$
-
-
-
-#### [MODIFY] `src/memory/poprag_gating.py`
-
-* Modulate weights based on node ingestion status and Belnap truth lattice:
-* `FULLY_INGESTED` + `TRUE` ($01_2$): nominal full weight ($1.0$)
-
-
-* `COARSE_ONLY`: soft heuristic weight ($0.45$)
-* `CONTRADICTION` ($00_2$): pruned to $0.0$
-
-
-
-
-#### [NEW] `tests/test_multi_scale_hipporag.py`
-
-* Test PPR convergence across a graph with 3 fully-ingested micro-clusters and 10 coarse macro-blocks.
-* Verify that a multi-hop query successfully travels across coarse nodes to identify a distant relevant block.
-* Assert traversal latency stays under $5.0\,\text{ms}$ on hybrid graphs of 50,000 nodes.
-
-
-
----
-
-### Section 6: Speculative Fast-Path Context Assembly & TTFT Bypass
-
-**Session Scope & Purpose:**
-Eliminate Time-To-First-Token (TTFT) lag by decoupling answer generation from background ingestion completeness. If the initial hot subgraph + top macro-passages provide sufficient epistemic coverage for the user query $\mathbf{q}$, assemble the dual-stream context block immediately and trigger the downstream LLM generation, bypassing full document compilation.
-
-#### [NEW] `src/memory/fast_path_assembler.py`
-
-* Implements `FastPathCoverageEvaluator`:
-* `check_coverage(query_seeds: Set[str], active_subgraph: QuantaGraph, top_passages: List[PassageRecord]) -> Tuple[bool, float]`
-* Calculates epistemic confidence: if target query entities are grounded and causal/temporal chain satisfies the query constraint, returns `(True, confidence)`.
-
-
-* Implements `FastPathContextAssembler`:
-* Builds dual-stream prompt:
-1. **Stream 1: Verified Active Subgraph Briefing** (Fine-grained facts from hot chunks)
-
-
-2. **Stream 2: High-Ranking Verbatim Raw Spans** (From both hot micro-passages and top macro-passages)
-
-
-
-
-* Returns context ready for immediate streaming completion.
-
-
-
-#### [MODIFY] `src/memory/context_assembler.py`
-
-* Bridge `DualStreamContextAssembler` to consume hybrid multi-scale ranking scores.
-
-
-
-#### [NEW] `tests/test_fast_path_assembler.py`
-
-* Test coverage evaluation on queries with complete hot paths vs queries requiring background expansion.
-* Verify dual-stream context format strictly matches downstream reader requirements.
-
-
-* Benchmark assembly time ($< 2.0\,\text{ms}$).
-
----
-
-### Section 7: Asynchronous Background Ingestion Queue & Early Termination Guards
-
-**Session Scope & Purpose:**
-Implement the non-blocking background ingestion worker. While the host LLM generates the answer or waits for the user's next turn in chat mode, an asynchronous worker incrementally digests remaining `BACKGROUND` chunks into full micro-scale ASG nodes. Crucially, implement **Early Termination Guards** so that in testing, benchmarking, or CI environments (`QUANTA_BACKGROUND_INGESTION=0`), background processing is disabled entirely, guaranteeing minimal runtime and zero GPU resource waste.
-
-#### [NEW] `src/pipeline/background_ingestor.py`
-
-* Implements `BackgroundIngestionWorker`:
-* Uses `asyncio.Queue` or a bounded worker thread pool.
-* Priority queue ordered by macro relevance score ($P(\text{CRITICAL}) > P(\text{BACKGROUND})$).
-* Background loop:
-1. Pops next pending micro-chunk.
-2. Executes `SkeletonTransducer` (30–45 tokens).
-
-
-3. Executes `KevDecisionEngine` 3-pass prefill scoring.
-
-
-4. Validates with `ClingoDLGate` and merges into global `QuantaGraph`.
-
-
-
-
-* Graceful cancellation and pause triggers:
-* Automatically pauses when incoming interactive user requests query `llama-server` to avoid GPU contention.
-* Resumes when the server is idle.
-
-
-
-
-* Implements `IngestionPolicyGuard`:
-* Inspects environment flag `QUANTA_BACKGROUND_INGESTION`:
-* `"0"` or `"off"`: Immediate stop after fast-path answer emission (for tests/benchmarks).
-* `"1"` or `"on"`: Detaches background worker to finish full document indexing.
-
-
-
-
-
-#### [NEW] `tests/test_background_ingestor.py`
-
-* Test queuing, background task execution, and dynamic graph updating.
-* Test cancellation guard when `QUANTA_BACKGROUND_INGESTION="0"`.
-* Test queue prioritization: higher-scoring background chunks are ingested first.
-
----
-
-### Section 8: End-to-End Pipeline Rewire, Proxy Telemetry & Paired Evaluation Suite
-
-**Session Scope & Purpose:**
-Wire all components into `CognitivePipeline`, update the reverse proxy (`:8000`) and MCP tools, and run a comprehensive head-to-head empirical evaluation against the monolithic SVM baseline on live RTX 3070 hardware. Measure TTFT reduction, total ingestion throughput, and accuracy parity on long-context benchmarks (MuSiQue, BABILong, NIAH).
-
-#### [MODIFY] `src/pipeline/cognitive_pipeline.py`
-
-* Rewire `ingest_and_query_streaming`:
-1. Extract task intent $\mathbf{q}$ via `TaskBoundaryExtractor`.
-2. Segment into macro-blocks via `HierarchicalChunker`.
-
-
-3. Score macro relevance via `KevDecisionEngine.score_macro_block_relevance`.
-
-
-4. Perform immediate micro-ingestion on `CRITICAL` chunks.
-
-
-5. Register coarse anchors for `BACKGROUND` chunks.
-
-
-6. Execute multi-scale HippoRAG 2 PPR.
-
-
-7. If fast-path coverage holds, assemble context and return answer immediately.
-8. If `QUANTA_BACKGROUND_INGESTION=1`, dispatch remaining chunks to `BackgroundIngestionWorker`.
-
-
-
-#### [MODIFY] `src/server/proxy.py`
-
-* Add control headers:
-* `X-Quanta-Dynamic-Granularity: true` (default: true)
-* `X-Quanta-Background-Ingest: false` (allows test client to toggle background worker)
-
-
-* Expose telemetry in HTTP response headers:
-* `X-Quanta-TTFT-Ms`: Time taken from request receipt to context assembly.
-* `X-Quanta-Macro-Blocks`: Total macro-blocks scanned.
-* `X-Quanta-Hot-Chunks`: Number of micro-chunks fully ingested before answer.
-* `X-Quanta-Deferred-Chunks`: Number of micro-chunks queued for background.
-
-
-
-#### [NEW] `scripts/evaluate_dynamic_ingestion.py`
-
-* Paired live hardware benchmark suite:
-* Compares Monolithic Full Ingestion vs Dynamic Multi-Scale Ingestion across:
-1. **MuSiQue 20-passage tasks ($N=30$)**
-
-2. **NIAH long context ($N=5$, 4k to 64k tokens)**
-
-3. **BABILong long-horizon state tracking ($N=5$)**
-
-
-
-* Collects TTFT (ms), End-to-End latency (s), Ingestion throughput (tok/s), Peak VRAM (GB), and QA Accuracy (%).
-
-
-* Emits publication-ready Markdown scorecard: `output/dynamic_ingestion_ablation_report.md`.
-
-
-
-#### [NEW] `tests/test_dynamic_ingestion_pipeline.py`
-
-* End-to-end integration test of the full dynamic pipeline.
-* Assert TTFT on a 10,000-token prompt drops below $850\,\text{ms}$ on RTX 3070 (mock/live).
-* Assert accuracy parity: 100% agreement with full-ingestion on gold test assertions.
-
----
-
-## Verification Plan
-
-### Automated Regression & Unit Suite
-
-Run sequentially in Windows PowerShell as each section is implemented:
-
-```powershell
-# Section 1: Task Boundary & Intent Scanner
-pytest tests/test_task_boundary_extractor.py -v
-
-# Section 2: Hierarchical Macro-Chunker & Mmap Profiler
-pytest tests/test_multi_scale_chunker.py -v
-
-# Section 3: Kev-4B Coarse Relevance Gater
-pytest tests/test_kev_macro_gater.py -v
-python scripts/evaluate_macro_gater.py --quick
-
-# Section 4: Multi-Scale Dual-Node ASG
-pytest tests/test_multi_scale_asg.py -v
-
-# Section 5: Multi-Scale HippoRAG 2 PPR
-pytest tests/test_multi_scale_hipporag.py -v
-
-# Section 6: Speculative Fast-Path Context Assembler
-pytest tests/test_fast_path_assembler.py -v
-
-# Section 7: Background Ingestion Queue & Early Termination Guards
-pytest tests/test_background_ingestor.py -v
-
-# Section 8: End-to-End Pipeline Rewire & Paired Benchmark
-pytest tests/test_dynamic_ingestion_pipeline.py -v
-python scripts/evaluate_dynamic_ingestion.py --mode live --samples 10
-
-```
-
-### Manual Hardware & Telemetry Verification
-
-1. **Time-To-First-Token (TTFT) Audit:** Submit a 20,000-token document containing a specific query at the end. Verify via proxy headers (`X-Quanta-TTFT-Ms`) that the first answer token streams back in $< 1{,}000\,\text{ms}$.
-2. **VRAM Concurrency Audit:** Run `nvidia-smi` while the background worker is ingesting cold chunks during a stream completion to confirm memory remains $\le 4.8\,\text{GB}$ on the RTX 3070 without GPU OOM crashes.
-
-
-3. **Early Termination Verification:** Run `pytest tests/ -v` with `QUANTA_BACKGROUND_INGESTION=0` and confirm that test suites finish in seconds without background ingestion worker thread leakage.
+* `Start working on Phase 0 in @multi_scale_plan.md: Telemetry, Long-Context Benchmark Builder & Baselines`
+* `Start working on Phase 1 in @multi_scale_plan.md: Query Extraction Refactor & Variants`
+* `Start working on Phase 2 in @multi_scale_plan.md: Hierarchical Chunker & Relevance Filter Bush`
+* `Start working on Phase 3 in @multi_scale_plan.md: Fast-Path Mode Bush`
+* `Start working on Phase 4 in @multi_scale_plan.md: Multi-Scale Graph & PPR (only if Gate G3 = go)`
+* `Start working on Phase 5 in @multi_scale_plan.md: Background Completion via Async Queue`
+* `Start working on Phase 6 in @multi_scale_plan.md: Integration & Final Paired Evaluation`
+
+Every session must:
+- read the latest gate decision in EVAL.md before starting
+- respect the AGENTS.md repair cap (at most 2 repair runs per node)
+- record each answered node, including negative results, before moving on
