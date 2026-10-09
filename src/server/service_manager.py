@@ -67,16 +67,19 @@ class QuantaServiceManager:
         base_url: str = "http://127.0.0.1:8888/v1",
         quanta_url: str = "http://127.0.0.1:8000/v1",
         target_model: str = "unsloth/Qwen3.5-4B-MTP-GGUF",
+        target_variant: str = "Q5_K_M",
         allow_cpu_offload: Optional[bool] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.quanta_url = quanta_url.rstrip("/")
         self.target_model = target_model
+        self.target_variant = target_variant
         self.allow_cpu_offload = allow_cpu_offload
         self.unsloth_mgr = UnslothServerManager(
             host=self._extract_host(self.base_url),
             port=self._extract_port(self.base_url, default=8888),
             target_model=self.target_model,
+            target_variant=self.target_variant,
             allow_cpu_offload=self.allow_cpu_offload,
         )
         self._spawned_processes: List[subprocess.Popen] = []
@@ -99,9 +102,12 @@ class QuantaServiceManager:
         """Checks if the Base LLM server (llama-server) is responsive."""
         return self.unsloth_mgr.is_service_responsive(timeout=timeout)
 
-    def is_model_loaded(self, model_id: Optional[str] = None) -> bool:
-        """Checks if target model is loaded in VRAM on the Base LLM server."""
-        return self.unsloth_mgr.is_model_loaded(model_id or self.target_model)
+    def is_model_loaded(self, model_id: Optional[str] = None, variant: Optional[str] = None) -> bool:
+        """Checks if target model is loaded in VRAM on the Base LLM server (matching variant)."""
+        return self.unsloth_mgr.is_model_loaded(
+            model_id or self.target_model,
+            variant=variant if variant is not None else self.target_variant,
+        )
 
     def is_proxy_running(self, timeout: float = 3.0) -> bool:
         """Checks if the QUANTA Reverse Proxy is responsive on /health or /v1/health."""
@@ -120,6 +126,7 @@ class QuantaServiceManager:
         """Gathers a comprehensive status report across all components."""
         base_running = self.is_base_llm_running()
         model_loaded = self.is_model_loaded() if base_running else False
+        loaded_variant = self.unsloth_mgr.get_loaded_variant(self.target_model) if base_running else None
         proxy_running = self.is_proxy_running()
         gpu_telemetry = self.unsloth_mgr.get_gpu_telemetry()
 
@@ -141,6 +148,8 @@ class QuantaServiceManager:
                 "backend_type": "llama-server",
                 "running": base_running,
                 "model_id": self.target_model,
+                "variant": self.target_variant,
+                "loaded_variant": loaded_variant,
                 "model_loaded": model_loaded,
                 "dual_routing": {
                     "chat_completions": f"{self.base_url}/chat/completions",
@@ -160,9 +169,9 @@ class QuantaServiceManager:
     # -------------------------------------------------------------------------
 
     def ensure_base_llm(self, timeout: float = 60.0) -> bool:
-        """Ensures the Base LLM server is running and the target model is loaded."""
+        """Ensures the Base LLM server is running and the target model is loaded with target variant."""
         if self.is_base_llm_running() and self.is_model_loaded():
-            logger.info("Base LLM is already running and model '%s' is loaded.", self.target_model)
+            logger.info("Base LLM is already running and model '%s' (%s) is loaded.", self.target_model, self.target_variant)
             return True
 
         print(format_ansi(f"[*] Checking Base LLM service on {self.base_url}...", "1;33"))
@@ -179,12 +188,12 @@ class QuantaServiceManager:
 
         # Verify model loaded state
         if not self.is_model_loaded():
-            print(format_ansi(f"[*] Model '{self.target_model}' is dormant. Requesting load into VRAM...", "1;33"))
-            loaded = self.unsloth_mgr.ensure_model_loaded(self.target_model, timeout=timeout)
+            print(format_ansi(f"[*] Model '{self.target_model}' ({self.target_variant}) is dormant or mismatched quant. Requesting load into VRAM...", "1;33"))
+            loaded = self.unsloth_mgr.ensure_model_loaded(self.target_model, timeout=timeout, gguf_variant=self.target_variant)
             if not loaded:
-                print(format_ansi(f"    [!] Failed to verify/load model '{self.target_model}'.", "1;31"))
+                print(format_ansi(f"    [!] Failed to verify/load model '{self.target_model}' ({self.target_variant}).", "1;31"))
                 return False
-            print(format_ansi(f"    [+] Model '{self.target_model}' loaded in VRAM.", "1;32"))
+            print(format_ansi(f"    [+] Model '{self.target_model}' ({self.target_variant}) loaded in VRAM.", "1;32"))
 
         return True
 
@@ -548,6 +557,7 @@ def main():
     start_p.add_argument("--llm", action="store_true", help="Spin up Base LLM only")
     start_p.add_argument("--base-url", type=str, default="http://127.0.0.1:8888/v1", help="Base LLM URL")
     start_p.add_argument("--quanta-url", type=str, default="http://127.0.0.1:8000/v1", help="QUANTA Proxy URL")
+    start_p.add_argument("--variant", type=str, default="Q5_K_M", help="Target model quant variant (default: Q5_K_M)")
 
     # Test MCP
     test_mcp_p = subparsers.add_parser("test-mcp", help="Run automated MCP tools self-test")
@@ -565,7 +575,9 @@ def main():
         print("\n" + format_ansi("================ QUANTA SERVICE STATUS DASHBOARD ================", "1;36"))
         base = status["base_llm"]
         base_st = format_ansi("ONLINE", "1;32") if base["running"] else format_ansi("OFFLINE", "1;31")
-        model_st = format_ansi("LOADED (VRAM)", "1;32") if base["model_loaded"] else format_ansi("DORMANT/OFFLINE", "1;33")
+        loaded_quant = base.get("loaded_variant") or base.get("variant", "")
+        quant_info = f", {loaded_quant}" if loaded_quant else ""
+        model_st = format_ansi(f"LOADED (VRAM{quant_info})", "1;32") if base["model_loaded"] else format_ansi("DORMANT/OFFLINE", "1;33")
         print(f"  Base LLM Server (:8888)  : {base_st} ({base['url']})")
         print(f"  Target Model In VRAM     : {model_st} ({base['model_id']})")
 
@@ -588,6 +600,9 @@ def main():
             mgr.base_url = args.base_url
         if args.quanta_url:
             mgr.quanta_url = args.quanta_url
+        if getattr(args, "variant", None):
+            mgr.target_variant = args.variant
+            mgr.unsloth_mgr.target_variant = args.variant
 
         if args.all or (not args.proxy and not args.llm):
             mgr.ensure_live_backend()

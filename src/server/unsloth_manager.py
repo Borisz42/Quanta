@@ -35,6 +35,7 @@ logger = logging.getLogger("quanta.server.unsloth_manager")
 DEFAULT_BACKEND_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8888
 DEFAULT_MODEL_ID = "unsloth/Qwen3.5-4B-MTP-GGUF"
+DEFAULT_MODEL_VARIANT = "Q5_K_M"
 DEFAULT_MODEL_PATH = "models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"
 
 
@@ -59,12 +60,14 @@ class UnslothServerManager:
         host: str = DEFAULT_BACKEND_HOST,
         port: int = DEFAULT_BACKEND_PORT,
         target_model: str = DEFAULT_MODEL_ID,
+        target_variant: str = DEFAULT_MODEL_VARIANT,
         model_path: Optional[str] = None,
         allow_cpu_offload: Optional[bool] = None,
     ):
         self.host = host
         self.port = port
         self.target_model = target_model
+        self.target_variant = target_variant or os.getenv("QUANTA_MODEL_VARIANT", DEFAULT_MODEL_VARIANT)
         self.model_path = model_path or os.getenv("QUANTA_MODEL_PATH", DEFAULT_MODEL_PATH)
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_url = f"{self.base_url}/v1"
@@ -200,13 +203,19 @@ class UnslothServerManager:
         parallel_slots = os.getenv("QUANTA_PARALLEL_SLOTS", "16")
         model_file = Path(self.model_path)
         if not model_file.exists():
-            for m_cand in [
+            hf_cache = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "hub" / "models--unsloth--Qwen3.5-4B-MTP-GGUF" / "snapshots"
+            hf_q5_cands = list(hf_cache.glob("*/Qwen3.5-4B-Q5_K_M.gguf")) if hf_cache.exists() else []
+            candidate_paths = [
+                *hf_q5_cands,
+                Path(r"C:\Users\PC\.lmstudio\models\unsloth\Qwen3.5-4B-MTP-GGUF\Qwen3.5-4B-Q5_K_M.gguf"),
+                Path(os.path.expanduser("~")) / ".lmstudio" / "models" / "unsloth" / "Qwen3.5-4B-MTP-GGUF" / "Qwen3.5-4B-Q5_K_M.gguf",
                 Path(r"C:\Users\PC\.lmstudio\models\ggml-org\Kev-4B-GGUF\Kev-4B-Q4_K_M.gguf"),
                 Path(r"C:\Users\PC\.lmstudio\models\unsloth\Qwen3.5-4B-MTP-GGUF\Qwen3.5-4B-Q4_K_M.gguf"),
                 Path(os.path.expanduser("~")) / ".lmstudio" / "models" / "ggml-org" / "Kev-4B-GGUF" / "Kev-4B-Q4_K_M.gguf",
                 Path(os.path.expanduser("~")) / ".lmstudio" / "models" / "unsloth" / "Qwen3.5-4B-MTP-GGUF" / "Qwen3.5-4B-Q4_K_M.gguf",
                 Path("models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"),
-            ]:
+            ]
+            for m_cand in candidate_paths:
                 if m_cand.exists():
                     model_file = m_cand
                     self.model_path = str(m_cand)
@@ -312,9 +321,10 @@ class UnslothServerManager:
 
     ensure_service_running = ensure_unsloth_service_running
 
-    def is_model_loaded(self, model_id: Optional[str] = None) -> bool:
-        """Checks if the target model is currently loaded in GPU VRAM."""
+    def is_model_loaded(self, model_id: Optional[str] = None, variant: Optional[str] = None) -> bool:
+        """Checks if the target model is currently loaded in GPU VRAM (optionally validating quant variant)."""
         target = model_id or self.target_model
+        expected_variant = variant if variant is not None else self.target_variant
         try:
             with httpx.Client(timeout=10.0) as client:
                 r = client.get(f"{self.api_url}/models")
@@ -330,22 +340,54 @@ class UnslothServerManager:
                         None
                     )
                     if entry is not None:
-                        return entry.get("loaded", True) is not False
+                        is_loaded = entry.get("loaded", True) is not False
+                        if is_loaded and expected_variant and "quant" in entry:
+                            quant = str(entry.get("quant") or "")
+                            if quant and expected_variant.lower() not in quant.lower():
+                                logger.info(
+                                    "Model '%s' is loaded with quant '%s', but '%s' is required.",
+                                    target, quant, expected_variant
+                                )
+                                return False
+                        return is_loaded
                     return len(models) > 0 and not model_id
         except Exception:
             pass
         return False
+
+    def get_loaded_variant(self, model_id: Optional[str] = None) -> Optional[str]:
+        """Queries the active loaded quant variant (e.g., 'Q5_K_M', 'UD-Q4_K_XL') from the backend."""
+        target = model_id or self.target_model
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                r = client.get(f"{self.api_url}/models")
+                if r.status_code == 200:
+                    models = r.json().get("data", [])
+                    entry = next(
+                        (
+                            m for m in models
+                            if (m.get("id") == target or target in m.get("aliases", []) or target in m.get("id", ""))
+                            and m.get("loaded", True) is not False
+                        ),
+                        None
+                    )
+                    if entry is not None:
+                        return entry.get("quant") or entry.get("meta", {}).get("ftype")
+        except Exception:
+            pass
+        return None
 
     def ensure_model_loaded(
         self,
         model_id: Optional[str] = None,
         gpu_layers: int = -1,
         timeout: float = 30.0,
-        gguf_variant: str = "Q5_K_M",
+        gguf_variant: Optional[str] = None,
         speculative_type: str = "mtp",
     ) -> bool:
-        """Verifies that the target model is loaded in GPU VRAM, requesting load if dormant."""
+        """Verifies that the target model is loaded in GPU VRAM (with requested quant variant, default Q5_K_M)."""
         target = model_id or self.target_model
+        variant = gguf_variant or self.target_variant
 
         # Ensure service is running
         if not self.ensure_unsloth_service_running(timeout=timeout):
@@ -354,20 +396,20 @@ class UnslothServerManager:
         # Enforce GPU policy
         self.enforce_gpu_policy()
 
-        # Check model loaded state
-        if self.is_model_loaded(target):
-            logger.info("Model '%s' is verified loaded in VRAM.", target)
+        # Check model loaded state (including quant match)
+        if self.is_model_loaded(target, variant=variant):
+            logger.info("Model '%s' (%s) is verified loaded in VRAM.", target, variant)
             return True
 
-        # Not loaded or not present: trigger load request
+        # Not loaded or incorrect quant: trigger load request
         try:
             with httpx.Client(timeout=5.0) as client:
-                logger.info("Model '%s' is dormant. Sending POST /api/inference/load...", target)
+                logger.info("Model '%s' (%s) is dormant/variant mismatch. Sending POST /api/inference/load...", target, variant)
                 load_payload = {
                     "model_path": target,
                     "gpu_memory_mode": "auto",
                     "gpu_layers": gpu_layers,
-                    "gguf_variant": gguf_variant,
+                    "gguf_variant": variant,
                     "speculative_type": speculative_type,
                 }
                 load_resp = client.post(f"{self.base_url}/api/inference/load", json=load_payload, timeout=30.0)
@@ -375,11 +417,11 @@ class UnslothServerManager:
                     t0 = time.time()
                     while time.time() - t0 < timeout:
                         time.sleep(1.0)
-                        if self.is_model_loaded(target):
-                            logger.info("Model '%s' successfully loaded into VRAM.", target)
+                        if self.is_model_loaded(target, variant=variant):
+                            logger.info("Model '%s' (%s) successfully loaded into VRAM.", target, variant)
                             return True
         except Exception as e:
-            logger.warning("Error verifying/loading model '%s': %s", target, e)
+            logger.warning("Error verifying/loading model '%s' (%s): %s", target, variant, e)
 
         return False
 
