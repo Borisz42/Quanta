@@ -1,6 +1,6 @@
 # QUANTA Query Extractor Evaluation Report (§Phase 1, exp-027*)
 
-- **Date**: 2026-10-09 18:04:25 UTC
+- **Date**: 2026-10-09 18:06:11 UTC
 - **Dataset Split**: `test` (22 samples evaluated)
 - **Promoted Winner**: `QE-C`
 
@@ -8,9 +8,9 @@
 
 | Strategy | Span Overlap (%) | Token-F1 (%) | Exact Match (%) | Boundary Acc (%) | Mean Latency (ms) | p95 Latency (ms) | Verdict |
 |---|---|---|---|---|---|---|---|
-| `QE-A` | 100.0% | 63.7% | 59.1% | 59.1% | 301.341 ms | 1351.421 ms | Control |
-| `QE-B` | 100.0% | 100.0% | 100.0% | 100.0% | 0.865 ms | 3.734 ms | Evaluated |
-| `QE-C` | 100.0% | 100.0% | 100.0% | 100.0% | 0.754 ms | 2.906 ms | **PROMOTED WINNER** |
+| `QE-A` | 100.0% | 63.7% | 59.1% | 59.1% | 298.527 ms | 1310.940 ms | Control |
+| `QE-B` | 100.0% | 100.0% | 100.0% | 100.0% | 0.790 ms | 3.456 ms | Evaluated |
+| `QE-C` | 100.0% | 100.0% | 100.0% | 100.0% | 0.789 ms | 4.425 ms | **PROMOTED WINNER** |
 
 ## 2. Format-Level Breakdown Comparison
 
