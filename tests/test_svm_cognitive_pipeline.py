@@ -355,3 +355,47 @@ def test_batch_ingestion_throughput(pipeline: CognitivePipeline):
     assert len(pipeline.passage_store) == 5
     avg_latency = sum(latencies_ms) / len(latencies_ms)
     assert avg_latency < 520.0, f"Average batch latency ({avg_latency:.1f}ms) exceeded 520ms limit"
+
+
+@pytest.mark.parametrize("kev_mode", ["bypass", "regular_kev_lora", "tiered", "co_decoded", "async"])
+def test_unified_kev_modes_ingestion(tmp_path: Path, kev_mode: str):
+    """Verifies that CognitivePipeline operates seamlessly across all 5 unified kev_mode options (Session 5)."""
+    db_path = tmp_path / f"test_{kev_mode}.db"
+    pipe = CognitivePipeline(
+        transducer_backend="mock",
+        kev_mode=kev_mode,
+        page_table_path=db_path,
+    )
+    try:
+        sample_text = (
+            "Charles Babbage invented the Difference Engine to calculate mathematical tables automatically. "
+            "Because errors were frequent in manual calculations, the machine improved accuracy."
+        )
+        graph = pipe.ingest_document(
+            text=sample_text,
+            doc_id=f"doc_{kev_mode}",
+            passage_id=f"P_{kev_mode}_01",
+            validate=True,
+        )
+
+        assert isinstance(graph, QuantaGraph)
+        assert len(graph.nodes) > 0
+        assert len(pipe.passage_store) == 1
+        assert len(pipe.binary_table) > 0
+
+        # Verify Belnap status on nodes
+        for node in graph.nodes.values():
+            assert hasattr(node, "truth_status")
+            if kev_mode == "async":
+                # Provisional mode commits UNKNOWN initially
+                assert node.truth_status in ("UNKNOWN", "TRUE")
+            else:
+                assert node.truth_status in ("TRUE", "UNKNOWN", "FALSE")
+
+        # Test query memory
+        ctx = pipe.query_memory("What did Charles Babbage invent?", top_k=3, flush_async=(kev_mode == "async"))
+        assert ctx.token_count_estimate > 0
+        assert len(ctx.passages) > 0
+    finally:
+        pipe.close()
+
