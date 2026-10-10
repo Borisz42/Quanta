@@ -89,6 +89,7 @@ class DiscourseChunk:
     global_end_offset: int = 0
     word_count: int = 0
     token_count_estimate: int = 0
+    parent_macro_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize DiscourseChunk to a JSON-compatible dictionary."""
@@ -104,6 +105,7 @@ class DiscourseChunk:
             "global_end_offset": self.global_end_offset,
             "word_count": self.word_count,
             "token_count_estimate": self.token_count_estimate,
+            "parent_macro_id": self.parent_macro_id,
         }
 
     @classmethod
@@ -125,6 +127,7 @@ class DiscourseChunk:
             global_end_offset=int(data.get("global_end_offset", 0)),
             word_count=int(data.get("word_count", 0)),
             token_count_estimate=int(data.get("token_count_estimate", 0)),
+            parent_macro_id=data.get("parent_macro_id"),
         )
 
     def __len__(self) -> int:
