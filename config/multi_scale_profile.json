@@ -53,11 +53,11 @@
     "notes": "Calibrated probability coefficients for F-A"
   },
   "fast_path.mode": {
-    "value": "passthrough",
+    "value": "coverage_adaptive",
     "source_exp": "exp-029a",
     "source_commit": "436c436",
     "calibrated_on": "long_context/test",
-    "notes": "Gate G3 promoted winner on TTFT vs Accuracy Pareto frontier (1.00x speedup)"
+    "notes": "Gate G3 promoted winner on TTFT vs Accuracy Pareto frontier (adaptive routing)"
   },
   "fast_path.hot_transduce_n": {
     "value": 2,
@@ -100,5 +100,40 @@
     "source_commit": "37d297e",
     "calibrated_on": "long_context/test",
     "notes": "Gate G5 calibrated pause policy with -11.2% foreground contention"
+  },
+  "targets.delta": {
+    "value": 0.02,
+    "source_exp": "exp-026a",
+    "source_commit": "3af861e",
+    "calibrated_on": "long_context/dev",
+    "notes": "Gate G0 empirical non-inferiority margin (delta = 2.0%)"
+  },
+  "targets.ttft_ratio": {
+    "value": 0.85,
+    "source_exp": "exp-026a",
+    "source_commit": "3af861e",
+    "calibrated_on": "long_context/dev",
+    "notes": "Gate G0 relative TTFT target bounded by transduction fraction"
+  },
+  "targets.ttc_ms_max": {
+    "value": 500.0,
+    "source_exp": "exp-026a",
+    "source_commit": "3af861e",
+    "calibrated_on": "long_context/dev",
+    "notes": "Gate G0 target TTC upper bound for fast-path assembly"
+  },
+  "targets.gold_recall": {
+    "value": 0.7,
+    "source_exp": "exp-028a",
+    "source_commit": "52eb1f6",
+    "calibrated_on": "long_context/dev",
+    "notes": "Gate G2 target gold evidence recall under token budget"
+  },
+  "targets.max_foreground_degradation": {
+    "value": 0.05,
+    "source_exp": "exp-031a",
+    "source_commit": "37d297e",
+    "calibrated_on": "long_context/test",
+    "notes": "Gate G5 tolerance bound for foreground TTFT degradation"
   }
 }
