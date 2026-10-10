@@ -321,6 +321,46 @@ def _extract_event_candidates(ev: Any) -> Tuple[Optional[str], Optional[str]]:
 
 OPTION_LETTERS: List[str] = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
+DEFAULT_RELEVANCE_LABELS: List[str] = ["RELEVANT", "IRRELEVANT"]
+DEFAULT_RELEVANCE_TEMPLATE: str = (
+    "Task: Assess whether the following text is relevant for answering the question.\n"
+    "Question: {query}\n\n"
+    "Passage:\n{text}\n\n"
+    "Is this passage relevant to answering the question?\n"
+    "A) RELEVANT\n"
+    "B) IRRELEVANT\n\n"
+    "Answer: "
+)
+
+
+class RelevanceScoreResult(dict):
+    """Result of relevance scoring mapping label -> probability with attached raw_logprobs."""
+
+    def __init__(
+        self,
+        probabilities: Dict[str, float],
+        raw_logprobs: Dict[str, float],
+        top_label: str,
+        top_prob: float,
+        latency_ms: float = 0.0,
+    ):
+        super().__init__(probabilities)
+        self.probabilities = probabilities
+        self.raw_logprobs = raw_logprobs
+        self.top_label = top_label
+        self.top_prob = top_prob
+        self.latency_ms = latency_ms
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "probabilities": self.probabilities,
+            "raw_logprobs": self.raw_logprobs,
+            "top_label": self.top_label,
+            "top_prob": self.top_prob,
+            "latency_ms": self.latency_ms,
+        }
+
+
 
 def _normalize_logprobs_to_probs(
     token_logprobs: Dict[str, float],
@@ -722,6 +762,59 @@ class MockKevEngine:
             lines.append(f"REL_{ev1_id}_{ev2_id}: [allen={allen}, pearl={pearl}]")
 
         return "\n".join(lines)
+
+    def score_relevance(
+        self,
+        intent: Union[str, Any],
+        text: str,
+        labels: Optional[Sequence[str]] = None,
+        prompt_template: Optional[str] = None,
+    ) -> RelevanceScoreResult:
+        """Mock evaluation of passage relevance against question/intent."""
+        query_text = getattr(intent, "query_text", str(intent))
+        target_labels = list(labels or DEFAULT_RELEVANCE_LABELS)
+
+        # Keyword / token overlap check
+        q_tokens = {w.lower() for w in re.findall(r"\b[A-Za-z0-9_]{3,}\b", query_text)}
+        t_tokens = {w.lower() for w in re.findall(r"\b[A-Za-z0-9_]{3,}\b", text)}
+        overlap = len(q_tokens & t_tokens)
+
+        if overlap > 0:
+            rel_prob = min(0.98, 0.70 + 0.08 * overlap)
+        else:
+            rel_prob = 0.08
+
+        rem_prob = (1.0 - rel_prob) / max(1, len(target_labels) - 1)
+        probs = {label: rem_prob for label in target_labels}
+        probs[target_labels[0]] = rel_prob
+
+        raw_lps: Dict[str, float] = {}
+        for idx, label in enumerate(target_labels):
+            letter = OPTION_LETTERS[idx] if idx < len(OPTION_LETTERS) else chr(65 + idx)
+            p = probs[label]
+            lp = math.log(max(1e-5, p))
+            raw_lps[letter] = lp
+            raw_lps[label] = lp
+
+        top_lbl = max(probs, key=lambda k: probs[k])
+        return RelevanceScoreResult(
+            probabilities=probs,
+            raw_logprobs=raw_lps,
+            top_label=top_lbl,
+            top_prob=probs[top_lbl],
+            latency_ms=0.08,
+        )
+
+    def score_relevance_batch(
+        self,
+        intent: Union[str, Any],
+        texts: Sequence[str],
+        labels: Optional[Sequence[str]] = None,
+        prompt_template: Optional[str] = None,
+        max_workers: int = 8,
+    ) -> List[RelevanceScoreResult]:
+        """Mock batch scoring of multiple text passages."""
+        return [self.score_relevance(intent, t, labels, prompt_template) for t in texts]
 
 
 # ---------------------------------------------------------------------------
@@ -2088,3 +2181,71 @@ class KevDecisionEngine:
             chunks,
             batch_size,
         )
+
+    # -----------------------------------------------------------------------
+    # Phase 2: Relevance Filter Prefill Logprob Scoring (§2.2)
+    # -----------------------------------------------------------------------
+
+    def score_relevance(
+        self,
+        intent: Union[str, Any],
+        text: str,
+        labels: Optional[Sequence[str]] = None,
+        prompt_template: Optional[str] = None,
+    ) -> RelevanceScoreResult:
+        """Score relevance of text against question/intent via single-token prefill logprob."""
+        query_text = getattr(intent, "query_text", str(intent))
+        target_labels = list(labels or DEFAULT_RELEVANCE_LABELS)
+        template = prompt_template or DEFAULT_RELEVANCE_TEMPLATE
+        target_letters = [OPTION_LETTERS[i] for i in range(len(target_labels))]
+
+        # Truncate text if excessively long for single prefill prompt
+        clean_text = text.strip()
+        if len(clean_text) > 4000:
+            clean_text = clean_text[:4000] + "..."
+
+        prompt = template.format(query=query_text, text=clean_text)
+
+        # Fast-path if server is offline and fallback to mock is enabled
+        if self.fallback_to_mock and not self.check_health():
+            return self._mock.score_relevance(intent, text, labels, prompt_template)
+
+        # Query logprobs
+        lps, latency_ms = self._query_completion_logprobs(prompt, target_letters)
+
+        if not lps and self.fallback_to_mock:
+            return self._mock.score_relevance(intent, text, labels, prompt_template)
+
+        top_label, top_prob, label_probs, option_raw_lps = _normalize_option_logprobs_to_probs(
+            lps, target_labels
+        )
+
+        return RelevanceScoreResult(
+            probabilities=label_probs,
+            raw_logprobs=option_raw_lps,
+            top_label=top_label,
+            top_prob=top_prob,
+            latency_ms=latency_ms,
+        )
+
+    def score_relevance_batch(
+        self,
+        intent: Union[str, Any],
+        texts: Sequence[str],
+        labels: Optional[Sequence[str]] = None,
+        prompt_template: Optional[str] = None,
+        max_workers: int = 8,
+    ) -> List[RelevanceScoreResult]:
+        """Concurrently score relevance of multiple text passages across parallel decode slots."""
+        if not texts:
+            return []
+
+        def _score_single(t: str) -> RelevanceScoreResult:
+            return self.score_relevance(intent, t, labels, prompt_template)
+
+        workers = min(max_workers, len(texts), self.concurrency_limit)
+        if workers > 1 and not (self.fallback_to_mock and not self.check_health()):
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                return list(executor.map(_score_single, texts))
+        return [_score_single(t) for t in texts]
+
