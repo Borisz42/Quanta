@@ -213,11 +213,9 @@ class DynamicIngestionEvaluator:
         logger.info("DynamicIngestionEvaluator initialized: mode=%s, transducer_backend=%s", self.mode, self.transducer_backend)
 
     def _is_live_backend_ready(self) -> bool:
-        """Checks if llama-server is reachable at :8888."""
+        """Checks if llama-server / Unsloth backend is reachable at :8888."""
         try:
-            import httpx
-            r = httpx.get("http://127.0.0.1:8888/health", timeout=1.0)
-            return r.status_code == 200
+            return self.unsloth_mgr.is_service_responsive(timeout=3.0)
         except Exception:
             return False
 
@@ -413,6 +411,8 @@ class DynamicIngestionEvaluator:
 
             if self.mode == "live":
                 ans_text, reader_ttft, reader_gen = self._generate_answer_live(query, retrieved_context)
+                if self.tracer:
+                    self.tracer.record_stage_timing("reader", reader_gen, gpu_calls=1)
                 ttft_ms = (t_ingest_s * 1000.0) + ttc_ms + reader_ttft
                 e2e_ms = (t_ingest_s * 1000.0) + ttc_ms + reader_gen
             else:
@@ -434,6 +434,8 @@ class DynamicIngestionEvaluator:
 
             if self.mode == "live":
                 ans_text, reader_ttft, reader_gen = self._generate_answer_live(query, retrieved_context)
+                if self.tracer:
+                    self.tracer.record_stage_timing("reader", reader_gen, gpu_calls=1)
                 ttft_ms = ttc_ms + reader_ttft
                 e2e_ms = ttc_ms + reader_gen
             else:
@@ -463,6 +465,8 @@ class DynamicIngestionEvaluator:
 
             if self.mode == "live":
                 ans_text, reader_ttft, reader_gen = self._generate_answer_live(query, retrieved_context)
+                if self.tracer:
+                    self.tracer.record_stage_timing("reader", reader_gen, gpu_calls=1)
                 ttft_ms = ttc_ms + reader_ttft
                 e2e_ms = ttc_ms + reader_gen
             else:
@@ -485,7 +489,10 @@ class DynamicIngestionEvaluator:
         em = compute_em(ans_text, gold_ans)
         f1 = compute_f1(ans_text, gold_ans)
         ret_tokens = int(len(retrieved_context.split()) * 1.33)
-        gpu_calls = self.tracer.get_total_gpu_calls() if self.tracer else (1 if condition != "CALIBRATED" else units_transduced)
+        if self.mode == "live":
+            gpu_calls = max(1, self.tracer.get_total_gpu_calls() if self.tracer else 1)
+        else:
+            gpu_calls = self.tracer.get_total_gpu_calls() if self.tracer else (1 if condition != "CALIBRATED" else units_transduced)
         stage_timings = self.tracer.get_stage_timings() if self.tracer else {}
 
         return PairedSampleResult(

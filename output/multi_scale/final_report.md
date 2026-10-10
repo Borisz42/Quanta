@@ -1,16 +1,16 @@
 # Dynamic Multi-Scale Ingestion — Final Paired Evaluation Report (`final_report.md`)
 
 > **Milestone**: Phase 6 Integration & Final Verification (`exp-032a`).
-> **Benchmark Split**: `test` | **Samples**: 6 | **Timestamp**: 2026-10-10 14:37:10
+> **Benchmark Split**: `test` | **Samples**: 6 | **Timestamp**: 2026-10-10 14:51:51
 > **Hardware**: NVIDIA GeForce RTX 3070 (8GB VRAM) / llama-server (:8888)
 
 ## 1. Executive Summary & Verdict
 
-- **Overall Verdict**: **SUCCESS: PROMOTED TO PRODUCTION DEFAULT**
-- **Non-Inferiority Verification ($\delta = 2.0\%$)**: **PASS** (Paired Accuracy $\Delta$: +66.7% [+33.3%, +100.0%])
-- **Time-To-First-Token (TTFT) Speedup**: **1.12x** (Relative Ratio: 0.891 [0.757, 1.027])
-- **Time-To-Context (TTC) Speedup**: **0.06x** (Relative Ratio: 15.571 [11.723, 19.306])
-- **GPU Synchronous Ingestion Calls**: Reduced from **0.0 calls** (B0) to **0.0 calls** (CALIBRATED)
+- **Overall Verdict**: **INCONCLUSIVE: REVIEW WITH USER**
+- **Non-Inferiority Verification ($\delta = 2.0\%$)**: **FAIL** (Paired Accuracy $\Delta$: +16.7% [-33.3%, +66.7%])
+- **Time-To-First-Token (TTFT) Speedup**: **2.84x** (Relative Ratio: 0.352 [0.249, 0.468])
+- **Time-To-Context (TTC) Speedup**: **0.00x** (Relative Ratio: 648.917 [461.841, 839.915])
+- **GPU Synchronous Ingestion Calls**: Reduced from **8.0 calls** (B0) to **3.0 calls** (CALIBRATED)
 
 ---
 
@@ -18,9 +18,9 @@
 
 | Condition | Samples | TTFT (ms) [95% CI] | TTC (ms) [95% CI] | Gold Recall (%) [95% CI] | Accuracy (EM%) [95% CI] | Token F1 | GPU Calls | Peak VRAM | Verdict |
 |---|---|---|---|---|---|---|---|---|---|
-| `B0` | 6 | **207.7** [166.4, 253.9] | **11.7** [8.7, 15.1] | 52.4% [19.0%, 85.7%] | **16.7%** [0.0%, 50.0%] | 0.111 | 0.0 | 6730 MB | Baseline Control |
-| `RAG0` | 6 | **11.6** [11.0, 12.3] | **1.6** [1.0, 2.3] | 97.6% [92.9%, 100.0%] | **83.3%** [50.0%, 100.0%] | 0.663 | 0.0 | 6730 MB | Lexical Control |
-| `CALIBRATED` | 6 | **175.1** [159.9, 191.7] | **163.1** [147.9, 179.7] | 92.9% [83.3%, 100.0%] | **83.3%** [50.0%, 100.0%] | 0.641 | 0.0 | 6727 MB | PROMOTED WINNER |
+| `B0` | 6 | **18383.6** [15432.7, 21576.6] | **8.4** [7.2, 10.4] | 67.9% [36.9%, 92.9%] | **66.7%** [33.3%, 100.0%] | 0.381 | 8.0 | 6911 MB | Baseline Control |
+| `RAG0` | 6 | **862.5** [839.3, 881.2] | **1.1** [0.9, 1.3] | 97.6% [92.9%, 100.0%] | **83.3%** [50.0%, 100.0%] | 0.587 | 1.0 | 6896 MB | Lexical Control |
+| `CALIBRATED` | 6 | **5959.9** [4999.3, 7030.4] | **5050.4** [4117.7, 6095.2] | 92.9% [83.3%, 100.0%] | **83.3%** [50.0%, 100.0%] | 0.437 | 3.0 | 6896 MB | PROMOTED WINNER |
 
 ---
 
@@ -28,9 +28,9 @@
 
 | Comparison | Metric | Mean Delta / Ratio | 95% Bootstrap CI | SLA / Target | Status |
 |---|---|---|---|---|---|
-| CALIBRATED vs B0 | Accuracy (EM%) Delta | +66.67% | [+33.33%, +100.00%] | Lower Bound $\ge -2.0\%$ | **PASS** |
-| CALIBRATED vs B0 | TTFT Ratio | 0.891x | [0.757, 1.027] | Ratio $\le 0.85$ | **SUB-OPTIMAL** |
-| CALIBRATED vs B0 | TTC Ratio | 15.571x | [11.723, 19.306] | Speedup $\ge 1.0x$ | **PASS** |
+| CALIBRATED vs B0 | Accuracy (EM%) Delta | +16.67% | [-33.33%, +66.67%] | Lower Bound $\ge -2.0\%$ | **FAIL** |
+| CALIBRATED vs B0 | TTFT Ratio | 0.352x | [0.249, 0.468] | Ratio $\le 0.85$ | **PASS** |
+| CALIBRATED vs B0 | TTC Ratio | 648.917x | [461.841, 839.915] | Speedup $\ge 1.0x$ | **PASS** |
 
 ---
 
@@ -38,9 +38,9 @@
 
 | Task Family | Family Description | B0 Accuracy (%) | RAG0 Accuracy (%) | CALIBRATED Accuracy (%) | Acc Lift vs B0 (%) | CALIBRATED TTFT (ms) |
 |---|---|---|---|---|---|---|
-| `babilong` | State Tracking | 50.0% | 50.0% | **100.0%** | +50.0% | 167.7 ms |
-| `musique` | Multi-Hop Reasoning | 0.0% | 100.0% | **50.0%** | +50.0% | 194.8 ms |
-| `niah` | Needle Retrieval | 0.0% | 100.0% | **100.0%** | +100.0% | 162.8 ms |
+| `babilong` | State Tracking | 50.0% | 50.0% | **100.0%** | +50.0% | 4598.7 ms |
+| `musique` | Multi-Hop Reasoning | 100.0% | 100.0% | **50.0%** | -50.0% | 7346.7 ms |
+| `niah` | Needle Retrieval | 50.0% | 100.0% | **100.0%** | +50.0% | 5934.2 ms |
 
 ---
 
@@ -48,8 +48,8 @@
 
 | Target Length | B0 TTC (ms) | CALIBRATED TTC (ms) | TTC Speedup | B0 TTFT (ms) | CALIBRATED TTFT (ms) | TTFT Speedup |
 |---|---|---|---|---|---|---|
-| 2000 tokens | 14.4 ms | **149.8 ms** | **0.10x** | 157.2 ms | **161.8 ms** | **0.97x** |
-| 4000 tokens | 9.1 ms | **176.3 ms** | **0.05x** | 258.2 ms | **188.3 ms** | **1.37x** |
+| 2000 tokens | 9.5 ms | **5591.0 ms** | **0.00x** | 14521.5 ms | **6496.0 ms** | **2.24x** |
+| 4000 tokens | 7.4 ms | **4509.9 ms** | **0.00x** | 22245.7 ms | **5423.8 ms** | **4.10x** |
 
 ---
 
