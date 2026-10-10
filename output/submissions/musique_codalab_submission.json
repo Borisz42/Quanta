@@ -1,35 +1,6 @@
 {
   "musique_ans_preds": {
-    "2hop__153573_109006": "Richard Levinson and William Link",
-    "4hop1__129721_32392_823060_610794": "Oklahoma City",
-    "3hop2__655849_223623_162182": "Central",
-    "3hop1__241001_568433_47686": "Confirm Greyhound Operation",
-    "2hop__231890_595414": "Conclusion",
-    "2hop__525242_52835": "Conclusion",
-    "2hop__169443_83769": "Will",
-    "4hop1__436202_765799_282674_759393": "Oconto",
-    "3hop1__539312_744503_34754": "BUT",
-    "3hop2__90098_60649_10557": "Latin",
-    "2hop__21104_16335": "Synthesize the Factors",
-    "2hop__499003_853511": "Sire Records",
-    "2hop__822965_165304": "no information",
-    "3hop2__19639_90098_10557": "Medieval Latin",
-    "4hop1__342858_131850_33897_81096": "Refining the logic based strictly on the text's internal consistency (which is broken)",
-    "2hop__82910_75184": "Jennifer Parker",
-    "2hop__156700_63853": "Conclusion",
-    "4hop1__17192_17130_70784_61381": "July 21",
-    "3hop1__132798_40769_64047": "Conclusion",
-    "4hop1__56635_49925_13759_736921": "Saxony-Anhalt",
-    "2hop__384238_74735": "James",
-    "2hop__860241_766393": "Amy Ryan",
-    "2hop__88372_83837": "Karen Fairchild",
-    "2hop__156658_155922": "Step 2",
-    "3hop2__326964_36852_7713": "Jiangsu",
-    "3hop1__295815_40769_64047": "Conclusion",
-    "2hop__156700_73244": "Formulate the conclusion",
-    "2hop__2416_53663": "Rainy River",
-    "2hop__463353_80420": "Little Rock Central High School",
-    "2hop__669456_108549": "Identify the writers of that series"
+    "3hop1__241001_568433_47686": "The documents are connected by their shared focus on employment structures, labor regulations, and workplace demographics, illustrating how legal frameworks define full-time status and maternity rights while contrasting these with specific regional examples of transit and industrial employment"
   },
   "model_name": "QUANTA-Qwen3.5-4B-MTP-NeuroSymbolic"
 }
