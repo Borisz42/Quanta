@@ -1,6 +1,6 @@
 # Dynamic Multi-Scale Ingestion: Relevance Filter Evaluation Report (`exp-028a`)
 
-**Evaluated Split**: `test` (6 samples) | **Timestamp**: 2026-10-10 10:19:24
+**Evaluated Split**: `test` (6 samples) | **Timestamp**: 2026-10-10 10:21:49
 
 ## 1. Variant Scorecard @ Budget = 1,500 Tokens
 
@@ -31,17 +31,17 @@
 | `background.enabled` | `False` | `False` | *Uncalibrated (B0)* | - | - | Whether asynchronous background ingestion is enabled |
 | `background.max_concurrency` | `1` | `1` | *Uncalibrated (B0)* | - | - | Maximum concurrent background worker threads |
 | `background.pause_policy` | `none` | `none` | *Uncalibrated (B0)* | - | - | Background worker pause policy: none, foreground_lock, slot_polling |
-| `chunker.macro_target_tokens` | `1000` | *None* | `exp-028a` | `01491b6` | long_context/dev | Gate G2 calibrated target token length for macro discourse blocks |
-| `chunker.micro_target_words` | `250` | *None* | `exp-028a` | `01491b6` | long_context/dev | Gate G2 calibrated target word length for micro discourse chunks |
+| `chunker.macro_target_tokens` | `1000` | *None* | `exp-028a` | `52eb1f6` | long_context/dev | Gate G2 calibrated target token length for macro discourse blocks |
+| `chunker.micro_target_words` | `250` | *None* | `exp-028a` | `52eb1f6` | long_context/dev | Gate G2 calibrated target word length for micro discourse chunks |
 | `fast_path.coverage_threshold` | *None* | *None* | *Uncalibrated (B0)* | - | - | Decision threshold for coverage check |
 | `fast_path.hot_transduce_n` | *None* | *None* | *Uncalibrated (B0)* | - | - | Number of top-ranked units synchronously transduced |
 | `fast_path.mode` | `passthrough` | `passthrough` | *Uncalibrated (B0)* | - | - | Fast-path mode: raw_only, hot_transduce, full, or passthrough |
-| `filter.calibration` | `{'method': 'platt', 'a': 1.0, 'b': 0.0}` | *None* | `exp-028a` | `01491b6` | long_context/dev | Calibrated probability coefficients for F-A |
-| `filter.keep_budget_tokens` | `1500` | *None* | `exp-028a` | `01491b6` | long_context/dev | Token budget cap for kept units guaranteeing >= 90% gold recall |
+| `filter.calibration` | `{'method': 'platt', 'a': 1.0, 'b': 0.0}` | *None* | `exp-028a` | `52eb1f6` | long_context/dev | Calibrated probability coefficients for F-A |
+| `filter.keep_budget_tokens` | `1500` | *None* | `exp-028a` | `52eb1f6` | long_context/dev | Token budget cap for kept units guaranteeing >= 90% gold recall |
 | `filter.keep_threshold` | *None* | *None* | *Uncalibrated (B0)* | - | - | Confidence/probability threshold to keep a unit |
 | `filter.keep_top_k` | *None* | *None* | *Uncalibrated (B0)* | - | - | Maximum number of units to keep |
-| `filter.strategy` | `F-A` | `passthrough` | `exp-028a` | `01491b6` | long_context/dev | Gate G2 promoted winner on gold-recall vs latency Pareto frontier |
-| `filter.unit` | `micro` | `micro` | `exp-028a` | `01491b6` | long_context/dev | Operating unit granularity for F-A |
+| `filter.strategy` | `F-A` | `passthrough` | `exp-028a` | `52eb1f6` | long_context/dev | Gate G2 promoted winner on gold-recall vs latency Pareto frontier |
+| `filter.unit` | `micro` | `micro` | `exp-028a` | `52eb1f6` | long_context/dev | Operating unit granularity for F-A |
 | `poprag.coarse_node_weight` | *None* | *None* | *Uncalibrated (B0)* | - | - | PPR damping weight for coarse macro nodes |
 | `ppr.inter_scale_weight` | *None* | *None* | *Uncalibrated (B0)* | - | - | Edge weight connecting micro chunks to coarse macro nodes |
 | `query_extractor.strategy` | `QE-B` | `passthrough` | `exp-027a` | `1c20c08` | long_context/test | Gate G1 promoted winner: Mean F1 100.0%, Span 100.0%, Latency 0.797 ms |

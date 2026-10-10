@@ -9,35 +9,35 @@
   "chunker.macro_target_tokens": {
     "value": 1000,
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Gate G2 calibrated target token length for macro discourse blocks"
   },
   "chunker.micro_target_words": {
     "value": 250,
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Gate G2 calibrated target word length for micro discourse chunks"
   },
   "filter.strategy": {
     "value": "F-A",
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Gate G2 promoted winner on gold-recall vs latency Pareto frontier"
   },
   "filter.unit": {
     "value": "micro",
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Operating unit granularity for F-A"
   },
   "filter.keep_budget_tokens": {
     "value": 1500,
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Token budget cap for kept units guaranteeing >= 90% gold recall"
   },
@@ -48,7 +48,7 @@
       "b": 0.0
     },
     "source_exp": "exp-028a",
-    "source_commit": "01491b6",
+    "source_commit": "52eb1f6",
     "calibrated_on": "long_context/dev",
     "notes": "Calibrated probability coefficients for F-A"
   }
