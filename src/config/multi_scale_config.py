@@ -306,6 +306,16 @@ class MultiScaleConfig:
         return self.get("fast_path.coverage_threshold")
 
     @property
+    def ppr_inter_scale_weight(self) -> Optional[float]:
+        val = self.get("ppr.inter_scale_weight")
+        return float(val) if val is not None else None
+
+    @property
+    def poprag_coarse_node_weight(self) -> Optional[float]:
+        val = self.get("poprag.coarse_node_weight")
+        return float(val) if val is not None else None
+
+    @property
     def background_enabled(self) -> bool:
         return bool(self.get("background.enabled", False))
 

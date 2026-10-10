@@ -61,6 +61,12 @@ DEFAULT_RELATION_WEIGHTS: Dict[str, float] = {
     "IMPORTS": 1.0,
     "DATA_FLOW_DEF_USE": 1.0,
     "CO_OCCURS": 0.85,
+    # Multi-Scale Graph & Concept Anchors (§Phase 4)
+    "INTER_SCALE_PARENT": 1.0,
+    "INTER_SCALE_CHILD": 0.8,
+    "CONCEPT_ANCHOR": 1.0,
+    "COARSE_CONCEPT": 1.0,
+    "PART_OF_MACRO": 1.0,
 }
 
 DEFAULT_NOMINAL_WEIGHT: float = 1.0
@@ -73,6 +79,7 @@ class PoPRAGGating:
     1. Belnap 4-valued lattice states (CONTRADICTION, TRUE, FALSE, UNKNOWN).
     2. Calibrated epistemic confidence values P in [0.0, 1.0].
     3. Query target polarity (positive assertion vs. negative refutation).
+    4. Calibrated inter-scale edge weights and coarse-node damping (§Phase 4).
     """
 
     def __init__(
@@ -81,6 +88,8 @@ class PoPRAGGating:
         default_nominal_weight: float = DEFAULT_NOMINAL_WEIGHT,
         contra_weight: float = 0.0,
         false_suppressed_weight: float = 0.0,
+        inter_scale_weight: Optional[float] = None,
+        coarse_node_weight: Optional[float] = None,
     ):
         """Initializes PoP-RAG epistemic gating.
         
@@ -89,6 +98,8 @@ class PoPRAGGating:
             default_nominal_weight: Fallback nominal weight for unlisted relations.
             contra_weight: Weight assigned to contradictory edges (default 0.0 -> pruned).
             false_suppressed_weight: Weight assigned to false edges on positive queries (default 0.0).
+            inter_scale_weight: Calibrated edge weight for inter-scale/coarse relations (§Phase 4).
+            coarse_node_weight: Calibrated damping weight for coarse macro nodes (§Phase 4).
         """
         self.relation_weights: Dict[str, float] = dict(DEFAULT_RELATION_WEIGHTS)
         if relation_weights:
@@ -96,6 +107,8 @@ class PoPRAGGating:
         self.default_nominal_weight = float(default_nominal_weight)
         self.contra_weight = float(contra_weight)
         self.false_suppressed_weight = float(false_suppressed_weight)
+        self.inter_scale_weight = float(inter_scale_weight) if inter_scale_weight is not None else None
+        self.coarse_node_weight = float(coarse_node_weight) if coarse_node_weight is not None else None
 
     def compute_gate_factor(
         self,
@@ -192,6 +205,12 @@ class PoPRAGGating:
         """
         w0 = base_weight if base_weight is not None else self.get_base_weight(relation)
 
+        # Multi-scale inter-scale edge weighting (§Phase 4)
+        if self.inter_scale_weight is not None and relation in (
+            "INTER_SCALE_PARENT", "INTER_SCALE_CHILD", "CONCEPT_ANCHOR", "COARSE_CONCEPT", "PART_OF_MACRO"
+        ):
+            w0 = self.inter_scale_weight
+
         # 1. Source node contradiction check: Can never spread out of a contradictory premise
         if source_node is not None:
             src_state = BelnapValue.from_str(getattr(source_node, "truth_status", "TRUE"))
@@ -215,7 +234,23 @@ class PoPRAGGating:
             if target_factor <= 0.0:
                 return 0.0
 
-        effective_factor = edge_factor * target_factor
+        # Coarse-node damping weight (§Phase 4)
+        coarse_damping = 1.0
+        if self.coarse_node_weight is not None:
+            is_src_coarse = (source_node is not None and (
+                getattr(source_node, "node_type", None) in ("macro_passage", "coarse_passage")
+                or getattr(source_node, "granularity", None) == "MACRO"
+            ))
+            is_tgt_coarse = (target_node is not None and (
+                getattr(target_node, "node_type", None) in ("macro_passage", "coarse_passage")
+                or getattr(target_node, "granularity", None) == "MACRO"
+            ))
+            if is_tgt_coarse:
+                coarse_damping *= self.coarse_node_weight
+            elif is_src_coarse:
+                coarse_damping *= self.coarse_node_weight
+
+        effective_factor = edge_factor * target_factor * coarse_damping
         return float(w0 * effective_factor)
 
     def gate_weights_vectorized(

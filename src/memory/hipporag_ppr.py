@@ -78,6 +78,12 @@ class HippoRAGRetriever:
         "HEADQUARTERS",
         "INSTANCE_OF",
         "SUBCLASS_OF",
+        # Multi-Scale Graph & Concept Anchors (§Phase 4)
+        "INTER_SCALE_PARENT",
+        "INTER_SCALE_CHILD",
+        "CONCEPT_ANCHOR",
+        "COARSE_CONCEPT",
+        "PART_OF_MACRO",
     }
 
     def __init__(
@@ -91,6 +97,8 @@ class HippoRAGRetriever:
         allowed_relations: Optional[Set[str]] = None,
         localized_threshold_nodes: int = 10000,
         default_hops: int = 4,
+        inter_scale_weight: Optional[float] = None,
+        coarse_node_weight: Optional[float] = None,
     ):
         """Initializes the HippoRAG retriever.
         
@@ -105,18 +113,44 @@ class HippoRAGRetriever:
             localized_threshold_nodes: Graph size threshold above which localized submatrix
                 PPR is automatically engaged for sub-5ms latency on massive graphs.
             default_hops: Default maximum neighborhood radius for localized retrieval.
+            inter_scale_weight: Optional edge weight connecting micro chunks to coarse macro nodes (§Phase 4).
+            coarse_node_weight: Optional PPR damping weight for coarse macro nodes (§Phase 4).
         """
         if not (0.0 < alpha < 1.0):
             raise ValueError(f"alpha must be in (0, 1), got {alpha}")
         self.alpha: float = float(alpha)
         self.convergence_tol: float = float(convergence_tol)
         self.max_iter: int = int(max_iter)
-        self.gating: PoPRAGGating = gating or PoPRAGGating()
+        if gating is not None:
+            self.gating = gating
+            if inter_scale_weight is not None:
+                self.gating.inter_scale_weight = float(inter_scale_weight)
+            if coarse_node_weight is not None:
+                self.gating.coarse_node_weight = float(coarse_node_weight)
+        else:
+            self.gating = PoPRAGGating(
+                inter_scale_weight=inter_scale_weight,
+                coarse_node_weight=coarse_node_weight,
+            )
         self.bidirectional: bool = bool(bidirectional)
         self.reverse_weight_factor: float = float(reverse_weight_factor)
         self.allowed_relations: Set[str] = allowed_relations or self.DEFAULT_ALLOWED_RELATIONS
         self.localized_threshold_nodes: int = localized_threshold_nodes
         self.default_hops: int = default_hops
+
+    @classmethod
+    def from_config(cls, config: Any = None, **kwargs) -> HippoRAGRetriever:
+        """Instantiates HippoRAGRetriever using parameters resolved from MultiScaleConfig."""
+        if config is None:
+            from config.multi_scale_config import MultiScaleConfig
+            config = MultiScaleConfig()
+        inter_scale = kwargs.pop("inter_scale_weight", config.ppr_inter_scale_weight)
+        coarse_weight = kwargs.pop("coarse_node_weight", config.poprag_coarse_node_weight)
+        return cls(
+            inter_scale_weight=inter_scale,
+            coarse_node_weight=coarse_weight,
+            **kwargs,
+        )
 
     def build_transition_matrix(
         self,
