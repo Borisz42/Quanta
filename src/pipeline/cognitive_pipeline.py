@@ -178,11 +178,40 @@ class CognitivePipeline:
         clingo_dl_gate: Optional[ClingoDLGate] = None,
         tracer: Optional[PipelineExecutionTracer] = None,
         multi_scale_config: Optional[MultiScaleConfig] = None,
+        skeleton_format: str = "sexpr_compact",
+        co_decoded_kev: bool = False,
         **transducer_kwargs,
     ):
         self.tracer = tracer or PipelineExecutionTracer.get_instance()
+        self.multi_scale_config = multi_scale_config or MultiScaleConfig()
+
+        # Resolve skeleton_format and co_decoded_kev (§Section 3 Master Plan)
+        raw_env_fmt = os.environ.get("QUANTA_SKELETON_FORMAT")
+        raw_env_co = os.environ.get("QUANTA_CO_DECODED_KEV")
+
+        if raw_env_fmt:
+            self.skeleton_format = raw_env_fmt.strip()
+        elif skeleton_format != "sexpr_compact":
+            self.skeleton_format = skeleton_format
+        elif self.multi_scale_config.is_calibrated("transducer.skeleton_format"):
+            self.skeleton_format = self.multi_scale_config.transducer_skeleton_format
+        else:
+            self.skeleton_format = skeleton_format
+
+        if raw_env_co is not None:
+            self.co_decoded_kev = raw_env_co.strip().lower() in ("1", "true", "yes", "on")
+        elif co_decoded_kev is not False:
+            self.co_decoded_kev = bool(co_decoded_kev)
+        elif self.multi_scale_config.is_calibrated("transducer.co_decoded"):
+            self.co_decoded_kev = self.multi_scale_config.transducer_co_decoded
+        else:
+            self.co_decoded_kev = bool(co_decoded_kev)
+
         # Extract Kev-specific configuration from kwargs to avoid forwarding to legacy transducer
-        self.kev_mode = transducer_kwargs.pop("kev_mode", "co_decoded")
+        if "kev_mode" in transducer_kwargs:
+            self.kev_mode = transducer_kwargs.pop("kev_mode")
+        else:
+            self.kev_mode = "co_decoded" if self.co_decoded_kev else "bypass"
         self.kev_concurrency = transducer_kwargs.pop("kev_concurrency", None)
 
         # 1. Chunker & Segmentation
@@ -252,11 +281,20 @@ class CognitivePipeline:
         if skeleton_transducer is not None:
             self.skeleton_transducer = skeleton_transducer
         elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
-            mock_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
-            self.skeleton_transducer = MockSkeletonTransducer(mode=mock_mode)
+            mock_mode = "co_decoded" if self.co_decoded_kev else "standard"
+            self.skeleton_transducer = MockSkeletonTransducer(
+                mode=mock_mode,
+                skeleton_format=self.skeleton_format,
+                co_decoded=self.co_decoded_kev,
+            )
         else:
-            trans_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
-            self.skeleton_transducer = SkeletonTransducer(fallback_to_mock=True, mode=trans_mode)
+            trans_mode = "co_decoded" if self.co_decoded_kev else "standard"
+            self.skeleton_transducer = SkeletonTransducer(
+                fallback_to_mock=True,
+                mode=trans_mode,
+                skeleton_format=self.skeleton_format,
+                co_decoded=self.co_decoded_kev,
+            )
 
         if kev_engine is not None:
             self.kev_engine = kev_engine
@@ -303,7 +341,6 @@ class CognitivePipeline:
             )
 
         # 14. Dynamic Multi-Scale Ingestion & Fast-Path Assembler (§Phase 3)
-        self.multi_scale_config = multi_scale_config or MultiScaleConfig()
         self.fast_path_assembler = FastPathAssembler(
             config=self.multi_scale_config,
             dual_stream_assembler=self.context_assembler,
@@ -359,6 +396,46 @@ class CognitivePipeline:
             yield
         finally:
             self.mark_foreground(False)
+
+    def set_skeleton_format(
+        self,
+        skeleton_format: str,
+        co_decoded: Optional[bool] = None,
+    ) -> None:
+        """Dynamically switch transduction representation format at runtime.
+
+        Args:
+            skeleton_format: "sexpr_compact", "sexpr_positional", or "json"
+            co_decoded: Optional boolean toggle for co-decoded single-letter Kev decisions.
+        """
+        self.skeleton_format = str(skeleton_format).strip()
+        if co_decoded is not None:
+            self.co_decoded_kev = bool(co_decoded)
+            self.kev_mode = "co_decoded" if self.co_decoded_kev else "bypass"
+
+        # Propagate to underlying skeleton transducer
+        if hasattr(self.skeleton_transducer, "skeleton_format"):
+            self.skeleton_transducer.skeleton_format = self.skeleton_format
+        if hasattr(self.skeleton_transducer, "co_decoded") and co_decoded is not None:
+            self.skeleton_transducer.co_decoded = self.co_decoded_kev
+        if hasattr(self.skeleton_transducer, "mode") and co_decoded is not None:
+            self.skeleton_transducer.mode = "co_decoded" if self.co_decoded_kev else "standard"
+        if hasattr(self.skeleton_transducer, "_mock"):
+            self.skeleton_transducer._mock.skeleton_format = self.skeleton_format
+            if co_decoded is not None:
+                self.skeleton_transducer._mock.co_decoded = self.co_decoded_kev
+                self.skeleton_transducer._mock.mode = "co_decoded" if self.co_decoded_kev else "standard"
+
+        # Keep multi_scale_config in sync if present
+        if hasattr(self, "multi_scale_config") and self.multi_scale_config is not None:
+            overrides = {"transducer.skeleton_format": self.skeleton_format}
+            if co_decoded is not None:
+                overrides["transducer.co_decoded"] = self.co_decoded_kev
+            self.multi_scale_config = self.multi_scale_config.with_overrides(overrides)
+
+    def set_co_decoded_kev(self, co_decoded: bool) -> None:
+        """Dynamically toggle co-decoded Kev decisions at runtime."""
+        self.set_skeleton_format(self.skeleton_format, co_decoded=co_decoded)
 
     def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
@@ -470,9 +547,21 @@ class CognitivePipeline:
 
         # Step 2: Skeleton Transduction
         t_trans0 = time.perf_counter()
-        transduce_kwargs = {}
-        if self.kev_mode == "co_decoded":
+        effective_format = os.environ.get("QUANTA_SKELETON_FORMAT", self.skeleton_format)
+        if "QUANTA_CO_DECODED_KEV" in os.environ:
+            env_co_val = os.environ["QUANTA_CO_DECODED_KEV"].strip().lower()
+            effective_co_decoded = env_co_val in ("1", "true", "yes", "on")
+        else:
+            effective_co_decoded = self.co_decoded_kev
+
+        transduce_kwargs = {
+            "skeleton_format": effective_format,
+            "co_decoded": effective_co_decoded,
+        }
+        if effective_co_decoded or self.kev_mode == "co_decoded":
             transduce_kwargs["mode"] = "co_decoded"
+        else:
+            transduce_kwargs["mode"] = "standard"
 
         if hasattr(self.skeleton_transducer, "transduce"):
             try:
@@ -485,8 +574,12 @@ class CognitivePipeline:
         elif callable(self.skeleton_transducer):
             skeleton_res = self.skeleton_transducer(text)
         else:
-            mock_mode = "co_decoded" if self.kev_mode == "co_decoded" else "standard"
-            skeleton_res = MockSkeletonTransducer(mode=mock_mode).transduce(text, passage_id=pid, doc_id=doc_id)
+            mock_mode = "co_decoded" if effective_co_decoded else "standard"
+            skeleton_res = MockSkeletonTransducer(
+                mode=mock_mode,
+                skeleton_format=effective_format,
+                co_decoded=effective_co_decoded,
+            ).transduce(text, passage_id=pid, doc_id=doc_id)
 
         if self.tracer:
             st_name = self.skeleton_transducer.__class__.__name__ if self.skeleton_transducer else "Mock"
@@ -499,7 +592,107 @@ class CognitivePipeline:
 
         # Step 3: Kev-4B 3-pass Prefill Scoring
         t_kev0 = time.perf_counter()
-        if self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none"):
+        if effective_co_decoded or (self.kev_mode == "co_decoded" and any(ev.intent or ev.epist for ev in skeleton_res.events)):
+            # Co-decoded single-pass mode: map co-decoded event tags directly into Kev decisions without secondary GPU calls
+            valencies = []
+            intent_epistemics = []
+            relations = []
+
+            for ev in skeleton_res.events:
+                if ev.subject_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.subject_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="AGENT",
+                        confidence=0.98,
+                        probabilities={"AGENT": 0.98},
+                    ))
+                if ev.object_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.object_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="PATIENT",
+                        confidence=0.98,
+                        probabilities={"PATIENT": 0.98},
+                    ))
+
+                # Intent & Epistemic Source
+                raw_intent = (ev.intent or "I").strip().upper()
+                raw_epist = (ev.epist or "O").strip().upper()
+                from models.kev_engine import (
+                    JOINT_ALLEN_MAP,
+                    JOINT_EPISTEMIC_MAP,
+                    JOINT_INTENT_MAP,
+                    JOINT_PEARL_MAP,
+                )
+                mapped_intent = JOINT_INTENT_MAP.get(raw_intent, KevSpeechActIntent.INFORMATIVE.value)
+                mapped_epist = JOINT_EPISTEMIC_MAP.get(raw_epist, KevEpistemicSource.DIRECT_OBSERVATION.value)
+
+                # Calibrate epistemic confidence for BelnapLatticeMapper
+                # O: Direct Observation (0.95 -> TRUE)
+                # D: Deduction (0.90 -> TRUE)
+                # H: Hearsay (0.50 -> UNKNOWN)
+                # C: Conjecture (0.40 -> UNKNOWN)
+                if raw_epist == "O":
+                    epist_conf = 0.95
+                elif raw_epist == "D":
+                    epist_conf = 0.90
+                elif raw_epist == "H":
+                    epist_conf = 0.50
+                elif raw_epist == "C":
+                    epist_conf = 0.40
+                else:
+                    epist_conf = 0.95
+
+                intent_epistemics.append(IntentEpistemicResult(
+                    event_id=ev.id,
+                    predicate=ev.predicate,
+                    intent=mapped_intent,
+                    intent_confidence=0.95,
+                    intent_probabilities={mapped_intent: 0.95},
+                    epistemic_source=mapped_epist,
+                    epistemic_confidence=epist_conf,
+                    epistemic_probabilities={mapped_epist: epist_conf},
+                ))
+
+            # Relations between sequential events if co-decoded
+            from models.kev_engine import (
+                JOINT_ALLEN_MAP,
+                JOINT_PEARL_MAP,
+            )
+            for i in range(len(skeleton_res.events) - 1):
+                ev_curr = skeleton_res.events[i]
+                ev_next = skeleton_res.events[i + 1]
+                allen_tag = (ev_curr.allen or "N").strip().upper()
+                pearl_tag = (ev_curr.pearl or "N").strip().upper()
+                mapped_allen = JOINT_ALLEN_MAP.get(allen_tag, AllenTemporalRelation.NONE.value)
+                mapped_pearl = JOINT_PEARL_MAP.get(pearl_tag, PearlCausalLink.NONE.value)
+                if mapped_allen != AllenTemporalRelation.NONE.value or mapped_pearl != PearlCausalLink.NONE.value:
+                    relations.append(RelationScoringResult(
+                        source_event_id=ev_curr.id,
+                        target_event_id=ev_next.id,
+                        source_predicate=ev_curr.predicate,
+                        target_predicate=ev_next.predicate,
+                        allen_relation=mapped_allen,
+                        allen_confidence=0.95,
+                        allen_probabilities={mapped_allen: 0.95},
+                        pearl_relation=mapped_pearl,
+                        pearl_confidence=0.95,
+                        pearl_probabilities={mapped_pearl: 0.95},
+                    ))
+
+            kev_eval = KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=intent_epistemics,
+                relations=relations,
+                total_latency_ms=0.1,
+                mode="co_decoded",
+            )
+        elif self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none") or not effective_co_decoded:
             # Direct Skeleton S-V-O valency assignment without external GPU logprob calls
             valencies = []
             for ev in skeleton_res.events:
@@ -540,90 +733,6 @@ class CognitivePipeline:
                 relations=[],
                 total_latency_ms=0.1,
                 mode="bypass",
-            )
-        elif self.kev_mode == "co_decoded":
-            # Co-decoded single-pass mode: map co-decoded event tags directly into Kev decisions without secondary GPU calls
-            valencies = []
-            intent_epistemics = []
-            relations = []
-
-            for ev in skeleton_res.events:
-                if ev.subject_ent_id:
-                    valencies.append(ValencyScoringResult(
-                        entity_id=ev.subject_ent_id,
-                        event_id=ev.id,
-                        entity_text="",
-                        predicate=ev.predicate,
-                        role="AGENT",
-                        confidence=0.98,
-                        probabilities={"AGENT": 0.98},
-                    ))
-                if ev.object_ent_id:
-                    valencies.append(ValencyScoringResult(
-                        entity_id=ev.object_ent_id,
-                        event_id=ev.id,
-                        entity_text="",
-                        predicate=ev.predicate,
-                        role="PATIENT",
-                        confidence=0.98,
-                        probabilities={"PATIENT": 0.98},
-                    ))
-
-                # Intent & Epistemic Source
-                raw_intent = (ev.intent or "I").strip().upper()
-                raw_epist = (ev.epist or "O").strip().upper()
-                from models.kev_engine import (
-                    JOINT_ALLEN_MAP,
-                    JOINT_EPISTEMIC_MAP,
-                    JOINT_INTENT_MAP,
-                    JOINT_PEARL_MAP,
-                )
-                mapped_intent = JOINT_INTENT_MAP.get(raw_intent, KevSpeechActIntent.INFORMATIVE.value)
-                mapped_epist = JOINT_EPISTEMIC_MAP.get(raw_epist, KevEpistemicSource.DIRECT_OBSERVATION.value)
-
-                intent_epistemics.append(IntentEpistemicResult(
-                    event_id=ev.id,
-                    predicate=ev.predicate,
-                    intent=mapped_intent,
-                    intent_confidence=0.95,
-                    intent_probabilities={mapped_intent: 0.95},
-                    epistemic_source=mapped_epist,
-                    epistemic_confidence=0.95,
-                    epistemic_probabilities={mapped_epist: 0.95},
-                ))
-
-            # Relations between sequential events if co-decoded
-            from models.kev_engine import (
-                JOINT_ALLEN_MAP,
-                JOINT_PEARL_MAP,
-            )
-            for i in range(len(skeleton_res.events) - 1):
-                ev_curr = skeleton_res.events[i]
-                ev_next = skeleton_res.events[i + 1]
-                allen_tag = (ev_curr.allen or "N").strip().upper()
-                pearl_tag = (ev_curr.pearl or "N").strip().upper()
-                mapped_allen = JOINT_ALLEN_MAP.get(allen_tag, AllenTemporalRelation.NONE.value)
-                mapped_pearl = JOINT_PEARL_MAP.get(pearl_tag, PearlCausalLink.NONE.value)
-                if mapped_allen != AllenTemporalRelation.NONE.value or mapped_pearl != PearlCausalLink.NONE.value:
-                    relations.append(RelationScoringResult(
-                        source_event_id=ev_curr.id,
-                        target_event_id=ev_next.id,
-                        source_predicate=ev_curr.predicate,
-                        target_predicate=ev_next.predicate,
-                        allen_relation=mapped_allen,
-                        allen_confidence=0.95,
-                        allen_probabilities={mapped_allen: 0.95},
-                        pearl_relation=mapped_pearl,
-                        pearl_confidence=0.95,
-                        pearl_probabilities={mapped_pearl: 0.95},
-                    ))
-
-            kev_eval = KevChunkEvaluation(
-                valencies=valencies,
-                intent_epistemics=intent_epistemics,
-                relations=relations,
-                total_latency_ms=0.1,
-                mode="co_decoded",
             )
         elif self.kev_mode == "async":
             # Decoupled Write-Ahead mode: commit provisional Belnap values and enqueue background verification
@@ -977,6 +1086,8 @@ class CognitivePipeline:
         finally:
             if hasattr(self.kev_engine, "concurrency_limit"):
                 self.kev_engine.concurrency_limit = orig_concurrency
+
+    ingest_passages_parallel = ingest_passages_batch
 
     def query_memory(
         self,

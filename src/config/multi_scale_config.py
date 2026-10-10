@@ -43,6 +43,9 @@ REGISTERED_PARAMS: Dict[str, Tuple[Any, str]] = {
     "background.enabled": (False, "Whether asynchronous background ingestion is enabled"),
     "background.pause_policy": ("none", "Background worker pause policy: none, foreground_lock, slot_polling"),
     "background.max_concurrency": (1, "Maximum concurrent background worker threads"),
+    # S-Expression Ingestion & Co-Decoding Toggles (§Section 3)
+    "transducer.skeleton_format": ("sexpr_compact", "Transduction representation format: sexpr_compact, sexpr_positional, or json"),
+    "transducer.co_decoded": (False, "Whether co-decoded Kev decisions (intent, epist, allen, pearl) are emitted"),
 }
 
 
@@ -180,6 +183,29 @@ class MultiScaleConfig:
                     calibrated_on=calibrated_on,
                     notes=f"Overridden via environment variable {env_k}",
                 )
+
+        # Direct Transducer environment variables (§Section 3)
+        if "QUANTA_SKELETON_FORMAT" in os.environ:
+            v_fmt = os.environ["QUANTA_SKELETON_FORMAT"].strip()
+            curr = self.params.get("transducer.skeleton_format")
+            self.params["transducer.skeleton_format"] = CalibratedParam(
+                name="transducer.skeleton_format",
+                value=v_fmt,
+                default_passthrough=curr.default_passthrough if curr else "sexpr_compact",
+                source_exp="env:QUANTA_SKELETON_FORMAT",
+                notes="Overridden via environment variable QUANTA_SKELETON_FORMAT",
+            )
+        if "QUANTA_CO_DECODED_KEV" in os.environ or "QUANTA_CO_DECODED" in os.environ:
+            raw_co = os.environ.get("QUANTA_CO_DECODED_KEV") or os.environ.get("QUANTA_CO_DECODED")
+            co_val = self._parse_env_value(raw_co)
+            curr = self.params.get("transducer.co_decoded")
+            self.params["transducer.co_decoded"] = CalibratedParam(
+                name="transducer.co_decoded",
+                value=bool(co_val),
+                default_passthrough=curr.default_passthrough if curr else False,
+                source_exp="env:QUANTA_CO_DECODED_KEV",
+                notes="Overridden via environment variable QUANTA_CO_DECODED_KEV",
+            )
 
         # Tier 4: Runtime / per-request overrides
         for ov_k, ov_v in self.runtime_overrides.items():
@@ -326,6 +352,14 @@ class MultiScaleConfig:
     @property
     def background_max_concurrency(self) -> int:
         return int(self.get("background.max_concurrency", 1))
+
+    @property
+    def transducer_skeleton_format(self) -> str:
+        return str(self.get("transducer.skeleton_format", "sexpr_compact"))
+
+    @property
+    def transducer_co_decoded(self) -> bool:
+        return bool(self.get("transducer.co_decoded", False))
 
     # -------------------------------------------------------------------------
     # Provenance Report & Profile Writing (§1)

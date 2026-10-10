@@ -57,6 +57,8 @@ class QuantaProxyConfig:
     fallback_to_local: bool = True
     target_model: Optional[str] = None
     transducer_backend: str = field(default_factory=lambda: os.getenv("QUANTA_TRANSDUCER_BACKEND", "mock"))
+    skeleton_format: str = field(default_factory=lambda: os.getenv("QUANTA_SKELETON_FORMAT", "sexpr_compact"))
+    co_decoded_kev: bool = field(default_factory=lambda: os.getenv("QUANTA_CO_DECODED_KEV", "0").lower() in ("1", "true", "yes", "on"))
     tracer: Optional[PipelineExecutionTracer] = None
     unsloth_manager: Optional[UnslothServerManager] = None
 
@@ -170,6 +172,8 @@ class PipelinePool:
         self.default_pipeline = config.pipeline or CognitivePipeline(
             transducer_backend=config.transducer_backend,
             page_table_path=config.page_table_path,
+            skeleton_format=config.skeleton_format,
+            co_decoded_kev=config.co_decoded_kev,
         )
         self.session_pipelines: Dict[str, CognitivePipeline] = {}
         self.session_hashes: Dict[str, Set[str]] = {}
@@ -185,6 +189,8 @@ class PipelinePool:
                 self.session_pipelines[session_id] = CognitivePipeline(
                     transducer_backend=self.config.transducer_backend,
                     page_table_path=":memory:",
+                    skeleton_format=self.config.skeleton_format,
+                    co_decoded_kev=self.config.co_decoded_kev,
                 )
             return self.session_pipelines[session_id]
 
@@ -328,6 +334,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_fast_path_mode: Optional[str] = Header(None, alias="X-Quanta-Fast-Path-Mode"),
         x_quanta_background_ingest: Optional[str] = Header(None, alias="X-Quanta-Background-Ingest"),
         x_quanta_profile: Optional[str] = Header(None, alias="X-Quanta-Profile"),
+        x_quanta_skeleton_format: Optional[str] = Header(None, alias="X-Quanta-Skeleton-Format"),
+        x_quanta_co_decoded: Optional[bool] = Header(None, alias="X-Quanta-Co-Decoded"),
     ):
         t0 = time.perf_counter()
         stats["total_requests"] += 1
@@ -337,6 +345,12 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
         if x_quanta_reset:
             pool.reset_session(x_quanta_session_id, pipeline)
+
+        # Handle per-request skeleton format and co-decoding overrides (§Section 3)
+        if x_quanta_skeleton_format is not None or x_quanta_co_decoded is not None:
+            tgt_fmt = x_quanta_skeleton_format or pipeline.skeleton_format
+            tgt_co = x_quanta_co_decoded if x_quanta_co_decoded is not None else pipeline.co_decoded_kev
+            pipeline.set_skeleton_format(tgt_fmt, co_decoded=tgt_co)
 
         # Handle per-request background ingestion override (§Phase 5 & §Phase 6)
         if x_quanta_background_ingest is not None:
