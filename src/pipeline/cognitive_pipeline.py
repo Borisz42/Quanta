@@ -182,10 +182,14 @@ class CognitivePipeline:
         co_decoded_kev: bool = False,
         max_workers: Optional[int] = None,
         max_slots: Optional[int] = None,
+        system_prompt: Optional[str] = None,
+        prompt_variant: Optional[str] = None,
         **transducer_kwargs,
     ):
         self.tracer = tracer or PipelineExecutionTracer.get_instance()
         self.multi_scale_config = multi_scale_config or MultiScaleConfig()
+        self.system_prompt = system_prompt
+        self.prompt_variant = prompt_variant or os.environ.get("QUANTA_PROMPT_VARIANT")
 
         # Resolve batch workers / slots (§Section 4 Master Plan)
         raw_env_slots = os.environ.get("QUANTA_MAX_SLOTS") or os.environ.get("QUANTA_PARALLEL_SLOTS") or os.environ.get("QUANTA_BATCH_WORKERS")
@@ -302,6 +306,8 @@ class CognitivePipeline:
                 mode=mock_mode,
                 skeleton_format=self.skeleton_format,
                 co_decoded=self.co_decoded_kev,
+                system_prompt=self.system_prompt,
+                prompt_variant=self.prompt_variant,
             )
         else:
             trans_mode = "co_decoded" if self.co_decoded_kev else "standard"
@@ -310,6 +316,8 @@ class CognitivePipeline:
                 mode=trans_mode,
                 skeleton_format=self.skeleton_format,
                 co_decoded=self.co_decoded_kev,
+                system_prompt=self.system_prompt,
+                prompt_variant=self.prompt_variant,
             )
 
         if kev_engine is not None:
@@ -587,6 +595,10 @@ class CognitivePipeline:
             transduce_kwargs["mode"] = "co_decoded"
         else:
             transduce_kwargs["mode"] = "standard"
+        if getattr(self, "prompt_variant", None):
+            transduce_kwargs["prompt_variant"] = self.prompt_variant
+        if getattr(self, "system_prompt", None):
+            transduce_kwargs["system_prompt"] = self.system_prompt
 
         if hasattr(self.skeleton_transducer, "transduce"):
             try:

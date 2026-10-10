@@ -10,7 +10,7 @@ To resolve these foundational vulnerabilities, this paper introduces the **Quate
 
 QUANTA organizes its 1024 dimensions into eight isolated 128-slot bands governed by polymorphic 2-bit semantic contracts: Belnap four-valued epistemic logic ($\mathcal{B}_4$), structural hardware routing, and formal logical variable registers. We present a Pareto-optimal defense proving that $d^* = 1024$ balances semantic compositionality, non-monotonic Answer Set Programming (ASP) tractability, and CPU/AVX-512 hardware alignment. 
 
-Linguistic ingestion departs from unstable discrete diffusion by adopting **Decoupled Two-Pass Small Language Model (SLM) Transduction**: frontier SLMs (Qwen 3.5 4B/2B, Gemma 4) served locally under strict Context-Free GBNF Grammars transduce text into token-compact S-expressions via high-throughput dual-mode transduction (keyword-based `sexpr_compact` default and positional `sexpr_positional`, slashing token inflation by 68.5%–75.5% down to 37.2–48.0 completion tokens/chunk, and accelerating live RTX 3070 ingestion by $3.32\times$–$3.52\times$ up to 465.6 words/sec across 12-slot continuous batching). Intermediate candidate graphs undergo formal verification via $s(\text{CASP})$ and Clingo Answer Set Programming solvers; detected inconsistencies yield Minimal Unsatisfiable Cores (MUCs) that trigger automated closed-loop self-repair. 
+Linguistic ingestion departs from unstable discrete diffusion by adopting **Decoupled Two-Pass Small Language Model (SLM) Transduction**: frontier SLMs (Qwen 3.5 4B/2B, Gemma 4) served locally under strict Context-Free GBNF Grammars transduce text into token-compact S-expressions via high-throughput dual-mode transduction (Pareto-optimized `sexpr_compact` default with minimalist prompt scaffolding, slashing completion tokens to 36.8 tokens/chunk, and accelerating live RTX 3070 ingestion up to 412.8–438.3 words/sec with 100.0% multi-hop QA Exact Match across 12-slot continuous batching). Intermediate candidate graphs undergo formal verification via $s(\text{CASP})$ and Clingo Answer Set Programming solvers; detected inconsistencies yield Minimal Unsatisfiable Cores (MUCs) that trigger automated closed-loop self-repair. 
 
 Working context is decoupled from GPU VRAM through **Virtual Graph Page-Table Attention** and BLAKE3 Content-Identifier (CID) Merkle folding, sustaining $\mathcal{O}(1)$ VRAM scaling. To eliminate the synchronous transduction latency wall on multi-thousand-token documents, QUANTA introduces **Dynamic Multi-Scale Ingestion**: a coverage-adaptive coprocessor combining hierarchical BM25 relevance filtering, bipartite HippoRAG PageRank, and foreground-locked background completion. On publication-scale benchmarks ($N=90$, 270 live runs on an RTX 3070), this cuts Time-To-First-Token by $5.91\times$ (up to $12.92\times$ at 8k tokens) and reduces synchronous GPU ingestion calls by $83.2\%$ while delivering a $+27.78\%$ paired accuracy lift. Finally, typological multilingual realizers project verified Mentalese graphs into Isolating, Agglutinative, and Fusional natural languages with zero semantic drift ($d_H = 0$). 
 
@@ -796,6 +796,28 @@ To identify the empirical saturation boundary of continuous batching on `llama-s
 2. **Linear Ingestion Acceleration**: Ingestion throughput increases from $132.1\text{ w/s}$ to **$438.3\text{ w/s}$ ($3.32\times$)** on `sexpr_compact` and **$465.6\text{ w/s}$ ($3.52\times$)** on `sexpr_positional`, cutting chunk transduction time from $1,123.3\text{ ms}$ to $338.7\text{ ms}$.
 3. **Zero Semantic Loss on Multi-Hop QA**: Downstream reader answering on the target query (*"In which sovereign country is the city housing the university where Charles Babbage studied located?"*) achieves **100.0% Exact Match** (*"United Kingdom"*), confirming that compact S-expression grammars incur zero loss in relational or topological fidelity.
 4. **Gate G7 Promotion Verdict**: Gate G7 establishes **`sexpr_compact`** as the default production ingestion transduction format (`transducer.skeleton_format = "sexpr_compact"`).
+
+#### 8.6.4 System Prompt Optimization, Positional Transduction & The Over-Prompting Paradox (exp-034a & exp-035a)
+
+To push ingestion throughput toward physical tensor limits while guaranteeing strict multi-hop reasoning convergence, experiments `exp-034a` and `exp-035a` conducted systematic prompt sweeps across both positional and keyword S-expression spaces on an active NVIDIA GeForce RTX 3070 GPU (12 continuous batching slots, 16 Wikipedia paragraphs, 2,375 words):
+
+| Variant ID & Representation | Transduction Format | Prompt Key | Prompt Footprint | Ingestion Throughput | Mean Latency / Chunk | Completion Tokens | Edge Connectivity | Gold Evidence Recall | Downstream QA EM | QA Token F1 | Gate G9 Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **`C0: Baseline Compact`** | `sexpr_compact` | `c0` | ~45 tok | **399.2 w/s** | **371.9 ms** | 50.3 tok | 78.6% | **75.0%** | **100.0%** | **1.000** | Production Control |
+| **`C1: Compact Minimalist`** | `sexpr_compact` | `c1` | ~35 tok | **412.8 w/s** | **359.6 ms** | **36.8 tok** | 72.0% | **75.0%** | **100.0%** | **1.000** | **PROMOTED WINNER (Gate G9)** |
+| **`C2: Relational Guidance`** | `sexpr_compact` | `c2` | ~180 tok | 289.2 w/s | 513.2 ms | 67.4 tok | 100.0% | 25.0% | 0.0% | 0.000 | PPR Dilution Failure |
+| **`C3: Jurisdiction Hierarchy`**| `sexpr_compact` | `c3` | ~240 tok | 297.2 w/s | 499.5 ms | 58.8 tok | 100.0% | 25.0% | 0.0% | 0.000 | Over-Prompting Failure |
+| **`C4: Co-Decoded Compact`** | `sexpr_compact` | `c4` | ~280 tok | 191.0 w/s | 777.3 ms | 102.4 tok | 100.0% | 50.0% | 0.0% | 0.000 | Co-Decoded Feature |
+| **`P0: Baseline Positional`** | `sexpr_positional` | `p0` | ~45 tok | 386.3 w/s | 384.3 ms | 35.9 tok | 52.4% | 50.0% | 0.0% | 0.000 | Slot Binding Ambiguity |
+| **`P3: Positional Geo Hierarchy`**| `sexpr_positional` | `p3` | ~250 tok | 319.3 w/s | 464.9 ms | 49.4 tok | 100.0% | 50.0% | **100.0%** | **1.000** | Positional Champion |
+
+*Table 9: Publication scorecard for prompt-optimized S-expression transduction on NVIDIA GeForce RTX 3070.*
+
+##### Theoretical Analysis of the Over-Prompting Paradox
+1. **The Intrinsic Scaffolding of Keyword Grammars**: In `sexpr_compact`, `:subj` and `:obj` keywords are embedded directly in the GBNF grammar, providing rigid semantic role constraints without requiring complex meta-prompts.
+2. **PPR Dilution from Over-Extraction**: Appending verbose multi-hop guidance (C2/C3) prompted the model to generate surplus secondary events (transitive density rising to $2.06\text{ events/chunk}$). This locally dense sub-graph dispersed Personalized PageRank (PPR) mass across extraneous sub-regional nodes, causing Gold Evidence Recall to collapse from $75.0\%$ to $25.0\%$ and reducing downstream QA EM to $0.0\%$ (*"England"*).
+3. **The Minimalist Pareto Frontier**: Shaving the prompt to ~35 tokens with strict constraints (*"strictly 2 core named entities and 1 main event"*) slashed completion tokens to $36.8\text{ tokens/chunk}$ ($-26.8\%$), yielding the highest overall ingestion speed (**$412.8\text{ words/sec}$**, $359.6\text{ ms/chunk}$) while retaining $75.0\%$ Gold Evidence Recall, $100.0\%$ QA Exact Match, and $1.000$ Token F1.
+4. **Gate G9 Promotion**: Promoted **`C1: Compact Minimalist / Ultra-Terse`** as the default production prompt across the QUANTA architecture (`DEFAULT_COMPACT_SEXPR_SYSTEM_PROMPT`).
 
 ---
 
