@@ -72,5 +72,19 @@
     "source_commit": "436c436",
     "calibrated_on": "long_context/test",
     "notes": "Gate G3 decision threshold for coverage-adaptive routing"
+  },
+  "ppr.inter_scale_weight": {
+    "value": 0.8,
+    "source_exp": "exp-030a",
+    "source_commit": "3d037ac",
+    "calibrated_on": "long_context/test",
+    "notes": "Gate G4 calibrated inter-scale weight (Acc lift +100.0%)"
+  },
+  "poprag.coarse_node_weight": {
+    "value": 0.5,
+    "source_exp": "exp-030a",
+    "source_commit": "3d037ac",
+    "calibrated_on": "long_context/test",
+    "notes": "Gate G4 calibrated coarse node damping weight"
   }
 }

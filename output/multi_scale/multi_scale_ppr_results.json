@@ -1,0 +1,163 @@
+{
+  "timestamp": "2026-10-10T13:41:57.957809",
+  "split": "test",
+  "gate_verdict": "PROMOTE",
+  "gate_rationale": "Variant G-B improved multi-hop accuracy by +100.0% (EM 100.0% vs G-A 0.0%), exceeding the delta=2.0% threshold with acceptable TTC overhead (458.23 ms vs 67.09 ms).",
+  "scaling_curve": [
+    {
+      "num_nodes": 100,
+      "num_edges": 538,
+      "mean_matrix_build_ms": 3.8576999999349937,
+      "mean_power_iter_ms": 0.39877999952295795,
+      "mean_total_ppr_ms": 4.256479999457952,
+      "p50_total_ppr_ms": 4.310599993914366,
+      "p95_total_ppr_ms": 4.830060002859682,
+      "mean_iterations": 21.0,
+      "mean_localized_ppr_ms": 4.4909000003826804
+    },
+    {
+      "num_nodes": 500,
+      "num_edges": 2695,
+      "mean_matrix_build_ms": 19.35010000015609,
+      "mean_power_iter_ms": 0.6759199997759424,
+      "mean_total_ppr_ms": 20.026019999932032,
+      "p50_total_ppr_ms": 17.15900000272086,
+      "p95_total_ppr_ms": 27.894919994287193,
+      "mean_iterations": 24.0,
+      "mean_localized_ppr_ms": 24.528040002041962
+    },
+    {
+      "num_nodes": 1000,
+      "num_edges": 5396,
+      "mean_matrix_build_ms": 32.55954000051133,
+      "mean_power_iter_ms": 0.6984799998463131,
+      "mean_total_ppr_ms": 33.25802000035765,
+      "p50_total_ppr_ms": 32.93560000747675,
+      "p95_total_ppr_ms": 35.56406000134302,
+      "mean_iterations": 24.0,
+      "mean_localized_ppr_ms": 33.26235999993514
+    },
+    {
+      "num_nodes": 2500,
+      "num_edges": 13498,
+      "mean_matrix_build_ms": 83.81398000055924,
+      "mean_power_iter_ms": 1.0036600011517294,
+      "mean_total_ppr_ms": 84.81764000171097,
+      "p50_total_ppr_ms": 84.0611000021454,
+      "p95_total_ppr_ms": 89.70318000210682,
+      "mean_iterations": 25.0,
+      "mean_localized_ppr_ms": 88.05472000094596
+    },
+    {
+      "num_nodes": 5000,
+      "num_edges": 26994,
+      "mean_matrix_build_ms": 173.597399998107,
+      "mean_power_iter_ms": 2.0898399990983307,
+      "mean_total_ppr_ms": 175.68723999720532,
+      "p50_total_ppr_ms": 174.77769999823067,
+      "p95_total_ppr_ms": 184.30607999762287,
+      "mean_iterations": 26.0,
+      "mean_localized_ppr_ms": 179.33155999926385
+    },
+    {
+      "num_nodes": 10000,
+      "num_edges": 53993,
+      "mean_matrix_build_ms": 371.1087800009409,
+      "mean_power_iter_ms": 4.080979998980183,
+      "mean_total_ppr_ms": 375.1897599999211,
+      "p50_total_ppr_ms": 361.9884999934584,
+      "p95_total_ppr_ms": 426.95206000789767,
+      "mean_iterations": 26.0,
+      "mean_localized_ppr_ms": 374.3925199989462
+    }
+  ],
+  "variants": {
+    "G-A": {
+      "variant": "G-A",
+      "sample_count": 2,
+      "mean_gold_recall": 0.0,
+      "ci_gold_recall": [
+        0.0,
+        0.0
+      ],
+      "mean_accuracy": 0.0,
+      "ci_accuracy": [
+        0.0,
+        0.0
+      ],
+      "mean_f1": 0.0,
+      "ci_f1": [
+        0.0,
+        0.0
+      ],
+      "mean_ttc_ms": 67.0900500008429,
+      "ci_ttc_ms": [
+        55.24860000150511,
+        78.93150000018068
+      ],
+      "mean_ppr_ms": 0.8775499954936095,
+      "mean_nodes": 38.5,
+      "mean_edges": 60.0,
+      "mean_tokens": 388.0,
+      "acc_delta_vs_control": 0.0
+    },
+    "G-B": {
+      "variant": "G-B",
+      "sample_count": 2,
+      "mean_gold_recall": 1.0,
+      "ci_gold_recall": [
+        1.0,
+        1.0
+      ],
+      "mean_accuracy": 1.0,
+      "ci_accuracy": [
+        1.0,
+        1.0
+      ],
+      "mean_f1": 1.0,
+      "ci_f1": [
+        1.0,
+        1.0
+      ],
+      "mean_ttc_ms": 458.23180000297725,
+      "ci_ttc_ms": [
+        332.33800000016345,
+        584.1256000057911
+      ],
+      "mean_ppr_ms": 8.585499999753665,
+      "mean_nodes": 342.5,
+      "mean_edges": 1617.5,
+      "mean_tokens": 3135.0,
+      "acc_delta_vs_control": 100.0
+    },
+    "G-C": {
+      "variant": "G-C",
+      "sample_count": 2,
+      "mean_gold_recall": 1.0,
+      "ci_gold_recall": [
+        1.0,
+        1.0
+      ],
+      "mean_accuracy": 1.0,
+      "ci_accuracy": [
+        1.0,
+        1.0
+      ],
+      "mean_f1": 1.0,
+      "ci_f1": [
+        1.0,
+        1.0
+      ],
+      "mean_ttc_ms": 323.8187499991909,
+      "ci_ttc_ms": [
+        278.5230000008596,
+        369.1144999975222
+      ],
+      "mean_ppr_ms": 13.828600000124425,
+      "mean_nodes": 303.5,
+      "mean_edges": 1040.0,
+      "mean_tokens": 3195.0,
+      "acc_delta_vs_control": 100.0
+    }
+  }
+}
