@@ -326,6 +326,7 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_max_context_tokens: Optional[int] = Header(None, alias="X-Quanta-Max-Context-Tokens"),
         x_quanta_timeout: Optional[float] = Header(None, alias="X-Quanta-Timeout"),
         x_quanta_fast_path_mode: Optional[str] = Header(None, alias="X-Quanta-Fast-Path-Mode"),
+        x_quanta_background_ingest: Optional[str] = Header(None, alias="X-Quanta-Background-Ingest"),
         x_quanta_profile: Optional[str] = Header(None, alias="X-Quanta-Profile"),
     ):
         t0 = time.perf_counter()
@@ -336,6 +337,15 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
 
         if x_quanta_reset:
             pool.reset_session(x_quanta_session_id, pipeline)
+
+        # Handle per-request background ingestion override (§Phase 5 & §Phase 6)
+        if x_quanta_background_ingest is not None:
+            bg_flag = str(x_quanta_background_ingest).lower().strip() in ("1", "true", "yes", "on")
+            pipeline.background_enabled = bg_flag
+            if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
+                pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides(
+                    {"background.enabled": bg_flag}
+                )
 
         # Handle global knowledge base mounting on demand
         if x_quanta_global_kb:
@@ -406,6 +416,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         is_cold_start = False
         t_ingest_ms = 0.0
         t_ret_ms = 0.0
+        fast_path_meta: Optional[Dict[str, Any]] = None
+        active_fp_mode: Optional[str] = None
 
         # Domain-aware gating: pure code syntax tasks should not query encyclopedic KB
         is_code_task = bool(re.search(r"(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import)", user_query))
@@ -426,16 +438,28 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 bool(x_quanta_global_kb),
             )
 
-            # Check fast_path mode from header or active profile (§Phase 3)
+            # Check fast_path mode from header or active profile (§Phase 3 & §Phase 6)
             active_fp_mode = x_quanta_fast_path_mode
-            if not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
-                if x_quanta_profile == "passthrough":
+            if x_quanta_profile is not None:
+                prof_str = str(x_quanta_profile).lower().strip()
+                if prof_str == "passthrough":
                     active_fp_mode = "passthrough"
-                else:
-                    active_fp_mode = pipeline.multi_scale_config.fast_path_mode
+                    if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
+                        pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides({
+                            "fast_path.mode": "passthrough",
+                            "filter.strategy": "passthrough",
+                            "background.enabled": False,
+                        })
+                elif prof_str == "calibrated":
+                    if not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
+                        fp_val = pipeline.multi_scale_config.fast_path_mode
+                        active_fp_mode = fp_val if fp_val != "passthrough" else "coverage_adaptive"
+            elif not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
+                active_fp_mode = pipeline.multi_scale_config.fast_path_mode
 
+            is_long_prompt = has_single_query_context or (raw_tokens > threshold) or (len(raw_user_content.split()) > 200)
             fast_path_meta: Optional[Dict[str, Any]] = None
-            if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and has_single_query_context:
+            if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and is_long_prompt:
                 full_prompt = raw_user_content
                 if doc_from_system and doc_from_system not in full_prompt:
                     full_prompt = f"{doc_from_system}\n\n{full_prompt}"
@@ -448,6 +472,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                     cold_start=False,
                 )
                 retrieved_context = fp_res.context
+                if fp_res.isolated_query:
+                    user_query = fp_res.isolated_query
                 fast_path_meta = fp_res.to_dict()
                 t_ingest_ms = fp_res.stage_timings.get("transduction", 0.0) + fp_res.stage_timings.get("chunking", 0.0)
                 t_ret_ms = fp_res.stage_timings.get("relevance filter", 0.0) + fp_res.stage_timings.get("PPR", 0.0)
@@ -673,13 +699,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             "X-Quanta-TTC-Ms": f"{t_ttc_ms:.2f}",
             "X-Quanta-Stage-Timings": json.dumps(stage_timings),
             "X-Quanta-GPU-Calls": str(total_gpu_calls),
+            "X-Quanta-Units-Scored": str(fast_path_meta.get("units_scored", 0)) if fast_path_meta else "0",
+            "X-Quanta-Units-Kept": str(fast_path_meta.get("units_kept", 0)) if fast_path_meta else "0",
+            "X-Quanta-Hot-Transduced": str(fast_path_meta.get("units_transduced", 0)) if fast_path_meta else "0",
+            "X-Quanta-Deferred": str(fast_path_meta.get("deferred_units", 0)) if fast_path_meta else "0",
         }
         if fast_path_meta:
             quanta_headers["X-Quanta-Fast-Path-Mode"] = str(fast_path_meta.get("mode", active_fp_mode))
-            quanta_headers["X-Quanta-Units-Scored"] = str(fast_path_meta.get("units_scored", 0))
-            quanta_headers["X-Quanta-Units-Kept"] = str(fast_path_meta.get("units_kept", 0))
-            quanta_headers["X-Quanta-Hot-Transduced"] = str(fast_path_meta.get("units_transduced", 0))
-            quanta_headers["X-Quanta-Deferred"] = str(fast_path_meta.get("deferred_units", 0))
 
 
         if request.stream:
