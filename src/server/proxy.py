@@ -325,6 +325,8 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_validate: Optional[bool] = Header(False, alias="X-Quanta-Validate"),
         x_quanta_max_context_tokens: Optional[int] = Header(None, alias="X-Quanta-Max-Context-Tokens"),
         x_quanta_timeout: Optional[float] = Header(None, alias="X-Quanta-Timeout"),
+        x_quanta_fast_path_mode: Optional[str] = Header(None, alias="X-Quanta-Fast-Path-Mode"),
+        x_quanta_profile: Optional[str] = Header(None, alias="X-Quanta-Profile"),
     ):
         t0 = time.perf_counter()
         stats["total_requests"] += 1
@@ -424,11 +426,37 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                 bool(x_quanta_global_kb),
             )
 
+            # Check fast_path mode from header or active profile (§Phase 3)
+            active_fp_mode = x_quanta_fast_path_mode
+            if not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
+                if x_quanta_profile == "passthrough":
+                    active_fp_mode = "passthrough"
+                else:
+                    active_fp_mode = pipeline.multi_scale_config.fast_path_mode
+
+            fast_path_meta: Optional[Dict[str, Any]] = None
+            if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and has_single_query_context:
+                full_prompt = raw_user_content
+                if doc_from_system and doc_from_system not in full_prompt:
+                    full_prompt = f"{doc_from_system}\n\n{full_prompt}"
+                fp_cfg = pipeline.multi_scale_config.with_overrides({"fast_path.mode": active_fp_mode})
+                fp_res = await asyncio.to_thread(
+                    pipeline.answer_long_context,
+                    full_prompt,
+                    config=fp_cfg,
+                    max_context_tokens=x_quanta_max_context_tokens or 1500,
+                    cold_start=False,
+                )
+                retrieved_context = fp_res.context
+                fast_path_meta = fp_res.to_dict()
+                t_ingest_ms = fp_res.stage_timings.get("transduction", 0.0) + fp_res.stage_timings.get("chunking", 0.0)
+                t_ret_ms = fp_res.stage_timings.get("relevance filter", 0.0) + fp_res.stage_timings.get("PPR", 0.0)
+
             import hashlib
             t_ingest_start = time.perf_counter()
 
-            # 1. Ingest dialogue history into CognitivePipeline if dialogue turns exist
-            if dialogue_history:
+            # 1. Ingest dialogue history into CognitivePipeline if dialogue turns exist (when not using fast-path)
+            if not fast_path_meta and dialogue_history:
                 history_text_blocks = []
                 for m in dialogue_history:
                     if m.content and m.content.strip():
@@ -449,75 +477,76 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
                         except Exception as e:
                             logger.warning("Error during dialogue history ASG ingestion: %s", e)
 
-            # 2. Ingest single-query user context document (cold-start single query)
-            if doc_from_user:
-                doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
-                if doc_hash not in ingested_turn_hashes:
-                    try:
-                        is_cold_start = True
-                        await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
-                        ingested_turn_hashes.add(doc_hash)
-                        stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                    except Exception as e:
-                        logger.error("Error during user context document ASG ingestion: %s", e)
+            if not fast_path_meta:
+                # 2. Ingest single-query user context document (cold-start single query)
+                if doc_from_user:
+                    doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
+                    if doc_hash not in ingested_turn_hashes:
+                        try:
+                            is_cold_start = True
+                            await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
+                            ingested_turn_hashes.add(doc_hash)
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                        except Exception as e:
+                            logger.error("Error during user context document ASG ingestion: %s", e)
 
-            # 3. Ingest system context document if present
-            if doc_from_system:
-                sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
-                if sys_doc_hash not in ingested_turn_hashes:
-                    try:
-                        is_cold_start = True
-                        await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
-                        ingested_turn_hashes.add(sys_doc_hash)
-                        stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                    except Exception as e:
-                        logger.error("Error during system context document ASG ingestion: %s", e)
+                # 3. Ingest system context document if present
+                if doc_from_system:
+                    sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
+                    if sys_doc_hash not in ingested_turn_hashes:
+                        try:
+                            is_cold_start = True
+                            await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
+                            ingested_turn_hashes.add(sys_doc_hash)
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                        except Exception as e:
+                            logger.error("Error during system context document ASG ingestion: %s", e)
 
-            t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
+                t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
 
-            # Retrieve active context via spreading activation (strictly from natural user_query)
-            t_ret_start = time.perf_counter()
-            try:
-                # Dynamic context budgeting for multi-hop queries and multi-document benchmarks
-                doc_text = (doc_from_user or "") + " " + (doc_from_system or "")
-                num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
-                query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
+                # Retrieve active context via spreading activation (strictly from natural user_query)
+                t_ret_start = time.perf_counter()
+                try:
+                    # Dynamic context budgeting for multi-hop queries and multi-document benchmarks
+                    doc_text = (doc_from_user or "") + " " + (doc_from_system or "")
+                    num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
+                    query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
 
-                # Multi-document scaling: allocate ~300-350 tokens per required hop / active document
-                if num_doc_headings >= 10 or query_hop_depth >= 3:
-                    # Target: 4 to 5 full passages (~1,400 to 1,600 tokens), providing ~45% compression over 2,700 tokens
-                    adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
-                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
-                else:
-                    # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
-                    adaptive_budget = min(cfg.max_context_tokens, 450)
-                    if has_single_query_context and raw_tokens > 0:
-                        adaptive_budget = min(adaptive_budget, max(50, int(raw_tokens * 0.45)))
-                    elif dialogue_history and not has_single_query_context:
-                        pruned_toks = estimate_messages_tokens(dialogue_history)
-                        if pruned_toks > 0:
-                            adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))
-                    effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
+                    # Multi-document scaling: allocate ~300-350 tokens per required hop / active document
+                    if num_doc_headings >= 10 or query_hop_depth >= 3:
+                        # Target: 4 to 5 full passages (~1,400 to 1,600 tokens), providing ~45% compression over 2,700 tokens
+                        adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
+                        effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
+                    else:
+                        # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
+                        adaptive_budget = min(cfg.max_context_tokens, 450)
+                        if has_single_query_context and raw_tokens > 0:
+                            adaptive_budget = min(adaptive_budget, max(50, int(raw_tokens * 0.45)))
+                        elif dialogue_history and not has_single_query_context:
+                            pruned_toks = estimate_messages_tokens(dialogue_history)
+                            if pruned_toks > 0:
+                                adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))
+                        effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
 
-                if format_type in ("dual_stream", "svm"):
-                    raw_ctx = await asyncio.to_thread(
-                        pipeline.query_memory,
-                        query=user_query,
-                        format="dual_stream",
-                        max_tokens=effective_max_tokens,
-                    )
-                    retrieved_context = getattr(raw_ctx, "full_context", str(raw_ctx))
-                else:
-                    retrieved_context = await asyncio.to_thread(
-                        pipeline.retrieve_context,
-                        query=user_query,
-                        format=format_type,
-                        max_tokens=effective_max_tokens,
-                    )
-            except Exception as e:
-                logger.warning("Error retrieving context from PageTable: %s", e)
-                retrieved_context = ""
-            t_ret_ms = (time.perf_counter() - t_ret_start) * 1000.0
+                    if format_type in ("dual_stream", "svm"):
+                        raw_ctx = await asyncio.to_thread(
+                            pipeline.query_memory,
+                            query=user_query,
+                            format="dual_stream",
+                            max_tokens=effective_max_tokens,
+                        )
+                        retrieved_context = getattr(raw_ctx, "full_context", str(raw_ctx))
+                    else:
+                        retrieved_context = await asyncio.to_thread(
+                            pipeline.retrieve_context,
+                            query=user_query,
+                            format=format_type,
+                            max_tokens=effective_max_tokens,
+                        )
+                except Exception as e:
+                    logger.warning("Error retrieving context from PageTable: %s", e)
+                    retrieved_context = ""
+                t_ret_ms = (time.perf_counter() - t_ret_start) * 1000.0
 
             # Build enriched system prompt
             system_content_parts = []
@@ -645,6 +674,13 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
             "X-Quanta-Stage-Timings": json.dumps(stage_timings),
             "X-Quanta-GPU-Calls": str(total_gpu_calls),
         }
+        if fast_path_meta:
+            quanta_headers["X-Quanta-Fast-Path-Mode"] = str(fast_path_meta.get("mode", active_fp_mode))
+            quanta_headers["X-Quanta-Units-Scored"] = str(fast_path_meta.get("units_scored", 0))
+            quanta_headers["X-Quanta-Units-Kept"] = str(fast_path_meta.get("units_kept", 0))
+            quanta_headers["X-Quanta-Hot-Transduced"] = str(fast_path_meta.get("units_transduced", 0))
+            quanta_headers["X-Quanta-Deferred"] = str(fast_path_meta.get("deferred_units", 0))
+
 
         if request.stream:
             return await _handle_streaming_response(

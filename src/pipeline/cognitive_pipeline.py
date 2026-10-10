@@ -96,6 +96,18 @@ from verification.belnap_calibrator import BelnapLatticeMapper
 from verification.clingo_dl_gate import ClingoDLGate
 from models.kev_async_worker import AsyncKevVerificationQueue, VerificationTask
 from pipeline.tracer import PipelineExecutionTracer
+from config.multi_scale_config import MultiScaleConfig
+from memory.fast_path_assembler import (
+    FastPathAssembler,
+    FastPathContext,
+    FastPathCoverageEvaluator,
+    FastPathMode,
+    FastPathResult,
+)
+from parser.multi_scale_chunker import HierarchicalChunker, MacroBlock
+from parser.task_boundary_extractor import ExtractedTaskIntent, TaskBoundaryExtractor
+from retrieval.relevance_filter import RelevanceFilter, ScoredUnit
+
 
 logger = logging.getLogger("quanta.pipeline.cognitive")
 
@@ -164,6 +176,7 @@ class CognitivePipeline:
         belnap_mapper: Optional[BelnapLatticeMapper] = None,
         clingo_dl_gate: Optional[ClingoDLGate] = None,
         tracer: Optional[PipelineExecutionTracer] = None,
+        multi_scale_config: Optional[MultiScaleConfig] = None,
         **transducer_kwargs,
     ):
         self.tracer = tracer or PipelineExecutionTracer.get_instance()
@@ -287,6 +300,13 @@ class CognitivePipeline:
                 clingo_dl_gate=self.clingo_dl_gate,
                 max_workers=int(os.environ.get("QUANTA_ASYNC_KEV_WORKERS", "2")),
             )
+
+        # 14. Dynamic Multi-Scale Ingestion & Fast-Path Assembler (§Phase 3)
+        self.multi_scale_config = multi_scale_config or MultiScaleConfig()
+        self.fast_path_assembler = FastPathAssembler(
+            config=self.multi_scale_config,
+            dual_stream_assembler=self.context_assembler,
+        )
 
     def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
@@ -1748,6 +1768,284 @@ class CognitivePipeline:
         logger.info("PageTable fallback query answered in %.2f ms: '%s' -> '%s'", elapsed_ms, query, ans)
         return ans
 
+    def answer_long_context(
+        self,
+        prompt: str,
+        config: Optional[MultiScaleConfig] = None,
+        max_context_tokens: int = 1500,
+        cold_start: bool = True,
+    ) -> FastPathResult:
+        """Orchestrates dynamic long-context answering via fast-path mode bush (§Phase 3).
+
+        Cycle:
+        1. Task Boundary Extraction: isolate query q and context document D.
+        2. Hierarchical Chunking: macro discourse blocks & micro chunks.
+        3. Relevance Filtering: score & prune irrelevant units without dropping gold evidence.
+        4. Selective Ingestion:
+           - M-A (raw-only): 0 synchronous transductions.
+           - M-B (hot-transduce N): synchronously transduce top-N kept units into graph.
+           - M-C (full): synchronously transduce all kept units into graph.
+           - M-D (coverage-adaptive): M-A if coverage >= threshold, else M-B.
+           - passthrough: B0 baseline full document ingestion.
+        5. Spreading Activation / HippoRAG PPR over active graph nodes (if graph non-empty).
+        6. Fast-Path Context Assembly: DualStreamContext with 100% lexical fidelity in stream 2.
+        7. Topological or evidence-grounded answer generation.
+        """
+        t_total0 = time.perf_counter()
+        ms_cfg = config or getattr(self, "multi_scale_config", None) or MultiScaleConfig()
+
+        if cold_start:
+            self.reset(clear_page_table=True)
+
+        if self.tracer:
+            self.tracer.reset_stage_telemetry()
+
+        # Step 1: Extractor
+        t_ext0 = time.perf_counter()
+        extractor = TaskBoundaryExtractor(strategy=ms_cfg.query_extractor_strategy)
+        intent = extractor.extract(prompt)
+        query_text = intent.query_text or prompt
+        context_text = intent.context_text
+        if not context_text or not context_text.strip():
+            context_text = prompt
+        t_ext_ms = (time.perf_counter() - t_ext0) * 1000.0
+        if self.tracer:
+            self.tracer.record_stage_timing("query split", t_ext_ms, gpu_calls=0)
+
+        # Step 2: Chunker
+        t_chk0 = time.perf_counter()
+        macro_tokens = ms_cfg.chunker_macro_target_tokens or 1000
+        micro_words = ms_cfg.chunker_micro_target_words or 250
+        chunker = HierarchicalChunker(macro_target_tokens=macro_tokens, micro_target_words=micro_words)
+
+        macro_blocks: List[MacroBlock] = []
+        all_micro_chunks: List[DiscourseChunk] = []
+        if context_text and context_text.strip():
+            macro_blocks = chunker.chunk(context_text)
+            all_micro_chunks = [c for mb in macro_blocks for c in mb.micro_chunks]
+            if not macro_blocks:
+                single_micro = DiscourseChunk(
+                    chunk_id="chunk_1",
+                    text=context_text,
+                    global_offset=0,
+                    global_end_offset=len(context_text),
+                    word_count=len(context_text.split()),
+                    token_count_estimate=int(len(context_text.split()) * 1.33),
+                )
+                all_micro_chunks = [single_micro]
+                macro_blocks = [
+                    MacroBlock(
+                        macro_id="macro_1",
+                        char_span=(0, len(context_text)),
+                        text=context_text,
+                        micro_chunks=[single_micro],
+                    )
+                ]
+        t_chk_ms = (time.perf_counter() - t_chk0) * 1000.0
+        if self.tracer:
+            self.tracer.record_stage_timing("chunking", t_chk_ms, gpu_calls=0)
+
+        # Step 3: Filter
+        t_flt0 = time.perf_counter()
+        filt = RelevanceFilter(
+            strategy=ms_cfg.filter_strategy,
+            unit=ms_cfg.filter_unit,
+            keep_threshold=ms_cfg.filter_keep_threshold,
+            keep_top_k=ms_cfg.filter_keep_top_k,
+            keep_budget_tokens=ms_cfg.filter_keep_budget_tokens,
+            calibration=ms_cfg.get("filter.calibration"),
+            grounder=getattr(self, "concept_grounder", None),
+            kev_engine=getattr(self, "kev_engine", None),
+        )
+        target_units = macro_blocks if ms_cfg.filter_unit in ("macro", "macro_head") else all_micro_chunks
+        scored_units = filt.score(intent, target_units)
+        kept_units = filt.apply_keep_policy(scored_units)
+        t_flt_ms = (time.perf_counter() - t_flt0) * 1000.0
+        if self.tracer:
+            gpu_flt = sum(getattr(u, "metadata", {}).get("gpu_calls", 0) for u in scored_units)
+            self.tracer.record_stage_timing("relevance filter", t_flt_ms, gpu_calls=gpu_flt)
+
+        # Step 4: Selective Ingestion
+        assembler = FastPathAssembler(
+            mode=ms_cfg.fast_path_mode,
+            hot_transduce_n=ms_cfg.fast_path_hot_transduce_n,
+            coverage_threshold=ms_cfg.fast_path_coverage_threshold,
+            config=ms_cfg,
+            dual_stream_assembler=self.context_assembler,
+        )
+        effective_mode, coverage_score = assembler.resolve_effective_mode(
+            intent=intent,
+            kept_units=kept_units,
+            target_entities=intent.target_entities,
+        )
+
+        subgraph: Optional[QuantaGraph] = None
+        units_transduced = 0
+        deferred_units = 0
+
+        # Register kept units into passage store so they are accessible by ID
+        for idx, ku in enumerate(kept_units):
+            pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_{idx+1}"
+            u_text = ku.unit.text if hasattr(ku, "unit") and hasattr(ku.unit, "text") else (ku.text if hasattr(ku, "text") else str(ku))
+            u_span = getattr(ku, "char_span", (0, len(u_text)))
+            if pid not in self.passage_store:
+                self.passage_store.add_passage(
+                    PassageRecord(
+                        passage_id=pid,
+                        doc_id="doc_01",
+                        char_span=u_span,
+                        text=u_text,
+                    )
+                )
+
+        if effective_mode == FastPathMode.RAW_ONLY.value:
+            # M-A: 0 synchronous transductions
+            units_transduced = 0
+            deferred_units = len(kept_units)
+            subgraph = None
+
+        elif effective_mode == FastPathMode.HOT_TRANSDUCE.value:
+            # M-B: Synchronously transduce top-N kept units
+            n = ms_cfg.fast_path_hot_transduce_n or 2
+            units_to_transduce = kept_units[:n]
+            units_transduced = len(units_to_transduce)
+            deferred_units = max(0, len(kept_units) - units_transduced)
+
+            for idx, ku in enumerate(units_to_transduce):
+                pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_hot_{idx+1}"
+                u_text = ku.unit.text if hasattr(ku, "unit") and hasattr(ku.unit, "text") else (ku.text if hasattr(ku, "text") else str(ku))
+                self.ingest_document(
+                    u_text,
+                    doc_id="doc_01",
+                    passage_id=pid,
+                    validate=False,
+                )
+
+            # Step 5: PPR over transduced graph
+            t_ppr0 = time.perf_counter()
+            subgraph = self.retriever.retrieve_subgraph_for_query(
+                query=query_text,
+                page_table=self.page_table,
+                top_k=10,
+                max_depth=2,
+                algorithm="hipporag",
+            )
+            t_ppr_ms = (time.perf_counter() - t_ppr0) * 1000.0
+            if self.tracer:
+                self.tracer.record_stage_timing("PPR", t_ppr_ms, gpu_calls=0)
+
+        elif effective_mode == FastPathMode.FULL.value:
+            # M-C: Synchronously transduce ALL kept units
+            units_to_transduce = kept_units
+            units_transduced = len(units_to_transduce)
+            deferred_units = 0
+
+            for idx, ku in enumerate(units_to_transduce):
+                pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_full_{idx+1}"
+                u_text = ku.unit.text if hasattr(ku, "unit") and hasattr(ku.unit, "text") else (ku.text if hasattr(ku, "text") else str(ku))
+                self.ingest_document(
+                    u_text,
+                    doc_id="doc_01",
+                    passage_id=pid,
+                    validate=False,
+                )
+
+            # Step 5: PPR over graph
+            t_ppr0 = time.perf_counter()
+            subgraph = self.retriever.retrieve_subgraph_for_query(
+                query=query_text,
+                page_table=self.page_table,
+                top_k=10,
+                max_depth=2,
+                algorithm="hipporag",
+            )
+            t_ppr_ms = (time.perf_counter() - t_ppr0) * 1000.0
+            if self.tracer:
+                self.tracer.record_stage_timing("PPR", t_ppr_ms, gpu_calls=0)
+
+        else:
+            # passthrough / B0
+            if context_text and context_text.strip():
+                self.ingest_document(context_text, doc_id="doc_01", validate=False)
+                units_transduced = len(all_micro_chunks) or 1
+            deferred_units = 0
+            t_ppr0 = time.perf_counter()
+            subgraph = self.retriever.retrieve_subgraph_for_query(
+                query=query_text,
+                page_table=self.page_table,
+                top_k=10,
+                max_depth=2,
+                algorithm="hipporag",
+            )
+            t_ppr_ms = (time.perf_counter() - t_ppr0) * 1000.0
+            if self.tracer:
+                self.tracer.record_stage_timing("PPR", t_ppr_ms, gpu_calls=0)
+
+        # Step 6: Context Assembly
+        t_asm0 = time.perf_counter()
+        fast_ctx = assembler.assemble(
+            subgraph=subgraph,
+            kept_units=kept_units,
+            passage_store=self.passage_store,
+            max_tokens=max_context_tokens,
+            query_text=query_text,
+            effective_mode=effective_mode,
+            coverage_score=coverage_score,
+            activations=getattr(subgraph, "activations", None) if subgraph else None,
+            transduced_count=units_transduced,
+        )
+        t_asm_ms = (time.perf_counter() - t_asm0) * 1000.0
+        if self.tracer:
+            self.tracer.record_stage_timing("context assembly", t_asm_ms, gpu_calls=0)
+
+        # Step 7: Answer Generation
+        t_ans0 = time.perf_counter()
+        answer = ""
+        if subgraph and len(subgraph.nodes) > 0:
+            try:
+                answer = self.answer_query(query_text, target_graph=subgraph)
+            except Exception:
+                answer = ""
+
+        if not answer or answer == "I do not have sufficient information in the knowledge graph to verify this.":
+            # Extract from retrieved raw passage stream
+            if fast_ctx.stream2_passages:
+                lines = [l.strip() for l in fast_ctx.stream2_passages.split("\n") if l.strip() and not l.startswith("===") and not l.startswith("[Passage")]
+                answer = lines[0] if lines else "No evidence found."
+            else:
+                answer = "No evidence found."
+
+        t_ans_ms = (time.perf_counter() - t_ans0) * 1000.0
+        if self.tracer:
+            self.tracer.record_stage_timing("reader", t_ans_ms, gpu_calls=0)
+
+        stage_timings = dict(self.tracer.stage_timings) if self.tracer else {}
+        gpu_calls = self.tracer.get_total_gpu_calls() if self.tracer else 0
+
+        return FastPathResult(
+            answer=answer,
+            context=fast_ctx.context_text,
+            isolated_query=query_text,
+            context_document=context_text,
+            mode=effective_mode,
+            coverage_score=coverage_score,
+            units_scored=len(target_units),
+            units_kept=len(kept_units),
+            units_transduced=units_transduced,
+            deferred_units=deferred_units,
+            subgraph=subgraph,
+            stage_timings=stage_timings,
+            gpu_calls=gpu_calls,
+            tokens_estimated=fast_ctx.estimated_tokens,
+            metadata={
+                "strategy": ms_cfg.filter_strategy,
+                "unit": ms_cfg.filter_unit,
+                "hot_transduce_n": assembler.hot_transduce_n,
+                "coverage_threshold": assembler.coverage_threshold,
+                "total_latency_ms": (time.perf_counter() - t_total0) * 1000.0,
+            },
+        )
+
     def process_and_answer_single_query(
         self,
         query_text: str,
@@ -1789,6 +2087,28 @@ class CognitivePipeline:
                 isolated_query = candidate_q
             elif not isolated_query:
                 isolated_query = query_text.strip()
+
+        # Phase 3 Fast-Path routing: check if fast_path mode is set
+        ms_cfg = getattr(self, "multi_scale_config", None) or MultiScaleConfig()
+        if ms_cfg.fast_path_mode not in ("passthrough", None, ""):
+            full_prompt = f"{doc}\n\n{query_text}" if doc else query_text
+            fp_res = self.answer_long_context(full_prompt, config=ms_cfg, max_context_tokens=max_tokens, cold_start=cold_start)
+            return {
+                "answer": fp_res.answer,
+                "retrieved_context": fp_res.context,
+                "isolated_query": fp_res.isolated_query,
+                "context_document": fp_res.context_document,
+                "ingest_latency_ms": fp_res.stage_timings.get("transduction", 0.0) + fp_res.stage_timings.get("chunking", 0.0),
+                "retrieval_latency_ms": fp_res.stage_timings.get("relevance filter", 0.0) + fp_res.stage_timings.get("PPR", 0.0),
+                "answer_latency_ms": fp_res.stage_timings.get("reader", 0.0),
+                "total_latency_ms": (time.perf_counter() - t_start) * 1000.0,
+                "raw_context_chars": len(doc) if doc else len(query_text),
+                "retrieved_context_chars": len(fp_res.context),
+                "cold_start": cold_start,
+                "allow_fixtures": allow_fixtures,
+                "fast_path_result": fp_res,
+                "mode": fp_res.mode,
+            }
 
         # 2. Transducer fixture flag configuration
         old_allow_fixtures = getattr(self.transducer, "allow_fixtures", None)
