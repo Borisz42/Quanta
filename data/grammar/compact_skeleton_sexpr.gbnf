@@ -1,0 +1,16 @@
+# QUANTA Compact Skeleton Transducer
+# GBNF Grammar for Constrained Decoding of Surface Skeletons with Optional Kev Enums (Keyword S-Expression)
+
+root ::= ws "(" ws "graph" (ws clause)* ws ")" ws
+clause ::= entity_clause | event_clause
+entity_clause ::= "(" ws "entity" ws id ws string (ws ":type" ws id)? ws ")"
+event_clause ::= "(" ws "event" ws id ws id (ws ":subj" ws id)? (ws ":obj" ws id)? (ws ":intent" ws intent_val)? (ws ":epist" ws epist_val)? (ws ":allen" ws allen_val)? (ws ":pearl" ws pearl_val)? ws ")"
+
+intent_val ::= "I" | "D" | "C" | "E"
+epist_val ::= "O" | "D" | "H" | "C"
+allen_val ::= "M" | "B" | "O" | "D" | "N"
+pearl_val ::= "M" | "C" | "N"
+
+id ::= [a-zA-Z0-9_.-]+
+string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\""
+ws ::= [ \t\n\r]*

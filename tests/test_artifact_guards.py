@@ -23,6 +23,8 @@ def test_registry_contains_critical_artifacts():
     assert "data/wordnet_offline.json" in rel_paths
     assert "data/framenet_valency.json" in rel_paths
     assert "data/grammar/quanta_asg.gbnf" in rel_paths
+    assert "data/grammar/compact_skeleton_sexpr.gbnf" in rel_paths
+    assert "data/grammar/positional_skeleton_sexpr.gbnf" in rel_paths
     assert "output/canonical_slots_layout.json" in rel_paths
 
 

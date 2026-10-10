@@ -1,0 +1,16 @@
+# QUANTA Positional Skeleton Transducer
+# GBNF Grammar for Constrained Decoding of Ultra-Compact Surface Skeletons with Optional Kev Enums (Positional S-Expression)
+
+root ::= ws "(" (ws clause)* ws ")" ws
+clause ::= entity_clause | event_clause
+entity_clause ::= "(" ws "e" ws id ws string (ws id)? ws ")"
+event_clause ::= "(" ws "ev" ws id ws id (ws id)? (ws id)? (ws intent_val)? (ws epist_val)? (ws allen_val)? (ws pearl_val)? ws ")"
+
+intent_val ::= "I" | "D" | "C" | "E"
+epist_val ::= "O" | "D" | "H" | "C"
+allen_val ::= "M" | "B" | "O" | "D" | "N"
+pearl_val ::= "M" | "C" | "N"
+
+id ::= [a-zA-Z0-9_.-]+
+string ::= "\"" ([^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\""
+ws ::= [ \t\n\r]*

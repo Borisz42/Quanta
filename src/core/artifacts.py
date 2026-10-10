@@ -164,6 +164,20 @@ ARTIFACT_REGISTRY: List[ArtifactSpec] = [
         "Context-free GBNF grammar for S-expression transduction",
         min_size_bytes=1_000,
     ),
+    ArtifactSpec(
+        "data/grammar/compact_skeleton_sexpr.gbnf",
+        "Grammars",
+        ArtifactCriticality.CRITICAL,
+        "GBNF grammar for compact keyword S-expression transduction",
+        min_size_bytes=200,
+    ),
+    ArtifactSpec(
+        "data/grammar/positional_skeleton_sexpr.gbnf",
+        "Grammars",
+        ArtifactCriticality.CRITICAL,
+        "GBNF grammar for ultra-compact positional S-expression transduction",
+        min_size_bytes=200,
+    ),
     # 4. Multi-Domain Benchmark Datasets
     ArtifactSpec(
         "data/raw/folio_train.jsonl",
