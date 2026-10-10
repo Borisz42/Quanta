@@ -340,12 +340,19 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         system_prompt: str = DEFAULT_UNSLOTH_SYSTEM_PROMPT,
         allow_fixtures: bool = True,
         mode: str = "legacy",
+        skeleton_format: Optional[str] = None,
+        co_decoded: bool = False,
     ):
         super().__init__(system_prompt=system_prompt)
         self.mode = mode
+        self.skeleton_format = skeleton_format
+        self.co_decoded = co_decoded
         self.allow_fixtures = allow_fixtures
         self.fixtures: Dict[str, DiscourseExtractionResult] = {}
-        self._mock_skeleton = MockSkeletonTransducer()
+        self._mock_skeleton = MockSkeletonTransducer(
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
+        )
 
         # Register canonical gold-standard fixtures
         self.register_fixture("eleanor_vance", CANONICAL_ELEANOR_VANCE_FIXTURE)
@@ -477,17 +484,26 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         chunk_text: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Extract stripped skeleton entity-event frame directly."""
         content = text if text is not None else chunk_text
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
+        kw = dict(kwargs)
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or self.skeleton_format
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        if co is None:
+            co = self.co_decoded
         return self._mock_skeleton.transduce(
             content,
             chunk_id=chunk_id,
             active_entities=active_entities,
-            **kwargs,
+            skeleton_format=fmt,
+            co_decoded=co,
+            **kw,
         )
 
     def transduce_raw(
@@ -497,27 +513,38 @@ class MockUnslothTransducer(BaseDiscourseTransducer):
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
         chunk_text: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> str:
         """Return raw S-expression or skeleton JSON string conforming to GBNF grammar."""
         content = text if text is not None else chunk_text
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
-        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode in ("skeleton", "co_decoded"):
+        kw = dict(kwargs)
+        target_mode = kw.pop("mode", None) or getattr(self, "mode", "legacy")
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or getattr(self, "skeleton_format", None)
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        if co is None:
+            co = getattr(self, "co_decoded", False)
+        if target_mode in ("skeleton", "co_decoded", "sexpr_compact", "sexpr_positional") or fmt is not None:
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
                 chunk_id=chunk_id,
-                **kwargs,
+                skeleton_format=fmt,
+                co_decoded=co,
+                **kw,
             )
-            return skel_res.to_skeleton_json()
+            if target_mode == "skeleton" and fmt is None:
+                return skel_res.to_skeleton_json()
+            return skel_res.to_skeleton_raw(format=fmt or "sexpr_compact")
         res = self.transduce(
             text=content,
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
-            **kwargs,
+            **kw,
         )
         return to_sexpr(res, pretty=True)
 
@@ -1114,9 +1141,13 @@ class UnslothTransducer(BaseDiscourseTransducer):
         fallback_base_url: Optional[str] = None,
         allow_fixtures: bool = True,
         mode: str = "legacy",
+        skeleton_format: Optional[str] = None,
+        co_decoded: bool = False,
     ):
         super().__init__(system_prompt=system_prompt or DEFAULT_UNSLOTH_SYSTEM_PROMPT)
         self.mode = mode
+        self.skeleton_format = skeleton_format
+        self.co_decoded = co_decoded
         self._allow_fixtures = allow_fixtures
         raw_base = (
             base_url
@@ -1137,6 +1168,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
+        self.api_key = api_key
+        self.fallback_to_mock = fallback_to_mock
         self.session = session or requests.Session()
         from requests.adapters import HTTPAdapter
         adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64)
@@ -1146,6 +1179,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
             system_prompt=self.system_prompt,
             allow_fixtures=allow_fixtures,
             mode=mode,
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
         )
         self._last_fallback_used = False
 
@@ -1165,6 +1200,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
             model=self.model,
             timeout=timeout,
             fallback_to_mock=fallback_to_mock,
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
         )
 
     def set_model(self, model: str) -> str:
@@ -1344,17 +1381,26 @@ class UnslothTransducer(BaseDiscourseTransducer):
         active_entities: Optional[List[EntityRecord]] = None,
         chunk_id: Optional[str] = None,
         chunk_text: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Extract stripped skeleton entity-event frame directly."""
         content = text if text is not None else chunk_text
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
+        kw = dict(kwargs)
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or self.skeleton_format
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        if co is None:
+            co = self.co_decoded
         return self._skeleton.transduce(
             text=content,
             chunk_id=chunk_id,
             active_entities=active_entities,
-            **kwargs,
+            skeleton_format=fmt,
+            co_decoded=co,
+            **kw,
         )
 
     def transduce_raw(
@@ -1364,6 +1410,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
         chunk_id: Optional[str] = None,
         active_manifest_prompt: Optional[str] = None,
         chunk_text: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> str:
         """Send inference request to server and return raw S-expression or skeleton JSON string."""
@@ -1371,15 +1419,25 @@ class UnslothTransducer(BaseDiscourseTransducer):
         if content is None:
             raise ValueError("Must provide either 'text' or 'chunk_text'")
 
-        target_mode = kwargs.get("mode") or getattr(self, "mode", "legacy")
-        if target_mode in ("skeleton", "co_decoded"):
+        kw = dict(kwargs)
+        target_mode = kw.pop("mode", None) or getattr(self, "mode", "legacy")
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or getattr(self, "skeleton_format", None)
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        if co is None:
+            co = getattr(self, "co_decoded", False)
+
+        if target_mode in ("skeleton", "co_decoded", "sexpr_compact", "sexpr_positional") or fmt is not None:
             skel_res = self.transduce_skeleton(
                 text=content,
                 active_entities=active_entities,
                 chunk_id=chunk_id,
-                **kwargs,
+                skeleton_format=fmt,
+                co_decoded=co,
+                **kw,
             )
-            return skel_res.to_skeleton_json()
+            if target_mode == "skeleton" and fmt is None:
+                return skel_res.to_skeleton_json()
+            return skel_res.to_skeleton_raw(format=fmt or "sexpr_compact")
 
         headers = self._get_headers()
         payload = self._build_payload(
@@ -1387,7 +1445,7 @@ class UnslothTransducer(BaseDiscourseTransducer):
             active_entities=active_entities,
             chunk_id=chunk_id,
             active_manifest_prompt=active_manifest_prompt,
-            **kwargs,
+            **kw,
         )
 
         candidate_urls: List[str] = [self.base_url]

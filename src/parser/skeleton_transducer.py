@@ -53,6 +53,378 @@ Enums:
 Example input: "Charles Babbage invented the Difference Engine."
 Example output: {"entities": [{"id": "E1", "text": "Charles Babbage"}, {"id": "E2", "text": "Difference Engine"}], "events": [{"id": "EV1", "pred": "invented", "subj": "E1", "obj": "E2", "intent": "I", "epist": "O", "allen": "B", "pearl": "M"}]}"""
 
+DEFAULT_COMPACT_SEXPR_SYSTEM_PROMPT = """You are the QUANTA Fast Compact S-Expression Transducer.
+Extract at most 3 core named entities and 1 main event predicate frame into a compact keyword S-expression. Never extract dates, honors, or adjectives.
+Example input: "Alan Turing completed his degrees at Cambridge."
+Example output: (graph (entity E1 "Alan Turing") (entity E2 "Cambridge") (event EV1 completed :subj E1 :obj E2))"""
+
+DEFAULT_POSITIONAL_SEXPR_SYSTEM_PROMPT = """You are the QUANTA Fast Positional S-Expression Transducer.
+Extract at most 3 core named entities and 1 main event predicate frame into an ultra-compact positional S-expression. Never extract dates, honors, or adjectives.
+Example input: "Alan Turing completed his degrees at Cambridge."
+Example output: ((e E1 "Alan Turing") (e E2 "Cambridge") (ev EV1 completed E1 E2))"""
+
+CO_DECODED_COMPACT_SEXPR_SYSTEM_PROMPT = """You are the QUANTA Co-Decoded Compact S-Expression Transducer.
+Extract at most 3 core named entities and 1 main event predicate frame with compact single-letter Kev decisions.
+Enums:
+- intent: I (Informative), D (Directive), C (Commissive), E (Expressive)
+- epist: O (Direct Observation), D (Deduction), H (Hearsay), C (Conjecture)
+- allen: M (Meets), B (Before), O (Overlaps), D (During), N (None)
+- pearl: M (Mechanism), C (Condition), N (None)
+Example input: "Charles Babbage invented the Difference Engine."
+Example output: (graph (entity E1 "Charles Babbage") (entity E2 "Difference Engine") (event EV1 invented :subj E1 :obj E2 :intent I :epist O :allen B :pearl M))"""
+
+CO_DECODED_POSITIONAL_SEXPR_SYSTEM_PROMPT = """You are the QUANTA Co-Decoded Positional S-Expression Transducer.
+Extract at most 3 core named entities and 1 main event predicate frame with compact single-letter Kev decisions.
+Enums:
+- intent: I (Informative), D (Directive), C (Commissive), E (Expressive)
+- epist: O (Direct Observation), D (Deduction), H (Hearsay), C (Conjecture)
+- allen: M (Meets), B (Before), O (Overlaps), D (During), N (None)
+- pearl: M (Mechanism), C (Condition), N (None)
+Example input: "Charles Babbage invented the Difference Engine."
+Example output: ((e E1 "Charles Babbage") (e E2 "Difference Engine") (ev EV1 invented E1 E2 I O B M))"""
+
+
+def parse_skeleton_sexpr(sexpr_str: str) -> Dict[str, Any]:
+    """High-speed parser for compact keyword and positional skeleton S-expressions.
+
+    Extracts entity and event clauses into standard dictionary format:
+    {"entities": [{"id": ..., "text": ..., "category": ...}],
+     "events": [{"id": ..., "pred": ..., "subj": ..., "obj": ..., ...}]}
+
+    Features:
+    - Strips reasoning blocks (<think>...</think>), code fences (```...```), and ; comments.
+    - Gracefully auto-repairs truncated outputs by appending missing closing parentheses.
+    - Decodes both keyword clauses ((entity E1 "...") (event EV1 pred :subj E1 :obj E2))
+      and positional clauses (((e E1 "...") (ev EV1 pred E1 E2))).
+    - Extracts co-decoded Kev decisions (intent, epist, allen, pearl) when present.
+    - Skips unparseable or unrecognized fragments without raising fatal errors.
+    """
+    clean = (sexpr_str or "").strip()
+    if not clean:
+        return {"entities": [], "events": []}
+
+    # 1. Strip reasoning blocks & markdown fences
+    clean = re.sub(r"<think>.*?</think>", "", clean, flags=re.DOTALL).strip()
+    fence = re.search(r"```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)\s*```", clean)
+    if fence:
+        clean = fence.group(1).strip()
+    elif clean.startswith("```"):
+        clean = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", clean)
+        clean = re.sub(r"\n?```$", "", clean).strip()
+
+    # JSON fallback check if model emitted JSON unexpectedly
+    clean_test = clean.strip()
+    if clean_test.startswith("{") and clean_test.endswith("}"):
+        try:
+            raw_json = json.loads(clean_test)
+            if "entities" in raw_json or "events" in raw_json:
+                ents = [
+                    {
+                        "id": str(e.get("id", f"E{idx+1}")),
+                        "text": str(e.get("text", e.get("surface_text", ""))),
+                        "category": str(e.get("category", "OBJECT")),
+                    }
+                    for idx, e in enumerate(raw_json.get("entities", []))
+                ]
+                return {"entities": ents, "events": list(raw_json.get("events", []))}
+        except Exception:
+            pass
+
+    # 2. Strip comments (';' outside quotes)
+    clean_lines = []
+    for line in clean.splitlines():
+        in_str = False
+        escape = False
+        cut_idx = -1
+        for idx, ch in enumerate(line):
+            if ch == '"' and not escape:
+                in_str = not in_str
+            elif ch == '\\' and in_str:
+                escape = not escape
+                continue
+            elif ch == ';' and not in_str:
+                cut_idx = idx
+                break
+            escape = False
+        if cut_idx != -1:
+            line = line[:cut_idx]
+        if line.strip():
+            clean_lines.append(line)
+    clean = "\n".join(clean_lines).strip()
+
+    # 3. Auto-close truncated string quotes & missing parentheses
+    open_count = 0
+    close_count = 0
+    in_str = False
+    escape = False
+    for ch in clean:
+        if ch == '"' and not escape:
+            in_str = not in_str
+        elif ch == '\\' and in_str:
+            escape = not escape
+            continue
+        elif not in_str:
+            if ch == '(':
+                open_count += 1
+            elif ch == ')':
+                close_count += 1
+        escape = False
+
+    if in_str:
+        clean += '"'
+    if open_count > close_count:
+        clean += ")" * (open_count - close_count)
+
+    # 4. Tokenize into (val, is_string) tuples
+    tokens: List[Tuple[str, bool]] = []
+    i = 0
+    n = len(clean)
+    while i < n:
+        ch = clean[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch in ('(', ')'):
+            tokens.append((ch, False))
+            i += 1
+            continue
+        if ch == '"':
+            i += 1
+            chars: List[str] = []
+            while i < n:
+                if clean[i] == '\\' and i + 1 < n:
+                    nxt = clean[i + 1]
+                    if nxt == '"':
+                        chars.append('"')
+                    elif nxt == '\\':
+                        chars.append('\\')
+                    elif nxt == 'n':
+                        chars.append('\n')
+                    elif nxt == 't':
+                        chars.append('\t')
+                    elif nxt == 'r':
+                        chars.append('\r')
+                    else:
+                        chars.append(nxt)
+                    i += 2
+                elif clean[i] == '"':
+                    i += 1
+                    break
+                else:
+                    chars.append(clean[i])
+                    i += 1
+            tokens.append(("".join(chars), True))
+            continue
+        # Atom / symbol / keyword
+        start = i
+        while i < n and not clean[i].isspace() and clean[i] not in ('(', ')'):
+            i += 1
+        atom = clean[start:i]
+        tokens.append((atom, False))
+
+    # 5. Build nested list AST using stack
+    root_nodes: List[Any] = []
+    stack: List[List[Any]] = [root_nodes]
+    for val, is_s in tokens:
+        if not is_s and val == '(':
+            new_lst: List[Any] = []
+            stack[-1].append(new_lst)
+            stack.append(new_lst)
+        elif not is_s and val == ')':
+            if len(stack) > 1:
+                stack.pop()
+        else:
+            stack[-1].append((val, is_s))
+
+    # 6. Traverse tree and harvest entity and event clauses
+    clauses: List[List[Any]] = []
+
+    def _collect(node: Any) -> None:
+        if not isinstance(node, list) or not node:
+            return
+        head = node[0]
+        if isinstance(head, tuple) and not head[1] and head[0].lower() in {"entity", "e", "event", "ev"}:
+            clauses.append(node)
+            return
+        for child in node:
+            if isinstance(child, list):
+                _collect(child)
+
+    for r in root_nodes:
+        _collect(r)
+
+    # Kev decision domain sets
+    VALID_INTENT = {"I", "D", "C", "E"}
+    VALID_EPIST = {"O", "D", "H", "C"}
+    VALID_ALLEN = {"M", "B", "O", "D", "N"}
+    VALID_PEARL = {"M", "C", "N"}
+
+    entities: List[Dict[str, Any]] = []
+    events: List[Dict[str, Any]] = []
+
+    for cl in clauses:
+        if not cl or not isinstance(cl[0], tuple):
+            continue
+        head = cl[0][0].lower()
+        items = cl[1:]
+
+        if head in ("entity", "e"):
+            # Entity clause
+            if not items:
+                continue
+            eid: Optional[str] = None
+            surface_text: Optional[str] = None
+            category: str = "OBJECT"
+
+            has_keywords = any(isinstance(it, tuple) and not it[1] and it[0].startswith(":") for it in items)
+            if has_keywords:
+                k_idx = 0
+                while k_idx < len(items):
+                    tok_val, tok_is_str = items[k_idx]
+                    if not tok_is_str and tok_val.startswith(":"):
+                        kw_name = tok_val.lstrip(":").lower()
+                        if k_idx + 1 < len(items):
+                            nxt_val = items[k_idx + 1][0]
+                            if kw_name in ("id", "eid"):
+                                eid = nxt_val
+                            elif kw_name in ("text", "surface", "name", "label"):
+                                surface_text = nxt_val
+                            elif kw_name in ("type", "category"):
+                                category = nxt_val
+                            k_idx += 2
+                            continue
+                    elif eid is None and not tok_is_str:
+                        eid = tok_val
+                    elif surface_text is None:
+                        surface_text = tok_val
+                    k_idx += 1
+            else:
+                # Positional / standard: (entity E1 "Charles Babbage" [:type ...]) or (e E1 "Charles Babbage" [TYPE])
+                if len(items) >= 1:
+                    eid = items[0][0]
+                if len(items) >= 2:
+                    surface_text = items[1][0]
+                if len(items) >= 3:
+                    t_val = items[2][0]
+                    if t_val == ":type" and len(items) >= 4:
+                        category = items[3][0]
+                    elif not t_val.startswith(":"):
+                        category = t_val
+
+            if eid:
+                entities.append({
+                    "id": eid,
+                    "text": surface_text if surface_text is not None else eid,
+                    "category": category,
+                })
+
+        elif head in ("event", "ev"):
+            # Event clause
+            if len(items) < 2:
+                # Minimum viable event has id and predicate
+                if len(items) == 1:
+                    events.append({"id": items[0][0], "pred": "observe", "subj": None, "obj": None})
+                continue
+
+            ev_id = items[0][0]
+            pred = items[1][0]
+            rem = items[2:]
+
+            subj: Optional[str] = None
+            obj: Optional[str] = None
+            intent: Optional[str] = None
+            epist: Optional[str] = None
+            allen: Optional[str] = None
+            pearl: Optional[str] = None
+
+            has_keywords = any(isinstance(it, tuple) and not it[1] and it[0].startswith(":") for it in rem)
+            if has_keywords:
+                r_idx = 0
+                while r_idx < len(rem):
+                    tok_val, tok_is_str = rem[r_idx]
+                    if not tok_is_str and tok_val.startswith(":"):
+                        kw_name = tok_val.lstrip(":").lower()
+                        if r_idx + 1 < len(rem):
+                            nxt_val = rem[r_idx + 1][0]
+                            if kw_name in ("subj", "agent", "subject"):
+                                subj = nxt_val
+                            elif kw_name in ("obj", "patient", "object", "theme"):
+                                obj = nxt_val
+                            elif kw_name == "intent":
+                                intent = nxt_val
+                            elif kw_name in ("epist", "epistemic"):
+                                epist = nxt_val
+                            elif kw_name == "allen":
+                                allen = nxt_val
+                            elif kw_name == "pearl":
+                                pearl = nxt_val
+                            r_idx += 2
+                            continue
+                    elif subj is None:
+                        subj = tok_val
+                    elif obj is None:
+                        obj = tok_val
+                    r_idx += 1
+            else:
+                # Positional event parsing: (ev EV1 pred [subj] [obj] [intent] [epist] [allen] [pearl])
+                pos_vals = [it[0] for it in rem]
+                # Filter out placeholder nulls
+                clean_vals = [None if v in ("-", "None", "nil", "null") else v for v in pos_vals]
+
+                # Check if all 4 trailing values or remaining values match Kev enums
+                # Standard sequence: subj (0), obj (1), intent (2), epist (3), allen (4), pearl (5)
+                val_idx = 0
+                if val_idx < len(clean_vals):
+                    # Check if clean_vals starts directly with 4 Kev tokens (rare: no subj/obj)
+                    if len(clean_vals) == 4 and clean_vals[0] in VALID_INTENT and clean_vals[1] in VALID_EPIST and clean_vals[2] in VALID_ALLEN and clean_vals[3] in VALID_PEARL:
+                        intent, epist, allen, pearl = clean_vals[0], clean_vals[1], clean_vals[2], clean_vals[3]
+                        val_idx = 4
+                    else:
+                        subj = clean_vals[val_idx]
+                        val_idx += 1
+
+                if val_idx < len(clean_vals) and intent is None:
+                    # Check if next tokens are remaining 4 Kev tokens
+                    rem_count = len(clean_vals) - val_idx
+                    if rem_count == 4 and clean_vals[val_idx] in VALID_INTENT and clean_vals[val_idx+1] in VALID_EPIST and clean_vals[val_idx+2] in VALID_ALLEN and clean_vals[val_idx+3] in VALID_PEARL:
+                        intent, epist, allen, pearl = clean_vals[val_idx], clean_vals[val_idx+1], clean_vals[val_idx+2], clean_vals[val_idx+3]
+                        val_idx += 4
+                    else:
+                        obj = clean_vals[val_idx]
+                        val_idx += 1
+
+                if val_idx < len(clean_vals) and intent is None:
+                    intent = clean_vals[val_idx]
+                    val_idx += 1
+                if val_idx < len(clean_vals) and epist is None:
+                    epist = clean_vals[val_idx]
+                    val_idx += 1
+                if val_idx < len(clean_vals) and allen is None:
+                    allen = clean_vals[val_idx]
+                    val_idx += 1
+                if val_idx < len(clean_vals) and pearl is None:
+                    pearl = clean_vals[val_idx]
+                    val_idx += 1
+
+            ev_dict: Dict[str, Any] = {
+                "id": ev_id,
+                "pred": pred,
+                "subj": subj,
+                "obj": obj,
+            }
+            if intent is not None:
+                ev_dict["intent"] = intent
+            if epist is not None:
+                ev_dict["epist"] = epist
+                ev_dict["epistemic"] = epist
+            if allen is not None:
+                ev_dict["allen"] = allen
+            if pearl is not None:
+                ev_dict["pearl"] = pearl
+            events.append(ev_dict)
+
+    return {"entities": entities, "events": events}
+
 
 def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None, filename: str = "skeleton_schema.gbnf") -> Path:
     """Locate the skeleton_schema.gbnf or co_decoded_skeleton_schema.gbnf grammar specification file."""
@@ -292,9 +664,131 @@ class SkeletonExtractionResult:
             ],
         }, separators=(',', ':'), ensure_ascii=False)
 
+    def to_skeleton_compact_sexpr(self) -> str:
+        """Returns compact keyword S-expression conforming to compact_skeleton_sexpr.gbnf."""
+        clauses: List[str] = []
+        for e in self.entities:
+            type_part = f" :type {e.category}" if e.category and e.category != "OBJECT" else ""
+            escaped_text = json.dumps(e.surface_text, ensure_ascii=False)
+            clauses.append(f"(entity {e.id} {escaped_text}{type_part})")
+        for ev in self.events:
+            parts = [f"event {ev.id} {ev.predicate}"]
+            if ev.subject_ent_id:
+                parts.append(f":subj {ev.subject_ent_id}")
+            if ev.object_ent_id:
+                parts.append(f":obj {ev.object_ent_id}")
+            if ev.intent:
+                parts.append(f":intent {ev.intent}")
+            if ev.epist:
+                parts.append(f":epist {ev.epist}")
+            if ev.allen:
+                parts.append(f":allen {ev.allen}")
+            if ev.pearl:
+                parts.append(f":pearl {ev.pearl}")
+            clauses.append(f"({' '.join(parts)})")
+        if not clauses:
+            return "(graph)"
+        return f"(graph {' '.join(clauses)})"
+
+    def to_skeleton_positional_sexpr(self) -> str:
+        """Returns ultra-compact positional S-expression conforming to positional_skeleton_sexpr.gbnf."""
+        clauses: List[str] = []
+        for e in self.entities:
+            type_part = f" {e.category}" if e.category and e.category != "OBJECT" else ""
+            escaped_text = json.dumps(e.surface_text, ensure_ascii=False)
+            clauses.append(f"(e {e.id} {escaped_text}{type_part})")
+        for ev in self.events:
+            parts = ["ev", ev.id, ev.predicate]
+            has_kev = bool(ev.intent or ev.epist or ev.allen or ev.pearl)
+            if ev.subject_ent_id or ev.object_ent_id or has_kev:
+                parts.append(ev.subject_ent_id or "-")
+            if ev.object_ent_id or has_kev:
+                parts.append(ev.object_ent_id or "-")
+            if has_kev:
+                parts.append(ev.intent or "I")
+                parts.append(ev.epist or "O")
+                parts.append(ev.allen or "N")
+                parts.append(ev.pearl or "N")
+            clauses.append(f"({' '.join(parts)})")
+        return f"({' '.join(clauses)})"
+
+    def to_skeleton_sexpr(self, format: str = "sexpr_compact") -> str:
+        """Serialize stripped skeleton into chosen S-expression format."""
+        fmt = (format or "sexpr_compact").lower()
+        if fmt in ("sexpr_positional", "positional_sexpr", "positional"):
+            return self.to_skeleton_positional_sexpr()
+        return self.to_skeleton_compact_sexpr()
+
+    def to_skeleton_raw(self, format: str = "sexpr_compact") -> str:
+        """Serialize stripped skeleton into requested format (json, sexpr_compact, or sexpr_positional)."""
+        fmt = (format or "sexpr_compact").lower()
+        if fmt in ("json", "skeleton_json"):
+            return self.to_skeleton_json()
+        elif fmt in ("sexpr_positional", "positional_sexpr", "positional"):
+            return self.to_skeleton_positional_sexpr()
+        return self.to_skeleton_compact_sexpr()
+
     @classmethod
     def from_json(cls, json_str: str) -> SkeletonExtractionResult:
         return cls.from_dict(json.loads(json_str))
+
+    @classmethod
+    def from_sexpr(
+        cls,
+        sexpr_str: str,
+        text: Optional[str] = None,
+        aligner: Optional[SpanAligner] = None,
+        chunk_id: Optional[str] = None,
+    ) -> SkeletonExtractionResult:
+        """Parse compact or positional S-expression and optionally ground against source text."""
+        data = parse_skeleton_sexpr(sexpr_str)
+        if text is not None:
+            span_aligner = aligner or SpanAligner()
+            entities: List[SkeletonEntity] = []
+            for raw_e in data.get("entities", []):
+                surface = str(raw_e.get("text", "")).strip()
+                aln = span_aligner.align(text, surface)
+                c_span = aln.char_span if aln else (0, min(len(surface), len(text)))
+                b_span = aln.byte_span if aln else span_aligner.char_to_byte_span(text, c_span)
+                entities.append(
+                    SkeletonEntity(
+                        id=str(raw_e.get("id", f"E{len(entities) + 1}")),
+                        surface_text=aln.matched_text if aln else surface,
+                        char_span=c_span,
+                        byte_span=b_span,
+                        category=str(raw_e.get("category", "OBJECT")),
+                        confidence=aln.confidence if aln else 0.8,
+                    )
+                )
+            events: List[SkeletonEvent] = []
+            for raw_ev in data.get("events", []):
+                pred = str(raw_ev.get("pred", raw_ev.get("predicate", ""))).strip()
+                aln = span_aligner.align(text, pred)
+                c_span = aln.char_span if aln else (0, min(len(pred), len(text)))
+                b_span = aln.byte_span if aln else span_aligner.char_to_byte_span(text, c_span)
+                events.append(
+                    SkeletonEvent(
+                        id=str(raw_ev.get("id", f"EV{len(events) + 1}")),
+                        predicate=pred,
+                        char_span=c_span,
+                        subject_ent_id=_as_ent_id(raw_ev.get("subj", raw_ev.get("subject_ent_id"))),
+                        object_ent_id=_as_ent_id(raw_ev.get("obj", raw_ev.get("object_ent_id"))),
+                        byte_span=b_span,
+                        raw_text=text[c_span[0]:c_span[1]] if aln else None,
+                        confidence=aln.confidence if aln else 0.8,
+                        intent=raw_ev.get("intent"),
+                        epist=raw_ev.get("epist", raw_ev.get("epistemic")),
+                        allen=raw_ev.get("allen"),
+                        pearl=raw_ev.get("pearl"),
+                    )
+                )
+            return cls(
+                entities=entities,
+                events=events,
+                chunk_id=chunk_id,
+                text=text,
+            )
+        return cls.from_dict(data)
 
     def to_discourse_result(self) -> DiscourseExtractionResult:
         """Convert stripped skeleton to standard DiscourseExtractionResult."""
@@ -397,14 +891,30 @@ class SkeletonExtractionResult:
 class MockSkeletonTransducer:
     """Deterministic, high-speed (<5ms) offline skeleton transducer for CI testing."""
 
-    def __init__(self, system_prompt: Optional[str] = None, mode: str = "standard"):
+    def __init__(
+        self,
+        system_prompt: Optional[str] = None,
+        mode: str = "standard",
+        skeleton_format: Optional[str] = None,
+        co_decoded: bool = False,
+    ):
         self.mode = mode
+        if skeleton_format is None:
+            if mode == "co_decoded":
+                skeleton_format = "json"
+                co_decoded = True
+            else:
+                skeleton_format = "sexpr_compact"
+        self.skeleton_format = skeleton_format
+        self.co_decoded = co_decoded or (mode == "co_decoded")
         if system_prompt is not None:
             self.system_prompt = system_prompt
-        elif mode == "co_decoded":
-            self.system_prompt = CO_DECODED_SKELETON_SYSTEM_PROMPT
+        elif self.skeleton_format in ("sexpr_positional", "positional_sexpr", "positional"):
+            self.system_prompt = CO_DECODED_POSITIONAL_SEXPR_SYSTEM_PROMPT if self.co_decoded else DEFAULT_POSITIONAL_SEXPR_SYSTEM_PROMPT
+        elif self.skeleton_format in ("json", "skeleton_json"):
+            self.system_prompt = CO_DECODED_SKELETON_SYSTEM_PROMPT if self.co_decoded else DEFAULT_SKELETON_SYSTEM_PROMPT
         else:
-            self.system_prompt = DEFAULT_SKELETON_SYSTEM_PROMPT
+            self.system_prompt = CO_DECODED_COMPACT_SEXPR_SYSTEM_PROMPT if self.co_decoded else DEFAULT_COMPACT_SEXPR_SYSTEM_PROMPT
         self.aligner = SpanAligner()
 
         # Known pre-seeded benchmark heuristics (primary S-V-O frames)
@@ -453,10 +963,16 @@ class MockSkeletonTransducer:
         chunk_id: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Deterministically extract skeleton entities and events with exact span alignment."""
-        effective_mode = mode or kwargs.get("mode") or self.mode
+        effective_co_decoded = co_decoded if co_decoded is not None else kwargs.get("co_decoded", self.co_decoded)
+        if mode == "co_decoded" or kwargs.get("mode") == "co_decoded":
+            effective_co_decoded = True
+        effective_format = skeleton_format or kwargs.get("skeleton_format") or self.skeleton_format
+        effective_mode = mode or kwargs.get("mode") or ("co_decoded" if effective_co_decoded else self.mode)
         t0 = time.perf_counter()
         clean_text = text.strip()
         lower = clean_text.lower()
@@ -473,7 +989,9 @@ class MockSkeletonTransducer:
             raw_entities = matched_spec["entities"]
             raw_events = matched_spec["events"]
         else:
-            raw_entities, raw_events = self._extract_heuristic_skeleton(clean_text, mode=effective_mode)
+            raw_entities, raw_events = self._extract_heuristic_skeleton(
+                clean_text, mode="co_decoded" if effective_co_decoded else "standard"
+            )
 
         # Ground spans via SpanAligner
         entities: List[SkeletonEntity] = []
@@ -511,10 +1029,10 @@ class MockSkeletonTransducer:
                 c_span = (0, min(len(pred), len(clean_text)))
                 b_span = self.aligner.char_to_byte_span(clean_text, c_span)
 
-            intent_val = raw_ev.get("intent") if effective_mode == "co_decoded" else None
-            epist_val = (raw_ev.get("epist") or raw_ev.get("epistemic")) if effective_mode == "co_decoded" else None
-            allen_val = raw_ev.get("allen") if effective_mode == "co_decoded" else None
-            pearl_val = raw_ev.get("pearl") if effective_mode == "co_decoded" else None
+            intent_val = raw_ev.get("intent") if effective_co_decoded else None
+            epist_val = (raw_ev.get("epist") or raw_ev.get("epistemic")) if effective_co_decoded else None
+            allen_val = raw_ev.get("allen") if effective_co_decoded else None
+            pearl_val = raw_ev.get("pearl") if effective_co_decoded else None
 
             events.append(
                 SkeletonEvent(
@@ -533,24 +1051,14 @@ class MockSkeletonTransducer:
                 )
             )
 
-        # Build JSON representation to verify exact token length
-        json_repr = json.dumps({
-            "entities": [{"id": e.id, "text": e.surface_text} for e in entities],
-            "events": [
-                {
-                    "id": ev.id,
-                    "pred": ev.predicate,
-                    **({"subj": ev.subject_ent_id} if ev.subject_ent_id else {}),
-                    **({"obj": ev.object_ent_id} if ev.object_ent_id else {}),
-                    **({"intent": ev.intent} if ev.intent else {}),
-                    **({"epist": ev.epist} if ev.epist else {}),
-                    **({"allen": ev.allen} if ev.allen else {}),
-                    **({"pearl": ev.pearl} if ev.pearl else {}),
-                }
-                for ev in events
-            ],
-        }, separators=(',', ':'), ensure_ascii=False)
-        token_count = estimate_token_count(json_repr)
+        temp_res = SkeletonExtractionResult(
+            entities=entities,
+            events=events,
+            chunk_id=chunk_id,
+            text=clean_text,
+        )
+        raw_repr = temp_res.to_skeleton_raw(format=effective_format)
+        token_count = estimate_token_count(raw_repr)
         latency = time.perf_counter() - t0
 
         return SkeletonExtractionResult(
@@ -566,7 +1074,57 @@ class MockSkeletonTransducer:
                 "backend": "mock_skeleton",
                 "model": "qwen3.5-4b-skeleton",
                 "mode": effective_mode,
+                "skeleton_format": effective_format,
+                "co_decoded": effective_co_decoded,
+                "raw_repr": raw_repr,
             },
+        )
+
+    def transduce_raw(
+        self,
+        text: str,
+        chunk_id: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Return raw S-expression or skeleton JSON string directly."""
+        kw = dict(kwargs)
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or self.skeleton_format
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        res = self.transduce(
+            text=text,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            mode=mode,
+            skeleton_format=fmt,
+            co_decoded=co,
+            **kw,
+        )
+        return res.to_skeleton_raw(format=fmt)
+
+    async def transduce_raw_async(
+        self,
+        text: str,
+        chunk_id: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Asynchronous execution wrapper for transduce_raw."""
+        return await asyncio.to_thread(
+            self.transduce_raw,
+            text=text,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            mode=mode,
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
+            **kwargs,
         )
 
     def _extract_heuristic_skeleton(self, text: str, mode: str = "standard") -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -731,6 +1289,8 @@ class SkeletonTransducer:
         grammar_path: Optional[Union[str, Path]] = None,
         system_prompt: Optional[str] = None,
         mode: str = "standard",
+        skeleton_format: Optional[str] = None,
+        co_decoded: bool = False,
     ):
         raw_base = (
             base_url
@@ -747,12 +1307,19 @@ class SkeletonTransducer:
         self.max_retries = max_retries
         self.fallback_to_mock = fallback_to_mock
         self.mode = mode
+        if skeleton_format is None:
+            if mode == "co_decoded":
+                skeleton_format = "json"
+                co_decoded = True
+            else:
+                skeleton_format = "sexpr_compact"
+        self.skeleton_format = skeleton_format
+        self.co_decoded = co_decoded or (mode == "co_decoded")
+        self.custom_system_prompt = system_prompt
         if system_prompt is not None:
             self.system_prompt = system_prompt
-        elif mode == "co_decoded":
-            self.system_prompt = CO_DECODED_SKELETON_SYSTEM_PROMPT
         else:
-            self.system_prompt = DEFAULT_SKELETON_SYSTEM_PROMPT
+            self.system_prompt = self._select_system_prompt(self.skeleton_format, self.co_decoded)
 
         self.session = requests.Session()
         from requests.adapters import HTTPAdapter
@@ -761,15 +1328,53 @@ class SkeletonTransducer:
         self.session.mount("https://", adapter)
         self.aligner = SpanAligner()
 
-        # Load GBNF Grammar
-        target_grammar_file = "co_decoded_skeleton_schema.gbnf" if mode == "co_decoded" else "skeleton_schema.gbnf"
+        # Load and cache GBNF Grammars
+        self.custom_grammar_path = grammar_path
+        target_grammar_file = self._select_grammar_filename(self.skeleton_format, self.co_decoded)
         self.grammar_path = _locate_skeleton_gbnf(grammar_path, filename=target_grammar_file)
         self.grammar_content = self.grammar_path.read_text(encoding="utf-8")
         self.grammar_hash = hashlib.sha256(self.grammar_content.encode("utf-8")).hexdigest()
+        self._grammar_cache: Dict[str, Tuple[str, str]] = {
+            target_grammar_file: (self.grammar_content, self.grammar_hash)
+        }
 
-        self._mock = MockSkeletonTransducer(system_prompt=self.system_prompt, mode=mode)
+        self._mock = MockSkeletonTransducer(
+            system_prompt=self.system_prompt,
+            mode=mode,
+            skeleton_format=self.skeleton_format,
+            co_decoded=self.co_decoded,
+        )
         self._last_fallback_used = False
         self._server_disabled = False
+
+    @staticmethod
+    def _select_grammar_filename(skeleton_format: str, co_decoded: bool = False) -> str:
+        fmt = (skeleton_format or "sexpr_compact").lower()
+        if fmt in ("sexpr_positional", "positional_sexpr", "positional"):
+            return "positional_skeleton_sexpr.gbnf"
+        elif fmt in ("json", "skeleton_json"):
+            return "co_decoded_skeleton_schema.gbnf" if co_decoded else "skeleton_schema.gbnf"
+        else:
+            return "compact_skeleton_sexpr.gbnf"
+
+    @staticmethod
+    def _select_system_prompt(skeleton_format: str, co_decoded: bool = False) -> str:
+        fmt = (skeleton_format or "sexpr_compact").lower()
+        if fmt in ("sexpr_positional", "positional_sexpr", "positional"):
+            return CO_DECODED_POSITIONAL_SEXPR_SYSTEM_PROMPT if co_decoded else DEFAULT_POSITIONAL_SEXPR_SYSTEM_PROMPT
+        elif fmt in ("json", "skeleton_json"):
+            return CO_DECODED_SKELETON_SYSTEM_PROMPT if co_decoded else DEFAULT_SKELETON_SYSTEM_PROMPT
+        else:
+            return CO_DECODED_COMPACT_SEXPR_SYSTEM_PROMPT if co_decoded else DEFAULT_COMPACT_SEXPR_SYSTEM_PROMPT
+
+    def _get_grammar(self, target_grammar_file: str) -> Tuple[str, str]:
+        if target_grammar_file in self._grammar_cache:
+            return self._grammar_cache[target_grammar_file]
+        g_path = _locate_skeleton_gbnf(self.custom_grammar_path, filename=target_grammar_file)
+        content = g_path.read_text(encoding="utf-8")
+        g_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        self._grammar_cache[target_grammar_file] = (content, g_hash)
+        return (content, g_hash)
 
     def check_health(self) -> bool:
         """Check if llama-server endpoint is reachable and a model is loaded in memory."""
@@ -793,28 +1398,45 @@ class SkeletonTransducer:
         chunk_id: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
         mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Extract skeleton entities and event anchors via llama-server with exact span groundings."""
-        effective_mode = mode or kwargs.get("mode") or self.mode
+        effective_co_decoded = co_decoded if co_decoded is not None else kwargs.get("co_decoded", self.co_decoded)
+        if mode == "co_decoded" or kwargs.get("mode") == "co_decoded":
+            effective_co_decoded = True
+        effective_format = skeleton_format or kwargs.get("skeleton_format") or self.skeleton_format
+        effective_mode = mode or kwargs.get("mode") or ("co_decoded" if effective_co_decoded else self.mode)
         clean_text = text.strip()
         t0 = time.perf_counter()
 
         if self._server_disabled and self.fallback_to_mock:
             self._last_fallback_used = True
-            res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
+            res = self._mock.transduce(
+                clean_text,
+                chunk_id=chunk_id,
+                active_entities=active_entities,
+                mode=effective_mode,
+                skeleton_format=effective_format,
+                co_decoded=effective_co_decoded,
+            )
             res.metadata["fallback_from_server"] = True
             return res
 
-        # Build payload
-        if effective_mode == "co_decoded":
-            sys_prompt = kwargs.get("system_prompt") or (
-                self.system_prompt if self.mode == "co_decoded" else CO_DECODED_SKELETON_SYSTEM_PROMPT
-            )
-            user_prompt = f"Extract co-decoded skeleton with compact Kev enums:\n\n{clean_text}"
-        else:
-            sys_prompt = kwargs.get("system_prompt") or self.system_prompt
-            user_prompt = f"Extract skeleton:\n\n{clean_text}"
+        # Build payload & grammar
+        target_grammar_file = self._select_grammar_filename(effective_format, effective_co_decoded)
+        g_content, g_hash = self._get_grammar(target_grammar_file)
+
+        sys_prompt = kwargs.get("system_prompt") or self.custom_system_prompt or self._select_system_prompt(effective_format, effective_co_decoded)
+
+        fmt_lower = effective_format.lower()
+        if fmt_lower in ("sexpr_positional", "positional_sexpr", "positional"):
+            user_prompt = f"Extract co-decoded positional skeleton with Kev enums:\n\n{clean_text}" if effective_co_decoded else f"Extract positional skeleton:\n\n{clean_text}"
+        elif fmt_lower in ("json", "skeleton_json"):
+            user_prompt = f"Extract co-decoded skeleton with compact Kev enums:\n\n{clean_text}" if effective_co_decoded else f"Extract skeleton:\n\n{clean_text}"
+        else: # "sexpr_compact"
+            user_prompt = f"Extract co-decoded compact skeleton with Kev enums:\n\n{clean_text}" if effective_co_decoded else f"Extract compact skeleton:\n\n{clean_text}"
 
         messages = [
             {"role": "system", "content": sys_prompt},
@@ -825,16 +1447,16 @@ class SkeletonTransducer:
             "model": kwargs.get("model", self.model),
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.0),
-            "max_tokens": kwargs.get("max_tokens", 1024),  # Generous token budget for complete entities + events JSON
-            "grammar": self.grammar_content,
+            "max_tokens": kwargs.get("max_tokens", 1024),
+            "grammar": g_content,
             "extra_body": {
-                "grammar": self.grammar_content,
-                "grammar_hash": self.grammar_hash,
+                "grammar": g_content,
+                "grammar_hash": g_hash,
             },
         }
 
         url = f"{self.base_url}/chat/completions"
-        raw_json_str: Optional[str] = None
+        raw_output_str: Optional[str] = None
         usage_info: Dict[str, Any] = {}
         t_prefill = 0.0
         last_err: Optional[Exception] = None
@@ -851,7 +1473,7 @@ class SkeletonTransducer:
                     content = (msg.get("content") or "").strip() or (msg.get("reasoning_content") or "").strip()
                     usage_info = data.get("usage", {})
                     t_prefill = (t_req_end - t_req_start) * 0.35  # Approx prefill proportion
-                    raw_json_str = content.strip()
+                    raw_output_str = content.strip()
                     break
                 else:
                     last_err = RuntimeError(f"Server error {resp.status_code}: {resp.text}")
@@ -865,32 +1487,46 @@ class SkeletonTransducer:
             if attempt < self.max_retries and not self._server_disabled:
                 time.sleep(0.1 * attempt)
 
-        if raw_json_str is None:
+        if raw_output_str is None:
             if self.fallback_to_mock:
                 self._last_fallback_used = True
                 self._server_disabled = True
                 logger.warning("llama-server unreachable (%s); using MockSkeletonTransducer", last_err)
-                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
+                res = self._mock.transduce(
+                    clean_text,
+                    chunk_id=chunk_id,
+                    active_entities=active_entities,
+                    mode=effective_mode,
+                    skeleton_format=effective_format,
+                    co_decoded=effective_co_decoded,
+                )
                 res.metadata["fallback_from_server"] = True
                 return res
             raise RuntimeError(f"Failed to extract skeleton from llama-server at {self.base_url}: {last_err}") from last_err
 
-        # Parse extracted JSON
+        # Parse extracted structure
         self._last_fallback_used = False
         try:
-            parsed_data = self._clean_and_parse_json(raw_json_str)
+            parsed_data = self._clean_and_parse(raw_output_str, skeleton_format=effective_format)
             entities, events = self._ground_and_build(clean_text, parsed_data, mode=effective_mode)
         except Exception as parse_err:
             if self.fallback_to_mock:
                 self._last_fallback_used = True
-                logger.warning("Failed to parse JSON from llama-server (%s); falling back to Mock", parse_err)
-                res = self._mock.transduce(clean_text, chunk_id=chunk_id, active_entities=active_entities, mode=effective_mode)
+                logger.warning("Failed to parse output from llama-server (%s); falling back to Mock", parse_err)
+                res = self._mock.transduce(
+                    clean_text,
+                    chunk_id=chunk_id,
+                    active_entities=active_entities,
+                    mode=effective_mode,
+                    skeleton_format=effective_format,
+                    co_decoded=effective_co_decoded,
+                )
                 res.metadata["fallback_from_server"] = True
                 return res
             raise
 
         t_total = time.perf_counter() - t0
-        token_count = usage_info.get("completion_tokens", estimate_token_count(raw_json_str))
+        token_count = usage_info.get("completion_tokens", estimate_token_count(raw_output_str))
 
         return SkeletonExtractionResult(
             entities=entities,
@@ -905,6 +1541,9 @@ class SkeletonTransducer:
                 "backend": "llama_server",
                 "model": self.model,
                 "mode": effective_mode,
+                "skeleton_format": effective_format,
+                "co_decoded": effective_co_decoded,
+                "raw_repr": raw_output_str,
             },
         )
 
@@ -913,6 +1552,9 @@ class SkeletonTransducer:
         text: str,
         chunk_id: Optional[str] = None,
         active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
         **kwargs,
     ) -> SkeletonExtractionResult:
         """Asynchronous execution wrapper for transduce."""
@@ -921,8 +1563,74 @@ class SkeletonTransducer:
             text=text,
             chunk_id=chunk_id,
             active_entities=active_entities,
+            mode=mode,
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
             **kwargs,
         )
+
+    def transduce_raw(
+        self,
+        text: str,
+        chunk_id: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Extract raw S-expression or JSON string."""
+        kw = dict(kwargs)
+        fmt = skeleton_format or kw.pop("skeleton_format", None) or self.skeleton_format
+        co = co_decoded if co_decoded is not None else kw.pop("co_decoded", None)
+        res = self.transduce(
+            text=text,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            mode=mode,
+            skeleton_format=fmt,
+            co_decoded=co,
+            **kw,
+        )
+        return res.to_skeleton_raw(format=fmt)
+
+    async def transduce_raw_async(
+        self,
+        text: str,
+        chunk_id: Optional[str] = None,
+        active_entities: Optional[List[EntityRecord]] = None,
+        mode: Optional[str] = None,
+        skeleton_format: Optional[str] = None,
+        co_decoded: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Asynchronous execution wrapper for transduce_raw."""
+        return await asyncio.to_thread(
+            self.transduce_raw,
+            text=text,
+            chunk_id=chunk_id,
+            active_entities=active_entities,
+            mode=mode,
+            skeleton_format=skeleton_format,
+            co_decoded=co_decoded,
+            **kwargs,
+        )
+
+    def _clean_and_parse(self, raw_str: str, skeleton_format: Optional[str] = None) -> Dict[str, Any]:
+        """Strip fences and safely decode S-expression or JSON structure with auto-repair."""
+        fmt = (skeleton_format or self.skeleton_format).lower()
+        if fmt in ("json", "skeleton_json"):
+            return self._clean_and_parse_json(raw_str)
+        try:
+            return parse_skeleton_sexpr(raw_str)
+        except Exception:
+            clean = raw_str.strip()
+            if clean.startswith("{") or "{\"" in clean:
+                try:
+                    return self._clean_and_parse_json(raw_str)
+                except Exception:
+                    pass
+            raise
 
     def _clean_and_parse_json(self, raw_str: str) -> Dict[str, Any]:
         """Strip fences and safely decode JSON structure, with truncated auto-repair."""
