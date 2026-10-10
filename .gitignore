@@ -186,6 +186,8 @@ cython_debug/
 output/*
 !output/canonical_slots_layout.json
 !output/paired_benchmark_report.md
+!output/parallel_slots_concurrency_benchmark.md
+!output/sexpr_vs_json_ingestion_benchmark.md
 !output/publication/
 !output/publication/**
 !output/submissions/

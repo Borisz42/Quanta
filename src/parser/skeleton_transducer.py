@@ -1380,17 +1380,20 @@ class SkeletonTransducer:
         """Check if llama-server endpoint is reachable and a model is loaded in memory."""
         if self._server_disabled:
             return False
-        endpoint = f"{self.base_url}/models"
-        try:
-            resp = self.session.get(endpoint, timeout=1.5)
-            if resp.status_code != 200:
-                return False
-            data = resp.json().get("data", [])
-            # In Unsloth Studio / LM Studio, entries have 'loaded': True/False
-            loaded_models = [m for m in data if m.get("loaded", True) is not False]
-            return len(loaded_models) > 0
-        except Exception:
-            return False
+        for path in ("/v1/models", "/models", "/health"):
+            endpoint = f"{self.base_url.rstrip('/')}{path}"
+            try:
+                resp = self.session.get(endpoint, timeout=1.5)
+                if resp.status_code == 200:
+                    if path == "/health":
+                        return True
+                    data = resp.json().get("data", [])
+                    loaded_models = [m for m in data if m.get("loaded", True) is not False]
+                    if loaded_models:
+                        return True
+            except Exception:
+                continue
+        return False
 
     def transduce(
         self,
@@ -1448,14 +1451,17 @@ class SkeletonTransducer:
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.0),
             "max_tokens": kwargs.get("max_tokens", 1024),
+            "enable_thinking": False,
             "grammar": g_content,
+            "chat_template_kwargs": {"enable_thinking": False},
             "extra_body": {
                 "grammar": g_content,
                 "grammar_hash": g_hash,
             },
         }
 
-        url = f"{self.base_url}/chat/completions"
+        base = self.base_url.rstrip("/")
+        url = f"{base}/v1/chat/completions" if not base.endswith("/v1") else f"{base}/chat/completions"
         raw_output_str: Optional[str] = None
         usage_info: Dict[str, Any] = {}
         t_prefill = 0.0

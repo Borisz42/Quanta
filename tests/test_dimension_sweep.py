@@ -5,15 +5,26 @@ from pathlib import Path
 import pytest
 import numpy as np
 
-from scripts.run_dimension_sweep import (
-    benchmark_collision_rate,
-    benchmark_rate_distortion_entropy,
-    benchmark_solver_grounding_latency,
-    benchmark_simd_retrieval_throughput,
-    generate_synthetic_dimension_matrix,
-    run_full_dimension_sweep,
-    export_sweep_artifacts,
-)
+try:
+    from scripts.run_dimension_sweep import (
+        benchmark_collision_rate,
+        benchmark_rate_distortion_entropy,
+        benchmark_solver_grounding_latency,
+        benchmark_simd_retrieval_throughput,
+        generate_synthetic_dimension_matrix,
+        run_full_dimension_sweep,
+        export_sweep_artifacts,
+    )
+except ImportError:
+    from src.scripts.run_dimension_sweep import (
+        benchmark_collision_rate,
+        benchmark_rate_distortion_entropy,
+        benchmark_solver_grounding_latency,
+        benchmark_simd_retrieval_throughput,
+        generate_synthetic_dimension_matrix,
+        run_full_dimension_sweep,
+        export_sweep_artifacts,
+    )
 
 
 def test_synthetic_dimension_matrix_projection():
