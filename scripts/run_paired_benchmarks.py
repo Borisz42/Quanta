@@ -91,8 +91,8 @@ AVAILABLE_SUITES = {
 }
 
 
-def interactive_selection(default_checkpoint_path: Optional[Path] = None) -> Tuple[Dict[str, int], str, str, bool]:
-    """Provides an interactive terminal menu for configuring suites and sample sizes."""
+def interactive_selection(default_checkpoint_path: Optional[Path] = None, default_workers: int = 8) -> Tuple[Dict[str, int], str, str, bool, int]:
+    """Provides an interactive terminal menu for configuring suites, sample sizes, and worker slots."""
     print(format_ansi("\n--- INTERACTIVE BENCHMARK CONFIGURATION ---", "1;33"))
 
     checkpoint_mgr = BenchmarkCheckpointManager(checkpoint_path=default_checkpoint_path)
@@ -125,16 +125,19 @@ def interactive_selection(default_checkpoint_path: Optional[Path] = None) -> Tup
     if mode == "live":
         print(format_ansi("[>] Live mode selected: Backend readiness check & auto-spinup active.", "1;32"))
 
+    workers_input = input(f"\nParallel Worker Concurrency / Decode Slots (default: {default_workers}): ").strip()
+    workers = int(workers_input) if workers_input.isdigit() and int(workers_input) > 0 else default_workers
+
     total_samples = sum(selected.values())
-    est_sec = total_samples * (3.5 if mode == "live" else 0.05)
-    print(f"\nConfiguration summary: {len(selected)} suites, {total_samples} total evaluations.")
+    est_sec = (total_samples / max(1, workers)) * (4.0 if mode == "live" else 0.05)
+    print(f"\nConfiguration summary: {len(selected)} suites, {total_samples} total evaluations across {workers} parallel slots.")
     print(f"Estimated Execution Time: {est_sec:.1f} seconds ({est_sec / 60.0:.1f} minutes).")
     confirm = input("Proceed with benchmark run? [Y/n]: ").strip().lower()
     if confirm in ("n", "no"):
         print("Run cancelled by user.")
         sys.exit(0)
 
-    return selected, ablation_mode, mode, resume
+    return selected, ablation_mode, mode, resume, workers
 
 
 def parse_suite_arg(suite_arg: str, default_samples: int) -> Dict[str, int]:
@@ -388,15 +391,31 @@ def main():
     parser.add_argument("--interactive", action="store_true", help="Open interactive terminal menu")
     parser.add_argument("--auto-spawn", dest="auto_spawn", action="store_true", default=True, help="Automatically check and spin up backend services in live mode (default: True)")
     parser.add_argument("--no-auto-spawn", dest="auto_spawn", action="store_false", help="Disable automatic backend service spinup")
+    default_workers = int(os.getenv("QUANTA_MAX_SLOTS", os.getenv("QUANTA_PARALLEL_SLOTS", "8")))
     parser.add_argument("--target-model", type=str, default="unsloth/Qwen3.5-4B-MTP-GGUF", help="Downstream base LLM model ID")
-    parser.add_argument("--workers", type=int, default=1, help="Number of concurrent worker threads for 4-slot parallel API execution (default: 1)")
+    parser.add_argument("--workers", type=int, default=default_workers, help=f"Number of concurrent worker threads for parallel slot continuous batching (default: {default_workers})")
     args = parser.parse_args()
 
     print_banner()
 
+    # Pre-detect backend parallel slots if running live mode
+    if args.mode == "live":
+        try:
+            from server.service_manager import get_service_manager
+            svc_mgr = get_service_manager()
+            svc_mgr.base_url = args.base_url
+            svc_mgr.quanta_url = args.quanta_url
+            svc_mgr.target_model = args.target_model
+            active_slots = svc_mgr.unsloth_mgr.get_active_slots()
+            if active_slots and active_slots > 0 and args.workers == default_workers:
+                args.workers = active_slots
+        except Exception:
+            pass
+
     if args.interactive:
-        suite_config, ablation_mode, mode, resume_flag = interactive_selection(Path(args.checkpoint_file))
+        suite_config, ablation_mode, mode, resume_flag, workers_count = interactive_selection(Path(args.checkpoint_file), default_workers=args.workers)
         args.resume = args.resume or resume_flag
+        args.workers = workers_count
     else:
         suite_config = parse_suite_arg(args.suite, args.samples)
         ablation_mode = args.ablation_mode
@@ -413,7 +432,7 @@ def main():
             except Exception as e:
                 logger.warning("Could not read saved suite_config from checkpoint: %s", e)
 
-    print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()} | Workers={args.workers}", "1;32"))
+    print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()} | Workers={args.workers} (Parallel Decode Slots)", "1;32"))
     print(format_ansi(f"[>] Target Suites: {suite_config}\n", "1;37"))
 
     # Automated backend service readiness verification & spinup for Live Mode
@@ -423,6 +442,8 @@ def main():
         svc_mgr.base_url = args.base_url
         svc_mgr.quanta_url = args.quanta_url
         svc_mgr.target_model = args.target_model
+        svc_mgr.target_slots = args.workers
+        svc_mgr.unsloth_mgr.target_slots = args.workers
 
         if args.auto_spawn:
             backend_ready = svc_mgr.ensure_live_backend()
@@ -574,7 +595,7 @@ def main():
                         suite_paired_results[idx_1b - 1] = pr_res
             else:
                 for itm in to_evaluate:
-                    idx_1b, pr_res = _process_sample(itm)
+                    idx_1b, pr_res = _process_sample(itm, session_id="worker_0")
                     suite_paired_results[idx_1b - 1] = pr_res
 
         suite_paired_results = [pr for pr in suite_paired_results if pr is not None]
