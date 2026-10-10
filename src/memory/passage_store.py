@@ -454,6 +454,11 @@ class PassageStore:
                         results.append(p)
             return results
 
+    def get_all_passages(self) -> List[PassageRecord]:
+        """Returns all registered passages across all granularities."""
+        with self._lock:
+            return list(self._passages.values())
+
     def get_macro_passages(self, doc_id: Optional[str] = None) -> List[PassageRecord]:
         """Returns all macro passages, optionally filtered by doc_id."""
         with self._lock:

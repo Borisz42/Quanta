@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+from contextlib import contextmanager
 import logging
 import os
 from pathlib import Path
@@ -308,8 +309,63 @@ class CognitivePipeline:
             dual_stream_assembler=self.context_assembler,
         )
 
+        # 15. Background Ingestion Worker (§Phase 5)
+        if "background.enabled" in self.multi_scale_config.runtime_overrides:
+            self.background_enabled = bool(self.multi_scale_config.runtime_overrides["background.enabled"])
+        else:
+            bg_env = os.environ.get("QUANTA_BACKGROUND_INGESTION")
+            if bg_env is not None and bg_env.strip().lower() in ("0", "off", "false", "no"):
+                self.background_enabled = False
+            elif bg_env is not None and bg_env.strip().lower() in ("1", "on", "true", "yes"):
+                self.background_enabled = True
+            else:
+                self.background_enabled = bool(self.multi_scale_config.background_enabled)
+
+        self.background_ingestor: Optional[AsyncKevVerificationQueue] = None
+        if self.background_enabled:
+            self.background_ingestor = AsyncKevVerificationQueue(
+                kev_engine=self.kev_engine,
+                page_table=self.page_table,
+                binary_table=self.binary_table,
+                belnap_mapper=self.belnap_mapper,
+                clingo_dl_gate=self.clingo_dl_gate,
+                transducer=self.skeleton_transducer,
+                passage_store=self.passage_store,
+                pipeline=self,
+                pause_policy=self.multi_scale_config.background_pause_policy,
+                max_workers=self.multi_scale_config.background_max_concurrency,
+                enabled=True,
+                auto_start=True,
+            )
+            if self.async_kev_worker is None:
+                self.async_kev_worker = self.background_ingestor
+
+    def mark_foreground(self, active: bool = True) -> None:
+        """Marks whether an in-process foreground request is executing (Pause Policy BG-B)."""
+        if hasattr(self, "background_ingestor") and self.background_ingestor is not None:
+            self.background_ingestor.mark_foreground(active)
+        elif hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.async_kev_worker.mark_foreground(active)
+
+    def set_foreground_active(self, active: bool = True) -> None:
+        """Alias for mark_foreground."""
+        self.mark_foreground(active)
+
+    @contextmanager
+    def foreground_scope(self):
+        """Context manager marking foreground execution to pause background worker (BG-B)."""
+        self.mark_foreground(True)
+        try:
+            yield
+        finally:
+            self.mark_foreground(False)
+
     def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
+        if hasattr(self, "background_ingestor") and self.background_ingestor is not None:
+            self.background_ingestor.clear()
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
+            self.async_kev_worker.clear()
         if hasattr(self, "active_canvas") and self.active_canvas is not None:
             self.active_canvas.clear()
         if hasattr(self, "entity_engine") and hasattr(self.entity_engine, "manifest"):
@@ -331,17 +387,25 @@ class CognitivePipeline:
             self.fault_handler.canvas = self.active_canvas
         if hasattr(self, "episodic_entity_registry"):
             self.episodic_entity_registry.clear()
-        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
-            self.async_kev_worker.clear()
+
+    def flush_background_queue(self, timeout: Optional[float] = None) -> bool:
+        """Flushes the background ingestion queue, blocking until all tasks complete."""
+        ok = True
+        if hasattr(self, "background_ingestor") and self.background_ingestor is not None:
+            ok = ok and self.background_ingestor.flush(timeout=timeout)
+        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None and self.async_kev_worker != getattr(self, "background_ingestor", None):
+            ok = ok and self.async_kev_worker.flush(timeout=timeout)
+        return ok
 
     def flush_kev_queue(self, timeout: Optional[float] = None) -> bool:
-        """Flushes the asynchronous Kev verification queue, blocking until all background tasks complete."""
-        if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
-            return self.async_kev_worker.flush(timeout=timeout)
-        return True
+        """Flushes the asynchronous queue, blocking until all background tasks complete."""
+        return self.flush_background_queue(timeout=timeout)
 
     def prioritize_passage(self, passage_id: str) -> bool:
-        """Elevates an enqueued passage to high priority in the async verification queue."""
+        """Elevates an enqueued passage to high priority in the async/background queue."""
+        if hasattr(self, "background_ingestor") and self.background_ingestor is not None:
+            if self.background_ingestor.prioritize(passage_id):
+                return True
         if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
             return self.async_kev_worker.prioritize(passage_id)
         return False
@@ -831,6 +895,13 @@ class CognitivePipeline:
             events=[ev.to_extracted_event() for ev in skeleton_res.events if hasattr(ev, "to_extracted_event")],
         )
         setattr(graph, "extraction_result", legacy_extraction)
+
+        # Update PassageStore ingestion state (§Phase 4/5)
+        if hasattr(self.passage_store, "set_ingestion_state"):
+            if self.kev_mode == "async":
+                self.passage_store.set_ingestion_state(pid, "PENDING")
+            else:
+                self.passage_store.set_ingestion_state(pid, "FULL")
 
         # Dispatch background verification in async mode
         if self.kev_mode == "async" and self.async_kev_worker is not None:
@@ -1860,7 +1931,7 @@ class CognitivePipeline:
         )
         target_units = macro_blocks if ms_cfg.filter_unit in ("macro", "macro_head") else all_micro_chunks
         scored_units = filt.score(intent, target_units)
-        kept_units = filt.apply_keep_policy(scored_units)
+        kept_units, _ = filt.apply_keep_policy(scored_units)
         t_flt_ms = (time.perf_counter() - t_flt0) * 1000.0
         if self.tracer:
             gpu_flt = sum(getattr(u, "metadata", {}).get("gpu_calls", 0) for u in scored_units)
@@ -1898,11 +1969,14 @@ class CognitivePipeline:
                         text=u_text,
                     )
                 )
+            if self.passage_store.get_ingestion_state(pid) is None:
+                self.passage_store.set_ingestion_state(pid, "PENDING")
 
         if effective_mode == FastPathMode.RAW_ONLY.value:
             # M-A: 0 synchronous transductions
             units_transduced = 0
             deferred_units = len(kept_units)
+            deferred_list = list(kept_units)
             subgraph = None
 
         elif effective_mode == FastPathMode.HOT_TRANSDUCE.value:
@@ -1911,6 +1985,7 @@ class CognitivePipeline:
             units_to_transduce = kept_units[:n]
             units_transduced = len(units_to_transduce)
             deferred_units = max(0, len(kept_units) - units_transduced)
+            deferred_list = list(kept_units[n:])
 
             for idx, ku in enumerate(units_to_transduce):
                 pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_hot_{idx+1}"
@@ -1940,6 +2015,7 @@ class CognitivePipeline:
             units_to_transduce = kept_units
             units_transduced = len(units_to_transduce)
             deferred_units = 0
+            deferred_list = []
 
             for idx, ku in enumerate(units_to_transduce):
                 pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_full_{idx+1}"
@@ -1970,6 +2046,7 @@ class CognitivePipeline:
                 self.ingest_document(context_text, doc_id="doc_01", validate=False)
                 units_transduced = len(all_micro_chunks) or 1
             deferred_units = 0
+            deferred_list = []
             t_ppr0 = time.perf_counter()
             subgraph = self.retriever.retrieve_subgraph_for_query(
                 query=query_text,
@@ -1982,43 +2059,81 @@ class CognitivePipeline:
             if self.tracer:
                 self.tracer.record_stage_timing("PPR", t_ppr_ms, gpu_calls=0)
 
-        # Step 6: Context Assembly
-        t_asm0 = time.perf_counter()
-        fast_ctx = assembler.assemble(
-            subgraph=subgraph,
-            kept_units=kept_units,
-            passage_store=self.passage_store,
-            max_tokens=max_context_tokens,
-            query_text=query_text,
-            effective_mode=effective_mode,
-            coverage_score=coverage_score,
-            activations=getattr(subgraph, "activations", None) if subgraph else None,
-            transduced_count=units_transduced,
-        )
-        t_asm_ms = (time.perf_counter() - t_asm0) * 1000.0
-        if self.tracer:
-            self.tracer.record_stage_timing("context assembly", t_asm_ms, gpu_calls=0)
+        # Enqueue deferred chunks for asynchronous background completion (§Phase 5)
+        if deferred_units > 0 and deferred_list:
+            for idx, ku in enumerate(deferred_list):
+                pid = ku.unit_id if hasattr(ku, "unit_id") else f"P_def_{idx+1}"
+                u_text = ku.unit.text if hasattr(ku, "unit") and hasattr(ku.unit, "text") else (ku.text if hasattr(ku, "text") else str(ku))
+                score = getattr(ku, "score", 0.5)
+                parent_macro_id = getattr(getattr(ku, "unit", ku), "parent_macro_id", None)
+                concept_codes = getattr(getattr(ku, "unit", ku), "concept_codes", [])
 
-        # Step 7: Answer Generation
-        t_ans0 = time.perf_counter()
-        answer = ""
-        if subgraph and len(subgraph.nodes) > 0:
-            try:
-                answer = self.answer_query(query_text, target_graph=subgraph)
-            except Exception:
-                answer = ""
+                if self.passage_store is not None:
+                    rec = self.passage_store.get_passage(pid)
+                    if rec is None:
+                        self.passage_store.add_passage(
+                            PassageRecord(
+                                passage_id=pid,
+                                doc_id="doc_01",
+                                char_span=(0, len(u_text)),
+                                text=u_text,
+                                granularity="MICRO",
+                                parent_macro_id=parent_macro_id,
+                                concept_codes=concept_codes,
+                            )
+                        )
+                    if self.passage_store.get_ingestion_state(pid) != "FULL":
+                        self.passage_store.set_ingestion_state(pid, "PENDING")
 
-        if not answer or answer == "I do not have sufficient information in the knowledge graph to verify this.":
-            # Extract from retrieved raw passage stream
-            if fast_ctx.stream2_passages:
-                lines = [l.strip() for l in fast_ctx.stream2_passages.split("\n") if l.strip() and not l.startswith("===") and not l.startswith("[Passage")]
-                answer = lines[0] if lines else "No evidence found."
-            else:
-                answer = "No evidence found."
+                if getattr(self, "background_enabled", False) and getattr(self, "background_ingestor", None) is not None:
+                    self.background_ingestor.enqueue_deferred(
+                        passage_id=pid,
+                        doc_id="doc_01",
+                        text=u_text,
+                        filter_score=score,
+                        parent_macro_id=parent_macro_id,
+                        concept_codes=concept_codes,
+                        graph=self.active_canvas,
+                    )
 
-        t_ans_ms = (time.perf_counter() - t_ans0) * 1000.0
-        if self.tracer:
-            self.tracer.record_stage_timing("reader", t_ans_ms, gpu_calls=0)
+        with self.foreground_scope():
+            # Step 6: Context Assembly
+            t_asm0 = time.perf_counter()
+            fast_ctx = assembler.assemble(
+                subgraph=subgraph,
+                kept_units=kept_units,
+                passage_store=self.passage_store,
+                max_tokens=max_context_tokens,
+                query_text=query_text,
+                effective_mode=effective_mode,
+                coverage_score=coverage_score,
+                activations=getattr(subgraph, "activations", None) if subgraph else None,
+                transduced_count=units_transduced,
+            )
+            t_asm_ms = (time.perf_counter() - t_asm0) * 1000.0
+            if self.tracer:
+                self.tracer.record_stage_timing("context assembly", t_asm_ms, gpu_calls=0)
+
+            # Step 7: Answer Generation
+            t_ans0 = time.perf_counter()
+            answer = ""
+            if subgraph and len(subgraph.nodes) > 0:
+                try:
+                    answer = self.answer_query(query_text, target_graph=subgraph)
+                except Exception:
+                    answer = ""
+
+            if not answer or answer == "I do not have sufficient information in the knowledge graph to verify this.":
+                # Extract from retrieved raw passage stream
+                if fast_ctx.stream2_passages:
+                    lines = [l.strip() for l in fast_ctx.stream2_passages.split("\n") if l.strip() and not l.startswith("===") and not l.startswith("[Passage")]
+                    answer = lines[0] if lines else "No evidence found."
+                else:
+                    answer = "No evidence found."
+
+            t_ans_ms = (time.perf_counter() - t_ans0) * 1000.0
+            if self.tracer:
+                self.tracer.record_stage_timing("reader", t_ans_ms, gpu_calls=0)
 
         stage_timings = dict(self.tracer.stage_timings) if self.tracer else {}
         gpu_calls = self.tracer.get_total_gpu_calls() if self.tracer else 0
@@ -2173,8 +2288,12 @@ class CognitivePipeline:
 
     def close(self):
         """Release PageTable, EntityEngine, and background worker resources."""
+        if hasattr(self, "background_ingestor") and self.background_ingestor is not None:
+            self.background_ingestor.stop(wait=True)
+            self.background_ingestor = None
         if hasattr(self, "async_kev_worker") and self.async_kev_worker is not None:
-            self.async_kev_worker.stop()
+            self.async_kev_worker.stop(wait=True)
+            self.async_kev_worker = None
         if hasattr(self, "entity_engine") and hasattr(self.entity_engine, "close"):
             self.entity_engine.close()
         if hasattr(self, "page_table") and hasattr(self.page_table, "close"):

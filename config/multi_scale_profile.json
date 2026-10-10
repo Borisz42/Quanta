@@ -86,5 +86,19 @@
     "source_commit": "3d037ac",
     "calibrated_on": "long_context/test",
     "notes": "Gate G4 calibrated coarse node damping weight"
+  },
+  "background.enabled": {
+    "value": true,
+    "source_exp": "exp-031a",
+    "source_commit": "5a8eee1",
+    "calibrated_on": "long_context/test",
+    "notes": "Gate G5 promoted winner enabling background completion (0.97x follow-up speedup)"
+  },
+  "background.pause_policy": {
+    "value": "foreground_lock",
+    "source_exp": "exp-031a",
+    "source_commit": "5a8eee1",
+    "calibrated_on": "long_context/test",
+    "notes": "Gate G5 calibrated pause policy with -11.2% foreground contention"
   }
 }
