@@ -43,6 +43,7 @@ class QuantaNode:
         "time_start",
         "time_end",
         "passage_id",
+        "parent_macro_id",
         "span_start",
         "span_end",
         "salience",
@@ -74,6 +75,7 @@ class QuantaNode:
         evidence_source: str = "direct_observation",
         node_type: Optional[str] = None,
         concept_code: Optional[int] = None,
+        parent_macro_id: Optional[str] = None,
     ):
         raw_vec = semantic_vector if vector is None else vector
         if raw_vec is None:
@@ -110,6 +112,7 @@ class QuantaNode:
         self.time_start: Optional[Union[int, float]] = None
         self.time_end: Optional[Union[int, float]] = None
         self.passage_id: Optional[str] = passage_id
+        self.parent_macro_id: Optional[str] = parent_macro_id
         self.span_start: Optional[int] = span_start
         self.span_end: Optional[int] = span_end
         self.salience: float = float(salience)
@@ -199,6 +202,7 @@ class QuantaNode:
         span_start: int,
         span_end: int,
         confidence: float = 1.0,
+        parent_macro_id: Optional[str] = None,
     ) -> None:
         """Binds this semantic node to an immutable passage text span.
         
@@ -207,11 +211,14 @@ class QuantaNode:
             span_start: Starting character offset.
             span_end: Ending character offset.
             confidence: Provenance confidence score [0.0, 1.0].
+            parent_macro_id: Optional parent macro passage identifier if passage is micro.
         """
         self.passage_id = passage_id
         self.span_start = span_start
         self.span_end = span_end
         self.confidence = float(confidence)
+        if parent_macro_id is not None:
+            self.parent_macro_id = parent_macro_id
 
     def get_grounded_text(self, passage_store: Any) -> Optional[str]:
         """Retrieves grounded verbatim passage text span from the passage store.
@@ -392,6 +399,7 @@ class QuantaNode:
             evidence_source=self.evidence_source,
             node_type=self.node_type,
             concept_code=self.concept_code,
+            parent_macro_id=self.parent_macro_id,
         )
         new_node.register_binding = self.register_binding
         new_node.time_start = self.time_start
@@ -414,6 +422,7 @@ class QuantaNode:
             "active_slots": readable_slots,
             "packed_bytes_hex": self.vector.to_bytes().hex(),
             "passage_id": self.passage_id,
+            "parent_macro_id": self.parent_macro_id,
             "span_start": self.span_start,
             "span_end": self.span_end,
             "salience": self.salience,
@@ -442,6 +451,7 @@ class QuantaNode:
             literal=data.get("literal"),
             parent_cid=data.get("parent_cid"),
             passage_id=data.get("passage_id"),
+            parent_macro_id=data.get("parent_macro_id"),
             span_start=data.get("span_start"),
             span_end=data.get("span_end"),
             salience=float(data.get("salience", 1.0)),
@@ -470,6 +480,9 @@ class QuantaGraph:
         self.passage_to_nodes: Dict[str, Set[str]] = {}
         # Bipartite index: semantic node CID -> (passage_id, span_start, span_end)
         self.node_to_passage: Dict[str, Tuple[str, int, int]] = {}
+        # Concept anchor indices (§Phase 4)
+        self.concept_to_anchor_cids: Dict[int, Set[str]] = {}
+        self.passage_to_concept_anchors: Dict[str, Set[str]] = {}
 
     @property
     def nodes(self) -> Dict[str, QuantaNode]:
@@ -512,6 +525,149 @@ class QuantaGraph:
         if node_cid != actual_cid:
             self.passage_to_nodes[passage_id].add(node_cid)
             self.node_to_passage[node_cid] = (passage_id, span_start, span_end)
+
+    def add_concept_anchor(self, passage_id: str, concept_code: int) -> QuantaNode:
+        """Anchors a passage to a concept code node in the graph (§Phase 4).
+        
+        Creates or retrieves a concept anchor node (node_type='concept_anchor', concept_code=concept_code),
+        adds it to the graph if not present, and connects it with all nodes in passage_id (or adds a
+        coarse passage node if none exists) via 'CONCEPT_ANCHOR' edges.
+        
+        Args:
+            passage_id: Passage identifier (micro or macro).
+            concept_code: 16-bit concept identifier from MmapLexicalGrounder.
+            
+        Returns:
+            The concept anchor QuantaNode.
+        """
+        code_u16 = int(concept_code) & 0xFFFF
+        anchor_label = f"concept:{code_u16}"
+
+        # Check if an anchor node for this concept code already exists in graph
+        anchor_node = None
+        for n in self._node_list:
+            if n.node_type == "concept_anchor" and n.concept_code == code_u16:
+                anchor_node = n
+                break
+
+        if anchor_node is None:
+            vec = QuantaVector.zeros()
+            vec["TYPE_ABSTRACT_CONCEPT"] = 1
+            anchor_node = QuantaNode(
+                vector=vec,
+                anchor=anchor_label,
+                concept_code=code_u16,
+                node_type="concept_anchor",
+            )
+            self.add_node(anchor_node)
+
+        self.concept_to_anchor_cids.setdefault(code_u16, set()).add(anchor_node.cid)
+        self.passage_to_concept_anchors.setdefault(passage_id, set()).add(anchor_node.cid)
+
+        # Link to all existing nodes grounded in passage_id
+        passage_nodes = self.get_nodes_for_passage(passage_id)
+        if passage_nodes:
+            for p_node in passage_nodes:
+                if p_node.cid != anchor_node.cid:
+                    try:
+                        self.add_edge(p_node.cid, "CONCEPT_ANCHOR", anchor_node.cid, propagate_cid=False)
+                    except Exception:
+                        pass
+        else:
+            # If no fine nodes exist yet for this passage, create or find a coarse node for the passage
+            coarse_node = None
+            for n in self._node_list:
+                if n.passage_id == passage_id and n.node_type in ("macro_passage", "coarse_passage"):
+                    coarse_node = n
+                    break
+            if coarse_node is None:
+                c_vec = QuantaVector.zeros()
+                c_vec["TYPE_PROPOSITION"] = 1
+                coarse_node = QuantaNode(
+                    vector=c_vec,
+                    anchor=f"passage:{passage_id}",
+                    passage_id=passage_id,
+                    node_type="coarse_passage",
+                    concept_code=code_u16,
+                )
+                self.add_node(coarse_node)
+            if coarse_node.cid != anchor_node.cid:
+                try:
+                    self.add_edge(coarse_node.cid, "CONCEPT_ANCHOR", anchor_node.cid, propagate_cid=False)
+                except Exception:
+                    pass
+
+        return anchor_node
+
+    def upgrade_passage(self, passage_id: str, subgraph: QuantaGraph) -> None:
+        """Merges a newly transduced subgraph for passage_id without invalidating existing edges (§Phase 4).
+        
+        Args:
+            passage_id: Passage identifier whose representation is being upgraded from coarse to fine.
+            subgraph: Transduced fine-grained QuantaGraph containing detailed semantic nodes.
+        """
+        if not subgraph._node_list:
+            return
+
+        # 1. Identify existing nodes in self for passage_id
+        old_nodes = list(self.get_nodes_for_passage(passage_id))
+        old_coarse_nodes = [n for n in old_nodes if n.node_type in ("coarse_passage", "macro_passage")]
+
+        # 2. Add all nodes from subgraph into self
+        sub_root_cid = subgraph.root_cid
+        sub_cids: List[str] = []
+        for s_node in subgraph._node_list:
+            if s_node.passage_id is None:
+                s_node.passage_id = passage_id
+            cid = self.add_node(s_node)
+            sub_cids.append(cid)
+
+        # Preserve alias mappings from subgraph so pre-transduction CIDs remain resolvable
+        for old_c, node_ref in subgraph._cid_to_node.items():
+            self._cid_to_node[old_c] = node_ref
+
+        # 3. Add all internal edges from subgraph
+        for s_node in subgraph._node_list:
+            for rel, target_cids in s_node.edges.items():
+                for t_cid in target_cids:
+                    if self.get_node(t_cid) is not None:
+                        try:
+                            self.add_edge(s_node.cid, rel, t_cid, propagate_cid=False)
+                        except Exception:
+                            pass
+
+        primary_target_cid = sub_root_cid if (sub_root_cid and self.get_node(sub_root_cid)) else sub_cids[0]
+
+        # 4. Re-route or attach edges from old coarse nodes to the fine subgraph
+        for old_node in old_coarse_nodes:
+            # Forward incoming edges to the primary target node
+            for n in list(self._node_list):
+                for rel, targets in list(n.edges.items()):
+                    if old_node.cid in targets and n.cid not in sub_cids:
+                        if primary_target_cid not in targets:
+                            try:
+                                self.add_edge(n.cid, rel, primary_target_cid, propagate_cid=False)
+                            except Exception:
+                                pass
+            # Forward outgoing edges from old_node
+            for rel, targets in list(old_node.edges.items()):
+                for t_cid in targets:
+                    if t_cid != primary_target_cid and self.get_node(t_cid) is not None:
+                        try:
+                            self.add_edge(primary_target_cid, rel, t_cid, propagate_cid=False)
+                        except Exception:
+                            pass
+
+        # 5. Connect any concept anchors previously associated with passage_id
+        if passage_id in self.passage_to_concept_anchors:
+            for anchor_cid in self.passage_to_concept_anchors[passage_id]:
+                if self.get_node(anchor_cid) is not None:
+                    for cid in sub_cids:
+                        if cid != anchor_cid:
+                            try:
+                                self.add_edge(cid, "CONCEPT_ANCHOR", anchor_cid, propagate_cid=False)
+                            except Exception:
+                                pass
 
     def get_nodes_for_passage(self, passage_id: str) -> List[QuantaNode]:
         """Retrieves all semantic nodes grounded in the given passage."""
@@ -562,6 +718,7 @@ class QuantaGraph:
                 evidence_source=node.evidence_source,
                 node_type=node.node_type,
                 concept_code=node.concept_code,
+                parent_macro_id=node.parent_macro_id,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
             new_node.register_binding = node.register_binding
@@ -578,6 +735,8 @@ class QuantaGraph:
         cloned.root_cid = self.root_cid
         cloned.passage_to_nodes = {k: set(v) for k, v in self.passage_to_nodes.items()}
         cloned.node_to_passage = dict(self.node_to_passage)
+        cloned.concept_to_anchor_cids = {k: set(v) for k, v in self.concept_to_anchor_cids.items()}
+        cloned.passage_to_concept_anchors = {k: set(v) for k, v in self.passage_to_concept_anchors.items()}
         for attr in ("extraction_result", "validation", "chunk_id", "entity_nodes", "event_nodes"):
             if hasattr(self, attr):
                 setattr(cloned, attr, getattr(self, attr))
@@ -648,7 +807,13 @@ class QuantaGraph:
         for n in self._node_list:
             self._cid_to_node[n.cid] = n
 
-    def add_edge(self, source_cid_or_node: Union[str, QuantaNode], relation: str, target_cid_or_node: Union[str, QuantaNode]) -> str:
+    def add_edge(
+        self,
+        source_cid_or_node: Union[str, QuantaNode],
+        relation: str,
+        target_cid_or_node: Union[str, QuantaNode],
+        propagate_cid: bool = True,
+    ) -> str:
         """Adds a directed relation edge between two nodes in the graph."""
         if isinstance(source_cid_or_node, QuantaNode):
             src_node = source_cid_or_node
@@ -679,6 +844,11 @@ class QuantaGraph:
         old_src_cid = src_node.cid
         src_node.add_edge(relation, dst_node.cid)
         dst_node.parent_cid = src_node.cid
+
+        if not propagate_cid:
+            self._cid_to_node[src_node.cid] = src_node
+            return src_node.cid
+
         new_src_cid = src_node.compute_cid()
 
         if old_src_cid != new_src_cid:

@@ -398,6 +398,29 @@ class BinaryNodeTable:
         self.cid_to_node_id: Dict[str, int] = {}
         self.node_id_to_cid: Dict[int, str] = {}
         self.passage_id_map: Dict[str, int] = {}
+        # Side table for parent macro passage references (§Phase 4 layout preservation)
+        self.node_id_to_parent_macro: Dict[int, str] = {}
+        self.passage_id_to_parent_macro: Dict[str, str] = {}
+
+    def register_parent_macro(self, node_id: int, parent_macro_id: str):
+        """Associates a node_id with its parent macro passage identifier in the side table."""
+        with self._lock:
+            self.node_id_to_parent_macro[int(node_id)] = str(parent_macro_id)
+
+    def get_parent_macro(self, node_id: int) -> Optional[str]:
+        """Resolves parent macro passage identifier from the side table."""
+        with self._lock:
+            return self.node_id_to_parent_macro.get(int(node_id))
+
+    def register_passage_parent_macro(self, passage_id: Union[str, int], parent_macro_id: str):
+        """Associates a passage identifier with its parent macro passage in the side table."""
+        with self._lock:
+            self.passage_id_to_parent_macro[str(passage_id)] = str(parent_macro_id)
+
+    def get_passage_parent_macro(self, passage_id: Union[str, int]) -> Optional[str]:
+        """Resolves parent macro passage identifier for a given passage in the side table."""
+        with self._lock:
+            return self.passage_id_to_parent_macro.get(str(passage_id))
 
     def register_node_cid(self, node_id: int, cid: str):
         """Associates a 32-bit integer node_id with its 256-bit BLAKE3 CID."""
