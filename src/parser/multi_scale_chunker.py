@@ -275,3 +275,9 @@ class HierarchicalChunker:
             "hit_rate": hit_rate,
             "avg_ms_per_query": avg_ms,
         }
+
+    def chunk(self, text: str) -> List[MacroBlock]:
+        """Convenience method returning macro blocks for input text."""
+        macro_blocks, _ = self.chunk_document(text)
+        return macro_blocks
+
