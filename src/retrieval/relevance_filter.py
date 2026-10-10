@@ -28,7 +28,12 @@ from models.kev_engine import KevDecisionEngine, MockKevEngine, RelevanceScoreRe
 from parser.chunker import DiscourseChunk
 from parser.mmap_grounder import MmapLexicalGrounder
 from parser.multi_scale_chunker import MacroBlock
-from parser.task_boundary_extractor import ExtractedTaskIntent
+from parser.task_boundary_extractor import (
+    ExtractedTaskIntent,
+    QUESTION_STOPWORDS,
+    clean_core_query,
+    extract_target_entities,
+)
 
 
 @dataclass
@@ -104,9 +109,12 @@ class RelevanceFilter:
     ) -> List[ScoredUnit]:
         """Score each discourse unit according to the configured strategy."""
         t0 = time.perf_counter()
-        query_text = (
-            intent.query_text if isinstance(intent, ExtractedTaskIntent) else str(intent)
-        )
+        if isinstance(intent, ExtractedTaskIntent):
+            query_text = intent.query_text
+            target_entities = list(intent.target_entities)
+        else:
+            query_text = str(intent)
+            target_entities = extract_target_entities(query_text)
 
         if not units:
             self.last_scoring_time_ms = 0.0
@@ -118,7 +126,7 @@ class RelevanceFilter:
             scored = self._score_passthrough(units)
             self.last_gpu_calls = 0
         elif strat in ("F-A", "LEXICAL", "BM25"):
-            scored = self._score_bm25(query_text, units)
+            scored = self._score_bm25(query_text, units, target_entities=target_entities)
             self.last_gpu_calls = 0
         elif strat in ("F-B", "CONCEPT", "CONCEPT_OVERLAP"):
             scored = self._score_concept_overlap(query_text, units)
@@ -133,7 +141,7 @@ class RelevanceFilter:
             scored = self._score_kev_macro(query_text, units, head_only=True)
             self.last_gpu_calls = len(units)
         elif strat in ("F-F", "CASCADE"):
-            scored, gpu_calls = self._score_cascade(query_text, units)
+            scored, gpu_calls = self._score_cascade(query_text, units, target_entities=target_entities)
             self.last_gpu_calls = gpu_calls
         else:
             logger.warning("Unknown filter strategy '%s', falling back to passthrough", strat)
@@ -196,7 +204,10 @@ class RelevanceFilter:
             current_tokens = 0
             for u in top_k_kept:
                 u_tok = max(1, u.tokens)
-                if not budget_kept or (current_tokens + u_tok <= budget):
+                is_exact_id = bool(u.metadata.get("has_exact_identifier", False))
+                # Elastic expansion up to 2500 - 3000 tokens for units matching exact technical identifiers
+                effective_budget = max(budget, 2500) if is_exact_id else budget
+                if not budget_kept or (current_tokens + u_tok <= effective_budget):
                     budget_kept.append(u)
                     current_tokens += u_tok
                 else:
@@ -254,17 +265,47 @@ class RelevanceFilter:
         self,
         query: str,
         units: Sequence[Union[DiscourseChunk, MacroBlock]],
+        target_entities: Optional[Sequence[str]] = None,
     ) -> List[ScoredUnit]:
-        """Variant F-A: Okapi BM25 scoring over tokenized vocabulary."""
-        q_terms = [t.lower() for t in re.findall(r"\b[A-Za-z0-9_]{2,}\b", query)]
-        if not q_terms:
+        """Variant F-A+: Okapi BM25 scoring with stopword filtering & entity/identifier boosting."""
+        clean_q = clean_core_query(query) if query else ""
+        raw_tokens = [t.lower() for t in re.findall(r"\b[A-Za-z0-9_]{2,}\b", clean_q or query)]
+        if not raw_tokens:
             return self._score_passthrough(units)
+
+        # Exclude QUESTION_STOPWORDS unless no content terms remain
+        content_tokens = [t for t in raw_tokens if t not in QUESTION_STOPWORDS]
+        q_terms = content_tokens if content_tokens else raw_tokens
+
+        # Collect target entities and technical identifiers from query & target_entities
+        all_entities: List[str] = list(target_entities or [])
+        # Extract technical alphanumeric variable IDs directly from query (e.g. ACC-9042, SRV-ALPHA)
+        for code in re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b|\bVault\s+\d+\b", f"{clean_q} {query}"):
+            if code not in all_entities:
+                all_entities.append(code)
+
+        tech_entities: List[str] = []
+        multi_word_entities: List[str] = []
+        single_word_entities: List[str] = []
+
+        for ent in all_entities:
+            ent_clean = ent.strip()
+            if not ent_clean or ent_clean.lower() in QUESTION_STOPWORDS:
+                continue
+            if re.search(r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+|\bVault\s+\d+", ent_clean):
+                tech_entities.append(ent_clean)
+            elif " " in ent_clean:
+                multi_word_entities.append(ent_clean)
+            elif len(ent_clean) > 2:
+                single_word_entities.append(ent_clean)
 
         # Tokenize corpus units
         doc_tokens_list: List[List[str]] = []
         doc_len_list: List[int] = []
+        doc_texts: List[str] = []
         for u in units:
             u_text = u.text if hasattr(u, "text") else ""
+            doc_texts.append(u_text)
             tokens = [t.lower() for t in re.findall(r"\b[A-Za-z0-9_]{2,}\b", u_text)]
             doc_tokens_list.append(tokens)
             doc_len_list.append(len(tokens))
@@ -285,7 +326,10 @@ class RelevanceFilter:
             idf[q] = math.log((N - count + 0.5) / (count + 0.5) + 1.0)
 
         raw_scores: List[float] = []
-        for doc, doc_len in zip(doc_tokens_list, doc_len_list):
+        unit_exact_id_flags: List[bool] = []
+        unit_matched_entities: List[List[str]] = []
+
+        for doc, doc_len, u_text in zip(doc_tokens_list, doc_len_list, doc_texts):
             doc_tf: Dict[str, int] = {}
             for t in doc:
                 doc_tf[t] = doc_tf.get(t, 0) + 1
@@ -296,7 +340,41 @@ class RelevanceFilter:
                 freq = doc_tf.get(q, 0)
                 if freq > 0:
                     s += idf.get(q, 0.0) * ((freq * (k1 + 1.0)) / (freq + denom_len))
-            raw_scores.append(s)
+
+            # Compute exact-match bonuses for entities
+            entity_boost = 0.0
+            has_exact_id = False
+            matched: List[str] = []
+
+            # 1. Technical alphanumeric identifiers (+6.0 boost)
+            for te in tech_entities:
+                if re.search(r"\b" + re.escape(te) + r"\b", u_text, re.IGNORECASE):
+                    entity_boost += 6.0
+                    has_exact_id = True
+                    matched.append(te)
+
+            # 2. Multi-word proper names (+5.0 boost)
+            for mwe in multi_word_entities:
+                if re.search(r"\b" + re.escape(mwe) + r"\b", u_text, re.IGNORECASE):
+                    entity_boost += 5.0
+                    matched.append(mwe)
+
+            # 3. Standalone proper nouns (+2.5 boost)
+            for swe in single_word_entities:
+                if re.search(r"\b" + re.escape(swe) + r"\b", u_text, re.IGNORECASE):
+                    entity_boost += 2.5
+                    matched.append(swe)
+
+            # Multiplicative boost for units with entity matches
+            if entity_boost > 0.0:
+                mult_factor = 1.5 if has_exact_id or any(m in multi_word_entities for m in matched) else 1.3
+                boosted_s = (s + entity_boost) * mult_factor
+            else:
+                boosted_s = s
+
+            raw_scores.append(boosted_s)
+            unit_exact_id_flags.append(has_exact_id)
+            unit_matched_entities.append(matched)
 
         # Calibrate / normalize scores into [0.0, 1.0]
         max_s = max(raw_scores) if raw_scores else 1.0
@@ -304,7 +382,7 @@ class RelevanceFilter:
         denom = (max_s - min_s) if (max_s - min_s) > 1e-6 else 1.0
 
         res: List[ScoredUnit] = []
-        for u, r_score in zip(units, raw_scores):
+        for u, r_score, exact_id, matched in zip(units, raw_scores, unit_exact_id_flags, unit_matched_entities):
             u_id, u_toks, span, gran = self._extract_unit_meta(u)
             norm_score = (r_score - min_s) / denom
             cal_score = self._apply_calibration(norm_score, raw_score=r_score)
@@ -318,7 +396,11 @@ class RelevanceFilter:
                     tokens=u_toks,
                     char_span=span,
                     granularity=gran,
-                    metadata={"strategy": "F-A_BM25"},
+                    metadata={
+                        "strategy": "F-A_BM25",
+                        "has_exact_identifier": exact_id,
+                        "matched_entities": matched,
+                    },
                 )
             )
         return res
@@ -464,9 +546,10 @@ class RelevanceFilter:
         self,
         query: str,
         units: Sequence[Union[DiscourseChunk, MacroBlock]],
+        target_entities: Optional[Sequence[str]] = None,
     ) -> Tuple[List[ScoredUnit], int]:
         """Variant F-F: Stage 1 BM25 pre-filter followed by Stage 2 Kev-4B re-ranking."""
-        stage1 = self._score_bm25(query, units)
+        stage1 = self._score_bm25(query, units, target_entities=target_entities)
         # Stage 1 prefilter: keep top 50% or top 8 units
         sorted_s1 = sorted(stage1, key=lambda u: u.score, reverse=True)
         keep_n = max(2, min(len(units), max(len(units) // 2, 6)))

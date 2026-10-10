@@ -540,7 +540,9 @@ class PairedEvaluator:
                     "X-Quanta-Reset": "true",
                     "X-Quanta-Timeout": str(sample_timeout),
                 }
-                if sample.suite == "musique":
+                if sample.token_count > 2000:
+                    headers_b["X-Quanta-Max-Context-Tokens"] = "2500"
+                elif sample.suite == "musique":
                     headers_b["X-Quanta-Max-Context-Tokens"] = "1500"
                 if session_id:
                     headers_b["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_local"
@@ -592,7 +594,9 @@ class PairedEvaluator:
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
             }
-            if sample.suite == "musique":
+            if sample.token_count > 2000:
+                headers_c["X-Quanta-Max-Context-Tokens"] = "2500"
+            elif sample.suite == "musique":
                 headers_c["X-Quanta-Max-Context-Tokens"] = "1500"
             if session_id:
                 headers_c["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_global"

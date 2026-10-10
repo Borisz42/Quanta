@@ -48,7 +48,7 @@ class QuantaProxyConfig:
     """Runtime configuration for QUANTA OpenAI Reverse Proxy."""
     backend_url: str = field(default_factory=lambda: os.getenv("QUANTA_BACKEND_URL", "http://127.0.0.1:8888/v1"))
     compression_threshold: int = field(default_factory=lambda: int(os.getenv("QUANTA_COMPRESSION_THRESHOLD", "2000")))
-    max_context_tokens: int = field(default_factory=lambda: int(os.getenv("QUANTA_MAX_CONTEXT_TOKENS", "2048")))
+    max_context_tokens: int = field(default_factory=lambda: int(os.getenv("QUANTA_MAX_CONTEXT_TOKENS", "2500")))
     context_format: str = "english"  # 'english' or 'sexpr'
     always_enrich: bool = False
     page_table_path: Optional[Union[str, Path]] = field(default_factory=lambda: os.getenv("QUANTA_PAGE_TABLE_PATH", None))
@@ -779,11 +779,12 @@ async def expand_context_dialogue(
             if doc_from_system and doc_from_system not in full_prompt:
                 full_prompt = f"{doc_from_system}\n\n{full_prompt}"
             fp_cfg = pipeline.multi_scale_config.with_overrides({"fast_path.mode": active_fp_mode})
+            effective_fp_tokens = max_context_tokens if max_context_tokens is not None else (2500 if raw_tokens > 2000 else 1500)
             fp_res = await asyncio.to_thread(
                 pipeline.answer_long_context,
                 full_prompt,
                 config=fp_cfg,
-                max_context_tokens=max_context_tokens or 1500,
+                max_context_tokens=effective_fp_tokens,
                 cold_start=False,
             )
             retrieved_context = fp_res.context

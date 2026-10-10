@@ -330,7 +330,7 @@ class FastPathAssembler:
         subgraph: Optional[QuantaGraph] = None,
         kept_units: Sequence[Any] = (),
         passage_store: Optional[PassageStore] = None,
-        max_tokens: int = 1500,
+        max_tokens: int = 2500,
         query_text: str = "",
         effective_mode: Optional[str] = None,
         coverage_score: Optional[float] = None,

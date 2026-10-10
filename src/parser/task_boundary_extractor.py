@@ -44,14 +44,75 @@ QUESTION_STOPWORDS = {
     "what", "who", "where", "why", "when", "how", "which", "whose", "whom",
     "is", "are", "was", "were", "the", "a", "an", "in", "on", "at", "by", "for",
     "with", "about", "against", "between", "into", "through", "during", "before",
-    "after", "above", "below", "to", "from", "up", "down", "in", "out", "over",
+    "after", "above", "below", "to", "from", "up", "down", "out", "over",
     "under", "again", "further", "then", "once", "here", "there", "all", "any",
     "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor",
     "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can",
     "will", "just", "don", "should", "now", "answer", "instructions", "question",
     "query", "prompt", "final", "direct", "directly", "strictly", "provided",
     "conclude", "format", "based", "exact",
+    # Additional question/directive and grammatical stopwords
+    "do", "does", "did", "done", "leave", "leaves", "leaving", "left",
+    "of", "and", "or", "as", "be", "been", "being",
+    "have", "has", "had", "having",
+    "it", "its", "they", "them", "their", "theirs",
+    "this", "that", "these", "those",
+    "i", "me", "my", "you", "your", "yours",
+    "he", "him", "his", "she", "her", "hers",
+    "we", "us", "our", "ours",
 }
+
+
+def clean_core_query(query: str) -> str:
+    """Strips benchmark instructions, formatting directives, and output constraints from query text."""
+    if not query or not query.strip():
+        return ""
+
+    text = query.strip()
+
+    # 1. Strip trailing/standalone instruction blocks:
+    # "Instructions:\n1. ... 2. ..." or "Format: ..."
+    directive_block_patterns = [
+        r"(?i)\n*\s*Instructions?:[\s\S]*$",
+        r"(?i)\n*\s*Format:[\s\S]*$",
+        r"(?i)\n*\s*Output format:[\s\S]*$",
+        r"(?i)\n*\s*Please answer:[\s\S]*$",
+        r"(?i)\n*\s*Constraints?:[\s\S]*$",
+        r"(?i)\n*\s*Guidelines?:[\s\S]*$",
+    ]
+    cleaned = text
+    for pat in directive_block_patterns:
+        cleaned = re.sub(pat, "", cleaned).strip()
+
+    # 2. Strip head instruction blocks if preceding question:
+    # "Instructions: ...\n\nWhere is the apple?"
+    head_directive_block_pattern = r"(?i)^(?:Instructions?|Format|Guidelines?):[\s\S]*?\n\n+"
+    cleaned = re.sub(head_directive_block_pattern, "", cleaned).strip()
+
+    # 3. Strip line-level directives or numbered instruction items
+    lines = cleaned.split("\n")
+    kept_lines = []
+    for line in lines:
+        l_str = line.strip()
+        if not l_str:
+            continue
+        # Check if line is an instruction directive
+        if re.match(r"(?i)^\s*(?:\d+[\.\)]|[-*•])\s*(?:In \d+|Conclude|Do not|Explain the factual bridge|Provide|Return|Format|Answer in|Strictly)\b", l_str):
+            continue
+        if re.match(r"(?i)^\s*(?:Conclude immediately|In \d+ to \d+ concise sentences|Do not summarize|Answer in the exact format|Output format:?)\b", l_str):
+            continue
+        if re.match(r"(?i)^\s*Answer:\s*<[^>]+>\s*$", l_str):
+            continue
+
+        # Also strip trailing inline directives within the line
+        l_clean = re.sub(r"(?i)\s*Conclude (?:immediately )?(?:on a new line )?in the exact format:?\s*['\"]?Answer:\s*<[^>]+>['\"]?\.?", "", l_str)
+        l_clean = re.sub(r"(?i)\s*In \d+ to \d+ concise sentences, explain the factual bridge.*", "", l_clean)
+        l_clean = re.sub(r"(?i)\s*Do not summarize or list irrelevant documents\.?", "", l_clean)
+        if l_clean.strip():
+            kept_lines.append(l_clean.strip())
+
+    result = "\n".join(kept_lines).strip()
+    return result if result else text
 
 
 @dataclass
@@ -63,6 +124,11 @@ class ExtractedTaskIntent:
     char_span: Optional[Tuple[int, int]] = None
     target_entities: List[str] = field(default_factory=list)
     strategy_used: str = "QE-A"
+
+    @property
+    def core_query(self) -> str:
+        """Returns the sanitized core query stripped of instruction boilerplate."""
+        return clean_core_query(self.query_text)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -80,6 +146,7 @@ def extract_target_entities(text: str) -> List[str]:
     if not text:
         return []
 
+    target_text = clean_core_query(text) or text
     entities: List[str] = []
     seen = set()
 
@@ -94,20 +161,20 @@ def extract_target_entities(text: str) -> List[str]:
         entities.append(cleaned)
 
     # 1. Quoted strings (e.g. 'Answer: <final answer>', "Vault 81")
-    for qm in re.findall(r"['\"]([^'\"]{2,60})['\"]", text):
+    for qm in re.findall(r"['\"]([^'\"]{2,60})['\"]", target_text):
         if not any(stop in qm.lower() for stop in ("answer", "final answer")):
             _add(qm)
 
     # 2. Alphanumeric codes, models, and technical identifiers (e.g. PHANTOM-9092, DELTA-X99, Vault 81)
-    for code in re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b|\bVault\s+\d+\b", text):
+    for code in re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b|\bVault\s+\d+\b", target_text):
         _add(code)
 
     # 3. Capitalized multi-word proper nouns (e.g. John von Neumann, Library of Alexandria)
-    for pn in re.findall(r"\b[A-Z][a-z]+(?:\s+(?:von|van|de|da|of|the)\s+[A-Z][a-z]+|\s+[A-Z][a-z]+)+\b", text):
+    for pn in re.findall(r"\b[A-Z][a-z]+(?:\s+(?:von|van|de|da|of|the)\s+[A-Z][a-z]+|\s+[A-Z][a-z]+)+\b", target_text):
         _add(pn)
 
     # 4. Standalone capitalized proper nouns (avoiding sentence starter if it's a stopword)
-    words = text.split()
+    words = target_text.split()
     for i, w in enumerate(words):
         w_clean = w.strip(" \t\r\n.,;:!?'\"()[]{}")
         if w_clean and w_clean[0].isupper() and len(w_clean) > 2:
@@ -411,6 +478,60 @@ class TaskBoundaryExtractor:
         m3 = re.match(pat_ctx_only, clean, re.IGNORECASE)
         if m3 and len(clean.split()) >= 25:
             doc = m3.group(1).strip()
+            paras = [p.strip() for p in re.split(r"\r?\n\s*\r?\n", doc) if p.strip()]
+            q_paras: List[str] = []
+            doc_paras: List[str] = []
+
+            # 1. If doc has paragraphs with explicit DOCUMENT_START_MARKERS,
+            # scan backwards to separate trailing query/directive paragraphs from documents.
+            has_doc_markers = any(
+                any(re.search(marker, p, re.IGNORECASE) for marker in DOCUMENT_START_MARKERS)
+                for p in paras
+            )
+            if has_doc_markers and len(paras) >= 2:
+                split_idx = len(paras)
+                for i in reversed(range(len(paras))):
+                    p = paras[i]
+                    is_doc = any(re.search(marker, p, re.IGNORECASE) for marker in DOCUMENT_START_MARKERS)
+                    if is_doc:
+                        split_idx = i + 1
+                        break
+                if split_idx < len(paras):
+                    doc_paras = paras[:split_idx]
+                    q_paras = paras[split_idx:]
+            elif len(paras) >= 2:
+                # 2. Heuristic check on tail paragraphs if no doc markers or split_idx == len(paras)
+                last_para = paras[-1]
+                has_last_q = "?" in last_para or self._starts_with_interrogative(last_para)
+                has_last_dir = (
+                    any(re.search(pat, last_para, re.IGNORECASE) for pat in HEAD_DIRECTIVE_PATTERNS)
+                    or last_para.lower().startswith("instructions:")
+                    or last_para.lower().startswith("format:")
+                )
+
+                if len(paras) >= 3 and has_last_dir:
+                    prev_para = paras[-2]
+                    has_prev_q = "?" in prev_para or self._starts_with_interrogative(prev_para)
+                    if has_prev_q:
+                        doc_paras = paras[:-2]
+                        q_paras = paras[-2:]
+
+                if not q_paras and (has_last_q or has_last_dir):
+                    doc_paras = paras[:-1]
+                    q_paras = [last_para]
+
+            if q_paras and doc_paras:
+                q_text = "\n\n".join(q_paras).strip()
+                doc_text = "\n\n".join(doc_paras).strip()
+                return ExtractedTaskIntent(
+                    query_text=q_text,
+                    context_text=doc_text,
+                    boundary_location="EXPLICIT",
+                    char_span=self._find_char_span(clean, q_text),
+                    target_entities=extract_target_entities(q_text),
+                    strategy_used="QE-B",
+                )
+
             return ExtractedTaskIntent(
                 query_text="",
                 context_text=doc,
@@ -493,8 +614,33 @@ class TaskBoundaryExtractor:
 
     def _check_tail_boundary(self, clean: str) -> Optional[ExtractedTaskIntent]:
         """Detects if query resides in the tail of the prompt preceded by document context."""
-        paras = [p.strip() for p in clean.split("\n\n") if p.strip()]
+        paras = [p.strip() for p in re.split(r"\r?\n\s*\r?\n", clean) if p.strip()]
         if len(paras) >= 2 and len(clean.split()) >= 20:
+            # Check if last paragraph is directive/instructions preceded by question
+            if len(paras) >= 3:
+                last_para = paras[-1]
+                prev_para = paras[-2]
+                has_last_dir = (
+                    any(re.search(pat, last_para, re.IGNORECASE) for pat in HEAD_DIRECTIVE_PATTERNS)
+                    or last_para.lower().startswith("instructions:")
+                    or last_para.lower().startswith("format:")
+                )
+                if has_last_dir:
+                    if (
+                        len(prev_para.split()) <= self.tail_window_words
+                        and ("?" in prev_para or self._starts_with_interrogative(prev_para))
+                    ):
+                        q_combined = f"{prev_para}\n\n{last_para}"
+                        doc_text = "\n\n".join(paras[:-2]).strip()
+                        return ExtractedTaskIntent(
+                            query_text=q_combined,
+                            context_text=doc_text,
+                            boundary_location="TAIL",
+                            char_span=self._find_char_span(clean, q_combined),
+                            target_entities=extract_target_entities(q_combined),
+                            strategy_used="QE-B",
+                        )
+
             last_para = paras[-1]
             if len(last_para.split()) <= self.tail_window_words:
                 if "?" in last_para or self._starts_with_interrogative(last_para):

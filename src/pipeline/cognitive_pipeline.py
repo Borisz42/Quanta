@@ -1993,7 +1993,7 @@ class CognitivePipeline:
         self,
         prompt: str,
         config: Optional[MultiScaleConfig] = None,
-        max_context_tokens: int = 1500,
+        max_context_tokens: int = 2500,
         cold_start: bool = True,
     ) -> FastPathResult:
         """Orchestrates dynamic long-context answering via fast-path mode bush (§Phase 3).
@@ -2068,12 +2068,13 @@ class CognitivePipeline:
 
         # Step 3: Filter
         t_flt0 = time.perf_counter()
+        effective_keep_budget = max_context_tokens if max_context_tokens is not None else ms_cfg.filter_keep_budget_tokens
         filt = RelevanceFilter(
             strategy=ms_cfg.filter_strategy,
             unit=ms_cfg.filter_unit,
             keep_threshold=ms_cfg.filter_keep_threshold,
             keep_top_k=ms_cfg.filter_keep_top_k,
-            keep_budget_tokens=ms_cfg.filter_keep_budget_tokens,
+            keep_budget_tokens=effective_keep_budget,
             calibration=ms_cfg.get("filter.calibration"),
             grounder=getattr(self, "concept_grounder", None),
             kev_engine=getattr(self, "kev_engine", None),
@@ -2248,11 +2249,15 @@ class CognitivePipeline:
         with self.foreground_scope():
             # Step 6: Context Assembly
             t_asm0 = time.perf_counter()
+            actual_assembly_tokens = max(
+                max_context_tokens,
+                sum(getattr(u, "tokens", 0) for u in kept_units if getattr(u, "metadata", {}).get("has_exact_identifier", False))
+            )
             fast_ctx = assembler.assemble(
                 subgraph=subgraph,
                 kept_units=kept_units,
                 passage_store=self.passage_store,
-                max_tokens=max_context_tokens,
+                max_tokens=actual_assembly_tokens,
                 query_text=query_text,
                 effective_mode=effective_mode,
                 coverage_score=coverage_score,

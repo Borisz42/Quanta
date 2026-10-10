@@ -630,7 +630,7 @@ class DualStreamContextAssembler:
     def assemble_passage_stream(
         self,
         passages: List[ProjectedPassage],
-        max_tokens: int = 700,
+        max_tokens: int = 2500,
     ) -> str:
         """Constructs Stream 2: Top-K Raw Source Passages from projected passages.
 
@@ -646,11 +646,34 @@ class DualStreamContextAssembler:
         if not passages:
             return ""
 
-        blocks: List[str] = ["=== RETRIEVED SOURCE PASSAGES ==="]
-        accumulated_words = 0
         max_words = max(1, int(max_tokens / 1.33))
 
-        for p in passages:
+        # Check total words of all candidate passages
+        total_words = sum(len(p.text.split()) + 15 for p in passages if p.text.strip())
+
+        # If passages exceed max_words, select the highest-scoring subset that fits within max_words
+        if total_words > max_words:
+            sorted_by_score = sorted(passages, key=lambda p: getattr(p, "score", 0.0), reverse=True)
+            selected_passages: List[ProjectedPassage] = []
+            acc_w = 0
+            for p in sorted_by_score:
+                if not p.text.strip():
+                    continue
+                w_count = len(p.text.split()) + 15  # Include header overhead
+                if not selected_passages or (acc_w + w_count <= max_words):
+                    selected_passages.append(p)
+                    acc_w += w_count
+
+            # Re-sort selected passages into original input document order
+            passage_order = {p.passage_id: idx for idx, p in enumerate(passages)}
+            passages_to_render = sorted(selected_passages, key=lambda p: passage_order.get(p.passage_id, 0))
+        else:
+            passages_to_render = passages
+
+        blocks: List[str] = ["=== RETRIEVED SOURCE PASSAGES ==="]
+        accumulated_words = 0
+
+        for p in passages_to_render:
             if not p.text.strip():
                 continue
 
