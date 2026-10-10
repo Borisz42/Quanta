@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 import re
 import time
-from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Set, Union
 import uuid
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
@@ -337,420 +337,29 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         x_quanta_skeleton_format: Optional[str] = Header(None, alias="X-Quanta-Skeleton-Format"),
         x_quanta_co_decoded: Optional[bool] = Header(None, alias="X-Quanta-Co-Decoded"),
     ):
-        t0 = time.perf_counter()
-        stats["total_requests"] += 1
-
-        pipeline = await pool.get_pipeline(x_quanta_session_id)
-        ingested_turn_hashes = pool.get_ingested_hashes(x_quanta_session_id)
-
-        if x_quanta_reset:
-            pool.reset_session(x_quanta_session_id, pipeline)
-
-        # Handle per-request skeleton format and co-decoding overrides (§Section 3)
-        if x_quanta_skeleton_format is not None or x_quanta_co_decoded is not None:
-            tgt_fmt = x_quanta_skeleton_format or pipeline.skeleton_format
-            tgt_co = x_quanta_co_decoded if x_quanta_co_decoded is not None else pipeline.co_decoded_kev
-            pipeline.set_skeleton_format(tgt_fmt, co_decoded=tgt_co)
-
-        # Handle per-request background ingestion override (§Phase 5 & §Phase 6)
-        if x_quanta_background_ingest is not None:
-            bg_flag = str(x_quanta_background_ingest).lower().strip() in ("1", "true", "yes", "on")
-            pipeline.background_enabled = bg_flag
-            if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
-                pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides(
-                    {"background.enabled": bg_flag}
-                )
-
-        # Handle global knowledge base mounting on demand
-        if x_quanta_global_kb:
-            if getattr(pipeline.page_table, "global_kb", None) is None:
-                try:
-                    from memory.global_kb import GlobalKnowledgeBase
-                    repo_root = Path(__file__).resolve().parent.parent.parent
-                    kb_path = repo_root / "data" / "wikipedia_quanta.db"
-                    if not kb_path.exists():
-                        kb_path = Path("data/wikipedia_quanta.db")
-                    if kb_path.exists():
-                        pipeline.page_table.mount_global_kb(GlobalKnowledgeBase(kb_path))
-                        logger.info("Successfully mounted GlobalKnowledgeBase from %s", kb_path)
-                except Exception as e:
-                    logger.warning("Failed to mount GlobalKnowledgeBase: %s", e)
-        elif x_quanta_no_global_kb:
-            if hasattr(pipeline.page_table, "global_kb"):
-                pipeline.page_table.global_kb = None
-
-        threshold = x_quanta_threshold if x_quanta_threshold is not None else cfg.compression_threshold
-        format_type = x_quanta_format if x_quanta_format is not None else cfg.context_format
-        force_enrich = x_quanta_force_enrich if x_quanta_force_enrich is not None else cfg.always_enrich
-
-        raw_messages = request.messages
-        if not raw_messages:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="messages array cannot be empty")
-
-        tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
-        if tracer is not None:
-            tracer.reset_stage_telemetry()
-
-        # 1. Measure incoming token footprint
-        raw_tokens = estimate_messages_tokens(raw_messages)
-
-        # 2. Extract active user query and historical context
-        # Find the latest user message
-        last_user_idx: Optional[int] = None
-        for i in reversed(range(len(raw_messages))):
-            if raw_messages[i].role == "user":
-                last_user_idx = i
-                break
-
-        if last_user_idx is None:
-            last_user_idx = len(raw_messages) - 1
-
-        active_user_msg = raw_messages[last_user_idx]
-        raw_user_content = active_user_msg.content or ""
-
-        # Historical messages are all messages prior to the active user turn
-        prior_messages = raw_messages[:last_user_idx]
-        system_messages = [m for m in prior_messages if m.role == "system"]
-        dialogue_history = [m for m in prior_messages if m.role != "system"]
-
-        # Decompose single-turn bulky context if present
-        t_split_start = time.perf_counter()
-        doc_from_user, isolated_question = decompose_query_context(raw_user_content)
-        doc_from_system, clean_sys_inst = extract_context_from_system(system_messages)
-        t_split_ms = (time.perf_counter() - t_split_start) * 1000.0
-        if tracer is not None:
-            tracer.record_stage_timing("query split", t_split_ms, gpu_calls=0)
-
-        has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
-        user_query = isolated_question if doc_from_user else raw_user_content
-        should_compress = (raw_tokens > threshold) or (len(raw_messages) > 4 and raw_tokens > 200) or has_single_query_context
-
-        retrieved_context: str = ""
-        compressed_messages: List[Dict[str, Any]] = []
-        is_cold_start = False
-        t_ingest_ms = 0.0
-        t_ret_ms = 0.0
-        fast_path_meta: Optional[Dict[str, Any]] = None
-        active_fp_mode: Optional[str] = None
-
-        # Domain-aware gating: pure code syntax tasks should not query encyclopedic KB
-        is_code_task = bool(re.search(r"(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import)", user_query))
-
-        should_enrich_or_compress = (
-            should_compress
-            or force_enrich
-            or (bool(x_quanta_global_kb) and not has_single_query_context and not is_code_task)
+        return await execute_chat_completion(
+            request=request,
+            pool=pool,
+            config=cfg,
+            stats=stats,
+            session_id=x_quanta_session_id,
+            threshold=x_quanta_threshold,
+            format_type=x_quanta_format,
+            force_enrich=x_quanta_force_enrich,
+            global_kb=x_quanta_global_kb,
+            no_global_kb=x_quanta_no_global_kb,
+            reset_memory=x_quanta_reset,
+            validate=x_quanta_validate,
+            max_context_tokens=x_quanta_max_context_tokens,
+            timeout=x_quanta_timeout,
+            fast_path_mode=x_quanta_fast_path_mode,
+            background_ingest=x_quanta_background_ingest,
+            profile=x_quanta_profile,
+            skeleton_format=x_quanta_skeleton_format,
+            co_decoded=x_quanta_co_decoded,
+            as_dict=False,
+            raw_request=raw_request,
         )
-
-        if should_enrich_or_compress:
-            logger.info(
-                "Triggering QUANTA context compression/enrichment: raw_tokens=%d, threshold=%d, prior_turns=%d, has_single_ctx=%s, global_kb=%s",
-                raw_tokens,
-                threshold,
-                len(dialogue_history),
-                has_single_query_context,
-                bool(x_quanta_global_kb),
-            )
-
-            # Check fast_path mode from header or active profile (§Phase 3 & §Phase 6)
-            active_fp_mode = x_quanta_fast_path_mode
-            if x_quanta_profile is not None:
-                prof_str = str(x_quanta_profile).lower().strip()
-                if prof_str == "passthrough":
-                    active_fp_mode = "passthrough"
-                    if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
-                        pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides({
-                            "fast_path.mode": "passthrough",
-                            "filter.strategy": "passthrough",
-                            "background.enabled": False,
-                        })
-                elif prof_str == "calibrated":
-                    if not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
-                        fp_val = pipeline.multi_scale_config.fast_path_mode
-                        active_fp_mode = fp_val if fp_val != "passthrough" else "coverage_adaptive"
-            elif not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
-                active_fp_mode = pipeline.multi_scale_config.fast_path_mode
-
-            is_long_prompt = has_single_query_context or (raw_tokens > threshold) or (len(raw_user_content.split()) > 200)
-            fast_path_meta: Optional[Dict[str, Any]] = None
-            if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and is_long_prompt:
-                full_prompt = raw_user_content
-                if doc_from_system and doc_from_system not in full_prompt:
-                    full_prompt = f"{doc_from_system}\n\n{full_prompt}"
-                fp_cfg = pipeline.multi_scale_config.with_overrides({"fast_path.mode": active_fp_mode})
-                fp_res = await asyncio.to_thread(
-                    pipeline.answer_long_context,
-                    full_prompt,
-                    config=fp_cfg,
-                    max_context_tokens=x_quanta_max_context_tokens or 1500,
-                    cold_start=False,
-                )
-                retrieved_context = fp_res.context
-                if fp_res.isolated_query:
-                    user_query = fp_res.isolated_query
-                fast_path_meta = fp_res.to_dict()
-                t_ingest_ms = fp_res.stage_timings.get("transduction", 0.0) + fp_res.stage_timings.get("chunking", 0.0)
-                t_ret_ms = fp_res.stage_timings.get("relevance filter", 0.0) + fp_res.stage_timings.get("PPR", 0.0)
-
-            import hashlib
-            t_ingest_start = time.perf_counter()
-
-            # 1. Ingest dialogue history into CognitivePipeline if dialogue turns exist (when not using fast-path)
-            if not fast_path_meta and dialogue_history:
-                history_text_blocks = []
-                for m in dialogue_history:
-                    if m.content and m.content.strip():
-                        speaker = "Human" if m.role == "user" else "Assistant"
-                        turn_text = f"{speaker}: {m.content.strip()}"
-                        turn_hash = hashlib.sha256(turn_text.encode("utf-8")).hexdigest()
-                        if turn_hash not in ingested_turn_hashes:
-                            history_text_blocks.append(turn_text)
-                            ingested_turn_hashes.add(turn_hash)
-
-                if history_text_blocks:
-                    history_text = "\n\n".join(history_text_blocks)
-                    if history_text.strip():
-                        try:
-                            is_cold_start = True
-                            await asyncio.to_thread(pipeline.process, history_text, validate=bool(x_quanta_validate))
-                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                        except Exception as e:
-                            logger.warning("Error during dialogue history ASG ingestion: %s", e)
-
-            if not fast_path_meta:
-                # 2. Ingest single-query user context document (cold-start single query)
-                if doc_from_user:
-                    doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
-                    if doc_hash not in ingested_turn_hashes:
-                        try:
-                            is_cold_start = True
-                            await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(x_quanta_validate))
-                            ingested_turn_hashes.add(doc_hash)
-                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                        except Exception as e:
-                            logger.error("Error during user context document ASG ingestion: %s", e)
-
-                # 3. Ingest system context document if present
-                if doc_from_system:
-                    sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
-                    if sys_doc_hash not in ingested_turn_hashes:
-                        try:
-                            is_cold_start = True
-                            await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(x_quanta_validate))
-                            ingested_turn_hashes.add(sys_doc_hash)
-                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
-                        except Exception as e:
-                            logger.error("Error during system context document ASG ingestion: %s", e)
-
-                t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
-
-                # Retrieve active context via spreading activation (strictly from natural user_query)
-                t_ret_start = time.perf_counter()
-                try:
-                    # Dynamic context budgeting for multi-hop queries and multi-document benchmarks
-                    doc_text = (doc_from_user or "") + " " + (doc_from_system or "")
-                    num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
-                    query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
-
-                    # Multi-document scaling: allocate ~300-350 tokens per required hop / active document
-                    if num_doc_headings >= 10 or query_hop_depth >= 3:
-                        # Target: 4 to 5 full passages (~1,400 to 1,600 tokens), providing ~45% compression over 2,700 tokens
-                        adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
-                        effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
-                    else:
-                        # Single-turn open-domain QA (ARC-Challenge, MMLU): 350 to 450 tokens of high-density verified facts
-                        adaptive_budget = min(cfg.max_context_tokens, 450)
-                        if has_single_query_context and raw_tokens > 0:
-                            adaptive_budget = min(adaptive_budget, max(50, int(raw_tokens * 0.45)))
-                        elif dialogue_history and not has_single_query_context:
-                            pruned_toks = estimate_messages_tokens(dialogue_history)
-                            if pruned_toks > 0:
-                                adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))
-                        effective_max_tokens = x_quanta_max_context_tokens if x_quanta_max_context_tokens is not None else adaptive_budget
-
-                    if format_type in ("dual_stream", "svm"):
-                        raw_ctx = await asyncio.to_thread(
-                            pipeline.query_memory,
-                            query=user_query,
-                            format="dual_stream",
-                            max_tokens=effective_max_tokens,
-                        )
-                        retrieved_context = getattr(raw_ctx, "full_context", str(raw_ctx))
-                    else:
-                        retrieved_context = await asyncio.to_thread(
-                            pipeline.retrieve_context,
-                            query=user_query,
-                            format=format_type,
-                            max_tokens=effective_max_tokens,
-                        )
-                except Exception as e:
-                    logger.warning("Error retrieving context from PageTable: %s", e)
-                    retrieved_context = ""
-                t_ret_ms = (time.perf_counter() - t_ret_start) * 1000.0
-
-            # Build enriched system prompt
-            system_content_parts = []
-            if clean_sys_inst:
-                system_content_parts.append(clean_sys_inst)
-            elif system_messages and not doc_from_system:
-                system_content_parts.append(system_messages[-1].content or "")
-
-            if retrieved_context and str(retrieved_context).strip():
-                if format_type in ("dual_stream", "svm"):
-                    context_header = (
-                        f"=== [QUANTA SEMANTIC VIRTUAL MEMORY DUAL-STREAM CONTEXT] ===\n"
-                        f"{str(retrieved_context).strip()}\n"
-                        f"============================================================"
-                    )
-                else:
-                    context_header = (
-                        f"=== [QUANTA NEURO-SYMBOLIC VERIFIED CONTEXT] ===\n"
-                        f"{str(retrieved_context).strip()}\n"
-                        f"================================================="
-                    )
-                system_content_parts.append(context_header)
-
-            merged_system_content = "\n\n".join(part for part in system_content_parts if part).strip()
-
-            if merged_system_content:
-                compressed_messages.append({
-                    "role": "system",
-                    "content": merged_system_content,
-                })
-
-            # Add latest user message (using isolated user_query if context was stripped)
-            compressed_messages.append({
-                "role": active_user_msg.role,
-                "content": user_query,
-            })
-
-            # If there are trailing messages after the user message (rare), preserve them
-            for m in raw_messages[last_user_idx + 1:]:
-                compressed_messages.append(_dump_model(m))
-
-            # Record metrics
-            compressed_tokens = sum(estimate_tokens(m.get("content", "")) for m in compressed_messages)
-            tokens_saved = max(0, raw_tokens - compressed_tokens)
-            stats["compressed_requests"] += 1
-            stats["tokens_saved"] += tokens_saved
-
-            logger.info(
-                "Compression complete: %d -> %d tokens (saved %d tokens, context len=%d, ingest=%.1fms, ret=%.1fms)",
-                raw_tokens,
-                compressed_tokens,
-                tokens_saved,
-                len(retrieved_context),
-                t_ingest_ms,
-                t_ret_ms,
-            )
-
-            tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
-            if tracer is not None:
-                tracer.record_reverse_proxy(
-                    raw_tokens=raw_tokens,
-                    compressed_tokens=compressed_tokens,
-                    latency_ms=(time.perf_counter() - t0) * 1000.0,
-                    turns_pruned=len(dialogue_history) + (1 if doc_from_user else 0),
-                    details={
-                        "user_query": user_query[:100],
-                        "context_injected": bool(retrieved_context),
-                        "cold_start": is_cold_start,
-                        "ingest_latency_ms": t_ingest_ms,
-                        "retrieval_latency_ms": t_ret_ms,
-                    },
-                )
-        else:
-            # Under threshold and not force-enriched: preserve messages as-is
-            compressed_messages = [
-                _dump_model(m) for m in raw_messages
-            ]
-
-        # Metadata payload for response
-        quanta_meta = {
-            "context_injected": bool(retrieved_context),
-            "cold_start": is_cold_start,
-            "ingest_latency_ms": t_ingest_ms,
-            "retrieval_latency_ms": t_ret_ms,
-            "raw_tokens": raw_tokens,
-            "compressed_tokens": sum(estimate_tokens(m.get("content", "")) for m in compressed_messages),
-            "tokens_saved": max(0, raw_tokens - sum(estimate_tokens(m.get("content", "")) for m in compressed_messages)),
-        }
-
-        # 3. Forward request to downstream backend or local neuro-symbolic fallback
-        completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
-        created_timestamp = int(time.time())
-
-        # Construct payload for downstream backend
-        downstream_payload = _dump_model(request, exclude_unset=True)
-        downstream_payload["messages"] = compressed_messages
-        if cfg.target_model:
-            downstream_payload["model"] = cfg.target_model
-        elif "8888" in cfg.backend_url and downstream_payload.get("model") in ("quanta-context-expander", "default", None):
-            downstream_payload["model"] = "unsloth/Qwen3.5-4B-MTP-GGUF"
-
-        # Verify GPU policy if targeting local Unsloth backend
-        if "8888" in cfg.backend_url or "localhost" in cfg.backend_url:
-            mgr = cfg.unsloth_manager or UnslothServerManager()
-            try:
-                mgr.enforce_gpu_policy()
-            except RuntimeError as rerr:
-                logger.warning("GPU policy enforcement alert: %s", rerr)
-                if not cfg.fallback_to_local:
-                    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(rerr))
-
-        tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
-
-        effective_timeout = (
-            x_quanta_timeout
-            if x_quanta_timeout is not None
-            else max(cfg.timeout_seconds, 60.0 + (raw_tokens / 1000.0) * 3.0)
-        )
-
-        t_ttc_ms = (time.perf_counter() - t0) * 1000.0
-        stage_timings = tracer.get_stage_timings() if tracer is not None else {}
-        total_gpu_calls = tracer.get_total_gpu_calls() if tracer is not None else 0
-        quanta_headers = {
-            "X-Quanta-TTC-Ms": f"{t_ttc_ms:.2f}",
-            "X-Quanta-Stage-Timings": json.dumps(stage_timings),
-            "X-Quanta-GPU-Calls": str(total_gpu_calls),
-            "X-Quanta-Units-Scored": str(fast_path_meta.get("units_scored", 0)) if fast_path_meta else "0",
-            "X-Quanta-Units-Kept": str(fast_path_meta.get("units_kept", 0)) if fast_path_meta else "0",
-            "X-Quanta-Hot-Transduced": str(fast_path_meta.get("units_transduced", 0)) if fast_path_meta else "0",
-            "X-Quanta-Deferred": str(fast_path_meta.get("deferred_units", 0)) if fast_path_meta else "0",
-        }
-        if fast_path_meta:
-            quanta_headers["X-Quanta-Fast-Path-Mode"] = str(fast_path_meta.get("mode", active_fp_mode))
-
-
-        if request.stream:
-            return await _handle_streaming_response(
-                backend_url=cfg.backend_url,
-                payload=downstream_payload,
-                completion_id=completion_id,
-                model=request.model,
-                created=created_timestamp,
-                fallback_pipeline=pipeline if cfg.fallback_to_local else None,
-                query=user_query,
-                context=retrieved_context,
-                timeout=effective_timeout,
-                tracer=tracer,
-                headers=quanta_headers,
-            )
-        else:
-            return await _handle_unary_response(
-                backend_url=cfg.backend_url,
-                payload=downstream_payload,
-                completion_id=completion_id,
-                model=request.model,
-                created=created_timestamp,
-                fallback_pipeline=pipeline if cfg.fallback_to_local else None,
-                query=user_query,
-                context=retrieved_context,
-                timeout=effective_timeout,
-                tracer=tracer,
-                quanta_meta=quanta_meta,
-                headers=quanta_headers,
-            )
 
     return app
 
@@ -772,7 +381,8 @@ async def _handle_unary_response(
     tracer: Optional[PipelineExecutionTracer] = None,
     quanta_meta: Optional[Dict[str, Any]] = None,
     headers: Optional[Dict[str, str]] = None,
-) -> JSONResponse:
+    as_dict: bool = False,
+) -> Union[JSONResponse, Dict[str, Any]]:
     """Forwards non-streaming request to backend or returns local neuro-symbolic completion."""
     t0 = time.perf_counter()
     try:
@@ -804,6 +414,8 @@ async def _handle_unary_response(
                 if tracer is not None:
                     resp_headers["X-Quanta-Stage-Timings"] = json.dumps(tracer.get_stage_timings())
                     resp_headers["X-Quanta-GPU-Calls"] = str(tracer.get_total_gpu_calls())
+                if as_dict:
+                    return data
                 return JSONResponse(content=data, status_code=200, headers=resp_headers)
             logger.warning("Downstream backend responded with status %d: %s", resp.status_code, resp.text)
     except Exception as exc:
@@ -826,33 +438,38 @@ async def _handle_unary_response(
         resp_headers["X-Quanta-Stage-Timings"] = json.dumps(tracer.get_stage_timings())
         resp_headers["X-Quanta-GPU-Calls"] = str(tracer.get_total_gpu_calls())
 
-    return JSONResponse(
-        content={
-            "id": completion_id,
-            "object": "chat.completion",
-            "created": created,
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": local_content,
-                    },
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": prompt_toks,
-                "completion_tokens": comp_toks,
-                "total_tokens": prompt_toks + comp_toks,
-            },
-            "quanta_metadata": {
-                **(quanta_meta or {}),
-                "context_injected": bool(context),
-                "backend": "local_neuro_symbolic_fallback",
-            },
+    content_dict = {
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": local_content,
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": prompt_toks,
+            "completion_tokens": comp_toks,
+            "total_tokens": prompt_toks + comp_toks,
         },
+        "quanta_metadata": {
+            **(quanta_meta or {}),
+            "context_injected": bool(context),
+            "backend": "local_neuro_symbolic_fallback",
+        },
+    }
+
+    if as_dict:
+        return content_dict
+
+    return JSONResponse(
+        content=content_dict,
         status_code=200,
         headers=resp_headers,
     )
@@ -993,6 +610,517 @@ def _generate_local_answer(pipeline: CognitivePipeline, query: str, context: str
         return f"Based on the verified knowledge graph:\n{context.strip()}"
 
     return f"QUANTA verified no contradictory graph state for query: '{query}'."
+
+
+# -----------------------------------------------------------------------------
+# Core Context Expansion & Chat Completion Execution Engine
+# -----------------------------------------------------------------------------
+
+async def expand_context_dialogue(
+    messages: Sequence[Union[ChatMessage, Dict[str, Any]]],
+    pipeline: CognitivePipeline,
+    ingested_turn_hashes: Set[str],
+    config: Optional[QuantaProxyConfig] = None,
+    threshold: Optional[int] = None,
+    format_type: Optional[str] = None,
+    force_enrich: Optional[bool] = None,
+    global_kb: Optional[bool] = None,
+    no_global_kb: Optional[bool] = None,
+    validate: Optional[bool] = False,
+    max_context_tokens: Optional[int] = None,
+    fast_path_mode: Optional[str] = None,
+    background_ingest: Optional[Union[str, bool]] = None,
+    profile: Optional[str] = None,
+    skeleton_format: Optional[str] = None,
+    co_decoded: Optional[bool] = None,
+    stats: Optional[Dict[str, Any]] = None,
+    tracer: Optional[PipelineExecutionTracer] = None,
+    t0: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Evaluates dialogue footprint, ingests bulky discourse into ASG PageTable,
+    and constructs compressed messages with retrieved neuro-symbolic context."""
+    t0_time = t0 if t0 is not None else time.perf_counter()
+    cfg = config or QuantaProxyConfig()
+
+    # Normalize messages to ChatMessage instances
+    norm_messages: List[ChatMessage] = []
+    for m in messages:
+        if isinstance(m, ChatMessage):
+            norm_messages.append(m)
+        elif isinstance(m, dict):
+            norm_messages.append(ChatMessage(**m))
+        else:
+            norm_messages.append(ChatMessage(role=getattr(m, "role", "user"), content=getattr(m, "content", str(m))))
+
+    if not norm_messages:
+        raise ValueError("messages array cannot be empty")
+
+    # Handle per-request skeleton format and co-decoding overrides (§Section 3)
+    if skeleton_format is not None or co_decoded is not None:
+        tgt_fmt = skeleton_format or pipeline.skeleton_format
+        tgt_co = co_decoded if co_decoded is not None else pipeline.co_decoded_kev
+        pipeline.set_skeleton_format(tgt_fmt, co_decoded=tgt_co)
+
+    # Handle per-request background ingestion override (§Phase 5 & §Phase 6)
+    if background_ingest is not None:
+        bg_flag = str(background_ingest).lower().strip() in ("1", "true", "yes", "on")
+        pipeline.background_enabled = bg_flag
+        if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
+            pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides(
+                {"background.enabled": bg_flag}
+            )
+
+    # Handle global knowledge base mounting on demand
+    if global_kb:
+        if getattr(pipeline.page_table, "global_kb", None) is None:
+            try:
+                from memory.global_kb import GlobalKnowledgeBase
+                repo_root = Path(__file__).resolve().parent.parent.parent
+                kb_path = repo_root / "data" / "wikipedia_quanta.db"
+                if not kb_path.exists():
+                    kb_path = Path("data/wikipedia_quanta.db")
+                if kb_path.exists():
+                    pipeline.page_table.mount_global_kb(GlobalKnowledgeBase(kb_path))
+                    logger.info("Successfully mounted GlobalKnowledgeBase from %s", kb_path)
+            except Exception as e:
+                logger.warning("Failed to mount GlobalKnowledgeBase: %s", e)
+    elif no_global_kb:
+        if hasattr(pipeline.page_table, "global_kb"):
+            pipeline.page_table.global_kb = None
+
+    effective_threshold = threshold if threshold is not None else cfg.compression_threshold
+    effective_format = format_type if format_type is not None else cfg.context_format
+    effective_force_enrich = force_enrich if force_enrich is not None else cfg.always_enrich
+
+    tr = tracer or cfg.tracer or PipelineExecutionTracer.get_instance()
+    if tr is not None:
+        tr.reset_stage_telemetry()
+
+    # 1. Measure incoming token footprint
+    raw_tokens = estimate_messages_tokens(norm_messages)
+
+    # 2. Extract active user query and historical context
+    last_user_idx: Optional[int] = None
+    for i in reversed(range(len(norm_messages))):
+        if norm_messages[i].role == "user":
+            last_user_idx = i
+            break
+
+    if last_user_idx is None:
+        last_user_idx = len(norm_messages) - 1
+
+    active_user_msg = norm_messages[last_user_idx]
+    raw_user_content = active_user_msg.content or ""
+
+    prior_messages = norm_messages[:last_user_idx]
+    system_messages = [m for m in prior_messages if m.role == "system"]
+    dialogue_history = [m for m in prior_messages if m.role != "system"]
+
+    # Decompose single-turn bulky context if present
+    t_split_start = time.perf_counter()
+    doc_from_user, isolated_question = decompose_query_context(raw_user_content)
+    doc_from_system, clean_sys_inst = extract_context_from_system(system_messages)
+    t_split_ms = (time.perf_counter() - t_split_start) * 1000.0
+    if tr is not None:
+        tr.record_stage_timing("query split", t_split_ms, gpu_calls=0)
+
+    has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
+    user_query = isolated_question if doc_from_user else raw_user_content
+    should_compress = (raw_tokens > effective_threshold) or (len(norm_messages) > 4 and raw_tokens > 200) or has_single_query_context
+
+    retrieved_context: str = ""
+    compressed_messages: List[Dict[str, Any]] = []
+    is_cold_start = False
+    t_ingest_ms = 0.0
+    t_ret_ms = 0.0
+    fast_path_meta: Optional[Dict[str, Any]] = None
+    active_fp_mode: Optional[str] = None
+
+    # Domain-aware gating: pure code syntax tasks should not query encyclopedic KB
+    is_code_task = bool(re.search(r"(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import)", user_query))
+
+    should_enrich_or_compress = (
+        should_compress
+        or effective_force_enrich
+        or (bool(global_kb) and not has_single_query_context and not is_code_task)
+    )
+
+    if should_enrich_or_compress:
+        logger.info(
+            "Triggering QUANTA context compression/enrichment: raw_tokens=%d, threshold=%d, prior_turns=%d, has_single_ctx=%s, global_kb=%s",
+            raw_tokens,
+            effective_threshold,
+            len(dialogue_history),
+            has_single_query_context,
+            bool(global_kb),
+        )
+
+        active_fp_mode = fast_path_mode
+        if profile is not None:
+            prof_str = str(profile).lower().strip()
+            if prof_str == "passthrough":
+                active_fp_mode = "passthrough"
+                if hasattr(pipeline, "multi_scale_config") and pipeline.multi_scale_config is not None:
+                    pipeline.multi_scale_config = pipeline.multi_scale_config.with_overrides({
+                        "fast_path.mode": "passthrough",
+                        "filter.strategy": "passthrough",
+                        "background.enabled": False,
+                    })
+            elif prof_str == "calibrated":
+                if not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
+                    fp_val = pipeline.multi_scale_config.fast_path_mode
+                    active_fp_mode = fp_val if fp_val != "passthrough" else "coverage_adaptive"
+        elif not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
+            active_fp_mode = pipeline.multi_scale_config.fast_path_mode
+
+        is_long_prompt = has_single_query_context or (raw_tokens > effective_threshold) or (len(raw_user_content.split()) > 200)
+        if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and is_long_prompt:
+            full_prompt = raw_user_content
+            if doc_from_system and doc_from_system not in full_prompt:
+                full_prompt = f"{doc_from_system}\n\n{full_prompt}"
+            fp_cfg = pipeline.multi_scale_config.with_overrides({"fast_path.mode": active_fp_mode})
+            fp_res = await asyncio.to_thread(
+                pipeline.answer_long_context,
+                full_prompt,
+                config=fp_cfg,
+                max_context_tokens=max_context_tokens or 1500,
+                cold_start=False,
+            )
+            retrieved_context = fp_res.context
+            if fp_res.isolated_query:
+                user_query = fp_res.isolated_query
+            fast_path_meta = fp_res.to_dict()
+            t_ingest_ms = fp_res.stage_timings.get("transduction", 0.0) + fp_res.stage_timings.get("chunking", 0.0)
+            t_ret_ms = fp_res.stage_timings.get("relevance filter", 0.0) + fp_res.stage_timings.get("PPR", 0.0)
+
+        import hashlib
+        t_ingest_start = time.perf_counter()
+
+        # Ingest dialogue history if turns exist (when not using fast-path)
+        if not fast_path_meta and dialogue_history:
+            history_text_blocks = []
+            for m in dialogue_history:
+                if m.content and m.content.strip():
+                    speaker = "Human" if m.role == "user" else "Assistant"
+                    turn_text = f"{speaker}: {m.content.strip()}"
+                    turn_hash = hashlib.sha256(turn_text.encode("utf-8")).hexdigest()
+                    if turn_hash not in ingested_turn_hashes:
+                        history_text_blocks.append(turn_text)
+                        ingested_turn_hashes.add(turn_hash)
+
+            if history_text_blocks:
+                history_text = "\n\n".join(history_text_blocks)
+                if history_text.strip():
+                    try:
+                        is_cold_start = True
+                        await asyncio.to_thread(pipeline.process, history_text, validate=bool(validate))
+                        if stats is not None:
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                    except Exception as e:
+                        logger.warning("Error during dialogue history ASG ingestion: %s", e)
+
+        if not fast_path_meta:
+            if doc_from_user:
+                doc_hash = hashlib.sha256(doc_from_user.encode("utf-8")).hexdigest()
+                if doc_hash not in ingested_turn_hashes:
+                    try:
+                        is_cold_start = True
+                        await asyncio.to_thread(pipeline.process, doc_from_user, chapter_id=f"doc_{doc_hash[:8]}", validate=bool(validate))
+                        ingested_turn_hashes.add(doc_hash)
+                        if stats is not None:
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                    except Exception as e:
+                        logger.error("Error during user context document ASG ingestion: %s", e)
+
+            if doc_from_system:
+                sys_doc_hash = hashlib.sha256(doc_from_system.encode("utf-8")).hexdigest()
+                if sys_doc_hash not in ingested_turn_hashes:
+                    try:
+                        is_cold_start = True
+                        await asyncio.to_thread(pipeline.process, doc_from_system, chapter_id=f"sys_{sys_doc_hash[:8]}", validate=bool(validate))
+                        ingested_turn_hashes.add(sys_doc_hash)
+                        if stats is not None:
+                            stats["nodes_ingested"] = pipeline.page_table.count_nodes() if hasattr(pipeline.page_table, "count_nodes") else len(pipeline.page_table)
+                    except Exception as e:
+                        logger.error("Error during system context document ASG ingestion: %s", e)
+
+            t_ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
+
+            # Retrieve active context via spreading activation (strictly from natural user_query)
+            t_ret_start = time.perf_counter()
+            try:
+                doc_text = (doc_from_user or "") + " " + (doc_from_system or "")
+                num_doc_headings = doc_text.count("Document [") + doc_text.count("Passage [")
+                query_hop_depth = pipeline.retriever.detect_query_hop_depth(user_query) if hasattr(pipeline, "retriever") else 2
+
+                if num_doc_headings >= 10 or query_hop_depth >= 3:
+                    adaptive_budget = min(cfg.max_context_tokens, max(1200, min(1600, num_doc_headings * 100)))
+                    effective_max_tokens = max_context_tokens if max_context_tokens is not None else adaptive_budget
+                else:
+                    adaptive_budget = min(cfg.max_context_tokens, 450)
+                    if has_single_query_context and raw_tokens > 0:
+                        adaptive_budget = min(adaptive_budget, max(50, int(raw_tokens * 0.45)))
+                    elif dialogue_history and not has_single_query_context:
+                        pruned_toks = estimate_messages_tokens(dialogue_history)
+                        if pruned_toks > 0:
+                            adaptive_budget = min(adaptive_budget, max(50, int(pruned_toks * 0.5)))
+                    effective_max_tokens = max_context_tokens if max_context_tokens is not None else adaptive_budget
+
+                if effective_format in ("dual_stream", "svm"):
+                    raw_ctx = await asyncio.to_thread(
+                        pipeline.query_memory,
+                        query=user_query,
+                        format="dual_stream",
+                        max_tokens=effective_max_tokens,
+                    )
+                    retrieved_context = getattr(raw_ctx, "full_context", str(raw_ctx))
+                else:
+                    retrieved_context = await asyncio.to_thread(
+                        pipeline.retrieve_context,
+                        query=user_query,
+                        format=effective_format,
+                        max_tokens=effective_max_tokens,
+                    )
+            except Exception as e:
+                logger.warning("Error retrieving context from PageTable: %s", e)
+                retrieved_context = ""
+            t_ret_ms = (time.perf_counter() - t_ret_start) * 1000.0
+
+        # Build enriched system prompt
+        system_content_parts = []
+        if clean_sys_inst:
+            system_content_parts.append(clean_sys_inst)
+        elif system_messages and not doc_from_system:
+            system_content_parts.append(system_messages[-1].content or "")
+
+        if retrieved_context and str(retrieved_context).strip():
+            if effective_format in ("dual_stream", "svm"):
+                context_header = (
+                    f"=== [QUANTA SEMANTIC VIRTUAL MEMORY DUAL-STREAM CONTEXT] ===\n"
+                    f"{str(retrieved_context).strip()}\n"
+                    f"============================================================"
+                )
+            else:
+                context_header = (
+                    f"=== [QUANTA NEURO-SYMBOLIC VERIFIED CONTEXT] ===\n"
+                    f"{str(retrieved_context).strip()}\n"
+                    f"================================================="
+                )
+            system_content_parts.append(context_header)
+
+        merged_system_content = "\n\n".join(part for part in system_content_parts if part).strip()
+
+        if merged_system_content:
+            compressed_messages.append({
+                "role": "system",
+                "content": merged_system_content,
+            })
+
+        compressed_messages.append({
+            "role": active_user_msg.role,
+            "content": user_query,
+        })
+
+        for m in norm_messages[last_user_idx + 1:]:
+            compressed_messages.append(_dump_model(m))
+
+        compressed_tokens = sum(estimate_tokens(m.get("content", "")) for m in compressed_messages)
+        tokens_saved = max(0, raw_tokens - compressed_tokens)
+        if stats is not None:
+            stats["compressed_requests"] += 1
+            stats["tokens_saved"] += tokens_saved
+
+        logger.info(
+            "Compression complete: %d -> %d tokens (saved %d tokens, context len=%d, ingest=%.1fms, ret=%.1fms)",
+            raw_tokens,
+            compressed_tokens,
+            tokens_saved,
+            len(retrieved_context),
+            t_ingest_ms,
+            t_ret_ms,
+        )
+
+        if tr is not None:
+            tr.record_reverse_proxy(
+                raw_tokens=raw_tokens,
+                compressed_tokens=compressed_tokens,
+                latency_ms=(time.perf_counter() - t0_time) * 1000.0,
+                turns_pruned=len(dialogue_history) + (1 if doc_from_user else 0),
+                details={
+                    "user_query": user_query[:100],
+                    "context_injected": bool(retrieved_context),
+                    "cold_start": is_cold_start,
+                    "ingest_latency_ms": t_ingest_ms,
+                    "retrieval_latency_ms": t_ret_ms,
+                },
+            )
+    else:
+        compressed_messages = [_dump_model(m) for m in norm_messages]
+        compressed_tokens = sum(estimate_tokens(m.get("content", "")) for m in compressed_messages)
+        tokens_saved = 0
+
+    quanta_meta = {
+        "context_injected": bool(retrieved_context),
+        "cold_start": is_cold_start,
+        "ingest_latency_ms": t_ingest_ms,
+        "retrieval_latency_ms": t_ret_ms,
+        "raw_tokens": raw_tokens,
+        "compressed_tokens": compressed_tokens,
+        "tokens_saved": tokens_saved,
+    }
+
+    t_ttc_ms = (time.perf_counter() - t0_time) * 1000.0
+    stage_timings = tr.get_stage_timings() if tr is not None else {}
+    total_gpu_calls = tr.get_total_gpu_calls() if tr is not None else 0
+    quanta_headers = {
+        "X-Quanta-TTC-Ms": f"{t_ttc_ms:.2f}",
+        "X-Quanta-Stage-Timings": json.dumps(stage_timings),
+        "X-Quanta-GPU-Calls": str(total_gpu_calls),
+        "X-Quanta-Units-Scored": str(fast_path_meta.get("units_scored", 0)) if fast_path_meta else "0",
+        "X-Quanta-Units-Kept": str(fast_path_meta.get("units_kept", 0)) if fast_path_meta else "0",
+        "X-Quanta-Hot-Transduced": str(fast_path_meta.get("units_transduced", 0)) if fast_path_meta else "0",
+        "X-Quanta-Deferred": str(fast_path_meta.get("deferred_units", 0)) if fast_path_meta else "0",
+    }
+    if fast_path_meta:
+        quanta_headers["X-Quanta-Fast-Path-Mode"] = str(fast_path_meta.get("mode", active_fp_mode))
+
+    return {
+        "compressed_messages": compressed_messages,
+        "retrieved_context": retrieved_context,
+        "user_query": user_query,
+        "raw_tokens": raw_tokens,
+        "compressed_tokens": compressed_tokens,
+        "tokens_saved": tokens_saved,
+        "quanta_meta": quanta_meta,
+        "quanta_headers": quanta_headers,
+        "fast_path_meta": fast_path_meta,
+        "pipeline": pipeline,
+    }
+
+
+async def execute_chat_completion(
+    request: ChatCompletionRequest,
+    pool: PipelinePool,
+    config: Optional[QuantaProxyConfig] = None,
+    stats: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+    threshold: Optional[int] = None,
+    format_type: Optional[str] = None,
+    force_enrich: Optional[bool] = None,
+    global_kb: Optional[bool] = None,
+    no_global_kb: Optional[bool] = None,
+    reset_memory: Optional[bool] = None,
+    validate: Optional[bool] = False,
+    max_context_tokens: Optional[int] = None,
+    timeout: Optional[float] = None,
+    fast_path_mode: Optional[str] = None,
+    background_ingest: Optional[Union[str, bool]] = None,
+    profile: Optional[str] = None,
+    skeleton_format: Optional[str] = None,
+    co_decoded: Optional[bool] = None,
+    as_dict: bool = False,
+    raw_request: Optional[Request] = None,
+) -> Union[JSONResponse, StreamingResponse, Dict[str, Any]]:
+    """Executes the full QUANTA context expansion, token pruning, and downstream backend proxying cycle."""
+    t0 = time.perf_counter()
+    cfg = config or QuantaProxyConfig()
+    if stats is not None:
+        stats["total_requests"] += 1
+
+    pipeline = await pool.get_pipeline(session_id)
+    ingested_turn_hashes = pool.get_ingested_hashes(session_id)
+
+    if reset_memory:
+        pool.reset_session(session_id, pipeline)
+
+    if not request.messages:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="messages array cannot be empty")
+
+    expansion = await expand_context_dialogue(
+        messages=request.messages,
+        pipeline=pipeline,
+        ingested_turn_hashes=ingested_turn_hashes,
+        config=cfg,
+        threshold=threshold,
+        format_type=format_type,
+        force_enrich=force_enrich,
+        global_kb=global_kb,
+        no_global_kb=no_global_kb,
+        validate=validate,
+        max_context_tokens=max_context_tokens,
+        fast_path_mode=fast_path_mode,
+        background_ingest=background_ingest,
+        profile=profile,
+        skeleton_format=skeleton_format,
+        co_decoded=co_decoded,
+        stats=stats,
+        tracer=cfg.tracer,
+        t0=t0,
+    )
+
+    compressed_messages = expansion["compressed_messages"]
+    retrieved_context = expansion["retrieved_context"]
+    user_query = expansion["user_query"]
+    quanta_meta = expansion["quanta_meta"]
+    quanta_headers = expansion["quanta_headers"]
+
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    created_timestamp = int(time.time())
+
+    downstream_payload = _dump_model(request, exclude_unset=True)
+    downstream_payload["messages"] = compressed_messages
+    if cfg.target_model:
+        downstream_payload["model"] = cfg.target_model
+    elif "8888" in cfg.backend_url and downstream_payload.get("model") in ("quanta-context-expander", "default", None):
+        downstream_payload["model"] = "unsloth/Qwen3.5-4B-MTP-GGUF"
+
+    if "8888" in cfg.backend_url or "localhost" in cfg.backend_url:
+        mgr = cfg.unsloth_manager or UnslothServerManager()
+        try:
+            mgr.enforce_gpu_policy()
+        except RuntimeError as rerr:
+            logger.warning("GPU policy enforcement alert: %s", rerr)
+            if not cfg.fallback_to_local:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(rerr))
+
+    effective_timeout = (
+        timeout
+        if timeout is not None
+        else max(cfg.timeout_seconds, 60.0 + (expansion["raw_tokens"] / 1000.0) * 3.0)
+    )
+
+    tracer = cfg.tracer or PipelineExecutionTracer.get_instance()
+
+    if request.stream:
+        return await _handle_streaming_response(
+            backend_url=cfg.backend_url,
+            payload=downstream_payload,
+            completion_id=completion_id,
+            model=request.model,
+            created=created_timestamp,
+            fallback_pipeline=pipeline if cfg.fallback_to_local else None,
+            query=user_query,
+            context=retrieved_context,
+            timeout=effective_timeout,
+            tracer=tracer,
+            headers=quanta_headers,
+        )
+    else:
+        return await _handle_unary_response(
+            backend_url=cfg.backend_url,
+            payload=downstream_payload,
+            completion_id=completion_id,
+            model=request.model,
+            created=created_timestamp,
+            fallback_pipeline=pipeline if cfg.fallback_to_local else None,
+            query=user_query,
+            context=retrieved_context,
+            timeout=effective_timeout,
+            tracer=tracer,
+            quanta_meta=quanta_meta,
+            headers=quanta_headers,
+            as_dict=as_dict,
+        )
 
 
 # Default application instance for uvicorn launch

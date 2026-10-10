@@ -1595,10 +1595,20 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-#### Available MCP Tools:
-* `quanta_ingest_document`: Ingests and folds lengthy texts or documentation into the PageTable Merkle DAG.
-* `quanta_query_memory`: Executes sub-5ms spreading activation query retrieval over stored knowledge subgraphs.
-* `quanta_get_entity_details`: Retrieves deep property graphs, taxonomic categories, and directed edges for a specific concept anchor.
+#### Available MCP Tools (Full Parity with Reverse Proxy):
+* `quanta_ingest_document`: Ingests and folds lengthy texts or documentation into the PageTable Merkle DAG, supporting session isolation, validation gates, and skeleton format overrides.
+* `quanta_query_memory`: Executes sub-5ms spreading activation query retrieval over stored knowledge subgraphs (supports `english`, `sexpr`, `dual_stream`, `svm`, and dynamic token budgeting).
+* `quanta_get_entity_details`: Retrieves deep property graphs, taxonomic categories, 1024-D slot bands, and directed edges for a specific concept anchor.
+* `quanta_expand_context`: Compresses bulky dialogues and decomposes long-context prompts, ingesting prior turns into PageTable and returning compressed messages with verified context and token savings.
+* `quanta_chat_completion`: Executes full OpenAI-compatible dialogue completion with neuro-symbolic context expansion, downstream backend proxying (Unsloth :8888 or cloud provider), and local fallback.
+* `quanta_answer_query`: Delivers sub-10ms direct neuro-symbolic question answering using graph topology and honest realizer.
+* `quanta_reset_memory`: Flushes working memory, ActiveCanvas, episodic registry, PageTable, and session hashes for a given session.
+* `quanta_get_memory_stats`: Returns real-time PageTable node counts, vector index utilization, plus reverse proxy request telemetry and token savings.
+* `quanta_list_models`: Discovers available models supported by QUANTA.
+
+#### Available MCP Resources & Prompts:
+* Resources: `quanta://models`, `quanta://memory/stats`, `quanta://health`.
+* Prompts: `quanta_context_expansion`, `quanta_knowledge_retrieval`.
 
 ---
 
