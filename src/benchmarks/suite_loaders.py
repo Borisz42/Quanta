@@ -386,6 +386,7 @@ class BenchmarkSuiteLoader:
                     token_count=t_cnt,
                     metadata={
                         "hop_count": item.get("hop_count", 2),
+                         "gold_passages": list(item.get("gold_passages", [])),
                         "start_entity": item.get("start_entity", ""),
                         "target_entity": item.get("target_entity", ""),
                         "bridge_entities": item.get("bridge_entities", []),

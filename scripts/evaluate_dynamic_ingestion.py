@@ -529,17 +529,34 @@ class DynamicIngestionEvaluator:
 
         logger.info("Executing Phase 6 paired evaluation (%d samples, conditions=%s, total=%d runs)...", len(samples), list(conditions), total_evals)
 
+        partial_path = self.output_dir / f"final_eval_partial_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+        skipped: List[str] = []
+
         for s_idx, sample in enumerate(samples, 1):
             logger.info("--- Sample %d/%d: %s (%s, %d tok) ---", s_idx, len(samples), sample["id"], sample["task_family"], sample.get("target_tokens", 2000))
-            for cond in conditions:
-                curr += 1
-                res = self.evaluate_sample(sample, cond)
+            pair: Dict[str, PairedSampleResult] = {}
+            try:
+                for cond in conditions:
+                    curr += 1
+                    res = self.evaluate_sample(sample, cond)
+                    pair[cond] = res
+                    logger.info(
+                        "[%s] EM=%s (F1=%.3f) | Recall=%.1f%% | TTFT=%.1f ms | TTC=%.1f ms | GPU calls=%d",
+                        cond, res.exact_match, res.f1_score, res.gold_recall * 100.0, res.ttft_ms, res.ttc_ms, res.gpu_calls
+                    )
+            except Exception as exc:  # keep pairing intact: drop the whole sample
+                logger.error("Sample %s failed (%s: %s); excluded from all conditions", sample["id"], type(exc).__name__, exc)
+                skipped.append(sample["id"])
+                continue
+            for cond, res in pair.items():
                 results[cond].append(res)
-                logger.info(
-                    "[%s] EM=%s (F1=%.3f) | Recall=%.1f%% | TTFT=%.1f ms | TTC=%.1f ms | GPU calls=%d",
-                    cond, res.exact_match, res.f1_score, res.gold_recall * 100.0, res.ttft_ms, res.ttc_ms, res.gpu_calls
-                )
+            with open(partial_path, "a", encoding="utf-8") as pf:
+                for res in pair.values():
+                    pf.write(json.dumps(res.to_dict()) + "\n")
 
+        if skipped:
+            logger.warning("%d sample(s) excluded due to errors: %s", len(skipped), skipped)
+        self.skipped_samples = skipped
         return results
 
     def aggregate_results(
@@ -749,8 +766,52 @@ class DynamicIngestionEvaluator:
 # CLI Entrypoint
 # -----------------------------------------------------------------------------
 
+def load_paired_suite_samples(
+    suite_spec: str,
+    lengths: Sequence[int] = (2000, 4000, 8000),
+) -> List[Dict[str, Any]]:
+    """Builds evaluation samples from the larger real benchmark loaders in
+    `benchmarks.suite_loaders` (same sources as scripts/run_paired_benchmarks.py).
+
+    suite_spec: comma-separated `name:count`, names in {musique, niah, babilong}.
+    """
+    sys.path.insert(0, str(repo_root / "src"))
+    from benchmarks.suite_loaders import BenchmarkSuiteLoader
+
+    loader = BenchmarkSuiteLoader()
+    out: List[Dict[str, Any]] = []
+    for part in [p.strip() for p in suite_spec.split(",") if p.strip()]:
+        name, _, cnt = part.partition(":")
+        n = int(cnt) if cnt else 20
+        if name == "musique":
+            raw = loader.load_musique(limit=n)
+        elif name in ("niah", "niah_long_context"):
+            raw = loader.generate_niah_samples(target_token_lengths=[lengths[i % len(lengths)] for i in range(n)])
+        elif name == "babilong":
+            raw = loader.load_babilong(target_token_lengths=[lengths[i % len(lengths)] for i in range(n)])
+        else:
+            logger.warning("Skipping unknown suite '%s'", name)
+            continue
+        family = "niah" if name.startswith("niah") else name
+        for i, s in enumerate(raw):
+            gold_ps = list(s.metadata.get("gold_passages") or []) or [s.gold_answer]
+            out.append({
+                "id": f"{s.id}__{i}",
+                "task_family": family,
+                "prompt": s.prompt,
+                "context": s.context,
+                "gold_answer": s.gold_answer,
+                "gold_passages": gold_ps,
+                "target_tokens": int(s.metadata.get("target_tokens") or s.token_count or 0),
+            })
+        logger.info("Loaded %d '%s' samples", len(raw), name)
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description="QUANTA Dynamic Multi-Scale Ingestion Final Paired Evaluation (§Phase 6)")
+    parser.add_argument("--suite", type=str, default=None, help="Use larger real benchmark loaders, e.g. musique:30,niah:30,babilong:30 (overrides --split)")
+    parser.add_argument("--lengths", type=str, default="2000,4000,8000", help="Token lengths cycled for synthetic suites (niah, babilong)")
     parser.add_argument("--split", type=str, default="test", choices=["dev", "test"], help="Benchmark split to evaluate (default: test)")
     parser.add_argument("--profile", type=str, default="calibrated", help="Profile mode ('calibrated' or 'passthrough') or file path")
     parser.add_argument("--conditions", type=str, default="B0,RAG0,CALIBRATED", help="Comma-separated conditions to run")
@@ -759,16 +820,22 @@ def main():
     parser.add_argument("--output", type=str, default="output/multi_scale/final_report.md", help="Output path for report markdown")
     args = parser.parse_args()
 
-    split_file = repo_root / "data" / "benchmarks" / "long_context" / f"{args.split}.jsonl"
-    if not split_file.exists():
-        logger.error("Split file not found: %s", split_file)
-        sys.exit(1)
-
     samples: List[Dict[str, Any]] = []
-    with open(split_file, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                samples.append(json.loads(line))
+    if args.suite:
+        lengths = [int(x) for x in args.lengths.split(",") if x.strip()]
+        samples = load_paired_suite_samples(args.suite, lengths=lengths)
+        if not samples:
+            logger.error("No samples loaded for suite spec '%s'", args.suite)
+            sys.exit(1)
+    else:
+        split_file = repo_root / "data" / "benchmarks" / "long_context" / f"{args.split}.jsonl"
+        if not split_file.exists():
+            logger.error("Split file not found: %s", split_file)
+            sys.exit(1)
+        with open(split_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    samples.append(json.loads(line))
 
     if args.max_samples:
         samples = samples[:args.max_samples]

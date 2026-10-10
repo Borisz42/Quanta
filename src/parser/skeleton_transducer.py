@@ -87,6 +87,13 @@ def _locate_skeleton_gbnf(custom_path: Optional[Union[str, Path]] = None, filena
     raise FileNotFoundError(f"Could not locate '{filename}'. Ensure 'data/grammar/{filename}' exists.")
 
 
+def _as_ent_id(v: Any) -> Optional[str]:
+    """Coerces an LLM-emitted subj/obj reference (str, list, or None) to a single entity id string."""
+    if isinstance(v, (list, tuple)):
+        v = next((x for x in v if x), None)
+    return str(v) if v not in (None, "") else None
+
+
 def estimate_token_count(text: str) -> int:
     """Accurately estimate BPE token count for skeleton JSON."""
     if not text:
@@ -514,8 +521,8 @@ class MockSkeletonTransducer:
                     id=raw_ev["id"],
                     predicate=pred,
                     char_span=c_span,
-                    subject_ent_id=raw_ev.get("subj"),
-                    object_ent_id=raw_ev.get("obj"),
+                    subject_ent_id=_as_ent_id(raw_ev.get("subj")),
+                    object_ent_id=_as_ent_id(raw_ev.get("obj")),
                     byte_span=b_span,
                     raw_text=clean_text[c_span[0]:c_span[1]] if alignment else None,
                     confidence=alignment.confidence if alignment else 0.8,
@@ -1006,8 +1013,8 @@ class SkeletonTransducer:
                     id=str(raw_ev.get("id", f"EV{len(events) + 1}")),
                     predicate=pred,
                     char_span=c_span,
-                    subject_ent_id=raw_ev.get("subj"),
-                    object_ent_id=raw_ev.get("obj"),
+                    subject_ent_id=_as_ent_id(raw_ev.get("subj")),
+                    object_ent_id=_as_ent_id(raw_ev.get("obj")),
                     byte_span=b_span,
                     raw_text=source_text[c_span[0]:c_span[1]] if alignment else None,
                     confidence=alignment.confidence if alignment else 0.8,
