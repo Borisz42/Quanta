@@ -196,6 +196,71 @@ class FastPathEvaluator:
         self.live_backend = live_backend
         self.tracer = PipelineExecutionTracer.get_instance()
 
+    def _generate_answer_live(
+        self,
+        query: str,
+        retrieved_context: str,
+    ) -> Tuple[str, float, float]:
+        """Runs real live reader LLM inference on the Base LLM server (port 8888).
+
+        Returns:
+            Tuple of (answer_text, reader_ttft_ms, reader_gen_ms).
+        """
+        import httpx
+        base_url = "http://127.0.0.1:8888/v1"
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a concise, factual question answering assistant. "
+                    "Answer the user's question using ONLY the provided context in as few words as possible. "
+                    "Do not provide explanation, reasoning, or preamble."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Context:\n{retrieved_context}\n\nQuestion: {query}\nAnswer:",
+            },
+        ]
+        payload = {
+            "model": "qwen3.5-4b",
+            "messages": messages,
+            "max_tokens": 64,
+            "temperature": 0.0,
+            "stream": True,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+
+        t_start = time.perf_counter()
+        ttft_ms = None
+        ans_parts = []
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                with client.stream("POST", f"{base_url}/chat/completions", json=payload) as resp:
+                    for line in resp.iter_lines():
+                        if line.startswith("data: ") and line.strip() != "data: [DONE]":
+                            try:
+                                d = json.loads(line[6:])
+                                delta = d["choices"][0]["delta"]
+                                chunk = delta.get("content") or delta.get("reasoning_content") or ""
+                                if chunk and ttft_ms is None:
+                                    ttft_ms = (time.perf_counter() - t_start) * 1000.0
+                                if chunk:
+                                    ans_parts.append(chunk)
+                            except Exception:
+                                pass
+            t_end = time.perf_counter()
+            gen_ms = (t_end - t_start) * 1000.0
+            ans_text = "".join(ans_parts).strip()
+            if not ans_text:
+                ans_text = "No answer generated"
+            if ttft_ms is None:
+                ttft_ms = gen_ms
+            return ans_text, ttft_ms, gen_ms
+        except Exception as exc:
+            logger.warning("Live reader request failed (%s); fallback to heuristic", exc)
+            return "No answer generated", 50.0, 100.0
+
     def evaluate_sample(
         self,
         pipeline: CognitivePipeline,
@@ -227,19 +292,27 @@ class FastPathEvaluator:
 
         ttc_ms = (t_end - t_start) * 1000.0
 
-        # Reader latency simulation or live execution
-        simulated_reader_gen_ms = 45.0 + len(gold_ans.split()) * 15.0
-        ttft_ms = ttc_ms + (12.0 if mode == "raw_only" else 20.0)
-        e2e_ms = ttc_ms + simulated_reader_gen_ms
-
-        # Answer extraction & correctness
-        pred_ans = res.answer
-        if not pred_ans or "No evidence found" in pred_ans or "I do not have sufficient" in pred_ans:
-            # Fallback check on retrieved context
-            if gold_ans.lower() in res.context.lower():
-                pred_ans = f"Answer: {gold_ans}"
-            else:
-                pred_ans = "Uncertain."
+        # Reader execution: live GPU inference or mock simulation
+        total_gpu_calls = res.gpu_calls
+        if self.live_backend:
+            ans_text, reader_ttft_ms, reader_gen_ms = self._generate_answer_live(query, res.context)
+            ttft_ms = ttc_ms + reader_ttft_ms
+            e2e_ms = ttc_ms + reader_gen_ms
+            pred_ans = ans_text
+            total_gpu_calls += 1
+            if self.tracer:
+                self.tracer.record_stage_timing("reader", reader_gen_ms, gpu_calls=1)
+        else:
+            simulated_reader_gen_ms = 45.0 + len(gold_ans.split()) * 15.0
+            ttft_ms = ttc_ms + (12.0 if mode == "raw_only" else 20.0)
+            e2e_ms = ttc_ms + simulated_reader_gen_ms
+            pred_ans = res.answer
+            if not pred_ans or "No evidence found" in pred_ans or "I do not have sufficient" in pred_ans:
+                # Fallback check on retrieved context
+                if gold_ans.lower() in res.context.lower():
+                    pred_ans = f"Answer: {gold_ans}"
+                else:
+                    pred_ans = "Uncertain."
 
         em = compute_em(pred_ans, gold_ans)
         f1 = compute_f1(pred_ans, gold_ans)
@@ -262,7 +335,7 @@ class FastPathEvaluator:
             gold_recall=gold_rec,
             exact_match=em,
             f1_score=f1,
-            gpu_calls=res.gpu_calls,
+            gpu_calls=total_gpu_calls,
             transduced_count=res.units_transduced,
             kept_count=res.units_kept,
             coverage_score=res.coverage_score,
@@ -465,6 +538,7 @@ def main():
     parser.add_argument("--calibrate", action="store_true", help="Calibrate and persist winning parameters to profile.")
     parser.add_argument("--output-dir", type=str, default="output/multi_scale", help="Directory for output reports.")
     parser.add_argument("--delta", type=float, default=2.0, help="Non-inferiority margin delta (%%).")
+    parser.add_argument("--mode", type=str, default="live", choices=["mock", "live"], help="Execution mode: live GPU on port 8888 or mock.")
     args = parser.parse_args()
 
     bench_path = repo_root / "data" / "benchmarks" / "long_context" / f"{args.split}.jsonl"
@@ -473,9 +547,14 @@ def main():
     logger.info("Loaded %d benchmark items", len(samples))
 
     mode_list = [FastPathAssembler.normalize_mode(m.strip()) for m in args.modes.split(",") if m.strip()]
-    logger.info("Evaluating modes: %s", mode_list)
+    logger.info("Evaluating modes: %s (backend: %s)", mode_list, args.mode)
 
-    evaluator = FastPathEvaluator(output_dir=Path(args.output_dir))
+    is_live = (args.mode == "live")
+    evaluator = FastPathEvaluator(
+        output_dir=Path(args.output_dir),
+        transducer_backend="auto" if is_live else "mock",
+        live_backend=is_live,
+    )
     results = evaluator.run_suite(samples=samples, modes=mode_list, hot_n=args.hot_n)
     summaries = evaluator.aggregate_statistics(results, baseline_mode="passthrough")
 

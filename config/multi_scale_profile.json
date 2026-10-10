@@ -53,23 +53,23 @@
     "notes": "Calibrated probability coefficients for F-A"
   },
   "fast_path.mode": {
-    "value": "raw_only",
+    "value": "passthrough",
     "source_exp": "exp-029a",
-    "source_commit": "84d1ea9",
+    "source_commit": "436c436",
     "calibrated_on": "long_context/test",
-    "notes": "Gate G3 promoted winner on TTFT vs Accuracy Pareto frontier (2.47x speedup)"
+    "notes": "Gate G3 promoted winner on TTFT vs Accuracy Pareto frontier (1.00x speedup)"
   },
   "fast_path.hot_transduce_n": {
     "value": 2,
     "source_exp": "exp-029a",
-    "source_commit": "84d1ea9",
+    "source_commit": "436c436",
     "calibrated_on": "long_context/test",
     "notes": "Gate G3 calibrated top-N chunks for hot transduction"
   },
   "fast_path.coverage_threshold": {
     "value": 0.75,
     "source_exp": "exp-029a",
-    "source_commit": "84d1ea9",
+    "source_commit": "436c436",
     "calibrated_on": "long_context/test",
     "notes": "Gate G3 decision threshold for coverage-adaptive routing"
   }

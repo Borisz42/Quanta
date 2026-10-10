@@ -809,14 +809,15 @@ class CognitivePipeline:
             graph.root_cid = next(iter(ent_cid_map.values()))
 
         # Merkle episodic fold
-        fold_node = fold_discourse_episode(graph.copy(), chunk_id=pid)
-        if isinstance(fold_node.literal, dict):
-            fold_node.literal["text"] = text
-            fold_node.literal["doc_id"] = doc_id
-        self.page_table.store_node(fold_node)
-        self.active_canvas.put(fold_node)
-        ch_id = chapter_id or doc_id
-        self.merkle_book.add_chunk_node(fold_node, chapter_id=ch_id)
+        if len(graph) > 0:
+            fold_node = fold_discourse_episode(graph.copy(), chunk_id=pid)
+            if isinstance(fold_node.literal, dict):
+                fold_node.literal["text"] = text
+                fold_node.literal["doc_id"] = doc_id
+            self.page_table.store_node(fold_node)
+            self.active_canvas.put(fold_node)
+            ch_id = chapter_id or doc_id
+            self.merkle_book.add_chunk_node(fold_node, chapter_id=ch_id)
 
         # Attach metadata
         setattr(graph, "skeleton_result", skeleton_res)
