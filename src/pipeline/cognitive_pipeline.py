@@ -180,10 +180,26 @@ class CognitivePipeline:
         multi_scale_config: Optional[MultiScaleConfig] = None,
         skeleton_format: str = "sexpr_compact",
         co_decoded_kev: bool = False,
+        max_workers: Optional[int] = None,
+        max_slots: Optional[int] = None,
         **transducer_kwargs,
     ):
         self.tracer = tracer or PipelineExecutionTracer.get_instance()
         self.multi_scale_config = multi_scale_config or MultiScaleConfig()
+
+        # Resolve batch workers / slots (§Section 4 Master Plan)
+        raw_env_slots = os.environ.get("QUANTA_MAX_SLOTS") or os.environ.get("QUANTA_PARALLEL_SLOTS") or os.environ.get("QUANTA_BATCH_WORKERS")
+        if max_workers is not None:
+            self.max_workers = int(max_workers)
+        elif max_slots is not None:
+            self.max_workers = int(max_slots)
+        elif raw_env_slots:
+            try:
+                self.max_workers = int(raw_env_slots.strip())
+            except Exception:
+                self.max_workers = self.multi_scale_config.server_batch_workers
+        else:
+            self.max_workers = self.multi_scale_config.server_batch_workers
 
         # Resolve skeleton_format and co_decoded_kev (§Section 3 Master Plan)
         raw_env_fmt = os.environ.get("QUANTA_SKELETON_FORMAT")
@@ -436,6 +452,15 @@ class CognitivePipeline:
     def set_co_decoded_kev(self, co_decoded: bool) -> None:
         """Dynamically toggle co-decoded Kev decisions at runtime."""
         self.set_skeleton_format(self.skeleton_format, co_decoded=co_decoded)
+
+    def set_batch_workers(self, workers: int) -> None:
+        """Dynamically set default batch worker concurrency at runtime."""
+        self.max_workers = max(1, int(workers))
+        if hasattr(self, "multi_scale_config") and self.multi_scale_config is not None:
+            self.multi_scale_config = self.multi_scale_config.with_overrides({
+                "server.batch_workers": self.max_workers,
+                "server.max_parallel_slots": self.max_workers,
+            })
 
     def reset(self, clear_page_table: bool = True) -> None:
         """Cleanly resets all working memory, active canvas, page table, and episodic state."""
@@ -1032,7 +1057,7 @@ class CognitivePipeline:
     def ingest_passages_batch(
         self,
         passages: Sequence[Union[Tuple[str, str, str], Dict[str, str]]],
-        max_workers: int = 16,
+        max_workers: Optional[int] = None,
         validate: bool = True,
     ) -> List[QuantaGraph]:
         """Ingests a collection of passages concurrently across parallel worker slots.
@@ -1043,7 +1068,7 @@ class CognitivePipeline:
 
         Args:
             passages: Sequence of (passage_id, doc_id, text) tuples or dicts.
-            max_workers: Maximum concurrent workers (defaults to 16 matching llama-server slots).
+            max_workers: Maximum concurrent workers (defaults to configured batch_workers / slots).
             validate: Whether to run difference logic verification.
 
         Returns:
@@ -1062,7 +1087,8 @@ class CognitivePipeline:
                 pid, doc_id, text = p
             norm_passages.append((pid, doc_id, text))
 
-        workers = min(max_workers, len(norm_passages))
+        target_workers = max_workers if max_workers is not None else getattr(self, "max_workers", 8)
+        workers = min(target_workers, len(norm_passages))
         if workers <= 1:
             return [
                 self.ingest_document(text=text, doc_id=doc_id, passage_id=pid, validate=validate)

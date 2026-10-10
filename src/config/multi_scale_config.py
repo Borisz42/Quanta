@@ -46,6 +46,9 @@ REGISTERED_PARAMS: Dict[str, Tuple[Any, str]] = {
     # S-Expression Ingestion & Co-Decoding Toggles (§Section 3)
     "transducer.skeleton_format": ("sexpr_compact", "Transduction representation format: sexpr_compact, sexpr_positional, or json"),
     "transducer.co_decoded": (False, "Whether co-decoded Kev decisions (intent, epist, allen, pearl) are emitted"),
+    # Server & Parallel Slot Concurrency (§Section 4)
+    "server.max_parallel_slots": (8, "Maximum parallel processing slots / workers for continuous batching (default: 8)"),
+    "server.batch_workers": (8, "Worker concurrency for batch document ingestion (default: 8)"),
 }
 
 
@@ -207,6 +210,44 @@ class MultiScaleConfig:
                 notes="Overridden via environment variable QUANTA_CO_DECODED_KEV",
             )
 
+        # Direct Parallel Slots environment variables (§Section 4)
+        if "QUANTA_MAX_SLOTS" in os.environ or "QUANTA_PARALLEL_SLOTS" in os.environ:
+            raw_slots = os.environ.get("QUANTA_MAX_SLOTS") or os.environ.get("QUANTA_PARALLEL_SLOTS")
+            try:
+                slots_val = int(raw_slots.strip())
+            except Exception:
+                slots_val = 8
+            curr_max = self.params.get("server.max_parallel_slots")
+            self.params["server.max_parallel_slots"] = CalibratedParam(
+                name="server.max_parallel_slots",
+                value=slots_val,
+                default_passthrough=curr_max.default_passthrough if curr_max else 8,
+                source_exp="env:QUANTA_MAX_SLOTS",
+                notes="Overridden via environment variable QUANTA_MAX_SLOTS",
+            )
+            curr_batch = self.params.get("server.batch_workers")
+            self.params["server.batch_workers"] = CalibratedParam(
+                name="server.batch_workers",
+                value=slots_val,
+                default_passthrough=curr_batch.default_passthrough if curr_batch else 8,
+                source_exp="env:QUANTA_MAX_SLOTS",
+                notes="Overridden via environment variable QUANTA_MAX_SLOTS",
+            )
+        if "QUANTA_BATCH_WORKERS" in os.environ:
+            raw_bw = os.environ.get("QUANTA_BATCH_WORKERS")
+            try:
+                bw_val = int(raw_bw.strip())
+            except Exception:
+                bw_val = 8
+            curr_batch = self.params.get("server.batch_workers")
+            self.params["server.batch_workers"] = CalibratedParam(
+                name="server.batch_workers",
+                value=bw_val,
+                default_passthrough=curr_batch.default_passthrough if curr_batch else 8,
+                source_exp="env:QUANTA_BATCH_WORKERS",
+                notes="Overridden via environment variable QUANTA_BATCH_WORKERS",
+            )
+
         # Tier 4: Runtime / per-request overrides
         for ov_k, ov_v in self.runtime_overrides.items():
             # Normalize key
@@ -360,6 +401,14 @@ class MultiScaleConfig:
     @property
     def transducer_co_decoded(self) -> bool:
         return bool(self.get("transducer.co_decoded", False))
+
+    @property
+    def server_max_parallel_slots(self) -> int:
+        return int(self.get("server.max_parallel_slots", 8))
+
+    @property
+    def server_batch_workers(self) -> int:
+        return int(self.get("server.batch_workers", 8))
 
     # -------------------------------------------------------------------------
     # Provenance Report & Profile Writing (§1)

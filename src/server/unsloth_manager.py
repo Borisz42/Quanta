@@ -90,7 +90,7 @@ class UnslothServerManager:
         self.port = port
         self.target_model = target_model
         self.target_variant = target_variant or os.getenv("QUANTA_MODEL_VARIANT", DEFAULT_MODEL_VARIANT)
-        self.target_slots = int(os.getenv("QUANTA_PARALLEL_SLOTS", str(target_slots or DEFAULT_PARALLEL_SLOTS)))
+        self.target_slots = int(os.getenv("QUANTA_MAX_SLOTS", os.getenv("QUANTA_PARALLEL_SLOTS", str(target_slots or DEFAULT_PARALLEL_SLOTS))))
         self.model_path = model_path or os.getenv("QUANTA_MODEL_PATH", DEFAULT_MODEL_PATH)
         self.base_url = f"http://{self.host}:{self.port}"
         self.api_url = f"{self.base_url}/v1"
@@ -223,7 +223,7 @@ class UnslothServerManager:
         launched = False
 
         # Candidate 1: standalone hardware-accelerated llama-server.exe
-        parallel_slots = os.getenv("QUANTA_PARALLEL_SLOTS", "16")
+        parallel_slots = os.getenv("QUANTA_MAX_SLOTS", os.getenv("QUANTA_PARALLEL_SLOTS", "16"))
         model_file = Path(self.model_path)
         if not model_file.exists():
             hf_cache = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "hub" / "models--unsloth--Qwen3.5-4B-MTP-GGUF" / "snapshots"

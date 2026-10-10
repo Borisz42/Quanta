@@ -135,5 +135,19 @@
     "source_commit": "37d297e",
     "calibrated_on": "long_context/test",
     "notes": "Gate G5 tolerance bound for foreground TTFT degradation"
+  },
+  "server.max_parallel_slots": {
+    "value": 12,
+    "source_exp": "exp-032a",
+    "source_commit": "49e442f",
+    "calibrated_on": "musique/dev_paragraphs",
+    "notes": "Gate G4 calibrated optimal parallel slots: 12 workers on NVIDIA GeForce RTX 3070, peak throughput 427.1 w/s (2.23x vs single worker)"
+  },
+  "server.batch_workers": {
+    "value": 12,
+    "source_exp": "exp-032a",
+    "source_commit": "49e442f",
+    "calibrated_on": "musique/dev_paragraphs",
+    "notes": "Gate G4 calibrated optimal parallel slots: 12 workers on NVIDIA GeForce RTX 3070, peak throughput 427.1 w/s (2.23x vs single worker)"
   }
 }

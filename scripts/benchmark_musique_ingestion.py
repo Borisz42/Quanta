@@ -236,7 +236,7 @@ def load_musique_passages(corpus: str = "paragraphs", sample_idx: int = 0, num_s
     return question, answer, passages
 
 
-def run_benchmark(mode: str = "auto", corpus: str = "paragraphs", num_samples: int = 2) -> Dict[str, Any]:
+def run_benchmark(mode: str = "auto", corpus: str = "paragraphs", num_samples: int = 2, slots: Optional[int] = None) -> Dict[str, Any]:
     print("=" * 80)
     print("  QUANTA MULTI-PASSAGE MUSIQUE INGESTION SPEED & THROUGHPUT BENCHMARK")
     print("=" * 80)
@@ -267,12 +267,13 @@ def run_benchmark(mode: str = "auto", corpus: str = "paragraphs", num_samples: i
     print("-" * 80)
     print("> CONFIGURATION 1: Ingestion WITHOUT Kev (Direct Skeleton Transduction)")
     print("-" * 80)
+    target_slots = slots or 16
     pipe_no_kev = CognitivePipeline(
         transducer_backend=active_backend,
         kev_mode="bypass",
     )
     t0 = time.perf_counter()
-    graphs_no_kev = pipe_no_kev.ingest_passages_batch(passages, max_workers=16, validate=False)
+    graphs_no_kev = pipe_no_kev.ingest_passages_batch(passages, max_workers=target_slots, validate=False)
     dt_no_kev_s = time.perf_counter() - t0
     wps_no_kev = total_words / max(0.001, dt_no_kev_s)
     lat_per_chunk_no_kev = (dt_no_kev_s * 1000.0) / len(passages)
@@ -307,7 +308,7 @@ def run_benchmark(mode: str = "auto", corpus: str = "paragraphs", num_samples: i
         kev_mode="regular_kev_lora",
     )
     t0 = time.perf_counter()
-    graphs_with_kev = pipe_with_kev.ingest_passages_batch(passages, max_workers=16, validate=False)
+    graphs_with_kev = pipe_with_kev.ingest_passages_batch(passages, max_workers=target_slots, validate=False)
     dt_with_kev_s = time.perf_counter() - t0
     wps_with_kev = total_words / max(0.001, dt_with_kev_s)
     lat_per_chunk_with_kev = (dt_with_kev_s * 1000.0) / len(passages)
@@ -423,7 +424,7 @@ This empirical study addresses the ingestion throughput bottleneck by:
 KEV_MODES = ["bypass", "regular_kev_lora", "tiered", "co_decoded", "async"]
 
 
-def run_kev_mode_comparison(kev_modes: List[str], backend_mode: str = "auto", corpus: str = "paragraphs", num_samples: int = 2) -> Dict[str, Any]:
+def run_kev_mode_comparison(kev_modes: List[str], backend_mode: str = "auto", corpus: str = "paragraphs", num_samples: int = 2, slots: Optional[int] = None) -> Dict[str, Any]:
     """Session 5: comparative benchmark across unified kev_mode options."""
     mgr = UnslothServerManager()
     is_live = False
@@ -433,15 +434,16 @@ def run_kev_mode_comparison(kev_modes: List[str], backend_mode: str = "auto", co
 
     question, answer, passages = load_musique_passages(corpus=corpus, sample_idx=0, num_samples=num_samples)
     total_words = sum(len(p[2].split()) for p in passages)
+    target_slots = slots or 16
     print("=" * 80)
-    print(f"  KEV MODE COMPARISON | backend={backend} | {len(passages)} passages, {total_words} words")
+    print(f"  KEV MODE COMPARISON | backend={backend} | {len(passages)} passages, {total_words} words, slots={target_slots}")
     print("=" * 80)
 
     results: Dict[str, Any] = {}
     for km in kev_modes:
         pipe = CognitivePipeline(transducer_backend=backend, kev_mode=km, page_table_path=":memory:")
         t0 = time.perf_counter()
-        pipe.ingest_passages_batch(passages, max_workers=16, validate=False)
+        pipe.ingest_passages_batch(passages, max_workers=target_slots, validate=False)
         dt = time.perf_counter() - t0
         t1 = time.perf_counter()
         flushed = pipe.flush_kev_queue(timeout=120.0)
@@ -475,7 +477,7 @@ def run_kev_mode_comparison(kev_modes: List[str], backend_mode: str = "auto", co
 
 **Date**: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
 **Backend**: `{backend}`
-**Workload**: MuSiQue multi-passage ({len(passages)} passages, {total_words} words), 16 workers
+**Workload**: MuSiQue multi-passage ({len(passages)} passages, {total_words} words), {target_slots} workers
 **Query**: "{question}" (gold: "{answer}")
 
 | kev_mode | Throughput (w/s) | Mean latency / chunk (ms) | Ingest time (s) | Async flush (s) | Binary nodes | Retrieval (ms) | Multi-hop answer in context |
@@ -495,11 +497,12 @@ if __name__ == "__main__":
     parser.add_argument("--backend", choices=["auto", "mock", "live"], default="auto")
     parser.add_argument("--corpus", choices=["paragraphs", "sentences"], default="paragraphs")
     parser.add_argument("--num-samples", type=int, default=2)
+    parser.add_argument("--slots", type=int, default=None, help="Number of parallel worker slots")
     args = parser.parse_args()
 
     if args.mode == "all":
-        run_kev_mode_comparison(KEV_MODES, args.backend, args.corpus, args.num_samples)
+        run_kev_mode_comparison(KEV_MODES, args.backend, args.corpus, args.num_samples, slots=args.slots)
     elif args.mode in KEV_MODES:
-        run_kev_mode_comparison([args.mode], args.backend, args.corpus, args.num_samples)
+        run_kev_mode_comparison([args.mode], args.backend, args.corpus, args.num_samples, slots=args.slots)
     else:
-        run_benchmark(mode=args.mode, corpus=args.corpus, num_samples=args.num_samples)
+        run_benchmark(mode=args.mode, corpus=args.corpus, num_samples=args.num_samples, slots=args.slots)

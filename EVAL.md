@@ -294,6 +294,33 @@ Evaluating variance between `B0_run1` and `B0_run2` on identical inputs across t
 
 ---
 
+### Table 2.11: Parallel Slot Concurrency Optimization & Empirical Sweeps (exp-032a, Live NVIDIA GeForce RTX 3070 Backend)
+
+> **Workload**: MuSiQue Multi-Passage Benchmark (16 multi-sentence paragraphs, 2,375 words total, 148.4 words/passage)  
+> **Backend**: Live `llama-server` (:8888) serving `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q5_K_M` on NVIDIA GeForce RTX 3070 (8GB VRAM)  
+> **Representation**: `sexpr_compact` (Pure SVO, Co-Decoded Kev: `False`)  
+> **Artifact**: `output/parallel_slots_concurrency_benchmark.md`  
+
+| Parallel Slots $N$ | Ingestion Time (s) | Throughput (w/s) | Mean Latency / Chunk (ms) | Median Latency (ms) | P95 Latency (ms) | Speedup vs $N=1$ | Dropped Requests / Errors | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| **1 slot** | 12.41 s | **191.4 w/s** | 775.6 ms | 673.6 ms | 1,629.3 ms | **1.00x** (Baseline) | 0 | Serial Baseline |
+| **2 slots** | 7.26 s | **326.9 w/s** | 454.0 ms | 891.1 ms | 1,424.2 ms | **1.71x** | 0 | Linear Scaling |
+| **4 slots** | 6.72 s | **353.3 w/s** | 420.2 ms | 1,635.2 ms | 2,476.2 ms | **1.85x** | 0 | Near-Optimal |
+| **8 slots** | 5.64 s | **421.0 w/s** | 352.6 ms | 2,287.3 ms | 4,676.5 ms | **2.20x** | 0 | GPU Saturation Ceiling |
+| **12 slots** | 5.56 s | **427.1 w/s** | 347.5 ms | 3,158.1 ms | 5,311.7 ms | **2.23x** | 0 | **PROMOTED OPTIMAL** |
+| **16 slots** | 5.65 s | **420.6 w/s** | 352.9 ms | 4,461.7 ms | 5,619.6 ms | **2.20x** | 0 | Host Overhead Plateau |
+
+#### Empirical Analysis & Hardware Saturation Observations:
+1. **Continuous Batching Utilization**: Single-worker ($N=1$) ingestion is bottlenecked at 191.4 words/second due to serial HTTP request round-trips and idle GPU cycles between chunk tokens. Parallel worker concurrency keeps all tensor cores and memory bandwidth utilized, elevating aggregate throughput to **427.1 words/second** (**2.23x speedup** on top of S-expression grammar compression).
+2. **Saturation Knee & Overhead Plateau**: Throughput scales steeply from $N=1$ to $N=8$ (+119.9% throughput lift), peaks at $N=12$ (427.1 w/s), and begins slight decay at $N=16$ (420.6 w/s) due to context dispatch contention and P95 latency blowout (5,619.6 ms).
+3. **Calibrated Parameter Persistence**:
+   - `server.max_parallel_slots = 12`
+   - `server.batch_workers = 12`
+   - Recorded in `config/multi_scale_profile.json` under experiment `exp-032a`.
+4. **Zero Error Reliability**: Across all 6 sweep configurations and 96 total paragraph ingestions, connection pool error rate was exactly **0.0%**, confirming HTTP adapter resilience with `pool_connections=64`.
+
+---
+
 
 
 ## Round Guidelines
