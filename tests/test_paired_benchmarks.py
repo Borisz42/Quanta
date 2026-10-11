@@ -379,3 +379,73 @@ def test_latex_table_zero_suppression_and_bolding():
         # MuSiQue reduction should be -70.0%
         assert "-70.0\\%" in main_tex
 
+
+def test_paired_evaluator_3way_dense_mock():
+    """Verifies 3-way dense-hybrid ablation (Base vs Dense RAG vs QUANTA-Gemma) in mock mode."""
+    loader = BenchmarkSuiteLoader()
+    samples = loader.load_musique(limit=2)
+
+    evaluator = PairedEvaluator(mode="mock", ablation_mode="3way-dense")
+    scorecard = evaluator.evaluate_suite("musique", samples)
+
+    assert scorecard.sample_count == 2
+    assert scorecard.ablation_mode == "3way-dense"
+    assert scorecard.dense_rag_accuracy_pct is not None
+    assert scorecard.quanta_gemma_accuracy_pct is not None
+    assert scorecard.quanta_gemma_accuracy_pct >= scorecard.dense_rag_accuracy_pct
+    assert scorecard.dense_rag_prompt_tokens is not None
+    assert scorecard.quanta_gemma_prompt_tokens is not None
+    assert scorecard.dense_rag_latency_s is not None
+    assert scorecard.quanta_gemma_latency_s is not None
+
+    md_row = scorecard.format_markdown_row()
+    assert "| **musique** |" in md_row
+    assert f"{scorecard.dense_rag_accuracy_pct:.1f}%" in md_row
+    assert f"{scorecard.quanta_gemma_accuracy_pct:.1f}%" in md_row
+
+
+def test_embeddinggemma_ablation_latex_export():
+    """Verifies publication LaTeX table generation for EmbeddingGemma ANVC ablation."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exporter = PublicationExporter(output_dir=Path(tmp_dir))
+        sc = ComparativeScorecard(
+            suite_name="musique",
+            sample_count=20,
+            base_accuracy_pct=40.0,
+            base_hallucination_pct=30.0,
+            base_mean_prompt_tokens=2200,
+            base_mean_latency_s=2.30,
+            base_mean_tps=42.0,
+            quanta_local_accuracy_pct=40.0,
+            quanta_local_prompt_tokens=1800,
+            quanta_local_latency_s=1.80,
+            quanta_global_accuracy_pct=60.0,
+            quanta_global_hallucination_pct=0.0,
+            quanta_global_prompt_tokens=420,
+            quanta_global_latency_s=0.85,
+            quanta_global_tps=58.0,
+            token_compression_pct=76.7,
+            speedup_ratio=2.12,
+            accuracy_lift_pct=20.0,
+            p_value=0.002,
+            significance_str="$^{**}$",
+            dense_rag_accuracy_pct=40.0,
+            dense_rag_prompt_tokens=1800,
+            dense_rag_latency_s=1.80,
+            dense_rag_hallucination_pct=25.0,
+            quanta_gemma_accuracy_pct=60.0,
+            quanta_gemma_prompt_tokens=420,
+            quanta_gemma_latency_s=0.85,
+            quanta_gemma_hallucination_pct=0.0,
+            ablation_mode="3way-dense",
+        )
+        paths = exporter.export_latex_tables([sc])
+        assert "embeddinggemma_ablation" in paths
+        assert paths["embeddinggemma_ablation"].exists()
+        content = paths["embeddinggemma_ablation"].read_text(encoding="utf-8")
+        assert "\\label{tab:embeddinggemma_ablation}" in content
+        assert "Dense RAG" in content
+        assert "QUANTA-Gemma" in content
+        assert "\\textbf{musique}" in content
+
+

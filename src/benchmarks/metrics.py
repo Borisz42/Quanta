@@ -452,6 +452,16 @@ class ComparativeScorecard:
     accuracy_lift_pct: float
     p_value: Optional[float] = None
     significance_str: str = ""
+    # ANVC / Dense-Hybrid Ablation extensions
+    dense_rag_accuracy_pct: Optional[float] = None
+    dense_rag_prompt_tokens: Optional[int] = None
+    dense_rag_latency_s: Optional[float] = None
+    dense_rag_hallucination_pct: Optional[float] = None
+    quanta_gemma_accuracy_pct: Optional[float] = None
+    quanta_gemma_prompt_tokens: Optional[int] = None
+    quanta_gemma_latency_s: Optional[float] = None
+    quanta_gemma_hallucination_pct: Optional[float] = None
+    ablation_mode: str = "3way"
 
     def format_terminal_ansi(self) -> str:
         """Formats ANSI-colored terminal report block."""
@@ -463,11 +473,24 @@ class ComparativeScorecard:
         lift_str = "0.0%" if abs(self.accuracy_lift_pct) < 0.05 else (f"+{self.accuracy_lift_pct:.1f}%" if self.accuracy_lift_pct > 0 else f"-{abs(self.accuracy_lift_pct):.1f}%")
         comp_str = "0.0%" if abs(self.token_compression_pct) < 0.05 else f"{self.token_compression_pct:.1f}%"
 
+        is_dense = self.ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+        cond_b_name = "Dense-Only RAG (Gemma 2)" if is_dense else "QUANTA Local (Ephemeral) "
+        cond_c_name = "QUANTA-Gemma ANVC (Core)" if is_dense else "QUANTA + 14GB Wikidata KB"
+
+        cond_b_acc = self.dense_rag_accuracy_pct if (is_dense and self.dense_rag_accuracy_pct is not None) else self.quanta_local_accuracy_pct
+        cond_b_tok = self.dense_rag_prompt_tokens if (is_dense and self.dense_rag_prompt_tokens is not None) else self.quanta_local_prompt_tokens
+        cond_b_lat = self.dense_rag_latency_s if (is_dense and self.dense_rag_latency_s is not None) else self.quanta_local_latency_s
+
+        cond_c_acc = self.quanta_gemma_accuracy_pct if (is_dense and self.quanta_gemma_accuracy_pct is not None) else self.quanta_global_accuracy_pct
+        cond_c_halluc = self.quanta_gemma_hallucination_pct if (is_dense and self.quanta_gemma_hallucination_pct is not None) else self.quanta_global_hallucination_pct
+        cond_c_tok = self.quanta_gemma_prompt_tokens if (is_dense and self.quanta_gemma_prompt_tokens is not None) else self.quanta_global_prompt_tokens
+        cond_c_lat = self.quanta_gemma_latency_s if (is_dense and self.quanta_gemma_latency_s is not None) else self.quanta_global_latency_s
+
         lines = [
             f"\n{c_cyan}=== Comparative Scorecard: {self.suite_name.upper()} (N={self.sample_count}) ==={c_reset}",
             f"  • Base LLM (Unsloth Studio) : Acc: {self.base_accuracy_pct:.1f}% | Halluc: {self.base_hallucination_pct:.1f}% | Prompt: {self.base_mean_prompt_tokens} tok | Latency: {self.base_mean_latency_s:.2f}s ({self.base_mean_tps:.1f} t/s)",
-            f"  • QUANTA Local (Ephemeral)  : Acc: {self.quanta_local_accuracy_pct:.1f}% | Prompt: {self.quanta_local_prompt_tokens} tok | Latency: {self.quanta_local_latency_s:.2f}s",
-            f"  • QUANTA + 14GB Wikidata KB : {c_green}Acc: {self.quanta_global_accuracy_pct:.1f}%{c_reset} | {c_green}Halluc: {self.quanta_global_hallucination_pct:.1f}%{c_reset} | Prompt: {self.quanta_global_prompt_tokens} tok | Latency: {self.quanta_global_latency_s:.2f}s ({self.quanta_global_tps:.1f} t/s)",
+            f"  • {cond_b_name} : Acc: {cond_b_acc:.1f}% | Prompt: {cond_b_tok} tok | Latency: {cond_b_lat:.2f}s",
+            f"  • {cond_c_name} : {c_green}Acc: {cond_c_acc:.1f}%{c_reset} | {c_green}Halluc: {cond_c_halluc:.1f}%{c_reset} | Prompt: {cond_c_tok} tok | Latency: {cond_c_lat:.2f}s ({self.quanta_global_tps:.1f} t/s)",
             f"  • {c_yellow}Key Deltas:{c_reset} {c_green}{lift_str} Accuracy Lift{c_reset} | {c_green}{comp_str} Token Reduction{c_reset} | {self.speedup_ratio:.2f}x Speedup | p-value: {self.p_value or 0.001:.4f} {self.significance_str}",
         ]
         return "\n".join(lines)
@@ -476,10 +499,17 @@ class ComparativeScorecard:
         """Formats a row for GitHub Markdown summary tables."""
         lift_str = "0.0%" if abs(self.accuracy_lift_pct) < 0.05 else (f"+{self.accuracy_lift_pct:.1f}%" if self.accuracy_lift_pct > 0 else f"-{abs(self.accuracy_lift_pct):.1f}%")
         comp_str = "0.0%" if abs(self.token_compression_pct) < 0.05 else (f"-{self.token_compression_pct:.1f}%" if self.token_compression_pct > 0 else f"+{abs(self.token_compression_pct):.1f}%")
+        is_dense = self.ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+        cond_b_acc = self.dense_rag_accuracy_pct if (is_dense and self.dense_rag_accuracy_pct is not None) else self.quanta_local_accuracy_pct
+        cond_c_acc = self.quanta_gemma_accuracy_pct if (is_dense and self.quanta_gemma_accuracy_pct is not None) else self.quanta_global_accuracy_pct
+        cond_c_tok = self.quanta_gemma_prompt_tokens if (is_dense and self.quanta_gemma_prompt_tokens is not None) else self.quanta_global_prompt_tokens
+        cond_c_lat = self.quanta_gemma_latency_s if (is_dense and self.quanta_gemma_latency_s is not None) else self.quanta_global_latency_s
+
         return (
             f"| **{self.suite_name}** | {self.sample_count} | "
-            f"{self.base_accuracy_pct:.1f}% | {self.quanta_local_accuracy_pct:.1f}% | **{self.quanta_global_accuracy_pct:.1f}%** | "
+            f"{self.base_accuracy_pct:.1f}% | {cond_b_acc:.1f}% | **{cond_c_acc:.1f}%** | "
             f"{lift_str} {self.significance_str} | "
-            f"{self.base_mean_prompt_tokens} -> **{self.quanta_global_prompt_tokens}** ({comp_str}) | "
-            f"{self.base_mean_latency_s:.2f}s -> **{self.quanta_global_latency_s:.2f}s** ({self.speedup_ratio:.2f}x) |"
+            f"{self.base_mean_prompt_tokens} -> **{cond_c_tok}** ({comp_str}) | "
+            f"{self.base_mean_latency_s:.2f}s -> **{cond_c_lat:.2f}s** ({self.speedup_ratio:.2f}x) |"
         )
+

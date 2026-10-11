@@ -117,8 +117,13 @@ def interactive_selection(default_checkpoint_path: Optional[Path] = None, defaul
         print("No suites selected. Defaulting to all suites with 10 samples each.")
         selected = {k: 10 for k in AVAILABLE_SUITES}
 
-    ablation_input = input("\nAblation Mode: [1] 3-Way (Base vs Q-Local vs Q+KB) [2] Paired (Base vs Q+KB) (default: 1): ").strip()
-    ablation_mode = "paired" if ablation_input == "2" else "3way"
+    ablation_input = input("\nAblation Mode: [1] 3-Way (Base vs Q-Local vs Q+KB) [2] Paired (Base vs Q+KB) [3] 3-Way Dense ANVC (Base vs Dense RAG vs QUANTA-Gemma) (default: 1): ").strip()
+    if ablation_input == "2":
+        ablation_mode = "paired"
+    elif ablation_input == "3":
+        ablation_mode = "3way-dense"
+    else:
+        ablation_mode = "3way"
 
     mode_input = input("Execution Mode: [1] Live (HTTP to Unsloth & QUANTA) [2] Mock (Fast CI Simulation) (default: 1): ").strip()
     mode = "mock" if mode_input == "2" else "live"
@@ -172,12 +177,17 @@ def generate_markdown_report(
     raw_predictions: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> str:
     """Formats full evaluation report as comprehensive GitHub Markdown."""
+    is_dense = ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+    arch_label = "Base LLM vs. Dense-Only RAG vs. QUANTA-Gemma ANVC" if is_dense else "Base LLM vs. QUANTA Local vs. QUANTA + 14GB Pre-compiled Wikidata KB"
+    table1_h3 = "Dense-Only RAG" if is_dense else "QUANTA Local"
+    table1_h4 = "QUANTA-Gemma" if is_dense else "QUANTA + KB"
+
     lines = [
         "# QUANTA Paired & Ablated Benchmark Report",
         "",
         f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ",
         f"**Execution Mode:** `{execution_mode.upper()}`  ",
-        f"**Ablation Architecture:** `{ablation_mode.upper()}` (Base LLM vs. QUANTA Local vs. QUANTA + 14GB Pre-compiled Wikidata KB)  ",
+        f"**Ablation Architecture:** `{ablation_mode.upper()}` ({arch_label})  ",
         "**Target Hardware:** NVIDIA GeForce RTX 3070 (8GB VRAM)  ",
         "**Base LLM:** `unsloth/Qwen3.5-4B-MTP-GGUF` at `Q5_K_M` (Unsloth Studio `:8888`)  ",
         "",
@@ -185,7 +195,7 @@ def generate_markdown_report(
         "",
         "## 1. Executive Summary & Comparative Scorecard",
         "",
-        "| Benchmark Suite | Samples ($N$) | Base LLM Acc | QUANTA Local | QUANTA + KB | Accuracy Lift | Prompt Token Footprint | Latency Speedup |",
+        f"| Benchmark Suite | Samples ($N$) | Base LLM Acc | {table1_h3} | {table1_h4} | Accuracy Lift | Prompt Token Footprint | Latency Speedup |",
         "|---|---|---|---|---|---|---|---|",
     ]
 
@@ -199,21 +209,45 @@ def generate_markdown_report(
         "",
         "---",
         "",
-        "## 2. Pre-Compiled Knowledge Base (14GB Wikidata) Empirical Impact Analysis",
-        "",
-        "This section measures the exact lift and trade-off of mounting `data/wikipedia_quanta.db` (4.51M entities, 11.65M triples):",
-        "",
-        "| Benchmark Domain | Local ASG Accuracy | +Wikidata KB Accuracy | Knowledge Base Lift ($\\Delta$) | Local Latency | +Wikidata Latency | KB Overhead |",
-        "|---|---|---|---|---|---|---|",
     ])
 
-    for sc in scorecards:
-        lift = sc.quanta_global_accuracy_pct - sc.quanta_local_accuracy_pct
-        lat_diff = sc.quanta_global_latency_s - sc.quanta_local_latency_s
-        lines.append(
-            f"| **{sc.suite_name}** | {sc.quanta_local_accuracy_pct:.1f}% | **{sc.quanta_global_accuracy_pct:.1f}%** | "
-            f"**+{lift:.1f}%** | {sc.quanta_local_latency_s:.2f}s | {sc.quanta_global_latency_s:.2f}s | {lat_diff * 1000.0:+.1f} ms |"
-        )
+    if is_dense:
+        lines.extend([
+            "## 2. Dense-Only RAG vs. QUANTA-Gemma ANVC Empirical Impact Analysis",
+            "",
+            "This section measures the exact lift and trade-off of pure Dense-Only RAG (EmbeddingGemma 2 bi-encoder + top-k context stuffing) against the QUANTA Neuro-Symbolic Core equipped with the Auxiliary Neural Vector Coprocessor (ANVC):",
+            "",
+            "| Benchmark Domain | Dense RAG Accuracy | QUANTA-Gemma Accuracy | ANVC Lift ($\\Delta$) | Dense Latency | QUANTA Latency | ANVC Speedup |",
+            "|---|---|---|---|---|---|---|",
+        ])
+        for sc in scorecards:
+            dense_acc = sc.dense_rag_accuracy_pct if sc.dense_rag_accuracy_pct is not None else sc.quanta_local_accuracy_pct
+            q_acc = sc.quanta_gemma_accuracy_pct if sc.quanta_gemma_accuracy_pct is not None else sc.quanta_global_accuracy_pct
+            dense_lat = sc.dense_rag_latency_s if sc.dense_rag_latency_s is not None else sc.quanta_local_latency_s
+            q_lat = sc.quanta_gemma_latency_s if sc.quanta_gemma_latency_s is not None else sc.quanta_global_latency_s
+            lift = q_acc - dense_acc
+            speed = dense_lat / max(0.001, q_lat)
+            lines.append(
+                f"| **{sc.suite_name}** | {dense_acc:.1f}% | **{q_acc:.1f}%** | "
+                f"**+{lift:.1f}%** | {dense_lat:.2f}s | {q_lat:.2f}s | {speed:.2f}x |"
+            )
+    else:
+        lines.extend([
+            "## 2. Pre-Compiled Knowledge Base (14GB Wikidata) Empirical Impact Analysis",
+            "",
+            "This section measures the exact lift and trade-off of mounting `data/wikipedia_quanta.db` (4.51M entities, 11.65M triples):",
+            "",
+            "| Benchmark Domain | Local ASG Accuracy | +Wikidata KB Accuracy | Knowledge Base Lift ($\\Delta$) | Local Latency | +Wikidata Latency | KB Overhead |",
+            "|---|---|---|---|---|---|---|",
+        ])
+        for sc in scorecards:
+            lift = sc.quanta_global_accuracy_pct - sc.quanta_local_accuracy_pct
+            lat_diff = sc.quanta_global_latency_s - sc.quanta_local_latency_s
+            lines.append(
+                f"| **{sc.suite_name}** | {sc.quanta_local_accuracy_pct:.1f}% | **{sc.quanta_global_accuracy_pct:.1f}%** | "
+                f"**+{lift:.1f}%** | {sc.quanta_local_latency_s:.2f}s | {sc.quanta_global_latency_s:.2f}s | {lat_diff * 1000.0:+.1f} ms |"
+            )
+
 
     lines.extend([
         "",
@@ -386,7 +420,9 @@ def main():
     parser = argparse.ArgumentParser(description="QUANTA Paired & Ablated Publication-Grade Benchmark Runner")
     parser.add_argument("--suite", type=str, default="", help="Comma-separated suites (e.g. humaneval:10,arc_science:20,squad_overhead:10)")
     parser.add_argument("--samples", type=int, default=None, help="Default sample count per suite (overrides suite defaults if specified)")
-    parser.add_argument("--ablation-mode", type=str, default="3way", choices=["paired", "3way"], help="3way (Base vs Q-Local vs Q+KB) or paired")
+    parser.add_argument("--ablation-mode", type=str, default="3way", choices=["paired", "3way", "3way-dense", "3way_dense", "dense_hybrid"], help="3way (Base vs Q-Local vs Q+KB), 3way-dense (Base vs Dense RAG vs QUANTA-Gemma ANVC), or paired")
+    parser.add_argument("--enable-embeddinggemma", action="store_true", help="Enable EmbeddingGemma 2 ANVC auxiliary coprocessor for dense-hybrid ablation")
+    parser.add_argument("--dense-hybrid", action="store_true", help="Alias for 3-way dense ablation (Base vs Dense RAG vs QUANTA-Gemma ANVC)")
     parser.add_argument("--mode", type=str, default="live", choices=["live", "mock"], help="Execution mode (live HTTP or mock CI)")
     parser.add_argument("--base-url", type=str, default="http://127.0.0.1:8888/v1", help="Unsloth Studio HTTP API URL")
     parser.add_argument("--quanta-url", type=str, default="http://127.0.0.1:8000/v1", help="QUANTA Reverse Proxy HTTP API URL")
@@ -402,6 +438,9 @@ def main():
     parser.add_argument("--target-model", type=str, default="unsloth/Qwen3.5-4B-MTP-GGUF", help="Downstream base LLM model ID")
     parser.add_argument("--workers", type=int, default=default_workers, help=f"Number of concurrent worker threads for parallel slot continuous batching (default: {default_workers})")
     args = parser.parse_args()
+
+    if args.dense_hybrid or args.enable_embeddinggemma:
+        args.ablation_mode = "3way-dense"
 
     print_banner()
 
@@ -438,6 +477,9 @@ def main():
                         ablation_mode = raw_cp["ablation_mode"]
             except Exception as e:
                 logger.warning("Could not read saved suite_config from checkpoint: %s", e)
+
+    if ablation_mode in ("3way_dense", "dense_hybrid"):
+        ablation_mode = "3way-dense"
 
     print(format_ansi(f"\n[>] Execution Configuration: Mode={mode.upper()} | Ablation={ablation_mode.upper()} | Workers={args.workers} (Parallel Decode Slots)", "1;32"))
     print(format_ansi(f"[>] Target Suites: {suite_config}\n", "1;37"))
@@ -542,6 +584,8 @@ def main():
         print_lock = threading.Lock()
         checkpoint_lock = threading.Lock()
 
+        is_dense_ablation = ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+
         # Identify which samples are already cached vs need evaluation
         to_evaluate = []
         for i, s in enumerate(samples, 1):
@@ -550,10 +594,19 @@ def main():
                 if cached_pr:
                     suite_paired_results[i - 1] = cached_pr
                     corr_icon_base = "[PASS]" if cached_pr.base_result.is_correct else "[FAIL]"
-                    corr_icon_quanta = "[PASS]" if cached_pr.quanta_global_result and cached_pr.quanta_global_result.is_correct else "[FAIL]"
-                    diag_tag = cached_pr.diagnostic_tag or (cached_pr.quanta_global_result.diagnostic_tag if cached_pr.quanta_global_result else None)
-                    diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
-                    print(f"  [{i:>2}/{len(samples)}] {s.id:<20} [CACHED] | Base: {corr_icon_base} ({cached_pr.base_result.prompt_tokens} tok, {cached_pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({cached_pr.quanta_global_result.prompt_tokens if cached_pr.quanta_global_result else 0} tok, {cached_pr.quanta_global_result.total_e2e_latency_s if cached_pr.quanta_global_result else 0:.2f}s){diag_str}")
+                    if is_dense_ablation:
+                        cond_b_res = cached_pr.dense_rag_result or cached_pr.quanta_local_result
+                        cond_c_res = cached_pr.quanta_gemma_result or cached_pr.quanta_global_result
+                        corr_icon_dense = "[PASS]" if cond_b_res and cond_b_res.is_correct else "[FAIL]"
+                        corr_icon_gemma = "[PASS]" if cond_c_res and cond_c_res.is_correct else "[FAIL]"
+                        diag_tag = cached_pr.diagnostic_tag or (cond_c_res.diagnostic_tag if cond_c_res else None)
+                        diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                        print(f"  [{i:>2}/{len(samples)}] {s.id:<20} [CACHED] | Base: {corr_icon_base} ({cached_pr.base_result.prompt_tokens} tok, {cached_pr.base_result.total_e2e_latency_s:.2f}s) | Dense: {corr_icon_dense} ({cond_b_res.prompt_tokens if cond_b_res else 0} tok, {cond_b_res.total_e2e_latency_s if cond_b_res else 0:.2f}s) | QUANTA-Gemma: {corr_icon_gemma} ({cond_c_res.prompt_tokens if cond_c_res else 0} tok, {cond_c_res.total_e2e_latency_s if cond_c_res else 0:.2f}s){diag_str}")
+                    else:
+                        corr_icon_quanta = "[PASS]" if cached_pr.quanta_global_result and cached_pr.quanta_global_result.is_correct else "[FAIL]"
+                        diag_tag = cached_pr.diagnostic_tag or (cached_pr.quanta_global_result.diagnostic_tag if cached_pr.quanta_global_result else None)
+                        diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                        print(f"  [{i:>2}/{len(samples)}] {s.id:<20} [CACHED] | Base: {corr_icon_base} ({cached_pr.base_result.prompt_tokens} tok, {cached_pr.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({cached_pr.quanta_global_result.prompt_tokens if cached_pr.quanta_global_result else 0} tok, {cached_pr.quanta_global_result.total_e2e_latency_s if cached_pr.quanta_global_result else 0:.2f}s){diag_str}")
                     continue
             to_evaluate.append((i, s))
 
@@ -567,11 +620,21 @@ def main():
 
             with print_lock:
                 corr_icon_base = "[PASS]" if pr_res.base_result.is_correct else "[FAIL]"
-                corr_icon_quanta = "[PASS]" if pr_res.quanta_global_result and pr_res.quanta_global_result.is_correct else "[FAIL]"
-                diag_tag = pr_res.diagnostic_tag or (pr_res.quanta_global_result.diagnostic_tag if pr_res.quanta_global_result else None)
-                diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
-                sess_info = f" [{session_id}]" if session_id else ""
-                print(f"  [{idx_1based:>2}/{len(samples)}] {sample_obj.id:<20}{sess_info} | Base: {corr_icon_base} ({pr_res.base_result.prompt_tokens} tok, {pr_res.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr_res.quanta_global_result.prompt_tokens if pr_res.quanta_global_result else 0} tok, {pr_res.quanta_global_result.total_e2e_latency_s if pr_res.quanta_global_result else 0:.2f}s){diag_str}")
+                if is_dense_ablation:
+                    cond_b_res = pr_res.dense_rag_result or pr_res.quanta_local_result
+                    cond_c_res = pr_res.quanta_gemma_result or pr_res.quanta_global_result
+                    corr_icon_dense = "[PASS]" if cond_b_res and cond_b_res.is_correct else "[FAIL]"
+                    corr_icon_gemma = "[PASS]" if cond_c_res and cond_c_res.is_correct else "[FAIL]"
+                    diag_tag = pr_res.diagnostic_tag or (cond_c_res.diagnostic_tag if cond_c_res else None)
+                    diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                    sess_info = f" [{session_id}]" if session_id else ""
+                    print(f"  [{idx_1based:>2}/{len(samples)}] {sample_obj.id:<20}{sess_info} | Base: {corr_icon_base} ({pr_res.base_result.prompt_tokens} tok, {pr_res.base_result.total_e2e_latency_s:.2f}s) | Dense: {corr_icon_dense} ({cond_b_res.prompt_tokens if cond_b_res else 0} tok, {cond_b_res.total_e2e_latency_s if cond_b_res else 0:.2f}s) | QUANTA-Gemma: {corr_icon_gemma} ({cond_c_res.prompt_tokens if cond_c_res else 0} tok, {cond_c_res.total_e2e_latency_s if cond_c_res else 0:.2f}s){diag_str}")
+                else:
+                    corr_icon_quanta = "[PASS]" if pr_res.quanta_global_result and pr_res.quanta_global_result.is_correct else "[FAIL]"
+                    diag_tag = pr_res.diagnostic_tag or (pr_res.quanta_global_result.diagnostic_tag if pr_res.quanta_global_result else None)
+                    diag_str = f" {format_ansi(diag_tag, '1;35')}" if diag_tag else ""
+                    sess_info = f" [{session_id}]" if session_id else ""
+                    print(f"  [{idx_1based:>2}/{len(samples)}] {sample_obj.id:<20}{sess_info} | Base: {corr_icon_base} ({pr_res.base_result.prompt_tokens} tok, {pr_res.base_result.total_e2e_latency_s:.2f}s) | QUANTA+KB: {corr_icon_quanta} ({pr_res.quanta_global_result.prompt_tokens if pr_res.quanta_global_result else 0} tok, {pr_res.quanta_global_result.total_e2e_latency_s if pr_res.quanta_global_result else 0:.2f}s){diag_str}")
 
                 if diag_tag == "[TRUNCATED]":
                     print(format_ansi(f"     ↳ [FORENSIC ALERT: TRUNCATED] {sample_obj.id}: Output was cut off by token limit (finish_reason='length')!", "1;31"))

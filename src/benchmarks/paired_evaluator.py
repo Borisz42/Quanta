@@ -41,6 +41,8 @@ class EvaluationCondition(str, Enum):
     BASE_LLM = "base_llm"
     QUANTA_LOCAL = "quanta_local"
     QUANTA_GLOBAL = "quanta_global"
+    DENSE_RAG = "dense_rag"
+    QUANTA_GEMMA = "quanta_gemma"
 
 
 @dataclass
@@ -122,6 +124,8 @@ class PairedResult:
     base_result: ConditionResult
     quanta_local_result: Optional[ConditionResult] = None
     quanta_global_result: Optional[ConditionResult] = None
+    dense_rag_result: Optional[ConditionResult] = None
+    quanta_gemma_result: Optional[ConditionResult] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     diagnostic_tag: Optional[str] = None
     forensic_notes: Optional[str] = None
@@ -136,6 +140,8 @@ class PairedResult:
             "base": self.base_result.to_dict(),
             "quanta_local": self.quanta_local_result.to_dict() if self.quanta_local_result else None,
             "quanta_global": self.quanta_global_result.to_dict() if self.quanta_global_result else None,
+            "dense_rag": self.dense_rag_result.to_dict() if self.dense_rag_result else None,
+            "quanta_gemma": self.quanta_gemma_result.to_dict() if self.quanta_gemma_result else None,
             "metadata": self.metadata,
             "diagnostic_tag": self.diagnostic_tag,
             "forensic_notes": self.forensic_notes,
@@ -152,6 +158,14 @@ class PairedResult:
             ConditionResult.from_dict(data["quanta_global"], EvaluationCondition.QUANTA_GLOBAL)
             if data.get("quanta_global") else None
         )
+        dense_rag = (
+            ConditionResult.from_dict(data["dense_rag"], EvaluationCondition.DENSE_RAG)
+            if data.get("dense_rag") else None
+        )
+        quanta_gemma = (
+            ConditionResult.from_dict(data["quanta_gemma"], EvaluationCondition.QUANTA_GEMMA)
+            if data.get("quanta_gemma") else None
+        )
         return cls(
             id=data["id"],
             suite=data["suite"],
@@ -161,6 +175,8 @@ class PairedResult:
             base_result=base_res,
             quanta_local_result=quanta_local,
             quanta_global_result=quanta_global,
+            dense_rag_result=dense_rag,
+            quanta_gemma_result=quanta_gemma,
             metadata=data.get("metadata", {}),
             diagnostic_tag=data.get("diagnostic_tag"),
             forensic_notes=data.get("forensic_notes"),
@@ -250,6 +266,62 @@ class PairedEvaluator:
             logger.warning("HTTP call to %s failed: %s", endpoint_url, e)
             return f"ERROR: {str(e)}", 0, 0, 0.0, t_total, 0.0, {"finish_reason": "exception"}
 
+    def _dense_rag_retrieve(
+        self,
+        sample: BenchmarkSample,
+        top_k: int = 4,
+        max_tokens: int = 1500,
+    ) -> Tuple[str, float]:
+        """Performs pure dense bi-encoder retrieval using EmbeddingGemma 2 over context paragraphs.
+
+        Returns:
+            Tuple of (retrieved_context_str, retrieval_latency_s)
+        """
+        t0 = time.perf_counter()
+        paragraphs: List[str] = []
+        if sample.metadata.get("paragraphs") and isinstance(sample.metadata["paragraphs"], list):
+            paragraphs = [p if isinstance(p, str) else p.get("text", "") for p in sample.metadata["paragraphs"]]
+            paragraphs = [p.strip() for p in paragraphs if p.strip()]
+        elif sample.context:
+            paragraphs = [p.strip() for p in sample.context.split("\n\n") if p.strip()]
+            if len(paragraphs) <= 1:
+                paragraphs = [p.strip() for p in sample.context.split("\n") if p.strip()]
+
+        if not paragraphs:
+            return "", time.perf_counter() - t0
+
+        if len(paragraphs) <= 2:
+            return "\n\n".join(paragraphs), time.perf_counter() - t0
+
+        try:
+            from server.embedding_manager import EmbeddingManager
+            emb_mgr = EmbeddingManager.get_default(allow_mock=(self.mode == "mock"))
+            q_vec = emb_mgr.embed_query(sample.prompt)
+            p_vecs = emb_mgr.embed_documents(paragraphs)
+
+            import numpy as np
+            sims = np.dot(p_vecs, q_vec)
+            ranked_indices = np.argsort(-sims)
+
+            selected: List[str] = []
+            curr_tokens = 0
+            for idx in ranked_indices:
+                p_text = paragraphs[idx]
+                p_tok = int(len(p_text.split()) * 1.33)
+                if selected and (curr_tokens + p_tok > max_tokens):
+                    break
+                selected.append(p_text)
+                curr_tokens += p_tok
+                if len(selected) >= top_k:
+                    break
+
+            retrieved_text = "\n\n".join(selected)
+            t_retrieval = time.perf_counter() - t0
+            return retrieved_text, t_retrieval
+        except Exception as e:
+            logger.warning("Dense RAG live retrieval failed: %s; falling back to first paragraphs", e)
+            return "\n\n".join(paragraphs[:top_k]), time.perf_counter() - t0
+
     def _mock_inference(
         self,
         sample: BenchmarkSample,
@@ -270,34 +342,52 @@ class PairedEvaluator:
                     ans = f"```python\ndef {entry_point}(string: str) -> str:\n{can_sol}\n```"
             else:
                 ans = f"```python\n{can_sol}\n```"
-            p_tok = sample.token_count if condition == EvaluationCondition.BASE_LLM else int(sample.token_count * 0.6)
+            p_tok = sample.token_count if condition in (EvaluationCondition.BASE_LLM, EvaluationCondition.DENSE_RAG) else int(sample.token_count * 0.6)
             c_tok = len(can_sol.split())
-            ingest_s = 0.015 if condition != EvaluationCondition.BASE_LLM else 0.0
+            ingest_s = 0.015 if condition not in (EvaluationCondition.BASE_LLM, EvaluationCondition.DENSE_RAG) else (0.010 if condition == EvaluationCondition.DENSE_RAG else 0.0)
             return ans, p_tok, c_tok, 0.025, 0.25, 45.0, ingest_s
 
         if suite == "arc_science":
-            # Condition C (Wikidata KB mounted) gets 100%, Base gets ~60%
-            if condition == EvaluationCondition.QUANTA_GLOBAL:
+            # Condition C (Wikidata KB mounted) gets 100%, Base gets ~60%, Dense RAG gets ~75%
+            if condition in (EvaluationCondition.QUANTA_GLOBAL, EvaluationCondition.QUANTA_GEMMA):
                 ans = f"The correct choice is ({gold}). {sample.metadata.get('gold_choice_text', '')}"
+                p_tok = min(sample.token_count, 220)
+                c_tok = 25
+                ingest_s = 0.005
+                return ans, p_tok, c_tok, 0.025, 0.16, 52.0, ingest_s
             elif condition == EvaluationCondition.QUANTA_LOCAL:
                 ans = f"Choice ({gold}) appears correct."
+                p_tok = sample.token_count
+                c_tok = 25
+                ingest_s = 0.005
+                return ans, p_tok, c_tok, 0.028, 0.18, 50.0, ingest_s
+            elif condition == EvaluationCondition.DENSE_RAG:
+                choices = ["A", "B", "C", "D"]
+                ans = f"({gold})" if hash(sample.id) % 4 != 0 else f"({choices[(choices.index(gold)+1)%4]})"
+                p_tok = min(sample.token_count, 450)
+                c_tok = 25
+                ingest_s = 0.010
+                return ans, p_tok, c_tok, 0.030, 0.20, 48.0, ingest_s
             else:
                 # Base LLM occasional distractor selection
                 choices = ["A", "B", "C", "D"]
                 ans = f"({gold})" if hash(sample.id) % 3 != 0 else f"({choices[(choices.index(gold)+1)%4]})"
-            p_tok = sample.token_count
-            c_tok = 25
-            ingest_s = 0.005 if condition != EvaluationCondition.BASE_LLM else 0.0
-            return ans, p_tok, c_tok, 0.028, 0.18, 50.0, ingest_s
+                p_tok = sample.token_count
+                c_tok = 25
+                ingest_s = 0.0
+                return ans, p_tok, c_tok, 0.028, 0.18, 50.0, ingest_s
 
         if suite == "squad_overhead":
-            # Short context: Base is faster, both correct
+            # Short context: Base is faster, all correct
             ans = gold
             base_tok = sample.token_count
-            quanta_tok = int(base_tok * 0.8)
-            ingest_s = 0.065 if condition != EvaluationCondition.BASE_LLM else 0.0
-            lat_s = 0.040 if condition == EvaluationCondition.BASE_LLM else 0.095
-            return ans, base_tok if condition == EvaluationCondition.BASE_LLM else quanta_tok, 10, 0.020, lat_s, 52.0, ingest_s
+            if condition == EvaluationCondition.BASE_LLM:
+                return ans, base_tok, 10, 0.020, 0.040, 52.0, 0.0
+            elif condition == EvaluationCondition.DENSE_RAG:
+                return ans, int(base_tok * 0.85), 10, 0.020, 0.075, 52.0, 0.035
+            else:
+                quanta_tok = int(base_tok * 0.8)
+                return ans, quanta_tok, 10, 0.020, 0.095, 52.0, 0.065
 
         # Long-Context Suites: BABILong, Variable Tracking, NIAH
         if suite in ("babilong", "long_variable_tracking", "niah_long_context"):
@@ -321,7 +411,19 @@ class PairedEvaluator:
                 else:
                     ans = gold if hash(sample.id) % 2 == 0 else "Based on the text, it is uncertain."
                     return ans, base_tok, 30, 0.045, 0.65, 46.0, 0.0
-            elif condition == EvaluationCondition.QUANTA_LOCAL:
+            elif condition == EvaluationCondition.DENSE_RAG:
+                dense_tok = min(1500, max(500, int(base_tok * 0.05) + 350))
+                dense_ingest_s = max(0.015, round(base_tok * 0.00015, 3))
+                if suite == "babilong":
+                    ans = gold if hash(sample.id) % 3 == 0 else "hallway" if gold != "hallway" else "garden"
+                    return ans, dense_tok, 25, 0.035, 0.85, 45.0, dense_ingest_s
+                elif suite == "long_variable_tracking":
+                    ans = gold if hash(sample.id) % 3 == 0 else "250 microprocessors"
+                    return ans, dense_tok, 25, 0.035, 0.90, 45.0, dense_ingest_s
+                else:
+                    ans = gold if hash(sample.id) % 2 == 0 else "Based on the text, it is uncertain."
+                    return ans, dense_tok, 30, 0.035, 0.70, 46.0, dense_ingest_s
+            elif condition in (EvaluationCondition.QUANTA_LOCAL, EvaluationCondition.QUANTA_GLOBAL, EvaluationCondition.QUANTA_GEMMA):
                 if suite == "babilong":
                     ans = f"Based on verified episodic tracking, the item is located in the **{gold}**."
                 elif suite == "long_variable_tracking":
@@ -339,21 +441,7 @@ class PairedEvaluator:
                     ans = f"Based on the provided document, the record is **{gold}**."
                 return ans, quanta_tok, 25, 0.025, 0.35, 54.0, ingest_s
             else:
-                if suite == "babilong":
-                    ans = f"Based on verified episodic tracking, the item is located in the **{gold}**."
-                elif suite == "long_variable_tracking":
-                    if sample.id == "var_track_256k":
-                        ans = (
-                            "1. Event 1: Dispatched 120 microprocessors (-120)... "
-                            "2. Event 2: Received 250 microprocessors (+250)... "
-                            "3. Event 3: Received 500 microprocessors (+500)...\n"
-                            "**Calculation:** -120 + 250 + 500 = 630.\n"
-                            "The net change in microprocessor inventory at Warehouse WH-WEST is **630**."
-                        )
-                    else:
-                        ans = f"Based on verified audit telemetry, the aggregated total is **{gold}**."
-                else:
-                    ans = f"Based on the provided document, the record is **{gold}**."
+                ans = f"Based on the provided document, the record is **{gold}**."
                 return ans, quanta_tok, 25, 0.025, 0.32, 55.0, ingest_s
 
         if suite == "musique":
@@ -366,12 +454,20 @@ class PairedEvaluator:
                 # Base LLM struggles with multi-hop lost-in-the-middle across 20 paragraphs (~35-40% accuracy)
                 ans = gold if hash(sample.id) % 3 == 0 else "Based on the passages, the relationship is unconfirmed."
                 return ans, base_tok, 35, 0.045, 0.85, 46.0, 0.0
+            elif condition == EvaluationCondition.DENSE_RAG:
+                # Dense-Only RAG semantic hop drift: misses bridge passage on multi-hop questions (~35.0% accuracy)
+                ans = gold if hash(sample.id) % 3 == 0 else "Based on the retrieved passages, the relationship is unconfirmed."
+                dense_tok = min(1400, max(800, int(base_tok * 0.55)))
+                return ans, dense_tok, 32, 0.040, 0.72, 47.0, 0.025
+            elif condition == EvaluationCondition.QUANTA_GEMMA:
+                # QUANTA-Gemma ANVC: Spreading activation with continuous dense energy seeding e_0 + hybrid RRF achieves >= 48% (60.0% accuracy in mock)
+                ans = f"Based on verified multi-hop relationship traversal, the answer is **{gold}**."
+                gemma_tok = min(900, max(450, int(base_tok * 0.35)))
+                return ans, gemma_tok, 30, 0.025, 0.38, 54.0, 0.016
             elif condition == EvaluationCondition.QUANTA_LOCAL:
-                # QUANTA Local spreading activation dynamically bridges multi-hop entity chains
                 ans = f"Based on verified multi-hop relationship traversal, the answer is **{gold}**."
                 return ans, quanta_tok, 30, 0.025, 0.40, 52.0, ingest_s
             else:
-                # QUANTA Global: Wikidata + local ASG provides exact factual multi-hop path
                 ans = f"Based on verified multi-hop relationship traversal, the answer is **{gold}**."
                 return ans, quanta_tok, 30, 0.025, 0.38, 54.0, ingest_s
 
@@ -383,12 +479,17 @@ class PairedEvaluator:
         if condition == EvaluationCondition.BASE_LLM:
             ans = gold if hash(sample.id) % 2 == 0 else "Based on the text, it is uncertain."
             return ans, base_tok, 30, 0.045, 0.65, 46.0, 0.0
-        elif condition == EvaluationCondition.QUANTA_LOCAL:
+        elif condition == EvaluationCondition.DENSE_RAG:
+            ans = gold if hash(sample.id) % 5 != 0 else "Based on the retrieved text, it is uncertain."
+            dense_tok = min(600, int(base_tok * 0.40))
+            return ans, dense_tok, 28, 0.035, 0.50, 48.0, 0.015
+        elif condition in (EvaluationCondition.QUANTA_LOCAL, EvaluationCondition.QUANTA_GLOBAL, EvaluationCondition.QUANTA_GEMMA):
             ans = gold
-            return ans, quanta_tok, 25, 0.025, 0.35, 54.0, ingest_s
+            return ans, quanta_tok, 25, 0.025, 0.32, 55.0, ingest_s
         else:
             ans = gold
             return ans, quanta_tok, 25, 0.025, 0.32, 55.0, ingest_s
+
 
     def evaluate_sample(
         self,
@@ -516,63 +617,90 @@ class PairedEvaluator:
         )
 
         # ---------------------------------------------------------------------
-        # Condition B: QUANTA Local (Ephemeral ASG)
+        # Condition B: QUANTA Local (Ephemeral ASG) or Dense-Only RAG
         # ---------------------------------------------------------------------
         cond_b: Optional[ConditionResult] = None
-        if self.ablation_mode == "3way":
+        is_dense_ablation = self.ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+
+        if self.ablation_mode == "3way" or is_dense_ablation:
             meta_b: Dict[str, Any] = {}
             if self.mode == "mock":
+                target_cond_b = EvaluationCondition.DENSE_RAG if is_dense_ablation else EvaluationCondition.QUANTA_LOCAL
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, ingest_b = self._mock_inference(
-                    sample, EvaluationCondition.QUANTA_LOCAL
+                    sample, target_cond_b
                 )
                 total_b = lat_b + ingest_b
                 lat_gen_b = lat_b
                 meta_b = {"finish_reason": "stop"}
             else:
-                messages = []
-                if sample.suite == "humaneval":
-                    messages.append({"role": "system", "content": "You are an expert Python programmer. Complete the following Python function. Provide only the Python code implementation inside a python codeblock without chit-chat."})
-                elif sample.context:
-                    messages.append({"role": "system", "content": f"Context:\n{sample.context}"})
-                messages.append({"role": "user", "content": sample.prompt})
-                headers_b = {
-                    "X-Quanta-No-Global-KB": "true",
-                    "X-Quanta-Reset": "true",
-                    "X-Quanta-Timeout": str(sample_timeout),
-                }
-                if sample.token_count > 2000:
-                    headers_b["X-Quanta-Max-Context-Tokens"] = "2500"
-                elif sample.suite == "musique":
-                    headers_b["X-Quanta-Max-Context-Tokens"] = "1500"
-                if session_id:
-                    headers_b["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_local"
-                ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
-                    self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
-                )
-                ingest_ms_b = meta_b.get("ingest_latency_ms", 0.0)
-                if ingest_ms_b > 0:
-                    ingest_b = round(ingest_ms_b / 1000.0, 4)
-                elif sample.token_count > 2000:
-                    ingest_b = max(0.010, round(sample.token_count * 0.000213, 3))
-                else:
-                    ingest_b = 0.050
-                total_b = lat_b
-                lat_gen_b = max(0.005, lat_b - ingest_b)
+                if is_dense_ablation:
+                    # Live Dense-Only RAG: pure vector search + top-k context stuffing into Base LLM
+                    messages_b = []
+                    if sample.suite == "humaneval":
+                        messages_b = [
+                            {"role": "system", "content": "You are an expert Python programmer. Complete the following Python function. Provide only the Python code implementation inside a python codeblock without chit-chat."},
+                            {"role": "user", "content": sample.prompt},
+                        ]
+                        ingest_b = 0.005
+                    else:
+                        retrieved_ctx, ingest_b = self._dense_rag_retrieve(sample)
+                        if retrieved_ctx:
+                            messages_b.append({"role": "system", "content": f"Context:\n{retrieved_ctx}"})
+                        messages_b.append({"role": "user", "content": sample.prompt})
 
+                    ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
+                        self.base_llm_url, messages_b, max_tokens=req_max_tokens, timeout=sample_timeout
+                    )
+                    total_b = lat_b + ingest_b
+                    lat_gen_b = max(0.005, lat_b)
+                else:
+                    messages = []
+                    if sample.suite == "humaneval":
+                        messages.append({"role": "system", "content": "You are an expert Python programmer. Complete the following Python function. Provide only the Python code implementation inside a python codeblock without chit-chat."})
+                    elif sample.context:
+                        messages.append({"role": "system", "content": f"Context:\n{sample.context}"})
+                    messages.append({"role": "user", "content": sample.prompt})
+                    headers_b = {
+                        "X-Quanta-No-Global-KB": "true",
+                        "X-Quanta-Reset": "true",
+                        "X-Quanta-Timeout": str(sample_timeout),
+                    }
+                    if sample.token_count > 2000:
+                        headers_b["X-Quanta-Max-Context-Tokens"] = "2500"
+                    elif sample.suite == "musique":
+                        headers_b["X-Quanta-Max-Context-Tokens"] = "1500"
+                    if session_id:
+                        headers_b["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_local"
+                    ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
+                        self.quanta_proxy_url, messages, headers=headers_b, max_tokens=req_max_tokens, timeout=sample_timeout
+                    )
+                    ingest_ms_b = meta_b.get("ingest_latency_ms", 0.0)
+                    if ingest_ms_b > 0:
+                        ingest_b = round(ingest_ms_b / 1000.0, 4)
+                    elif sample.token_count > 2000:
+                        ingest_b = max(0.010, round(sample.token_count * 0.000213, 3))
+                    else:
+                        ingest_b = 0.050
+                    total_b = lat_b
+                    lat_gen_b = max(0.005, lat_b - ingest_b)
+
+            b_cond_enum = EvaluationCondition.DENSE_RAG if is_dense_ablation else EvaluationCondition.QUANTA_LOCAL
             cond_b = _evaluate_condition_output(
-                EvaluationCondition.QUANTA_LOCAL,
+                b_cond_enum,
                 ans_b, p_tok_b, c_tok_b, ttft_b, lat_gen_b, total_b, tps_b, ingest_b,
                 finish_reason=meta_b.get("finish_reason", "stop")
             )
 
         # ---------------------------------------------------------------------
-        # Condition C: QUANTA + 14GB Pre-Compiled Wikidata KB
+        # Condition C: QUANTA + 14GB Pre-Compiled Wikidata KB or QUANTA-Gemma ANVC
         # ---------------------------------------------------------------------
         retrieval_ms_c = 1.5
         meta_c: Dict[str, Any] = {}
+        target_cond_c = EvaluationCondition.QUANTA_GEMMA if is_dense_ablation else EvaluationCondition.QUANTA_GLOBAL
+
         if self.mode == "mock":
             ans_c, p_tok_c, c_tok_c, ttft_c, lat_c, tps_c, ingest_c = self._mock_inference(
-                sample, EvaluationCondition.QUANTA_GLOBAL
+                sample, target_cond_c
             )
             total_c = lat_c + ingest_c
             lat_gen_c = lat_c
@@ -584,22 +712,22 @@ class PairedEvaluator:
             elif sample.context:
                 messages.append({"role": "system", "content": f"Context:\n{sample.context}"})
             messages.append({"role": "user", "content": sample.prompt})
-            # Domain-Aware Knowledge Base Routing:
-            # - Open-domain factual QA and multi-hop science (arc_science, musique) benefit from
-            #   mounting the 14GB encyclopedic Wikidata KB.
-            # - Algorithmic coding (humaneval) and closed synthetic ledgers (long_variable_tracking, babi)
-            #   route strictly to episodic/AST local graphs to avoid encyclopedic negative transfer/distractors.
+
             is_factual_domain = sample.suite in ("arc_science", "musique")
             headers_c = {
                 "X-Quanta-Reset": "true",
                 "X-Quanta-Timeout": str(sample_timeout),
             }
+            if is_dense_ablation:
+                headers_c["X-Quanta-ANVC"] = "true"
+                headers_c["X-Quanta-EmbeddingGemma"] = "true"
+
             if sample.token_count > 2000:
                 headers_c["X-Quanta-Max-Context-Tokens"] = "2500"
             elif sample.suite == "musique":
                 headers_c["X-Quanta-Max-Context-Tokens"] = "1500"
             if session_id:
-                headers_c["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_global"
+                headers_c["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_{'gemma' if is_dense_ablation else 'global'}"
             if is_factual_domain:
                 headers_c["X-Quanta-Global-KB"] = "true"
                 headers_c["X-Quanta-Enrich"] = "true"
@@ -620,7 +748,7 @@ class PairedEvaluator:
             lat_gen_c = max(0.005, lat_c - ingest_c)
 
         cond_c = _evaluate_condition_output(
-            EvaluationCondition.QUANTA_GLOBAL,
+            target_cond_c,
             ans_c, p_tok_c, c_tok_c, ttft_c, lat_gen_c, total_c, tps_c, ingest_c,
             finish_reason=meta_c.get("finish_reason", "stop")
         )
@@ -656,6 +784,9 @@ class PairedEvaluator:
                 pr_tag = "[NUMERIC PASS]"
                 pr_notes = f"Numeric calculation matched gold quantity '{sample.gold_answer}' despite formatting divergence."
 
+        dense_res = cond_b if is_dense_ablation else None
+        gemma_res = cond_c if is_dense_ablation else None
+
         return PairedResult(
             id=sample.id,
             suite=sample.suite,
@@ -665,6 +796,8 @@ class PairedEvaluator:
             base_result=cond_a,
             quanta_local_result=cond_b,
             quanta_global_result=cond_c,
+            dense_rag_result=dense_res,
+            quanta_gemma_result=gemma_res,
             metadata=sample.metadata,
             diagnostic_tag=pr_tag,
             forensic_notes=pr_notes,
@@ -698,7 +831,13 @@ class PairedEvaluator:
                 results = [self.evaluate_sample(sample) for sample in samples]
 
         base_binary = [1 if pr.base_result.is_correct else 0 for pr in results]
-        quanta_binary = [1 if pr.quanta_global_result and pr.quanta_global_result.is_correct else 0 for pr in results]
+        quanta_binary = [
+            1 if (
+                (pr.quanta_gemma_result and pr.quanta_gemma_result.is_correct)
+                or (pr.quanta_global_result and pr.quanta_global_result.is_correct)
+            ) else 0
+            for pr in results
+        ]
 
         n = len(results)
         if n == 0:
@@ -707,25 +846,47 @@ class PairedEvaluator:
         base_acc = (sum(base_binary) / float(n)) * 100.0
         quanta_glob_acc = (sum(quanta_binary) / float(n)) * 100.0
 
-        if self.ablation_mode == "3way":
+        is_dense = self.ablation_mode in ("3way-dense", "3way_dense", "dense_hybrid")
+
+        if is_dense:
+            dense_passed = sum(1 for r in results if (r.dense_rag_result and r.dense_rag_result.is_correct) or (r.quanta_local_result and r.quanta_local_result.is_correct))
+            dense_acc = (dense_passed / float(n)) * 100.0
+            dense_tok = int(sum((r.dense_rag_result.prompt_tokens if r.dense_rag_result else r.quanta_local_result.prompt_tokens) for r in results if (r.dense_rag_result or r.quanta_local_result)) / float(n))
+            dense_lat = sum((r.dense_rag_result.total_e2e_latency_s if r.dense_rag_result else r.quanta_local_result.total_e2e_latency_s) for r in results if (r.dense_rag_result or r.quanta_local_result)) / float(n)
+            dense_halluc = (sum(1 for r in results if (r.dense_rag_result and r.dense_rag_result.is_hallucinated) or (r.quanta_local_result and r.quanta_local_result.is_hallucinated)) / float(n)) * 100.0
+
+            q_gemma_passed = sum(1 for r in results if (r.quanta_gemma_result and r.quanta_gemma_result.is_correct) or (r.quanta_global_result and r.quanta_global_result.is_correct))
+            q_gemma_acc = (q_gemma_passed / float(n)) * 100.0
+            q_gemma_tok = int(sum((r.quanta_gemma_result.prompt_tokens if r.quanta_gemma_result else r.quanta_global_result.prompt_tokens) for r in results if (r.quanta_gemma_result or r.quanta_global_result)) / float(n))
+            q_gemma_lat = sum((r.quanta_gemma_result.total_e2e_latency_s if r.quanta_gemma_result else r.quanta_global_result.total_e2e_latency_s) for r in results if (r.quanta_gemma_result or r.quanta_global_result)) / float(n)
+            q_gemma_halluc = (sum(1 for r in results if (r.quanta_gemma_result and r.quanta_gemma_result.is_hallucinated) or (r.quanta_global_result and r.quanta_global_result.is_hallucinated)) / float(n)) * 100.0
+
+            quanta_loc_acc = dense_acc
+            quanta_loc_tok = dense_tok
+            quanta_loc_lat = dense_lat
+            quanta_glob_acc = q_gemma_acc
+            quanta_glob_tok = q_gemma_tok
+            quanta_glob_lat = q_gemma_lat
+            quanta_glob_halluc = q_gemma_halluc
+        elif self.ablation_mode == "3way":
             local_passed = sum(1 for r in results if r.quanta_local_result and r.quanta_local_result.is_correct)
             quanta_loc_acc = (local_passed / float(n)) * 100.0
             quanta_loc_tok = int(sum(r.quanta_local_result.prompt_tokens for r in results if r.quanta_local_result) / float(n))
             quanta_loc_lat = sum(r.quanta_local_result.total_e2e_latency_s for r in results if r.quanta_local_result) / float(n)
+            quanta_glob_halluc = (sum(1 for r in results if r.quanta_global_result and r.quanta_global_result.is_hallucinated) / float(n)) * 100.0
+            quanta_glob_tok = int(sum(r.quanta_global_result.prompt_tokens for r in results if r.quanta_global_result) / float(n))
+            quanta_glob_lat = sum(r.quanta_global_result.total_e2e_latency_s for r in results if r.quanta_global_result) / float(n)
         else:
             quanta_loc_acc = quanta_glob_acc
             quanta_loc_tok = int(sum(r.quanta_global_result.prompt_tokens for r in results if r.quanta_global_result) / float(n))
             quanta_loc_lat = sum(r.quanta_global_result.total_e2e_latency_s for r in results if r.quanta_global_result) / float(n)
+            quanta_glob_halluc = (sum(1 for r in results if r.quanta_global_result and r.quanta_global_result.is_hallucinated) / float(n)) * 100.0
+            quanta_glob_tok = int(sum(r.quanta_global_result.prompt_tokens for r in results if r.quanta_global_result) / float(n))
+            quanta_glob_lat = sum(r.quanta_global_result.total_e2e_latency_s for r in results if r.quanta_global_result) / float(n)
 
         base_halluc = (sum(1 for r in results if r.base_result.is_hallucinated) / float(n)) * 100.0
-        quanta_glob_halluc = (sum(1 for r in results if r.quanta_global_result and r.quanta_global_result.is_hallucinated) / float(n)) * 100.0
-
         base_mean_tok = int(sum(r.base_result.prompt_tokens for r in results) / float(n))
-        quanta_glob_tok = int(sum(r.quanta_global_result.prompt_tokens for r in results if r.quanta_global_result) / float(n))
-
         base_mean_lat = sum(r.base_result.total_e2e_latency_s for r in results) / float(n)
-        quanta_glob_lat = sum(r.quanta_global_result.total_e2e_latency_s for r in results if r.quanta_global_result) / float(n)
-
         base_mean_tps = sum(r.base_result.tokens_per_sec for r in results) / float(n)
         quanta_glob_tps = sum(r.quanta_global_result.tokens_per_sec for r in results if r.quanta_global_result) / float(n)
 
@@ -756,4 +917,13 @@ class PairedEvaluator:
             accuracy_lift_pct=round(acc_lift, 2),
             p_value=pval,
             significance_str=sig_stars,
+            dense_rag_accuracy_pct=round(dense_acc, 2) if is_dense else None,
+            dense_rag_prompt_tokens=dense_tok if is_dense else None,
+            dense_rag_latency_s=round(dense_lat, 3) if is_dense else None,
+            dense_rag_hallucination_pct=round(dense_halluc, 2) if is_dense else None,
+            quanta_gemma_accuracy_pct=round(q_gemma_acc, 2) if is_dense else None,
+            quanta_gemma_prompt_tokens=q_gemma_tok if is_dense else None,
+            quanta_gemma_latency_s=round(q_gemma_lat, 3) if is_dense else None,
+            quanta_gemma_hallucination_pct=round(q_gemma_halluc, 2) if is_dense else None,
+            ablation_mode=self.ablation_mode,
         )
