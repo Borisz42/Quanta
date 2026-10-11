@@ -191,5 +191,26 @@
     "source_commit": "170ccb0",
     "calibrated_on": "rtx_3070/bench",
     "notes": "Target compute device: GPU (cuda) default for 154.1x batch speedup, 1.43GB VRAM footprint within 8GB envelope; graceful CPU fallback on OOM"
+  },
+  "grounder.archetype_top_k": {
+    "value": 1,
+    "source_exp": "exp-037d",
+    "source_commit": "f4a2aaa",
+    "calibrated_on": "synthetic_neologisms/oov",
+    "notes": "Gate G3b calibrated top-k nearest archetype slots: k=1"
+  },
+  "grounder.archetype_threshold": {
+    "value": 0.6,
+    "source_exp": "exp-037d",
+    "source_commit": "f4a2aaa",
+    "calibrated_on": "synthetic_neologisms/oov",
+    "notes": "Gate G3b calibrated archetype activation threshold theta_arch=0.60"
+  },
+  "grounder.archetype_belnap_value": {
+    "value": "true",
+    "source_exp": "exp-037d",
+    "source_commit": "f4a2aaa",
+    "calibrated_on": "synthetic_neologisms/oov",
+    "notes": "Gate G3b calibrated Belnap truth value strategy: true (Coverage=95.0%, Precision=36.8%, Latency=89.7us)"
   }
 }

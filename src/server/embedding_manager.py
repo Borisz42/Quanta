@@ -361,6 +361,15 @@ class EmbeddingManager:
     - Subprocess lifecycle management for standalone llama-server.
     """
 
+    _default_instance: Optional[EmbeddingManager] = None
+
+    @classmethod
+    def get_default(cls, allow_mock: bool = False) -> EmbeddingManager:
+        """Obtain or initialize the global singleton EmbeddingManager instance."""
+        if cls._default_instance is None:
+            cls._default_instance = cls(allow_mock=allow_mock)
+        return cls._default_instance
+
     def __init__(
         self,
         config: Optional[MultiScaleConfig] = None,

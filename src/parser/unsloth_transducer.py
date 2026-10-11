@@ -1231,6 +1231,8 @@ class UnslothTransducer(BaseDiscourseTransducer):
         self._grammar_warmed = True
         target = base_url or self.base_url
         if not self.check_health(target):
+            if self.fallback_to_mock:
+                return True
             return False
         try:
             headers = self._get_headers()

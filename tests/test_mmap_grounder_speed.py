@@ -22,8 +22,10 @@ from core.types import QuantaVector
 from parser.asg_compiler import ASGCompiler
 from parser.lexical_grounder import ConceptNetLexicalGrounder
 from parser.mmap_grounder import MmapLexicalGrounder
+from parser.schema import ExtractedEntity
 from parser.unsloth_transducer import MockUnslothTransducer, UnslothTransducer
 from pipeline.cognitive_pipeline import CognitivePipeline
+from server.embedding_manager import MockEmbeddingManager, EmbeddingManager
 
 
 @pytest.fixture
@@ -233,3 +235,113 @@ def test_async_process_narrative():
         assert len(pipeline.active_canvas) <= pipeline.active_canvas.capacity
 
     asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# 7. ANVC Out-of-Vocabulary (OOV) Dynamic Archetype Projection (§Session 3)
+# ---------------------------------------------------------------------------
+
+def test_archetype_projection_matrix_loading(mmap_grounder: MmapLexicalGrounder):
+    """Verify that MmapLexicalGrounder loads archetype_embeddings.bin with correct shape and stats."""
+    assert mmap_grounder.has_archetypes() is True
+    assert mmap_grounder._archetype_dim >= 64
+    assert mmap_grounder._archetype_mmap is not None
+    assert mmap_grounder._archetype_mmap.shape == (256, mmap_grounder._archetype_dim)
+
+    # Verify rows are unit-normalized
+    norms = np.linalg.norm(mmap_grounder._archetype_mmap, axis=-1)
+    assert np.allclose(norms, 1.0, atol=1e-3), "Archetype rows are not unit-normalized."
+
+
+def test_oov_neologism_archetype_projection(mmap_grounder: MmapLexicalGrounder):
+    """Verify that OOV neologisms absent from codebook activate appropriate archetype slots."""
+    neologisms = [
+        "cryo-containment manifold",
+        "photonic lattice accelerator",
+        "quantum flux gate",
+    ]
+
+    for term in neologisms:
+        # Assert true OOV for discrete dictionary lookup
+        assert mmap_grounder._lookup_row(term) is None, f"{term} unexpectedly found in discrete codebook"
+
+        # Project using mock manager with threshold adapted to mock range
+        mgr = MockEmbeddingManager(matryoshka_dim=mmap_grounder._archetype_dim)
+        concept = mmap_grounder.project_oov_concept(
+            term=term,
+            embedding_manager=mgr,
+            top_k=2,
+            threshold=0.08,
+            belnap_mode="unknown",
+        )
+
+        assert concept is not None, f"Archetype projection returned None for {term}"
+        assert concept.lemma == term
+        assert concept.synset_name.startswith("cn:oov:")
+        assert len(concept.active_slots) > 0, f"No active slots generated for {term}"
+
+        # Verify slots populated in Band 3 & 4 ([384..640])
+        vec_arr = concept.vector.to_numpy()
+        band3_4_active = np.nonzero(vec_arr[384:640])[0]
+        assert len(band3_4_active) > 0, "No Band 3/4 slots populated in QuantaVector"
+
+        for slot_name, slot_val in concept.active_slots.items():
+            assert slot_val in (1, 3), f"Invalid Belnap truth value {slot_val}"
+
+    # Also verify projection directly on exact archetype vector with high threshold
+    exact_vec = mmap_grounder._archetype_mmap[0]
+    c_exact = mmap_grounder.project_oov_concept(
+        term=exact_vec,
+        top_k=1,
+        threshold=0.90,
+        belnap_mode="unknown",
+    )
+    assert c_exact is not None
+    assert len(c_exact.active_slots) == 1
+
+
+def test_oov_projection_latency_sla(mmap_grounder: MmapLexicalGrounder):
+    """Benchmark 5,000 OOV projections and assert mean latency is strictly < 0.1 ms (target < 0.05 ms)."""
+    # Pre-select 10 realistic unit-normalized query vectors from archetype matrix
+    raw_vecs = np.array(mmap_grounder._archetype_mmap[:10], dtype=np.float32)
+
+    num_iterations = 5000
+    t0 = time.perf_counter()
+    for i in range(num_iterations):
+        q = raw_vecs[i % len(raw_vecs)]
+        concept = mmap_grounder.project_oov_concept(
+            term=q,
+            top_k=2,
+            threshold=0.0,
+            belnap_mode="unknown",
+        )
+        assert concept is not None
+
+    total_time = time.perf_counter() - t0
+    mean_latency_ms = (total_time / num_iterations) * 1000.0
+    mean_latency_us = mean_latency_ms * 1000.0
+
+    print(f"\n[BENCHMARK] 5,000 OOV Archetype Projections: Total = {total_time:.4f}s, Mean = {mean_latency_ms:.4f} ms ({mean_latency_us:.2f} µs)")
+    assert mean_latency_ms < 0.1, f"Mean latency {mean_latency_ms:.4f} ms exceeded threshold 0.1 ms"
+
+
+def test_asg_compiler_oov_grounding(mmap_grounder: MmapLexicalGrounder):
+    """Verify that ASGCompiler populates Band 3/4 slots on OOV entities using archetype projection."""
+    mgr = MockEmbeddingManager(matryoshka_dim=mmap_grounder._archetype_dim)
+    compiler = ASGCompiler(mmap_grounder=mmap_grounder, embedding_manager=mgr)
+
+    entity = ExtractedEntity(
+        id="E1",
+        canonical_name="nanotachyon",
+        category="OBJECT",
+    )
+
+    node = compiler.compile_entity(entity, register_index=0)
+    assert node is not None
+    assert node.anchor.startswith("cn:oov:")
+
+    # Verify that Band 3/4 slots received non-zero activations
+    vec_arr = node.vector.to_numpy()
+    b3_b4_indices = np.nonzero(vec_arr[384:640])[0]
+    assert len(b3_b4_indices) > 0, "QuantaNode did not receive any Band 3/4 archetype slots"
+

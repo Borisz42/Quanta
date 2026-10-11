@@ -206,6 +206,7 @@ class ASGCompiler:
         validator_gate: Optional[ValidationGate] = None,
         interner: Optional[Any] = None,
         mmap_grounder: Optional[Any] = None,
+        embedding_manager: Optional[Any] = None,
     ):
         """Initialize the compiler with grounding backends and symbolic validation gate."""
         if mmap_grounder is None:
@@ -219,6 +220,7 @@ class ASGCompiler:
         self.conceptnet_grounder = conceptnet_grounder or ConceptNetLexicalGrounder.get_default()
         self.wordnet_grounder = wordnet_grounder or WordNetLexicalGrounder.get_default()
         self.validator_gate = validator_gate or ValidatorGate()
+        self.embedding_manager = embedding_manager
         if interner is None:
             from memory.node_interner import get_global_interner
             self.interner = get_global_interner()
@@ -472,6 +474,10 @@ class ASGCompiler:
                     res = self.mmap_grounder.resolve_concept(wn_syn, pos="n")
                 if not res:
                     res = self.conceptnet_grounder.resolve_concept(wn_syn, pos="n")
+
+        # ANVC Dynamic Archetype Projection Fallback for OOV terms (§Session 3)
+        if not res and self.mmap_grounder and self.mmap_grounder.has_archetypes():
+            res = self.mmap_grounder.project_oov_concept(lookup_name, embedding_manager=self.embedding_manager)
 
         if res:
             node.anchor = res.synset_name

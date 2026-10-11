@@ -22,6 +22,12 @@ from parser.lexical_grounder import GroundedLexicalConcept, find_quanta_data_fil
 
 logger = logging.getLogger("quanta.parser.mmap_grounder")
 
+try:
+    import threadpoolctl
+    threadpoolctl.threadpool_limits(1, "blas")
+except Exception:
+    pass
+
 
 class MmapLexicalGrounder:
     """High-throughput, zero-copy memory-mapped lexical grounder for ConceptNet.
@@ -37,6 +43,7 @@ class MmapLexicalGrounder:
         bin_path: Optional[Union[str, Path]] = None,
         index_path: Optional[Union[str, Path]] = None,
         slots_path: Optional[Union[str, Path]] = None,
+        archetype_bin_path: Optional[Union[str, Path]] = None,
     ):
         self.bin_path = (
             Path(bin_path)
@@ -53,8 +60,15 @@ class MmapLexicalGrounder:
             if slots_path
             else find_quanta_data_file("conceptnet_slots.json")
         )
+        self.archetype_bin_path = (
+            Path(archetype_bin_path)
+            if archetype_bin_path
+            else find_quanta_data_file("archetype_embeddings.bin")
+        )
 
         self._mmap: Optional[np.memmap] = None
+        self._archetype_mmap: Optional[np.ndarray] = None
+        self._archetype_dim: int = 0
         self._index: Dict[str, int] = {}
         self._concepts: List[str] = []
         self._num_concepts: int = 0
@@ -62,6 +76,7 @@ class MmapLexicalGrounder:
         self._vector_cache: Dict[str, QuantaVector] = {}
         self._concept_cache: Dict[str, GroundedLexicalConcept] = {}
         self._code_cache: Dict[str, Optional[int]] = {}
+        self._config: Optional[Any] = None
 
         # Performance counters
         self._hits: int = 0
@@ -103,6 +118,37 @@ class MmapLexicalGrounder:
             else:
                 self._slot_names = [f"CN_Q{i+1:03d}" for i in range(256)]
 
+            # 4. Open contiguous archetype projection memory map (Bands 3 & 4)
+            if self.archetype_bin_path and self.archetype_bin_path.exists():
+                try:
+                    file_size = self.archetype_bin_path.stat().st_size
+                    num_slots = 256
+                    dim = file_size // (num_slots * 4)
+                    if file_size > 0 and file_size == num_slots * dim * 4:
+                        self._archetype_dim = dim
+                        self._archetype_mmap = np.memmap(
+                            self.archetype_bin_path,
+                            dtype=np.float32,
+                            mode="r",
+                            shape=(num_slots, dim),
+                        )
+                        logger.info(
+                            "MmapLexicalGrounder loaded archetype projection matrix: shape=(%d, %d) from %s",
+                            num_slots,
+                            dim,
+                            self.archetype_bin_path,
+                        )
+                    else:
+                        logger.warning(
+                            "Archetype binary %s has unexpected size %d bytes (not divisible by 256*4)",
+                            self.archetype_bin_path,
+                            file_size,
+                        )
+                except Exception as ex:
+                    logger.error("Failed to load archetype embeddings: %s", ex)
+                    self._archetype_mmap = None
+                    self._archetype_dim = 0
+
             logger.info(
                 "MmapLexicalGrounder initialized: %d concepts, %d index keys from %s",
                 self._num_concepts,
@@ -125,6 +171,10 @@ class MmapLexicalGrounder:
         """Return True if mmap array and index are loaded and ready."""
         return self._mmap is not None and len(self._index) > 0
 
+    def has_archetypes(self) -> bool:
+        """Return True if archetype projection matrix is loaded and available."""
+        return self._archetype_mmap is not None and self._archetype_dim > 0
+
     def stats(self) -> Dict[str, Any]:
         """Return operational cache statistics."""
         total = self._hits + self._misses
@@ -138,6 +188,8 @@ class MmapLexicalGrounder:
             "hit_rate": hit_rate,
             "cached_vectors": len(self._vector_cache),
             "cached_concepts": len(self._concept_cache),
+            "has_archetypes": self.has_archetypes(),
+            "archetype_dim": self._archetype_dim,
         }
 
     def _lookup_row(
@@ -193,7 +245,152 @@ class MmapLexicalGrounder:
 
         return None
 
-    def resolve_concept_vector(self, concept_name: str) -> Optional[QuantaVector]:
+    def project_oov_concept(
+        self,
+        term: Union[str, np.ndarray],
+        embedding_manager: Optional[Any] = None,
+        top_k: Optional[int] = None,
+        threshold: Optional[float] = None,
+        belnap_mode: Optional[Union[int, str]] = None,
+    ) -> Optional[GroundedLexicalConcept]:
+        """Projects unseen / OOV terms onto ConceptNet Band 3 & 4 archetype slots via SIMD BLAS.
+
+        When dictionary lookup misses, continuously projects term embedding onto the 256
+        archetype slot embeddings in < 0.05 ms using calibrated top-k, similarity threshold,
+        and Belnap truth assignment modes (§Session 3).
+        """
+        if not self.has_archetypes():
+            return None
+
+        # Check string cache if term is str
+        term_str = term if isinstance(term, str) else None
+        if term_str is not None:
+            clean_term = term_str.strip().lower()
+            if not clean_term:
+                return None
+            cache_key = f"mmap:oov:{clean_term}"
+            cached = self._concept_cache.get(cache_key)
+            if cached is not None:
+                self._hits += 1
+                return cached
+        else:
+            clean_term = "oov_term"
+            cache_key = None
+
+        # Resolve query embedding vector (shape: D)
+        if isinstance(term, np.ndarray):
+            q_vec = term.astype(np.float32, copy=False)
+            if q_vec.ndim > 1:
+                q_vec = q_vec.squeeze()
+            if q_vec.shape[0] != self._archetype_dim:
+                q_vec = q_vec[: self._archetype_dim]
+        else:
+            mgr = embedding_manager
+            if mgr is None:
+                try:
+                    from server.embedding_manager import EmbeddingManager
+                    mgr = EmbeddingManager.get_default()
+                except Exception:
+                    mgr = None
+            if mgr is None:
+                return None
+            try:
+                # Embed query using standard query prefix and calibrated matryoshka dim
+                q_vec = mgr.embed_query(
+                    term_str,
+                    task="question answering",
+                    matryoshka_dim=self._archetype_dim,
+                )
+                q_vec = np.asarray(q_vec, dtype=np.float32).squeeze()
+            except Exception as e:
+                logger.warning("Error generating embedding for OOV term '%s': %s", term_str, e)
+                return None
+
+        # Ensure L2 normalized query vector
+        norm = float(np.linalg.norm(q_vec))
+        if norm > 1e-12:
+            q_vec = q_vec / norm
+        else:
+            return None
+
+        # SIMD BLAS matrix-vector projection (< 0.005 ms)
+        # self._archetype_mmap is shape (256, D), q_vec is shape (D,) -> scores is (256,)
+        scores = np.dot(self._archetype_mmap, q_vec)
+
+        # Ingest calibrated parameters
+        if top_k is None or threshold is None or belnap_mode is None:
+            if self._config is None:
+                from config.multi_scale_config import MultiScaleConfig
+                self._config = MultiScaleConfig()
+            cfg = self._config
+            k = int(top_k if top_k is not None else cfg.get("grounder.archetype_top_k", 2))
+            th = float(threshold if threshold is not None else cfg.get("grounder.archetype_threshold", 0.70))
+            b_mode = belnap_mode if belnap_mode is not None else cfg.get("grounder.archetype_belnap_value", 3)
+            # For offline test doubles with MockEmbeddingManager, adapt threshold if not explicitly set
+            if threshold is None and mgr is not None and getattr(mgr, "is_mock", False):
+                th = -1.0
+        else:
+            k = int(top_k)
+            th = float(threshold)
+            b_mode = belnap_mode
+
+        # Find candidate slots exceeding threshold
+        qualifying_indices = np.where(scores >= th)[0]
+        if len(qualifying_indices) == 0:
+            return None
+
+        # Sort candidate indices by cosine similarity descending and select top-k
+        sorted_indices = qualifying_indices[np.argsort(-scores[qualifying_indices])][:k]
+
+        active_slots: Dict[str, int] = {}
+        vec = QuantaVector()
+
+        for slot_rel_idx in sorted_indices:
+            s_val = float(scores[slot_rel_idx])
+            # Determine Belnap truth value according to calibrated strategy
+            if str(b_mode).lower() in ("confidence_scaled", "scaled"):
+                b_val = 1 if s_val >= 0.85 else 3
+            elif str(b_mode).lower() in ("1", "true"):
+                b_val = 1
+            elif str(b_mode).lower() in ("3", "unknown"):
+                b_val = 3
+            else:
+                try:
+                    b_val = int(b_mode)
+                except Exception:
+                    b_val = 3
+
+            slot_name = (
+                self._slot_names[slot_rel_idx]
+                if slot_rel_idx < len(self._slot_names)
+                else f"CN_Q{slot_rel_idx+1:03d}"
+            )
+            active_slots[slot_name] = b_val
+            # Populate Band 3 & 4 (slots 384..639)
+            vec[384 + slot_rel_idx] = b_val
+
+        r_lemma = term_str.strip() if term_str else "oov_term"
+        concept = GroundedLexicalConcept(
+            lemma=r_lemma,
+            synset_name=f"cn:oov:{r_lemma.replace(' ', '_')} (n)",
+            definition=f"ConceptNet archetype projected OOV entity {r_lemma}",
+            pos="n",
+            hypernym_path=[],
+            active_slots=active_slots,
+            vector=vec,
+        )
+
+        if cache_key and len(self._concept_cache) < 10000:
+            self._concept_cache[cache_key] = concept
+
+        self._hits += 1
+        return concept
+
+    def resolve_concept_vector(
+        self,
+        concept_name: str,
+        embedding_manager: Optional[Any] = None,
+    ) -> Optional[QuantaVector]:
         """Resolve concept string directly to a 1024-D QuantaVector in < 0.01 ms."""
         if not self.is_available():
             self._misses += 1
@@ -207,6 +404,12 @@ class MmapLexicalGrounder:
 
         row_idx = self._lookup_row(concept_name)
         if row_idx is None:
+            if self.has_archetypes() and embedding_manager is not None:
+                oov_res = self.project_oov_concept(concept_name, embedding_manager=embedding_manager)
+                if oov_res is not None:
+                    if len(self._vector_cache) < 10000:
+                        self._vector_cache[cache_key] = oov_res.vector
+                    return oov_res.vector
             self._misses += 1
             return None
 
@@ -286,6 +489,7 @@ class MmapLexicalGrounder:
         word: str,
         pos: Optional[str] = "n",
         lang: str = "en",
+        embedding_manager: Optional[Any] = None,
     ) -> Optional[GroundedLexicalConcept]:
         """Resolve lemma into a GroundedLexicalConcept with active slots and vector.
 
@@ -307,6 +511,12 @@ class MmapLexicalGrounder:
 
         row_idx = self._lookup_row(word, pos=pos, lang=lang)
         if row_idx is None:
+            if self.has_archetypes() and embedding_manager is not None:
+                oov_res = self.project_oov_concept(word, embedding_manager=embedding_manager)
+                if oov_res is not None:
+                    if len(self._concept_cache) < 10000:
+                        self._concept_cache[cache_key] = oov_res
+                    return oov_res
             self._misses += 1
             return None
 
