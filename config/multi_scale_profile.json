@@ -149,5 +149,12 @@
     "source_commit": "49e442f",
     "calibrated_on": "musique/dev_paragraphs",
     "notes": "Gate G4 calibrated optimal parallel slots: 12 workers on NVIDIA GeForce RTX 3070, peak throughput 427.1 w/s (2.23x vs single worker)"
+  },
+  "embedding.matryoshka_dim": {
+    "value": 64,
+    "source_exp": "exp-037a",
+    "source_commit": "610e45c",
+    "calibrated_on": "musique_long/dev",
+    "notes": "Pareto-optimal MRL dimension D=64: MRR=0.6484, Retention=0.3026, 10k-Latency=0.09ms, Mem=24.4MB"
   }
 }
