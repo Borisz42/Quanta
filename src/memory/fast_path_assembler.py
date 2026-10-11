@@ -286,25 +286,30 @@ class FastPathAssembler:
         meets coverage_threshold, else HOT_TRANSDUCE.
         If dense hot-path is triggered, immediately routes to RAW_ONLY fast-path.
         """
-        hot_triggered, max_dense, top_u = self.check_dense_hot_path(kept_units)
-        if hot_triggered:
-            cov_score = 1.0
-            return FastPathMode.RAW_ONLY.value, cov_score
-
-        cov_score = self.coverage_evaluator.check_coverage(
-            intent=intent,
-            units=kept_units,
-            target_entities=target_entities,
-        )
-
         if self.mode == FastPathMode.COVERAGE_ADAPTIVE.value:
+            hot_triggered, max_dense, top_u = self.check_dense_hot_path(kept_units)
+            if hot_triggered:
+                cov_score = 1.0
+                return FastPathMode.RAW_ONLY.value, cov_score
+
+            cov_score = self.coverage_evaluator.check_coverage(
+                intent=intent,
+                units=kept_units,
+                target_entities=target_entities,
+            )
             if cov_score >= self.coverage_threshold:
                 effective = FastPathMode.RAW_ONLY.value
             else:
                 effective = FastPathMode.HOT_TRANSDUCE.value
             return effective, cov_score
 
+        cov_score = self.coverage_evaluator.check_coverage(
+            intent=intent,
+            units=kept_units,
+            target_entities=target_entities,
+        )
         return self.mode, cov_score
+
 
     def assemble_dense_hot_path(
         self,

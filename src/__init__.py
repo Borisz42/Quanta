@@ -21,6 +21,7 @@ from parser.nlp_forward import NLPForwardParser
 from parser.lexical_grounder import WordNetLexicalGrounder
 from parser.fol_parser import FOLParser
 from parser.ast_parser import ASTForwardParser
+from parser.scene_graph_grounder import SceneGraphGrounder, VisualCrop, compute_rcc8_relation
 from solver.validator_gate import ValidationGate, ValidationResult
 from profiler.info_profiler import QuantaInformationProfiler
 from profiler.mrmr_selector import MRMRSelector
@@ -58,6 +59,9 @@ __all__ = [
     "WordNetLexicalGrounder",
     "FOLParser",
     "ASTForwardParser",
+    "SceneGraphGrounder",
+    "VisualCrop",
+    "compute_rcc8_relation",
     "ValidationGate",
     "ValidationResult",
     "QuantaInformationProfiler",

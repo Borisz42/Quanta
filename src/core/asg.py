@@ -55,6 +55,7 @@ class QuantaNode:
         "concept_code",
         "_ppr_activation",
         "dense_vector",
+        "docstring",
     )
 
     _default_interner: Optional[Any] = None
@@ -79,6 +80,7 @@ class QuantaNode:
         concept_code: Optional[int] = None,
         parent_macro_id: Optional[str] = None,
         dense_vector: Optional[Union[np.ndarray, Sequence[float]]] = None,
+        docstring: Optional[str] = None,
     ):
         raw_vec = semantic_vector if vector is None else vector
         if raw_vec is None:
@@ -128,6 +130,7 @@ class QuantaNode:
         self.dense_vector: Optional[np.ndarray] = (
             np.asarray(dense_vector, dtype=np.float32) if dense_vector is not None else None
         )
+        self.docstring: Optional[str] = docstring
 
     def invalidate_cache(self):
         """Invalidates cached CID and canonical CID."""

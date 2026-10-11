@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 import ast
+import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import numpy as np
 
+from config.multi_scale_config import MultiScaleConfig
 from core.asg import QuantaGraph, QuantaNode
 from core.types import (
     QuantaVector,
@@ -16,12 +19,27 @@ from core.types import (
 )
 from parser.lexical_grounder import WordNetLexicalGrounder
 
+logger = logging.getLogger("quanta.parser.ast_parser")
+
 
 class ASTForwardParser:
     """Recursively converts Python AST nodes into rich, content-addressed QuantaGraph ASGs."""
 
-    def __init__(self, offline_cache_path: Optional[str] = None):
+    def __init__(
+        self,
+        offline_cache_path: Optional[str] = None,
+        embedding_manager: Optional[Any] = None,
+        config: Optional[Any] = None,
+        code_similarity_threshold: Optional[float] = None,
+    ):
+        self.config = config or MultiScaleConfig()
         self.grounder = WordNetLexicalGrounder(offline_cache_path=offline_cache_path)
+        self.embedding_manager = embedding_manager
+        self.code_threshold = (
+            float(code_similarity_threshold)
+            if code_similarity_threshold is not None
+            else float(self.config.get("ast.code_similarity_threshold", 0.70))
+        )
         self._current_function_name: Optional[str] = None
         self._current_function_node: Optional[QuantaNode] = None
 
@@ -76,6 +94,22 @@ class ASTForwardParser:
             q_node.anchor = f"func:{node.name}"
             args_repr = ", ".join(a.arg for a in node.args.args)
             q_node.literal = f"def {node.name}({args_repr})"
+
+            docstring = ast.get_docstring(node)
+            if docstring:
+                q_node.docstring = docstring
+
+            # ANVC Embedding: Embed function declaration, arguments, and docstring
+            if self.embedding_manager is not None:
+                if docstring:
+                    sig_text = f"def {node.name}({args_repr}):\n    \"\"\"{docstring}\"\"\""
+                else:
+                    sig_text = f"def {node.name}({args_repr}):"
+                try:
+                    vec = self.embedding_manager.embed_code(sig_text)
+                    q_node.dense_vector = np.asarray(vec, dtype=np.float32)
+                except Exception as emb_err:
+                    logger.debug("Failed to embed AST function %s: %s", node.name, emb_err)
 
             if isinstance(node, ast.AsyncFunctionDef):
                 q_node.set_slot("LJB_ASYNC_CONCURRENT", 1)
@@ -437,4 +471,66 @@ class ASTForwardParser:
 
         graph.add_node(q_node)
         return q_node
+
+    def search_functions(
+        self,
+        query: str,
+        graph: QuantaGraph,
+        threshold: Optional[float] = None,
+        top_k: Optional[int] = None,
+    ) -> List[Tuple[QuantaNode, float]]:
+        """Searches AST function root nodes matching a natural language query or code description.
+
+        Embeds the query using the code retrieval prefix and computes cosine similarities
+        against all function nodes in the graph possessing dense vector representations.
+        Returns matching (QuantaNode, score) tuples exceeding the configured threshold,
+        sorted in descending order of similarity.
+        """
+        if self.embedding_manager is None:
+            return []
+
+        th = threshold if threshold is not None else self.code_threshold
+        query_vec = self.embedding_manager.embed_code(query)
+
+        matches: List[Tuple[QuantaNode, float]] = []
+        for node in graph.nodes.values():
+            if node.get_slot("GRAPH_FUNCTION_DEF") == 1 and node.dense_vector is not None:
+                sim = float(np.dot(node.dense_vector, query_vec))
+                if sim >= th:
+                    matches.append((node, sim))
+
+        matches.sort(key=lambda x: x[1], reverse=True)
+        if top_k is not None:
+            matches = matches[:top_k]
+        return matches
+
+    def rank_functions(
+        self,
+        query: str,
+        graph: QuantaGraph,
+        top_k: Optional[int] = None,
+    ) -> List[Tuple[QuantaNode, float]]:
+        """Ranks all function nodes in the graph by semantic similarity to the query without threshold cutoff."""
+        if self.embedding_manager is None:
+            return []
+
+        query_vec = self.embedding_manager.embed_code(query)
+        matches: List[Tuple[QuantaNode, float]] = []
+        for node in graph.nodes.values():
+            if node.get_slot("GRAPH_FUNCTION_DEF") == 1 and node.dense_vector is not None:
+                sim = float(np.dot(node.dense_vector, query_vec))
+                matches.append((node, sim))
+
+        matches.sort(key=lambda x: x[1], reverse=True)
+        if top_k is not None:
+            matches = matches[:top_k]
+        return matches
+
+    def find_function_by_name(self, name: str, graph: QuantaGraph) -> Optional[QuantaNode]:
+        """Finds a function node by function identifier name."""
+        target_anchor = f"func:{name}"
+        for node in graph.nodes.values():
+            if node.get_slot("GRAPH_FUNCTION_DEF") == 1 and node.anchor == target_anchor:
+                return node
+        return None
 

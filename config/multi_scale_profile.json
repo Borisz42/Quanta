@@ -233,5 +233,19 @@
     "source_commit": "11f66e8",
     "calibrated_on": "musique_multihop/dev",
     "notes": "Gate G4b calibrated max initial seed nodes K_seed=8 (Precision=75.0%, F1=85.7%)"
+  },
+  "ast.code_similarity_threshold": {
+    "value": 0.8,
+    "source_exp": "exp-037f",
+    "source_commit": "9e18f82",
+    "calibrated_on": "humaneval_82/dev",
+    "notes": "Gate G5b calibrated AST code similarity threshold theta_code=0.80 (Pass@1=100.0%, F1=0.824, Precision=70.1%)"
+  },
+  "scene.visual_archetype_threshold": {
+    "value": 0.5,
+    "source_exp": "exp-037f",
+    "source_commit": "9e18f82",
+    "calibrated_on": "multimodal_crops/dev",
+    "notes": "Gate G5b calibrated visual archetype threshold theta_vis=0.50 (WordNet Noun Category Accuracy=100.0%)"
   }
 }

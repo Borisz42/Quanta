@@ -148,7 +148,8 @@ class MockEmbeddingBackend(BaseEmbeddingBackend):
             whole_vec = self._hash_vector(clean)
 
             # Token-level hash for lexical / bag-of-words similarity correlation
-            words = [w.lower() for w in clean.replace("|", " ").replace(":", " ").split() if len(w) > 2]
+            import re
+            words = [w.lower() for w in re.findall(r"[a-zA-Z0-9_]+", clean) if len(w) > 2]
             if words:
                 token_sum = np.zeros(self.native_dim, dtype=np.float32)
                 for w in words[:40]:  # limit for speed
@@ -156,8 +157,8 @@ class MockEmbeddingBackend(BaseEmbeddingBackend):
                 token_norm = np.linalg.norm(token_sum)
                 if token_norm > 1e-12:
                     token_sum /= token_norm
-                # Blend global text identity (60%) with token overlap (40%)
-                combined = 0.6 * whole_vec + 0.4 * token_sum
+                # Blend global text identity (20%) with token overlap (80%)
+                combined = 0.2 * whole_vec + 0.8 * token_sum
             else:
                 combined = whole_vec
 

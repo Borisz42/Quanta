@@ -745,48 +745,6 @@ class CognitivePipeline:
                 total_latency_ms=0.1,
                 mode="co_decoded",
             )
-        elif self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none") or not effective_co_decoded:
-            # Direct Skeleton S-V-O valency assignment without external GPU logprob calls
-            valencies = []
-            for ev in skeleton_res.events:
-                if ev.subject_ent_id:
-                    valencies.append(ValencyScoringResult(
-                        entity_id=ev.subject_ent_id,
-                        event_id=ev.id,
-                        entity_text="",
-                        predicate=ev.predicate,
-                        role="AGENT",
-                        confidence=0.98,
-                        probabilities={"AGENT": 0.98},
-                    ))
-                if ev.object_ent_id:
-                    valencies.append(ValencyScoringResult(
-                        entity_id=ev.object_ent_id,
-                        event_id=ev.id,
-                        entity_text="",
-                        predicate=ev.predicate,
-                        role="PATIENT",
-                        confidence=0.98,
-                        probabilities={"PATIENT": 0.98},
-                    ))
-            kev_eval = KevChunkEvaluation(
-                valencies=valencies,
-                intent_epistemics=[
-                    IntentEpistemicResult(
-                        event_id=ev.id,
-                        predicate=ev.predicate,
-                        intent="INFORMATIVE",
-                        intent_confidence=0.95,
-                        intent_probabilities={"INFORMATIVE": 0.95},
-                        epistemic_source="DIRECT_OBSERVATION",
-                        epistemic_confidence=0.95,
-                        epistemic_probabilities={"DIRECT_OBSERVATION": 0.95},
-                    ) for ev in skeleton_res.events
-                ],
-                relations=[],
-                total_latency_ms=0.1,
-                mode="bypass",
-            )
         elif self.kev_mode == "async":
             # Decoupled Write-Ahead mode: commit provisional Belnap values and enqueue background verification
             valencies = []
@@ -828,6 +786,48 @@ class CognitivePipeline:
                 relations=[],
                 total_latency_ms=0.05,
                 mode="async_provisional",
+            )
+        elif self.kev_mode in ("bypass", "none", "off") or getattr(self.kev_engine, "mode", None) in ("bypass", "none") or not effective_co_decoded:
+            # Direct Skeleton S-V-O valency assignment without external GPU logprob calls
+            valencies = []
+            for ev in skeleton_res.events:
+                if ev.subject_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.subject_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="AGENT",
+                        confidence=0.98,
+                        probabilities={"AGENT": 0.98},
+                    ))
+                if ev.object_ent_id:
+                    valencies.append(ValencyScoringResult(
+                        entity_id=ev.object_ent_id,
+                        event_id=ev.id,
+                        entity_text="",
+                        predicate=ev.predicate,
+                        role="PATIENT",
+                        confidence=0.98,
+                        probabilities={"PATIENT": 0.98},
+                    ))
+            kev_eval = KevChunkEvaluation(
+                valencies=valencies,
+                intent_epistemics=[
+                    IntentEpistemicResult(
+                        event_id=ev.id,
+                        predicate=ev.predicate,
+                        intent="INFORMATIVE",
+                        intent_confidence=0.95,
+                        intent_probabilities={"INFORMATIVE": 0.95},
+                        epistemic_source="DIRECT_OBSERVATION",
+                        epistemic_confidence=0.95,
+                        epistemic_probabilities={"DIRECT_OBSERVATION": 0.95},
+                    ) for ev in skeleton_res.events
+                ],
+                relations=[],
+                total_latency_ms=0.1,
+                mode="bypass",
             )
         else:
             kev_eval = self.kev_engine.evaluate_chunk(

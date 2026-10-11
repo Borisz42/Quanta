@@ -1124,5 +1124,15 @@ async def execute_chat_completion(
         )
 
 
-# Default application instance for uvicorn launch
-app = create_proxy_app()
+# Lazy application instance for uvicorn launch (PEP 562)
+_app: Optional[FastAPI] = None
+
+
+def __getattr__(name: str):
+    global _app
+    if name == "app":
+        if _app is None:
+            _app = create_proxy_app()
+        return _app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
