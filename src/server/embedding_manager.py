@@ -31,7 +31,7 @@ logger = logging.getLogger("quanta.server.embedding_manager")
 
 DEFAULT_EMBEDDING_HOST = "127.0.0.1"
 DEFAULT_EMBEDDING_PORT = 8889
-DEFAULT_MODEL_ID = "google/embeddinggemma-270m"
+DEFAULT_MODEL_ID = "google/embeddinggemma-2"
 DEFAULT_MATRYOSHKA_DIM = 768
 DEFAULT_BATCH_SIZE = 16
 NATIVE_DIMENSION = 768
@@ -350,6 +350,7 @@ class EmbeddingManager:
         matryoshka_dim: Optional[int] = None,
         device: Optional[str] = None,
         batch_size: Optional[int] = None,
+        allow_mock: bool = False,
     ):
         self.config = config or MultiScaleConfig()
 
@@ -362,6 +363,7 @@ class EmbeddingManager:
         )
         self.device = device or self.config.embedding_device
         self.batch_size = batch_size if batch_size is not None else self.config.embedding_batch_size
+        self.allow_mock = allow_mock
 
         self._backend: Optional[BaseEmbeddingBackend] = None
         self._server_process: Optional[subprocess.Popen] = None
@@ -370,7 +372,7 @@ class EmbeddingManager:
         self._init_backend()
 
     def _init_backend(self):
-        """Resolves and instantiates the chosen backend."""
+        """Resolves and instantiates the chosen backend with strict live guard."""
         choice = self.backend_choice
 
         if choice == "mock":
@@ -396,12 +398,17 @@ class EmbeddingManager:
                 self._active_backend_name = self._backend._backend_type or "in-process"
                 return
             except Exception as e:
-                logger.warning("Failed to initialize in-process backend: %s. Falling back to mock.", e)
-                self._backend = MockEmbeddingBackend(native_dim=NATIVE_DIMENSION)
-                self._active_backend_name = "mock"
-                return
+                if self.allow_mock:
+                    logger.warning("Failed to initialize in-process backend: %s. Falling back to mock (allow_mock=True).", e)
+                    self._backend = MockEmbeddingBackend(native_dim=NATIVE_DIMENSION)
+                    self._active_backend_name = "mock"
+                    return
+                raise RuntimeError(
+                    f"ANVC Strict Live Backend Failure: In-process EmbeddingGemma 2 ('{self.model_id}') "
+                    f"failed to initialize on device '{self.device}': {e}. Mock fallback is disallowed."
+                )
 
-        # Auto dispatch
+        # Auto dispatch: Probe llama-server (:8889), then in-process, then fail if not allowed
         if choice == "auto":
             # 1. Probe if llama-server is already alive on self.port
             probe = LlamaServerEmbeddingBackend(
@@ -412,30 +419,62 @@ class EmbeddingManager:
             if probe.is_available():
                 self._backend = probe
                 self._active_backend_name = "llama-server"
-                logger.info("Auto-dispatch connected to live llama-server on %s:%d", self.host, self.port)
+                logger.info("Auto-dispatch connected to live dedicated llama-server on %s:%d", self.host, self.port)
                 return
 
-            # 2. Try in-process if torch/transformers available
+            # 2. Try in-process live EmbeddingGemma 2
+            last_err = None
             try:
                 self._backend = InProcessEmbeddingBackend(
                     model_id=self.model_id,
                     device=self.device,
                 )
                 self._active_backend_name = self._backend._backend_type or "in-process"
-                logger.info("Auto-dispatch initialized in-process embedding engine (%s)", self._active_backend_name)
+                logger.info("Auto-dispatch initialized live in-process embedding engine (%s on %s)", self._active_backend_name, self.device)
                 return
             except Exception as exc:
-                logger.info("In-process embedding model unavailable (%s). Falling back to mock.", exc)
+                last_err = exc
+                logger.warning("In-process EmbeddingGemma 2 initialization error: %s", exc)
 
-            # 3. Fallback to Mock
-            self._backend = MockEmbeddingBackend(native_dim=NATIVE_DIMENSION)
-            self._active_backend_name = "mock"
-            logger.info("Auto-dispatch resolved to MockEmbeddingBackend.")
+            # 3. Fallback to mock ONLY if explicitly permitted
+            if self.allow_mock:
+                self._backend = MockEmbeddingBackend(native_dim=NATIVE_DIMENSION)
+                self._active_backend_name = "mock"
+                logger.warning("Auto-dispatch fell back to MockEmbeddingBackend (allow_mock=True).")
+                return
+
+            raise RuntimeError(
+                f"ANVC Strict Live Backend Failure: Dedicated llama-server on port {self.port} is offline, "
+                f"and in-process EmbeddingGemma 2 ('{self.model_id}') failed to load on device '{self.device}': {last_err}. "
+                "ANVC strictly mandates a real, live EmbeddingGemma 2 backend. Mock fallback is disabled."
+            )
 
     @property
     def active_backend_name(self) -> str:
         """Returns the active backend descriptor string."""
         return self._active_backend_name
+
+    @property
+    def is_mock(self) -> bool:
+        """Returns True if the active backend is a mock pseudo-generator."""
+        return self._active_backend_name == "mock"
+
+    @property
+    def is_live(self) -> bool:
+        """Returns True if a real, live EmbeddingGemma 2 model is responsive."""
+        return not self.is_mock and self.is_service_responsive()
+
+    def assert_live_backend(self):
+        """Strict hardware and model guard enforcing live EmbeddingGemma 2 execution."""
+        if self.is_mock:
+            raise RuntimeError(
+                "ANVC Live Backend Guard Violation: MockEmbeddingBackend is currently active! "
+                "ANVC strictly mandates live execution with 'google/embeddinggemma-2' on CPU/GPU or llama-server :8889."
+            )
+        if not self.is_service_responsive():
+            raise RuntimeError(
+                f"ANVC Live Backend Guard Violation: Embedding backend '{self._active_backend_name}' is not responsive!"
+            )
 
     # -------------------------------------------------------------------------
     # Inference Methods
@@ -683,5 +722,6 @@ class MockEmbeddingManager(EmbeddingManager):
             config=config,
             backend="mock",
             matryoshka_dim=matryoshka_dim,
+            allow_mock=True,
             **kwargs,
         )

@@ -50,11 +50,11 @@ REGISTERED_PARAMS: Dict[str, Tuple[Any, str]] = {
     "server.max_parallel_slots": (8, "Maximum parallel processing slots / workers for continuous batching (default: 8)"),
     "server.batch_workers": (8, "Worker concurrency for batch document ingestion (default: 8)"),
     # ANVC: Auxiliary Neural Vector Coprocessor (EmbeddingGemma 2) & Calibration Registry
-    "embedding.model_id": ("google/embeddinggemma-270m", "Model identifier or GGUF path for EmbeddingGemma 2"),
+    "embedding.model_id": ("google/embeddinggemma-2", "Model identifier or GGUF path for EmbeddingGemma 2"),
     "embedding.port": (8889, "HTTP port for dedicated embedding llama-server backend"),
     "embedding.backend": ("auto", "Embedding inference backend: auto, llama-server, sentence_transformers, mock"),
     "embedding.matryoshka_dim": (768, "Matryoshka Representation Learning truncation dimension D in [64..768]"),
-    "embedding.device": ("cuda", "Target compute device for in-process embedding engine: cuda or cpu"),
+    "embedding.device": ("cpu", "Target compute device for in-process embedding engine: cpu or cuda"),
     "embedding.batch_size": (16, "Inference batch size for chunk embedding extraction"),
     "filter.rrf_k": (60, "Reciprocal Rank Fusion smoothing constant k for hybrid filtering"),
     "filter.weight_lexical": (0.5, "RRF lexical BM25 component weight w_lex"),
@@ -455,7 +455,7 @@ class MultiScaleConfig:
     # ANVC / Embedding convenience properties
     @property
     def embedding_model_id(self) -> str:
-        return str(self.get("embedding.model_id", "google/embeddinggemma-270m"))
+        return str(self.get("embedding.model_id", "google/embeddinggemma-2"))
 
     @property
     def embedding_port(self) -> int:
@@ -471,7 +471,7 @@ class MultiScaleConfig:
 
     @property
     def embedding_device(self) -> str:
-        return str(self.get("embedding.device", "cuda"))
+        return str(self.get("embedding.device", "cpu"))
 
     @property
     def embedding_batch_size(self) -> int:

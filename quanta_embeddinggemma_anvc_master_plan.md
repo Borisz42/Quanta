@@ -11,18 +11,22 @@ However, three specific bottlenecks persist in the current pipeline due to relia
 
 ### The Objective: Auxiliary Neural Vector Coprocessor (ANVC)
 
-Integrate **EmbeddingGemma 2** (the 270M/300M modular text/code slice) as an **Auxiliary Neural Vector Coprocessor (ANVC)**. 
+Integrate **EmbeddingGemma 2** (`google/embeddinggemma-2`, non-gated 740M multimodal model with 270M text slice) as an **Auxiliary Neural Vector Coprocessor (ANVC)**.
 
 The ANVC operates as a continuous geometric advisor to the discrete symbolic core:
 - **Neural Advisory Role**: Provides continuous dense similarities for candidate filtering, continuous archetype projections for OOV grounding, and smooth energy distributions for spreading activation seeding.
 - **Preserved Symbolic Invariants**: All downstream truth values remain strictly quantized into Belnap FOUR ($\mathcal{B}_4 = \{00_2, 01_2, 10_2, 11_2\}$); all knowledge graph nodes remain content-addressed via 256-bit BLAKE3 hashes; and all causal/temporal consistency checks continue to pass through `clingo-dl` difference logic gates.
-- **VRAM Envelope ($\le 8\text{ GB}$ RTX 3070)**: EmbeddingGemma 2 consumes $\sim 550\text{--}650\text{ MB}$ VRAM (FP16 / GGUF `Q8_0`), running concurrently alongside `unsloth/Qwen3.5-4B-MTP-GGUF` ($3.0\text{--}3.8\text{ GB}$ VRAM) with $>3.8\text{ GB}$ remaining for continuous batching buffers.
+- **Decoupled Architecture & Zero VRAM Collision**:
+  - The primary generative LLM (`unsloth/Qwen3.5-4B-MTP-GGUF`) runs on GPU on `:8888`, consuming $\approx 7.3\text{ GB} / 8.0\text{ GB}$ VRAM on the RTX 3070.
+  - EmbeddingGemma 2 is **strictly decoupled** from Unsloth. It runs in-process on CPU (`device="cpu"`) via SentenceTransformers, or on a dedicated standalone `llama-server` process on `:8889`.
+  - On CPU, EmbeddingGemma 2 consumes **$0\text{ MB}$ GPU VRAM** and $\approx 1.4\text{ GB}$ system RAM, eliminating OOM risk entirely while delivering $\approx 100\text{--}150\text{ ms}$ inference latencies.
+- **Strict Live Guard Policy**: No mock pseudo-random representations are allowed for research calibration, evaluation sweeps, or production runtime. An explicit live backend assertion (`assert_live_backend()`) halts execution with `RuntimeError` if a live EmbeddingGemma 2 engine is not online.
 
 ```mermaid
 flowchart TD
     subgraph INGESTION["Input Stream & Task Extraction"]
         Q[User Query / Document Chunk] --> TBE[TaskBoundaryExtractor]
-        TBE --> EMB_MGR[EmbeddingManager (Port :8889 / In-Process)<br/>EmbeddingGemma-2 270M Slice (Configurable MRL Dim)]
+        TBE --> EMB_MGR[EmbeddingManager (In-Process CPU / Port :8889)<br/>Real google/embeddinggemma-2 (Configurable MRL Dim)]
     end
 
     subgraph DENSE_ADVISORY["Auxiliary Neural Vector Coprocessor (ANVC)"]
@@ -96,11 +100,11 @@ flowchart TD
 **Goal**: Implement a lightweight, non-blocking local serving manager for EmbeddingGemma 2, establish configuration parameters in `MultiScaleConfig`, and execute a rigorous empirical sweep across Matryoshka truncation sizes ($D \in \{64, 128, 256, 512, 768\}$) to evaluate accuracy vs. memory bandwidth vs. latency.
 
 #### Target Files
-- `src/server/embedding_manager.py` [NEW]: Dedicated lifecycle and client manager for EmbeddingGemma 2. Supports dual backend (dedicated `llama-server` on `:8889` or in-process `sentence_transformers`/`transformers`) and `MockEmbeddingManager` for CI.
-- `src/config/multi_scale_config.py` [MODIFY]: Register embedding configuration parameters (`embedding.model_id`, `embedding.port`, `embedding.backend`, `embedding.matryoshka_dim`, `embedding.device`, `embedding.batch_size`).
+- `src/server/embedding_manager.py` [NEW]: Dedicated lifecycle and client manager for `google/embeddinggemma-2`. Supports dual backend (dedicated `llama-server` on `:8889` or in-process `sentence_transformers`/`transformers` on CPU/GPU), strict live guard (`assert_live_backend()`), and isolated `MockEmbeddingManager` for unit test doubles only.
+- `src/config/multi_scale_config.py` [MODIFY]: Register embedding configuration parameters (`embedding.model_id` defaulting to `google/embeddinggemma-2`, `embedding.port`, `embedding.backend`, `embedding.matryoshka_dim`, `embedding.device` defaulting to `cpu`, `embedding.batch_size`).
 - `src/server/service_manager.py` [MODIFY]: Integrate `EmbeddingManager` into unified startup (`--all`), health auditing, and process shutdown.
-- `scripts/sweep_matryoshka_dimensions.py` [NEW]: Empirical dimension sweep harness evaluating $D \in \{64, 128, 256, 512, 768\}$ on representation entropy, retrieval accuracy (MRR / Recall@K), SIMD dot-product latency, and memory footprint.
-- `tests/test_embedding_manager.py` [NEW]: Unit tests for embedding generation, task prefix formatting, arbitrary Matryoshka truncation, L2 normalization, and mock fallback.
+- `scripts/sweep_matryoshka_dimensions.py` [NEW]: Empirical dimension sweep harness evaluating $D \in \{64, 128, 256, 512, 768\}$ on representation entropy, retrieval accuracy (MRR / Recall@K), SIMD dot-product latency, and memory footprint. Strictly runs with live `google/embeddinggemma-2` by default.
+- `tests/test_embedding_manager.py` [NEW]: Unit tests for embedding generation, task prefix formatting, arbitrary Matryoshka truncation, L2 normalization, and mock test double isolation.
 
 #### Technical Specification
 1. **Dynamic Matryoshka Representation Learning (MRL)**:
@@ -116,36 +120,38 @@ flowchart TD
      - **Memory Footprint**: RAM / VRAM per 100,000 vectors ($D \times 4\text{ bytes} \times 10^5$).
    - Generates publication curve and Pareto frontier: Accuracy vs. Microsecond Latency.
    - Automatically writes the winning Pareto dimension to `config/multi_scale_profile.json` under `embedding.matryoshka_dim`.
-3. **Task Prefix Formatters**:
+3. **Strict Live Guard Policy**:
+   - `EmbeddingManager(allow_mock=False)` asserts the active engine is genuine `google/embeddinggemma-2`.
+   - Silent fallbacks to pseudo-random mocks are strictly rejected and trigger a `RuntimeError`.
+4. **Task Prefix Formatters**:
    - Asymmetric Query: `task: question answering | query: {query}` or `task: search result | query: {query}`
    - Asymmetric Document: `title: {title} | text: {chunk_text}` (default `title: none`)
    - Code Search: `task: code retrieval | query: {query}`
 
 #### Verification & Test Suite
 ```powershell
-pytest tests/test_embedding_manager.py
-python scripts/sweep_matryoshka_dimensions.py --samples 50 --export-report
+pytest tests/test_embedding_manager.py tests/test_service_manager.py
+python scripts/sweep_matryoshka_dimensions.py --samples 50 --mode live --export-report
 ```
-- Assert single-query latency $\le 15\text{ ms}$ on RTX 3070.
-- Assert batched throughput $\ge 8,000\text{ tokens/sec}$ on 32-chunk batches.
-- Confirm total VRAM (Qwen + EmbeddingGemma) does not exceed $4.2\text{ GB}$ via `nvidia-smi`.
-- Verify dimension sweep generates `output/matryoshka_dimension_sweep.json` and report.
+- Assert single-query latency $\le 200\text{ ms}$ on CPU ($0\text{ MB}$ GPU VRAM impact).
+- Assert batched throughput $\ge 1,000\text{ tokens/sec}$ on CPU batched evaluation.
+- Confirm GPU VRAM for EmbeddingGemma is $0\text{ MB}$ (CPU execution) preserving all $8\text{ GB}$ for Unsloth/Qwen on `:8888`.
+- Verify dimension sweep generates `output/matryoshka_dimension_sweep.json` and report using live embeddings.
 
 #### Example Starting Prompt for Session 1
 ```text
 Execute Session 1 of the ANVC Master Plan (quanta_embeddinggemma_anvc_master_plan.md).
 Goal: Implement the Dedicated Local Embedding Engine & Matryoshka Dimension Sweep.
 1. Create `src/server/embedding_manager.py` implementing `EmbeddingManager`:
+   - Real model `google/embeddinggemma-2` executing on CPU or dedicated `:8889` llama-server.
+   - Strict live guard enforcing `assert_live_backend()` and `allow_mock=False`.
    - Enforce task prefix formatters (asymmetric query, document, code).
    - Support arbitrary Matryoshka truncation D in [64..768] with L2 normalization (retrieving D from MultiScaleConfig).
-   - Implement multi-backend dispatch: dedicated llama-server on port 8889, in-process PyTorch/SentenceTransformers, and MockEmbeddingManager for CI.
-2. Update `src/config/multi_scale_config.py` to register all embedding parameters.
+2. Update `src/config/multi_scale_config.py` to register all embedding parameters with CPU default.
 3. Update `src/server/service_manager.py` to orchestrate the embedding manager lifecycle.
-4. Create `scripts/sweep_matryoshka_dimensions.py` to benchmark D in {64, 128, 256, 512, 768}:
-   - Measure retrieval MRR/Recall, dot product latency (us), and memory consumption.
-   - Plot/export Pareto frontier and update `config/multi_scale_profile.json` with the winning dimension.
-5. Create `tests/test_embedding_manager.py` verifying vector shapes, L2 normalization, prefix injection, and latency.
-Verify with `pytest tests/test_embedding_manager.py` and `python scripts/sweep_matryoshka_dimensions.py --mode mock`.
+4. Create `scripts/sweep_matryoshka_dimensions.py` to benchmark D in {64, 128, 256, 512, 768} with live backend.
+5. Create `tests/test_embedding_manager.py` verifying vector shapes, L2 normalization, prefix injection, and guard enforcement.
+Verify with `pytest tests/test_embedding_manager.py` and `python scripts/sweep_matryoshka_dimensions.py --mode live`.
 ```
 
 ---
@@ -407,7 +413,7 @@ Execute Session 6 of the ANVC Master Plan (quanta_embeddinggemma_anvc_master_pla
 Goal: Run Head-to-Head Paired Ablation & Gate G10 Promotion.
 1. Update `src/benchmarks/paired_evaluator.py` to support `Condition DENSE_RAG` and `Condition QUANTA_GEMMA`.
 2. Update `scripts/run_paired_benchmarks.py` with flags `--enable-embeddinggemma` and `--dense-hybrid`.
-3. Execute live or mock paired benchmark across MuSiQue, BABILong, NIAH, and HumanEval using calibrated configuration from `config/multi_scale_profile.json`.
+3. Execute live paired benchmark across MuSiQue, BABILong, NIAH, and HumanEval using calibrated configuration from `config/multi_scale_profile.json` (mock strictly disallowed).
 4. Auto-generate LaTeX table `output/publication/tables/embeddinggemma_ablation.tex`.
 5. Record run `exp-037a` in `EVAL.md` and evaluate Gate G10 promotion criteria.
 ```
