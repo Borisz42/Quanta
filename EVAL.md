@@ -86,6 +86,8 @@ This document tracks baseline benchmarks, experimental hypotheses, and empirical
 | `exp-035a` | `main` | `exp-034a` | `HEAD` | Compact Keyword vs. Positional S-Expression System Prompt Optimization & Pareto Frontier (§quanta_sexpr_ingestion_master_plan.md): Evaluated 5 compact prompt variants (C0–C4) against positional variants (P0, P3) on NVIDIA GeForce RTX 3070 (12 slots, 16 MuSiQue paragraphs, 2,375 words). Discovered that verbose relational prompts (C2/C3) on keyword S-expressions bloat transitive density (2.06 ev/chunk), dilute PPR spreading activation (Gold Recall 75% -> 25%), and collapse QA EM to 0.0% ("England"). Conversely, C1 (Minimalist Terse, ~35 tok) cut completion tokens to 36.8 tok/chunk (-26.8%), accelerated throughput to 412.8 w/s (359.6 ms/chunk), and achieved 100.0% QA Exact Match ("United Kingdom", 1.000 F1). | Ingestion Throughput: 399.2 w/s (C0) -> **412.8 w/s (C1)** vs 319.3 w/s (P3); Completion Tokens: 50.3 -> **36.8 tok/chunk (-26.8%)**; Gold Evidence Recall: 50.0% (P3) -> **75.0% (C0/C1)**; Multi-Hop QA Exact Match: **100.0% ("United Kingdom")**; Token F1: **1.000**; Gate G9 Verdict: **PROMOTED C1 (Minimalist Terse) as Absolute Production Winner on Pareto Frontier**. | Success | Gate G9 Promoted / Production Default |
 | `exp-036a` | `main` | `exp-035a` | `HEAD` | Multi-Hop Retrieval, Entity-Boosted BM25 & Score-Prioritized Context Budgeting: (1) Added `clean_core_query()` and expanded `QUESTION_STOPWORDS` in `task_boundary_extractor.py` & `relevance_filter.py`; (2) Implemented backwards paragraph scanning in `_check_explicit_delimiters` and `_check_tail_boundary` to cleanly isolate terminal query questions and directives from `Context:` document blocks; (3) Added `target_entities` ingestion with +5.0 proper noun, +6.0 technical identifier boosts, and 1.3–1.5x multiplicative scaling in `_score_bm25`; (4) Added elastic budget expansion up to 2,500 tokens for technical identifiers in `apply_keep_policy`; (5) Implemented score-prioritized passage selection in `assemble_passage_stream` ensuring highest-relevance evidence is never truncated by budget caps; (6) Evaluated live on NVIDIA GeForce RTX 3070 backend across MuSiQue and Long Variable Tracking. | Accuracy: MuSiQue **0.0% -> 100.0% PASS** ("Toronto Coach Terminal", 16.1% token reduction); Long Variable Tracking: +200 credits -> **1,700 credits (100.0% PASS)**, 40.5% token reduction, 1.31x speedup; Truncation / Hallucination Rate: **0.0%**; Unit Tests: 14/14 passed (100%). | Success | Promote / Production Default |
 | `exp-037a` | `main` | `exp-036a` | `610e45c` | ANVC Session 1: Dedicated Local Embedding Engine & Matryoshka Dimension Sweep (§quanta_embeddinggemma_anvc_master_plan.md): Implemented `EmbeddingManager` (`src/server/embedding_manager.py`) supporting asymmetric query/document/code task prefix formatters, multi-backend dispatch (dedicated `llama-server` on :8889, in-process PyTorch/SentenceTransformers, and deterministic `MockEmbeddingManager` for CI), arbitrary Matryoshka Representation Learning (MRL) truncation $D \in [64..768]$ with unit $L_2$ normalization; registered embedding and ANVC parameters in `MultiScaleConfig` (`src/config/multi_scale_config.py`); integrated ANVC Embedding Coprocessor health auditing, unified spinup (`--embedding`, `--all`), and process teardown into `QuantaServiceManager` (`src/server/service_manager.py`); implemented empirical dimension sweep harness (`scripts/sweep_matryoshka_dimensions.py`) evaluating $D \in \{64, 128, 256, 512, 768\}$ across representation fidelity $\rho(D)$, gold passage MRR/Recall, SIMD dot-product latency ($\mu\text{s}$), and memory footprint; comprehensive unit tests (`tests/test_embedding_manager.py`). | Dense Advisory: 0 -> Dedicated ANVC coprocessor; MRL Dimensions: Full 768-D -> Calibrated $D=64$ (Pareto winner: 91.7% memory reduction [293.0 MB -> 24.4 MB per 100k vecs], 19.43x SIMD latency speedup [1.79 ms -> 0.09 ms per 10k ops], 96.0% Recall@5, MRR 0.6484); Tests: 13/13 passed (100%). | Success | Promote / Proceed to Session 2 (Hybrid BM25 + Dense Filter) |
+| `exp-037b` | `main` | `exp-037a` | `c2bd275` | ANVC Session 2: Hybrid BM25 + Dense Bi-Encoder Relevance Filter & Fusion Calibration (§quanta_embeddinggemma_anvc_master_plan.md): Implemented Variant `F-G` (`dense_hybrid`) combining BM25 lexical scores with EmbeddingGemma 2 dense cosine similarities via configurable Reciprocal Rank Fusion ($RRF(d) = \frac{w_{\text{lex}}}{k_{\text{rrf}} + \text{rank}_{\text{BM25}}(d)} + \frac{w_{\text{dense}}}{k_{\text{rrf}} + \text{rank}_{\text{dense}}(d)}$); ensured `MacroBlock` and `DiscourseChunk` store and cache dense embeddings on ingestion with configurable Matryoshka dimensionality $D$ and batch attachment in `HierarchicalChunker`; connected dense score hot-path in `FastPathAssembler` (`check_dense_hot_path`, routing directly to `RAW_ONLY` fast-path when $\max_d s_{\text{dense}}(d) \ge \theta_{\text{fast}}$); created empirical calibration harness (`scripts/calibrate_dense_filter.py`) sweeping $w_{\text{dense}} \in [0.2..0.8]$, $k_{\text{rrf}} \in [10..100]$, and $\theta_{\text{fast}} \in [0.75..0.90]$; extended unit test suite (`tests/test_relevance_filter.py`, `tests/test_fast_path_assembler.py`). | Gold Evidence Recall (Paraphrase): 80.7% (BM25 baseline) -> **100.0% (F-G, $\ge 92.0\%$ target met)**; Filter Query Latency: **2.58 ms (< 10.0 ms SLA met)**; Calibrated Profile: $w_{\text{dense}}=0.50, w_{\text{lex}}=0.50, k_{\text{rrf}}=10, \theta_{\text{fast}}=0.75$; Tests: 13/13 passed (100%). | Success | Promote / Proceed to Session 3 (OOV Archetype Projection) |
+
 
 
 
@@ -458,6 +460,35 @@ Evaluating variance between `B0_run1` and `B0_run2` on identical inputs across t
    - `RelevanceFilter.apply_keep_policy` expands token budget up to 2,500 tokens when units match exact technical identifiers, preserving all 4 ledger chunks (+1500, -350, +600, -50).
 5. **Score-Prioritized Passage Assembly**:
    - `assemble_passage_stream` selects the highest-scoring candidate passages before applying token budget limits, ensuring top-ranked evidence (e.g. `chunk_0018`, score 1.00) is never crowded out by lower-scoring preceding paragraphs.
+
+---
+
+### Table 2.16: Dense Hybrid Relevance Filter Calibration & Fast-Path Dynamic Coupling (exp-037b)
+
+> **Backend**: ANVC Auxiliary Neural Vector Coprocessor (`EmbeddingManager` on $D=64$ Matryoshka dimension)  
+> **Benchmark**: MuSiQue multi-hop QA pairs with automated synonym distractors ($N=30$ sample pairs)  
+> **Calibration Harness**: `scripts/calibrate_dense_filter.py`  
+> **Artifacts**: `output/dense_filter_calibration.json`, `output/dense_filter_calibration_report.md`  
+
+| Strategy & Configuration | $w_{\text{dense}}$ | $w_{\text{lex}}$ | $k_{\text{rrf}}$ | $\theta_{\text{fast}}$ | Raw Query Recall | Paraphrase Recall | Filter Latency | SLA / Gate Status |
+|---|---|---|---|---|---|---|---|---|
+| **F-A (BM25 Lexical Control)** | 0.00 | 1.00 | - | - | 100.0% | 80.7% (capped) | 0.40 ms | Ingestion Baseline |
+| **F-G: Variant A (Lexical Heavy)** | 0.20 | 0.80 | 60 | 0.85 | 100.0% | 88.5% | 2.61 ms | Below 92% Target |
+| **F-G: Variant B (Balanced RRF)** | **0.50** | **0.50** | **10** | **0.75** | **100.0%** | **100.0%** | **2.58 ms** | **PROMOTED WINNER (Gate G2b)** |
+| **F-G: Variant C (Dense Heavy)** | 0.80 | 0.20 | 60 | 0.85 | 100.0% | 100.0% | 2.64 ms | High Dense Weight |
+| **F-G: Dense Fast-Path Hot Bypass** | - | - | - | 0.75 | 100.0% | 100.0% | **0.95 ms** | **Bypasses BM25** |
+
+#### Key Empirical Findings & Gate G2b Architectural Decision:
+1. **Vocabulary-Mismatch Ingestion Dropouts Eliminated**:
+   - Platt-calibrated lexical BM25 (`F-A`) drops gold evidence on abstract paraphrasing and indirect questions due to zero token overlap.
+   - Calibrated Dense Hybrid RRF (`F-G`) fusions elevate gold evidence into top ranks even under extreme lexical divergence, increasing Paraphrase Evidence Recall from **80.7% to 100.0%** ($\ge 92.0\%$ target met).
+2. **Sub-3ms Filter Latency SLA**:
+   - Because MacroBlocks and DiscourseChunks store or cache dense embeddings on ingestion, query-time filtering only embeds the query vector and computes SIMD dot products.
+   - Mean filter execution latency is **2.58 ms per query** (strictly $< 10.0\text{ ms}$ SLA met).
+3. **Dynamic Fast-Path Coupling**:
+   - When candidate dense similarity exceeds $\theta_{\text{fast}} = 0.75$, BM25 computation is completely bypassed and units route directly to fast-path assembly, cutting scoring latency down to **0.95 ms**.
+4. **Gate G2b Promotion Verdict**:
+   - **PROMOTED `F-G (Dense Hybrid)`** to production in `config/multi_scale_profile.json` (`w_dense=0.5, w_lex=0.5, k=10, theta_fast=0.75`).
 
 ---
 

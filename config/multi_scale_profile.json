@@ -21,11 +21,11 @@
     "notes": "Gate G2 calibrated target word length for micro discourse chunks"
   },
   "filter.strategy": {
-    "value": "F-A",
-    "source_exp": "exp-028a",
-    "source_commit": "52eb1f6",
-    "calibrated_on": "long_context/dev",
-    "notes": "Gate G2 promoted winner on gold-recall vs latency Pareto frontier"
+    "value": "F-G",
+    "source_exp": "exp-037b",
+    "source_commit": "c2bd275",
+    "calibrated_on": "musique_sample_real/dev",
+    "notes": "Gate G2b promoted winner: Paraphrase Recall 100.0%, Latency 2.58 ms"
   },
   "filter.unit": {
     "value": "micro",
@@ -156,5 +156,33 @@
     "source_commit": "610e45c",
     "calibrated_on": "musique_long/dev",
     "notes": "Pareto-optimal MRL dimension D=64: MRR=0.6484, Retention=0.3026, 10k-Latency=0.09ms, Mem=24.4MB"
+  },
+  "filter.weight_dense": {
+    "value": 0.5,
+    "source_exp": "exp-037b",
+    "source_commit": "c2bd275",
+    "calibrated_on": "musique_sample_real/dev",
+    "notes": "Calibrated bi-encoder RRF weight w_dense=0.5"
+  },
+  "filter.weight_lexical": {
+    "value": 0.5,
+    "source_exp": "exp-037b",
+    "source_commit": "c2bd275",
+    "calibrated_on": "musique_sample_real/dev",
+    "notes": "Calibrated lexical BM25 RRF weight w_lex=0.5"
+  },
+  "filter.rrf_k": {
+    "value": 10,
+    "source_exp": "exp-037b",
+    "source_commit": "c2bd275",
+    "calibrated_on": "musique_sample_real/dev",
+    "notes": "Calibrated RRF smoothing constant k=10"
+  },
+  "filter.dense_fast_path_threshold": {
+    "value": 0.75,
+    "source_exp": "exp-037b",
+    "source_commit": "c2bd275",
+    "calibrated_on": "musique_sample_real/dev",
+    "notes": "Calibrated dense fast-path threshold theta_fast=0.75"
   }
 }
