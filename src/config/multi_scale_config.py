@@ -54,7 +54,7 @@ REGISTERED_PARAMS: Dict[str, Tuple[Any, str]] = {
     "embedding.port": (8889, "HTTP port for dedicated embedding llama-server backend"),
     "embedding.backend": ("auto", "Embedding inference backend: auto, llama-server, sentence_transformers, mock"),
     "embedding.matryoshka_dim": (768, "Matryoshka Representation Learning truncation dimension D in [64..768]"),
-    "embedding.device": ("cpu", "Target compute device for in-process embedding engine: cpu or cuda"),
+    "embedding.device": ("cuda", "Target compute device for in-process embedding engine: cuda or cpu"),
     "embedding.batch_size": (16, "Inference batch size for chunk embedding extraction"),
     "filter.rrf_k": (60, "Reciprocal Rank Fusion smoothing constant k for hybrid filtering"),
     "filter.weight_lexical": (0.5, "RRF lexical BM25 component weight w_lex"),
@@ -471,7 +471,7 @@ class MultiScaleConfig:
 
     @property
     def embedding_device(self) -> str:
-        return str(self.get("embedding.device", "cpu"))
+        return str(self.get("embedding.device", "cuda"))
 
     @property
     def embedding_batch_size(self) -> int:

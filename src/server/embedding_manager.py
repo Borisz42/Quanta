@@ -261,10 +261,21 @@ class InProcessEmbeddingBackend(BaseEmbeddingBackend):
 
             actual_device = self.device
             if actual_device == "cuda" and not torch.cuda.is_available():
+                logger.info("CUDA requested but not available; falling back to CPU for %s", self.model_id)
                 actual_device = "cpu"
 
             logger.info("Loading in-process SentenceTransformer model: %s on %s", self.model_id, actual_device)
-            self._model = SentenceTransformer(self.model_id, device=actual_device)
+            try:
+                self._model = SentenceTransformer(self.model_id, device=actual_device)
+            except Exception as load_err:
+                if actual_device == "cuda" and ("out of memory" in str(load_err).lower() or "cuda" in str(load_err).lower()):
+                    logger.warning("Failed to load SentenceTransformer on CUDA (%s); falling back to CPU", load_err)
+                    torch.cuda.empty_cache()
+                    actual_device = "cpu"
+                    self._model = SentenceTransformer(self.model_id, device="cpu")
+                else:
+                    raise
+            self.device = actual_device
             self._backend_type = "sentence_transformers"
             return
         except Exception as st_err:
@@ -281,7 +292,17 @@ class InProcessEmbeddingBackend(BaseEmbeddingBackend):
 
             logger.info("Loading in-process HF AutoModel: %s on %s", self.model_id, actual_device)
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-            self._model = AutoModel.from_pretrained(self.model_id).to(actual_device)
+            try:
+                self._model = AutoModel.from_pretrained(self.model_id).to(actual_device)
+            except Exception as hf_load_err:
+                if actual_device == "cuda":
+                    logger.warning("Failed to load HF model on CUDA (%s); falling back to CPU", hf_load_err)
+                    torch.cuda.empty_cache()
+                    actual_device = "cpu"
+                    self._model = AutoModel.from_pretrained(self.model_id).to("cpu")
+                else:
+                    raise
+            self.device = actual_device
             self._model.eval()
             self._backend_type = "transformers"
             return

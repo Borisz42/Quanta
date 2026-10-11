@@ -184,5 +184,12 @@
     "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
     "notes": "Calibrated dense fast-path threshold theta_fast=0.75"
+  },
+  "embedding.device": {
+    "value": "cuda",
+    "source_exp": "exp-037c",
+    "source_commit": "170ccb0",
+    "calibrated_on": "rtx_3070/bench",
+    "notes": "Target compute device: GPU (cuda) default for 154.1x batch speedup, 1.43GB VRAM footprint within 8GB envelope; graceful CPU fallback on OOM"
   }
 }
