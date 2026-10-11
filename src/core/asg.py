@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import blake3
+import numpy as np
 
 from core.types import (
     QuantaVector,
@@ -53,6 +54,7 @@ class QuantaNode:
         "node_type",
         "concept_code",
         "_ppr_activation",
+        "dense_vector",
     )
 
     _default_interner: Optional[Any] = None
@@ -76,6 +78,7 @@ class QuantaNode:
         node_type: Optional[str] = None,
         concept_code: Optional[int] = None,
         parent_macro_id: Optional[str] = None,
+        dense_vector: Optional[Union[np.ndarray, Sequence[float]]] = None,
     ):
         raw_vec = semantic_vector if vector is None else vector
         if raw_vec is None:
@@ -122,6 +125,9 @@ class QuantaNode:
         self.node_type: Optional[str] = node_type
         self.concept_code: Optional[int] = concept_code
         self._ppr_activation: Optional[float] = None
+        self.dense_vector: Optional[np.ndarray] = (
+            np.asarray(dense_vector, dtype=np.float32) if dense_vector is not None else None
+        )
 
     def invalidate_cache(self):
         """Invalidates cached CID and canonical CID."""
@@ -407,6 +413,7 @@ class QuantaNode:
         new_node._cid_cache = self._cid_cache
         new_node._canonical_cid_cache = self._canonical_cid_cache
         new_node._ppr_activation = self._ppr_activation
+        new_node.dense_vector = self.dense_vector.copy() if self.dense_vector is not None else None
         return new_node
 
     def to_dict(self) -> Dict[str, Any]:
@@ -431,6 +438,7 @@ class QuantaNode:
             "evidence_source": self.evidence_source,
             "node_type": self.node_type,
             "concept_code": self.concept_code,
+            "dense_vector": self.dense_vector.tolist() if self.dense_vector is not None else None,
         }
         return d
 
@@ -460,6 +468,7 @@ class QuantaNode:
             evidence_source=str(data.get("evidence_source", "direct_observation")),
             node_type=data.get("node_type"),
             concept_code=data.get("concept_code"),
+            dense_vector=np.asarray(data["dense_vector"], dtype=np.float32) if data.get("dense_vector") is not None else None,
         )
         return node
 
@@ -698,6 +707,30 @@ class QuantaGraph:
                 return n
         return None
 
+    def get_reverse_edges(self, target_cid: str) -> List[Tuple[str, str]]:
+        """Returns list of (source_cid, relation) pointing to target_cid in O(N_nodes) time."""
+        rev: List[Tuple[str, str]] = []
+        for n in self._node_list:
+            if n.cid == target_cid:
+                continue
+            for rel, targets in n.edges.items():
+                if target_cid in targets:
+                    rev.append((n.cid, rel))
+        return rev
+
+    def fetch_node(self, cid: str) -> Optional[QuantaNode]:
+        """Uniform lookup interface matching PageTable."""
+        return self.get_node(cid)
+
+    def fetch_nodes(self, cids: Sequence[str]) -> List[QuantaNode]:
+        """Uniform batch lookup interface matching PageTable."""
+        res: List[QuantaNode] = []
+        for c in cids:
+            n = self.get_node(c)
+            if n is not None:
+                res.append(n)
+        return res
+
     def copy(self) -> QuantaGraph:
         """Create a deep copy of the QuantaGraph and its QuantaNodes."""
         cloned = QuantaGraph(root_cid=self.root_cid)
@@ -719,6 +752,7 @@ class QuantaGraph:
                 node_type=node.node_type,
                 concept_code=node.concept_code,
                 parent_macro_id=node.parent_macro_id,
+                dense_vector=node.dense_vector.copy() if node.dense_vector is not None else None,
             )
             new_node.edges = {k: list(v) for k, v in node.edges.items()}
             new_node.register_binding = node.register_binding

@@ -49,6 +49,7 @@ from parser.schema import (
 )
 from parser.sexpr_parser import to_sexpr
 from realizer.english_nlg import EnglishRealizer
+from config.multi_scale_config import MultiScaleConfig
 
 logger = logging.getLogger("quanta.memory.spreading_activation")
 
@@ -315,6 +316,11 @@ class SpreadingActivationRetriever:
         poprag_gating: Optional[PoPRAGGating] = None,
         context_assembler: Optional[DualStreamContextAssembler] = None,
         passage_store: Optional[PassageStore] = None,
+        dense_seed_threshold: Optional[float] = None,
+        hybrid_blend_alpha: Optional[float] = None,
+        max_seed_nodes: Optional[int] = None,
+        embedding_manager: Optional[Any] = None,
+        config: Optional[MultiScaleConfig] = None,
     ):
         """Initialize the SpreadingActivationRetriever.
 
@@ -330,6 +336,11 @@ class SpreadingActivationRetriever:
             poprag_gating: Optional PoPRAGGating instance.
             context_assembler: Optional DualStreamContextAssembler for realization bypass.
             passage_store: Optional PassageStore holding raw passage text nodes.
+            dense_seed_threshold: Dense cosine threshold theta_seed for seed injection.
+            hybrid_blend_alpha: Blend ratio alpha between dense and Hamming seed energy.
+            max_seed_nodes: Maximum initial seed nodes K_seed.
+            embedding_manager: Optional EmbeddingManager instance for ANVC dense query embeddings.
+            config: Optional MultiScaleConfig resolver.
         """
         self.realizer = realizer or EnglishRealizer()
         self.decay = decay
@@ -348,6 +359,27 @@ class SpreadingActivationRetriever:
         self.context_assembler = context_assembler or DualStreamContextAssembler(
             passage_store=self.passage_store
         )
+
+        # ANVC Continuous Energy Seeding parameters
+        self.config = config or MultiScaleConfig()
+        self.dense_seed_threshold = (
+            dense_seed_threshold
+            if dense_seed_threshold is not None
+            else float(self.config.get("spreading.dense_seed_threshold", 0.65))
+        )
+        self.hybrid_blend_alpha = (
+            hybrid_blend_alpha
+            if hybrid_blend_alpha is not None
+            else float(self.config.get("spreading.hybrid_blend_alpha", 0.5))
+        )
+        self.max_seed_nodes = (
+            max_seed_nodes
+            if max_seed_nodes is not None
+            else int(self.config.get("spreading.max_seed_nodes", 5))
+        )
+        self.matryoshka_dim = int(self.config.get("embedding.matryoshka_dim", 64))
+        self.embedding_manager = embedding_manager
+        self.last_seed_energy: Dict[str, float] = {}
 
     # -------------------------------------------------------------------------
     # Task 4.1: Query ASG Transduction
@@ -864,25 +896,43 @@ class SpreadingActivationRetriever:
     def find_seed_nodes(
         self,
         query: Union[str, QuantaGraph, QuantaVector, bytes, np.ndarray],
-        page_table: PageTable,
-        top_k: int = 5,
-    ) -> List[Tuple[str, int]]:
-        """Identifies top-K seed node CIDs in host memory via AVX-512 / SWAR SIMD Hamming search.
+        page_table: Union[PageTable, QuantaGraph],
+        top_k: Optional[int] = None,
+        dense_seed_threshold: Optional[float] = None,
+        hybrid_blend_alpha: Optional[float] = None,
+        return_energy: bool = False,
+    ) -> Union[List[Tuple[str, int]], List[Tuple[str, float]], Dict[str, float]]:
+        """Identifies top-K seed node CIDs via hybrid dense energy seeding & SIMD Hamming search.
 
-        Executes in < 1 ms over 100,000+ nodes using SimdHammingIndex.
+        Combines:
+        1. Continuous bi-encoder query embedding (EmbeddingGemma 2) with cosine energy e_{0,dense}.
+        2. Discrete SIMD Hamming popcount & lexical entity matching e_{0,hamming}.
+        3. Calibrated hybrid blending: e_0 = alpha * e_{0,dense} + (1 - alpha) * e_{0,hamming}.
 
         Args:
             query: Query text, compiled QuantaGraph, QuantaVector, or packed 256-byte vector.
-            page_table: PageTable host memory store containing SimdHammingIndex.
-            top_k: Number of nearest seed CIDs to return.
+            page_table: PageTable or QuantaGraph host memory store.
+            top_k: Number of nearest seed CIDs to return (defaults to self.max_seed_nodes).
+            dense_seed_threshold: Override for theta_seed cutoff.
+            hybrid_blend_alpha: Override for blend ratio alpha.
+            return_energy: If True, returns Dict[cid, energy] (e_0) instead of list of tuples.
 
         Returns:
-            List of (cid, hamming_distance) pairs sorted by distance.
+            List of (cid, score) pairs or Dict[cid, float] if return_energy=True.
         """
-        has_vector_index = len(page_table.vector_index) > 0
+        eff_top_k = top_k if top_k is not None else self.max_seed_nodes
+        eff_theta_seed = dense_seed_threshold if dense_seed_threshold is not None else self.dense_seed_threshold
+        eff_alpha = hybrid_blend_alpha if hybrid_blend_alpha is not None else self.hybrid_blend_alpha
+
+        is_graph_input = isinstance(page_table, QuantaGraph)
+        has_vector_index = hasattr(page_table, "vector_index") and len(page_table.vector_index) > 0
         has_global_kb = getattr(page_table, "global_kb", None) is not None
-        if not has_vector_index and not has_global_kb:
-            return []
+        has_dense_store = hasattr(page_table, "_dense_vectors") and len(page_table._dense_vectors) > 0
+        has_nodes = is_graph_input and len(page_table.nodes) > 0
+
+        if not has_vector_index and not has_global_kb and not has_dense_store and not has_nodes:
+            self.last_seed_energy = {}
+            return {} if return_energy else []
 
         query_vec: Union[QuantaVector, bytes, np.ndarray]
         named_entities: List[str] = []
@@ -919,11 +969,16 @@ class SpreadingActivationRetriever:
         pred_lemma = q_graph.root.literal if (q_graph and q_graph.root and isinstance(q_graph.root.literal, str)) else None
 
         # 1. Execute fast SIMD bitwise Hamming search if vector index present
-        matches = page_table.vector_index.search(query_vec, top_k=top_k) if has_vector_index else []
+        matches: List[Tuple[str, int]] = []
+        if has_vector_index:
+            matches = page_table.vector_index.search(query_vec, top_k=max(eff_top_k * 2, 20))
 
         # 2. If named entities are present, boost matching entity CIDs if found in PageTable or Global KB
+        boosted: List[Tuple[str, int]] = []
+        boosted_cids: Set[str] = set()
+        cand_limit = max(eff_top_k * 2, 10)
+
         if named_entities or pred_lemma:
-            existing_cids = {cid for cid, _ in matches}
             generic_stop = {
                 "polimer", "anyag", "substance", "compound", "specimen", "item", "items", "order",
                 "entity", "sample", "minta", "cooling", "system", "maintains",
@@ -933,14 +988,10 @@ class SpreadingActivationRetriever:
                 "describe", "explain", "review", "sentence", "sentences", "there", "always",
                 "possible", "valid", "move", "that", "this"
             }
-            # Prioritize longer, more specific multi-word entities, plus action predicate
             candidate_terms = list(named_entities)
             if pred_lemma and len(pred_lemma) >= 3 and pred_lemma.lower() not in generic_stop and pred_lemma.lower() not in self.QUESTION_STOPWORDS:
                 candidate_terms.append(pred_lemma.lower())
             sorted_ents = sorted(candidate_terms, key=lambda x: len(x), reverse=True)
-            boosted: List[Tuple[str, int]] = []
-            boosted_cids: Set[str] = set()
-            cand_limit = max(top_k * 2, 10)
             per_ent_limit = max(10, cand_limit)
             for ent_text in sorted_ents:
                 ent_clean = ent_text.lower().strip()
@@ -959,7 +1010,6 @@ class SpreadingActivationRetriever:
                 else:
                     cids = []
 
-                # Query Global Knowledge Base strictly if mounted and entity qualifies as a proper seed
                 if has_global_kb and self._is_qualified_global_kb_seed(ent_text, original_query=query_text_raw):
                     try:
                         kb_matches = page_table.global_kb.lookup_entity(ent_clean, limit=3)
@@ -971,7 +1021,7 @@ class SpreadingActivationRetriever:
 
                 for ent_cid in cids:
                     if ent_cid not in boosted_cids:
-                        n_check = page_table.fetch_node(ent_cid)
+                        n_check = page_table.fetch_node(ent_cid) if hasattr(page_table, "fetch_node") else (page_table.nodes.get(ent_cid) if is_graph_input else None)
                         if n_check and (
                             (n_check.anchor and (n_check.anchor.startswith("merkle:") or n_check.anchor.startswith("fold:")))
                             or (isinstance(n_check.literal, dict) and n_check.literal.get("type") == "discourse_episode_fold")
@@ -982,15 +1032,127 @@ class SpreadingActivationRetriever:
                 if len(boosted) >= cand_limit * 2:
                     break
 
-            remaining_matches = [(cid, dist) for cid, dist in matches if cid not in boosted_cids]
+        remaining_matches = [(cid, dist) for cid, dist in matches if cid not in boosted_cids]
+        combined_discrete = boosted + remaining_matches
 
-            # If exact named entities matched the query, prioritize them as seeds
-            if boosted:
-                return boosted[:max(top_k, min(len(boosted), 20))]
+        # 3. Continuous Dense Energy Seeding (ANVC Bi-Encoder Advisory)
+        dense_active = (self.embedding_manager is not None) and (bool(query_text_raw.strip())) and (eff_alpha > 0.0)
 
-            matches = boosted + remaining_matches
+        if dense_active:
+            q_dense = None
+            try:
+                raw_q_dense = self.embedding_manager.embed_query(
+                    query_text_raw,
+                    task="question answering",
+                    matryoshka_dim=self.matryoshka_dim,
+                )
+                q_dense = np.asarray(raw_q_dense, dtype=np.float32).reshape(-1)
+                q_norm = float(np.linalg.norm(q_dense))
+                if q_norm > 1e-12:
+                    q_dense /= q_norm
+                else:
+                    q_dense = None
+            except Exception as e:
+                logger.warning("Error computing dense query embedding in find_seed_nodes: %s", e)
+                q_dense = None
 
-        return matches[:top_k]
+            if q_dense is not None:
+                candidate_dense: Dict[str, np.ndarray] = {}
+
+                # A. Host PageTable memory-mapped / in-memory dense vectors
+                if hasattr(page_table, "_dense_vectors") and page_table._dense_vectors:
+                    for cid, vec in page_table._dense_vectors.items():
+                        candidate_dense[cid] = vec
+
+                # B. In-memory QuantaGraph nodes
+                if is_graph_input:
+                    for cid, node in page_table.nodes.items():
+                        if getattr(node, "dense_vector", None) is not None:
+                            candidate_dense[cid] = node.dense_vector
+                        elif node.literal or node.anchor:
+                            t_text = str(node.literal or node.anchor)
+                            try:
+                                dvec = self.embedding_manager.embed_document(t_text, title=node.anchor or "none", matryoshka_dim=self.matryoshka_dim)
+                                dvec = np.asarray(dvec, dtype=np.float32).reshape(-1)
+                                dnorm = float(np.linalg.norm(dvec))
+                                if dnorm > 1e-12:
+                                    dvec /= dnorm
+                                node.dense_vector = dvec
+                                candidate_dense[cid] = dvec
+                            except Exception:
+                                pass
+
+                # C. Discrete candidates without dense vectors
+                for cid, _ in combined_discrete[:max(eff_top_k * 4, 30)]:
+                    if cid not in candidate_dense:
+                        node = page_table.fetch_node(cid) if hasattr(page_table, "fetch_node") else (page_table.nodes.get(cid) if is_graph_input else None)
+                        if node is not None:
+                            if getattr(node, "dense_vector", None) is not None:
+                                candidate_dense[cid] = node.dense_vector
+                            elif node.literal or node.anchor:
+                                t_text = str(node.literal or node.anchor)
+                                try:
+                                    dvec = self.embedding_manager.embed_document(t_text, title=node.anchor or "none", matryoshka_dim=self.matryoshka_dim)
+                                    dvec = np.asarray(dvec, dtype=np.float32).reshape(-1)
+                                    dnorm = float(np.linalg.norm(dvec))
+                                    if dnorm > 1e-12:
+                                        dvec /= dnorm
+                                    node.dense_vector = dvec
+                                    if hasattr(page_table, "set_dense_vector"):
+                                        page_table.set_dense_vector(cid, dvec)
+                                    candidate_dense[cid] = dvec
+                                except Exception:
+                                    pass
+
+                # Compute dense cosine similarities and threshold
+                e0_dense: Dict[str, float] = {}
+                for cid, dvec in candidate_dense.items():
+                    if dvec is not None and dvec.shape == q_dense.shape:
+                        sim = float(np.dot(q_dense, dvec))
+                        if sim >= eff_theta_seed:
+                            e0_dense[cid] = sim
+                        else:
+                            e0_dense[cid] = 0.0
+
+                # Compute discrete Hamming energies
+                e0_hamming: Dict[str, float] = {}
+                for cid, dist in combined_discrete:
+                    if cid in boosted_cids:
+                        e0_hamming[cid] = 1.0
+                    else:
+                        e0_hamming[cid] = max(0.0, 1.0 - float(dist) / 1024.0)
+
+                # Hybrid blend e_0 = alpha * e_{0,dense} + (1 - alpha) * e_{0,hamming}
+                all_cids = set(e0_dense.keys()) | set(e0_hamming.keys())
+                e0: Dict[str, float] = {}
+                for cid in all_cids:
+                    s_d = e0_dense.get(cid, 0.0)
+                    s_h = e0_hamming.get(cid, 0.0)
+                    blend = eff_alpha * s_d + (1.0 - eff_alpha) * s_h
+                    if blend > 0.0:
+                        e0[cid] = float(blend)
+
+                sorted_cids = sorted(e0.keys(), key=lambda c: e0[c], reverse=True)
+                top_cids = sorted_cids[:eff_top_k]
+                if top_cids:
+                    self.last_seed_energy = {c: e0[c] for c in top_cids}
+                    if return_energy:
+                        return self.last_seed_energy
+                    return [(c, e0[c]) for c in top_cids]
+
+        # 4. Fallback: Pure discrete matching when dense disabled or no positive energy
+        if boosted:
+            discrete_top = boosted[:max(eff_top_k, min(len(boosted), 20))]
+        else:
+            discrete_top = combined_discrete[:eff_top_k]
+
+        self.last_seed_energy = {
+            cid: (1.0 if dist == 0 else max(0.01, 1.0 - float(dist) / 1024.0))
+            for cid, dist in discrete_top
+        }
+        if return_energy:
+            return self.last_seed_energy
+        return discrete_top[:eff_top_k]
 
     # -------------------------------------------------------------------------
     # Task 4.3: Implement Spreading Activation Traversal
@@ -998,7 +1160,7 @@ class SpreadingActivationRetriever:
 
     def traverse_hipporag(
         self,
-        seed_cids: Sequence[str],
+        seed_cids: Union[Sequence[str], Dict[str, float]],
         graph_or_page_table: Union[QuantaGraph, PageTable],
         max_hops: int = 4,
         alpha: Optional[float] = None,
@@ -1011,6 +1173,7 @@ class SpreadingActivationRetriever:
         Guarantees zero multi-hop semantic drift by propagating along topological edges
         while pruning contradictory paths (Belnap 00_2) and dampening unverified facts (11_2).
         """
+        seed_keys = list(seed_cids.keys()) if isinstance(seed_cids, dict) else list(seed_cids)
         if isinstance(graph_or_page_table, QuantaGraph):
             res_graph = self.hipporag.retrieve_subgraph(
                 seed_cids=seed_cids,
@@ -1019,15 +1182,15 @@ class SpreadingActivationRetriever:
                 threshold=threshold,
                 query_polarity=query_polarity,
             )
-            setattr(res_graph, "query_seeds", list(seed_cids))
+            setattr(res_graph, "query_seeds", seed_keys)
             return res_graph
 
         # PageTable input: build local QuantaGraph of k-hop neighborhood around seeds
         pt = graph_or_page_table
         local_graph = QuantaGraph()
-        visited: Set[str] = set(seed_cids)
-        frontier: List[str] = list(seed_cids)
-        fetched_seeds = pt.fetch_nodes(seed_cids) if hasattr(pt, "fetch_nodes") else [pt.get_node(c) for c in seed_cids]
+        visited: Set[str] = set(seed_keys)
+        frontier: List[str] = list(seed_keys)
+        fetched_seeds = pt.fetch_nodes(seed_keys) if hasattr(pt, "fetch_nodes") else [pt.get_node(c) for c in seed_keys]
         for s_node in fetched_seeds:
             if s_node:
                 local_graph.add_node(s_node)
@@ -1072,12 +1235,12 @@ class SpreadingActivationRetriever:
             threshold=threshold,
             query_polarity=query_polarity,
         )
-        setattr(res_graph, "query_seeds", list(seed_cids))
+        setattr(res_graph, "query_seeds", seed_keys)
         return res_graph
 
     def traverse_subgraph(
         self,
-        seed_cids: Sequence[str],
+        seed_cids: Union[Sequence[str], Dict[str, float]],
         page_table: Union[PageTable, QuantaGraph],
         max_depth: int = 2,
         decay: float = 0.7,
@@ -1140,19 +1303,22 @@ class SpreadingActivationRetriever:
         queue: deque[Tuple[str, int]] = deque()
         node_cache: Dict[str, Optional[QuantaNode]] = {}
 
+        seed_keys = list(seed_cids.keys()) if isinstance(seed_cids, dict) else list(seed_cids)
+        seed_weights = seed_cids if isinstance(seed_cids, dict) else {cid: 1.0 for cid in seed_keys}
+
         # Batch prefetch initial seed nodes
         if hasattr(page_table, "fetch_nodes"):
-            fetched_seeds = page_table.fetch_nodes(seed_cids)
+            fetched_seeds = page_table.fetch_nodes(seed_keys)
         elif hasattr(page_table, "get_node"):
-            fetched_seeds = [page_table.get_node(cid) for cid in seed_cids]
+            fetched_seeds = [page_table.get_node(cid) for cid in seed_keys]
         elif hasattr(page_table, "nodes"):
-            fetched_seeds = [page_table.nodes.get(cid) for cid in seed_cids]
+            fetched_seeds = [page_table.nodes.get(cid) for cid in seed_keys]
         else:
             fetched_seeds = []
 
-        for cid, n in zip(seed_cids, fetched_seeds):
+        for cid, n in zip(seed_keys, fetched_seeds):
             node_cache[cid] = n
-            activations[cid] = 1.0
+            activations[cid] = float(seed_weights.get(cid, 1.0))
             queue.append((cid, 0))
 
         expanded: Set[Tuple[str, int]] = set()
@@ -1253,7 +1419,10 @@ class SpreadingActivationRetriever:
                             # Do not traverse backwards into fold summary nodes
                             p_node = node_cache.get(p_cid)
                             if p_node is None:
-                                p_node = page_table.fetch_node(p_cid)
+                                if hasattr(page_table, "fetch_node"):
+                                    p_node = page_table.fetch_node(p_cid)
+                                elif hasattr(page_table, "get_node"):
+                                    p_node = page_table.get_node(p_cid)
                                 node_cache[p_cid] = p_node
                             if p_node and (
                                 (p_node.anchor and (p_node.anchor.startswith("merkle:") or p_node.anchor.startswith("fold:")))
@@ -1281,10 +1450,16 @@ class SpreadingActivationRetriever:
                                 if p_cid not in node_cache:
                                     reverse_cids_to_fetch.append(p_cid)
                     if reverse_cids_to_fetch:
-                        fetched_rev = page_table.fetch_nodes(reverse_cids_to_fetch)
+                        if hasattr(page_table, "fetch_nodes"):
+                            fetched_rev = page_table.fetch_nodes(reverse_cids_to_fetch)
+                        elif hasattr(page_table, "get_node"):
+                            fetched_rev = [page_table.get_node(c) for c in reverse_cids_to_fetch]
+                        else:
+                            fetched_rev = []
                         for r_cid, r_node in zip(reverse_cids_to_fetch, fetched_rev):
-                            node_cache[r_cid] = r_node
-                else:
+                            if r_node is not None:
+                                node_cache[r_cid] = r_node
+                elif hasattr(page_table, "_conn"):
                     cur = page_table._conn.cursor()
                     cur.execute(
                         "SELECT cid, edges FROM nodes WHERE edges LIKE ?",
@@ -1407,7 +1582,7 @@ class SpreadingActivationRetriever:
         if root_cid is not None:
             subgraph.root_cid = root_cid
         elif seed_cids:
-            subgraph.root_cid = seed_cids[0]
+            subgraph.root_cid = next(iter(seed_cids))
 
         setattr(subgraph, "query_seeds", list(seed_cids))
         setattr(subgraph, "activations", activations)
@@ -1947,8 +2122,13 @@ class SpreadingActivationRetriever:
         query_polarity: str = "positive",
     ) -> QuantaGraph:
         """Compiles query, identifies seed nodes via SIMD search, and returns the activated sub-graph."""
-        seeds = self.find_seed_nodes(query, page_table, top_k=top_k)
-        seed_cids = [cid for cid, dist in seeds]
+        seeds = self.find_seed_nodes(query, page_table, top_k=top_k, return_energy=True)
+        if isinstance(seeds, dict):
+            seed_cids = list(seeds.keys())
+            seed_input = seeds
+        else:
+            seed_cids = [cid for cid, dist in seeds]
+            seed_input = seed_cids
 
         q_text = query if isinstance(query, str) else (str(query.root.literal) if getattr(query, "root", None) and query.root.literal else "")
         detected_depth = self.detect_query_hop_depth(q_text) if q_text else 2
@@ -1968,7 +2148,7 @@ class SpreadingActivationRetriever:
         eff_threshold = threshold if threshold is not None else (0.15 if is_multihop_task else self.threshold)
 
         subgraph = self.traverse_subgraph(
-            seed_cids=seed_cids,
+            seed_cids=seed_input,
             page_table=page_table,
             max_depth=effective_depth,
             decay=eff_decay,
@@ -1977,6 +2157,7 @@ class SpreadingActivationRetriever:
             query_polarity=query_polarity,
         )
         setattr(subgraph, "query_seeds", seed_cids)
+        setattr(subgraph, "seed_energies", seeds if isinstance(seeds, dict) else {cid: 1.0 for cid in seed_cids})
         if q_text:
             setattr(subgraph, "query_text", q_text)
         return subgraph

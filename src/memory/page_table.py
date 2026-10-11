@@ -384,6 +384,7 @@ class PageTable(MutableMapping):
         self.vector_index = SimdHammingIndex()
         self._reverse_edges: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
         self._literal_index: Dict[str, Set[str]] = defaultdict(set)
+        self._dense_vectors: Dict[str, np.ndarray] = {}
         self.global_kb: Optional[Any] = None
         self.active_canvas: Optional[Any] = None
         self.entity_mapper: Optional[Any] = None
@@ -576,6 +577,8 @@ class PageTable(MutableMapping):
                     ),
                 )
                 self.vector_index.add(cid, packed_vec)
+                if getattr(node, "dense_vector", None) is not None:
+                    self._dense_vectors[cid] = np.asarray(node.dense_vector, dtype=np.float32)
 
             return cid
 
@@ -623,6 +626,8 @@ class PageTable(MutableMapping):
                     getattr(node, "concept_code", None),
                 ))
                 batch_vecs.append((cid, packed_vec))
+                if getattr(node, "dense_vector", None) is not None:
+                    self._dense_vectors[cid] = np.asarray(node.dense_vector, dtype=np.float32)
 
             with self._conn:
                 self._conn.executemany(
@@ -685,6 +690,8 @@ class PageTable(MutableMapping):
                 concept_code=concept_code,
             )
             node._cid_cache = cid
+            if cid in self._dense_vectors:
+                node.dense_vector = self._dense_vectors[cid]
 
             # Update access telemetry only if requested
             if update_access:
@@ -740,6 +747,8 @@ class PageTable(MutableMapping):
                     concept_code=concept_code,
                 )
                 node._cid_cache = cid
+                if cid in self._dense_vectors:
+                    node.dense_vector = self._dense_vectors[cid]
                 nodes_dict[cid] = node
 
         if self.global_kb is not None:
@@ -981,8 +990,17 @@ class PageTable(MutableMapping):
             self.vector_index = SimdHammingIndex()
             self._reverse_edges.clear()
             self._literal_index.clear()
+            self._dense_vectors.clear()
             if self.active_canvas is not None and hasattr(self.active_canvas, "clear"):
                 self.active_canvas.clear()
+
+    def get_dense_vector(self, cid: str) -> Optional[np.ndarray]:
+        """Returns cached dense vector for node CID if available."""
+        return self._dense_vectors.get(cid)
+
+    def set_dense_vector(self, cid: str, vector: Union[np.ndarray, Sequence[float]]) -> None:
+        """Associates a dense vector with a node CID in host memory."""
+        self._dense_vectors[cid] = np.asarray(vector, dtype=np.float32)
 
     def get_entity_mapper(self) -> Any:
         """Lazily returns or instantiates WikidataEntityMapper."""

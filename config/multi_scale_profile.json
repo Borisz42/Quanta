@@ -212,5 +212,26 @@
     "source_commit": "fdcb6fb",
     "calibrated_on": "synthetic_neologisms/oov",
     "notes": "Gate G3b calibrated Belnap truth value strategy: true (Coverage=95.0%, Precision=36.8%, Latency=89.7us)"
+  },
+  "spreading.dense_seed_threshold": {
+    "value": 0.75,
+    "source_exp": "exp-037e",
+    "source_commit": "11f66e8",
+    "calibrated_on": "musique_multihop/dev",
+    "notes": "Gate G4b calibrated dense cosine seed threshold theta_seed=0.75 (Paraphrase Recall=100.0%, Latency=3.943ms)"
+  },
+  "spreading.hybrid_blend_alpha": {
+    "value": 1.0,
+    "source_exp": "exp-037e",
+    "source_commit": "11f66e8",
+    "calibrated_on": "musique_multihop/dev",
+    "notes": "Gate G4b calibrated hybrid blend ratio alpha=1.00 (Paraphrase Recall lift vs discrete: +100.0%)"
+  },
+  "spreading.max_seed_nodes": {
+    "value": 8,
+    "source_exp": "exp-037e",
+    "source_commit": "11f66e8",
+    "calibrated_on": "musique_multihop/dev",
+    "notes": "Gate G4b calibrated max initial seed nodes K_seed=8 (Precision=75.0%, F1=85.7%)"
   }
 }
