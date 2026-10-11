@@ -184,6 +184,7 @@ class CognitivePipeline:
         max_slots: Optional[int] = None,
         system_prompt: Optional[str] = None,
         prompt_variant: Optional[str] = None,
+        embedding_manager: Optional[Any] = None,
         **transducer_kwargs,
     ):
         self.tracer = tracer or PipelineExecutionTracer.get_instance()
@@ -400,6 +401,21 @@ class CognitivePipeline:
             )
             if self.async_kev_worker is None:
                 self.async_kev_worker = self.background_ingestor
+
+        # 16. Dense Bi-Encoder Embedding Manager (§ANVC Session 2)
+        if embedding_manager is not None:
+            self.embedding_manager = embedding_manager
+        elif transducer_backend in ("mock", "mock_json", "mock_unsloth", "mock_sexpr", "sexpr_mock"):
+            from server.embedding_manager import MockEmbeddingManager
+            self.embedding_manager = MockEmbeddingManager(matryoshka_dim=self.multi_scale_config.embedding_matryoshka_dim)
+        else:
+            try:
+                from server.embedding_manager import EmbeddingManager
+                self.embedding_manager = EmbeddingManager(config=self.multi_scale_config)
+            except Exception as e:
+                logger.warning("Could not initialize EmbeddingManager (%s); using MockEmbeddingManager fallback", e)
+                from server.embedding_manager import MockEmbeddingManager
+                self.embedding_manager = MockEmbeddingManager(matryoshka_dim=self.multi_scale_config.embedding_matryoshka_dim)
 
     def mark_foreground(self, active: bool = True) -> None:
         """Marks whether an in-process foreground request is executing (Pause Policy BG-B)."""
@@ -2037,7 +2053,16 @@ class CognitivePipeline:
         t_chk0 = time.perf_counter()
         macro_tokens = ms_cfg.chunker_macro_target_tokens or 1000
         micro_words = ms_cfg.chunker_micro_target_words or 250
-        chunker = HierarchicalChunker(macro_target_tokens=macro_tokens, micro_target_words=micro_words)
+        emb_mgr = getattr(self, "embedding_manager", None)
+        matryoshka_dim = ms_cfg.embedding_matryoshka_dim
+        chunker = HierarchicalChunker(
+            macro_target_tokens=macro_tokens,
+            micro_target_words=micro_words,
+            config=ms_cfg,
+            grounder=getattr(self, "concept_grounder", None),
+            embedding_manager=emb_mgr,
+            matryoshka_dim=matryoshka_dim,
+        )
 
         macro_blocks: List[MacroBlock] = []
         all_micro_chunks: List[DiscourseChunk] = []
@@ -2062,6 +2087,15 @@ class CognitivePipeline:
                         micro_chunks=[single_micro],
                     )
                 ]
+                if emb_mgr is not None:
+                    chunker.attach_dense_embeddings(
+                        macro_blocks=macro_blocks,
+                        micro_chunks=all_micro_chunks,
+                        embedding_manager=emb_mgr,
+                        matryoshka_dim=matryoshka_dim,
+                        embed_macros=True,
+                        embed_micros=(ms_cfg.filter_unit == "micro"),
+                    )
         t_chk_ms = (time.perf_counter() - t_chk0) * 1000.0
         if self.tracer:
             self.tracer.record_stage_timing("chunking", t_chk_ms, gpu_calls=0)
@@ -2076,8 +2110,10 @@ class CognitivePipeline:
             keep_top_k=ms_cfg.filter_keep_top_k,
             keep_budget_tokens=effective_keep_budget,
             calibration=ms_cfg.get("filter.calibration"),
+            config=ms_cfg,
             grounder=getattr(self, "concept_grounder", None),
             kev_engine=getattr(self, "kev_engine", None),
+            embedding_manager=emb_mgr,
         )
         target_units = macro_blocks if ms_cfg.filter_unit in ("macro", "macro_head") else all_micro_chunks
         scored_units = filt.score(intent, target_units)

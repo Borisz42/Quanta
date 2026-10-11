@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
+import numpy as np
+
 try:
     import spacy
     SPACY_AVAILABLE = True
@@ -90,10 +92,11 @@ class DiscourseChunk:
     word_count: int = 0
     token_count_estimate: int = 0
     parent_macro_id: Optional[str] = None
+    dense_embedding: Optional[Union[np.ndarray, List[float]]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize DiscourseChunk to a JSON-compatible dictionary."""
-        return {
+        d = {
             "chunk_id": self.chunk_id,
             "text": self.text,
             "sentence_spans": [s.to_dict() for s in self.sentence_spans],
@@ -107,6 +110,12 @@ class DiscourseChunk:
             "token_count_estimate": self.token_count_estimate,
             "parent_macro_id": self.parent_macro_id,
         }
+        if self.dense_embedding is not None:
+            if hasattr(self.dense_embedding, "tolist"):
+                d["dense_embedding"] = self.dense_embedding.tolist()
+            else:
+                d["dense_embedding"] = list(self.dense_embedding)
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> DiscourseChunk:
@@ -115,6 +124,9 @@ class DiscourseChunk:
             SentenceSpan.from_dict(s)
             for s in data.get("sentence_spans", [])
         ]
+        emb = data.get("dense_embedding")
+        if emb is not None:
+            emb = np.array(emb, dtype=np.float32)
         return cls(
             chunk_id=str(data["chunk_id"]),
             text=str(data["text"]),
@@ -128,7 +140,27 @@ class DiscourseChunk:
             word_count=int(data.get("word_count", 0)),
             token_count_estimate=int(data.get("token_count_estimate", 0)),
             parent_macro_id=data.get("parent_macro_id"),
+            dense_embedding=emb,
         )
+
+    def get_dense_embedding(
+        self,
+        embedding_manager: Optional[Any] = None,
+        matryoshka_dim: Optional[int] = None,
+    ) -> Optional[np.ndarray]:
+        """Returns cached embedding, or computes and caches it via embedding_manager."""
+        if self.dense_embedding is not None:
+            emb = np.asarray(self.dense_embedding, dtype=np.float32)
+            if matryoshka_dim is not None and emb.shape[-1] != matryoshka_dim:
+                from server.embedding_manager import truncate_and_normalize
+                emb = truncate_and_normalize(emb, matryoshka_dim)
+                self.dense_embedding = emb
+            return emb
+        if embedding_manager is not None:
+            emb = embedding_manager.embed_document(self.text, matryoshka_dim=matryoshka_dim)
+            self.dense_embedding = emb
+            return emb
+        return None
 
     def __len__(self) -> int:
         """Return length of verbatim chunk text in characters."""

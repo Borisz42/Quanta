@@ -10,6 +10,7 @@ Variants supported:
 - F-D: macro (full text) Kev-4B prefill logprob (n_macro GPU calls)
 - F-E: macro (head only) Kev-4B prefill logprob (n_macro GPU calls)
 - F-F: cascade (lexical/concept prefilter + Kev reranking)
+- F-G: dense hybrid (BM25 + EmbeddingGemma 2 dense cosine similarities via RRF)
 - passthrough: default B0 behavior (keeps 100% of units)
 
 Supports keep policies (threshold, top-k, token budget) and calibration (temperature/Platt).
@@ -18,10 +19,13 @@ Supports keep policies (threshold, top-k, token budget) and calibration (tempera
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 import math
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+
+import numpy as np
 
 from config.multi_scale_config import MultiScaleConfig
 from models.kev_engine import KevDecisionEngine, MockKevEngine, RelevanceScoreResult
@@ -34,6 +38,8 @@ from parser.task_boundary_extractor import (
     clean_core_query,
     extract_target_entities,
 )
+
+logger = logging.getLogger("quanta.retrieval.relevance_filter")
 
 
 @dataclass
@@ -76,8 +82,15 @@ class RelevanceFilter:
         config: Optional[MultiScaleConfig] = None,
         kev_engine: Optional[Union[KevDecisionEngine, MockKevEngine]] = None,
         grounder: Optional[MmapLexicalGrounder] = None,
+        embedding_manager: Optional[Any] = None,
+        rrf_k: Optional[int] = None,
+        weight_lexical: Optional[float] = None,
+        weight_dense: Optional[float] = None,
+        dense_fast_path_threshold: Optional[float] = None,
+        matryoshka_dim: Optional[int] = None,
     ):
         cfg = config or MultiScaleConfig()
+        self.config = cfg
         self.strategy = (strategy or cfg.filter_strategy or "passthrough").upper()
         self.unit_type = (unit or cfg.filter_unit or "micro").lower()
         self.keep_threshold = (
@@ -93,6 +106,19 @@ class RelevanceFilter:
 
         self.kev_engine = kev_engine or MockKevEngine()
         self.grounder = grounder or MmapLexicalGrounder.get_default()
+
+        # ANVC Hybrid Dense Bi-Encoder Parameters (§Session 2)
+        self.embedding_manager = embedding_manager
+        self.rrf_k = int(rrf_k if rrf_k is not None else cfg.filter_rrf_k)
+        self.weight_lexical = float(weight_lexical if weight_lexical is not None else cfg.filter_weight_lexical)
+        self.weight_dense = float(weight_dense if weight_dense is not None else cfg.filter_weight_dense)
+        self.dense_fast_path_threshold = (
+            dense_fast_path_threshold
+            if dense_fast_path_threshold is not None
+            else cfg.filter_dense_fast_path_threshold
+        )
+        self.matryoshka_dim = int(matryoshka_dim if matryoshka_dim is not None else cfg.embedding_matryoshka_dim)
+        self.last_fast_path_triggered: bool = False
 
         # Telemetry
         self.last_scoring_time_ms: float = 0.0
@@ -142,6 +168,9 @@ class RelevanceFilter:
             self.last_gpu_calls = len(units)
         elif strat in ("F-F", "CASCADE"):
             scored, gpu_calls = self._score_cascade(query_text, units, target_entities=target_entities)
+            self.last_gpu_calls = gpu_calls
+        elif strat in ("F-G", "DENSE_HYBRID", "HYBRID", "RRF"):
+            scored, gpu_calls = self._score_dense_hybrid(query_text, units, target_entities=target_entities)
             self.last_gpu_calls = gpu_calls
         else:
             logger.warning("Unknown filter strategy '%s', falling back to passthrough", strat)
@@ -581,6 +610,162 @@ class RelevanceFilter:
         id_order = {u.chunk_id if hasattr(u, "chunk_id") else u.macro_id: idx for idx, u in enumerate(units)}
         res_sorted = sorted(res, key=lambda s: id_order.get(s.unit_id, 0))
         return res_sorted, len(cand_units)
+
+    def _score_dense_hybrid(
+        self,
+        query: str,
+        units: Sequence[Union[DiscourseChunk, MacroBlock]],
+        target_entities: Optional[Sequence[str]] = None,
+    ) -> Tuple[List[ScoredUnit], int]:
+        """Variant F-G: Dense Hybrid combining BM25 lexical with EmbeddingGemma 2 bi-encoder via RRF.
+
+        Formulation:
+            RRF(d) = (w_lex / (k_rrf + rank_BM25(d))) + (w_dense / (k_rrf + rank_dense(d)))
+        Fast-Path Dynamic Coupling:
+            If max_d s_dense(d) >= theta_fast, bypass BM25 and immediately route top unit to fast path.
+        """
+        if self.embedding_manager is None:
+            try:
+                from server.embedding_manager import EmbeddingManager
+                self.embedding_manager = EmbeddingManager(config=self.config)
+            except Exception as e:
+                logger.warning("Could not instantiate EmbeddingManager (%s); using mock fallback", e)
+                from server.embedding_manager import MockEmbeddingManager
+                self.embedding_manager = MockEmbeddingManager(matryoshka_dim=self.matryoshka_dim)
+
+        mgr = self.embedding_manager
+        dim = self.matryoshka_dim
+
+        # 1. Embed query
+        q_vec = mgr.embed_query(query, matryoshka_dim=dim)
+        if hasattr(q_vec, "ndim") and q_vec.ndim > 1:
+            q_vec = q_vec.squeeze()
+        q_vec = np.asarray(q_vec, dtype=np.float32)
+
+        # 2. Check / compute dense embeddings for all candidate units
+        unembedded_indices = []
+        for i, u in enumerate(units):
+            emb = getattr(u, "dense_embedding", None)
+            if emb is None:
+                unembedded_indices.append(i)
+            else:
+                emb_arr = np.asarray(emb, dtype=np.float32)
+                if emb_arr.shape[-1] != dim:
+                    from server.embedding_manager import truncate_and_normalize
+                    emb_arr = truncate_and_normalize(emb_arr, dim)
+                    u.dense_embedding = emb_arr
+
+        gpu_calls = 1  # 1 call for query
+        if unembedded_indices:
+            unembedded_texts = [units[i].text for i in unembedded_indices]
+            batch_vecs = mgr.embed_documents(unembedded_texts, matryoshka_dim=dim)
+            for i, vec in zip(unembedded_indices, batch_vecs):
+                units[i].dense_embedding = vec
+            gpu_calls += len(unembedded_indices)
+
+        # Stack unit vectors into matrix U: shape (N, D)
+        unit_vecs = np.stack([np.asarray(u.dense_embedding, dtype=np.float32) for u in units], axis=0)
+        # Cosine similarity via dot-product (both q_vec and unit_vecs are L2-normalized)
+        dense_scores = np.dot(unit_vecs, q_vec).astype(float)
+        dense_scores = np.clip(dense_scores, -1.0, 1.0)
+
+        # 3. Fast-Path Dynamic Coupling Check
+        max_dense = float(np.max(dense_scores)) if len(dense_scores) > 0 else 0.0
+        theta_fast = self.dense_fast_path_threshold
+        fast_path_triggered = (theta_fast is not None and max_dense >= theta_fast)
+        self.last_fast_path_triggered = fast_path_triggered
+
+        if fast_path_triggered:
+            # Fast-path bypass: directly rank by dense cosine similarity without BM25
+            min_dense = float(np.min(dense_scores))
+            denom = (max_dense - min_dense) if (max_dense - min_dense) > 1e-6 else 1.0
+
+            res: List[ScoredUnit] = []
+            for idx, u in enumerate(units):
+                u_id, u_toks, span, gran = self._extract_unit_meta(u)
+                d_score = float(dense_scores[idx])
+                norm_score = max(0.0, min(1.0, (d_score - min_dense) / denom))
+                cal_score = self._apply_calibration(norm_score, raw_score=d_score)
+                dense_rank = int(np.sum(dense_scores > d_score)) + 1
+                res.append(
+                    ScoredUnit(
+                        unit=u,
+                        unit_id=u_id,
+                        score=cal_score,
+                        raw_score=d_score,
+                        raw_logprob=math.log(max(1e-5, cal_score)),
+                        tokens=u_toks,
+                        char_span=span,
+                        granularity=gran,
+                        metadata={
+                            "strategy": "F-G_DENSE_HYBRID",
+                            "dense_score": d_score,
+                            "dense_rank": dense_rank,
+                            "fast_path_bypassed": True,
+                            "dense_fast_path_triggered": True,
+                        },
+                    )
+                )
+            return res, gpu_calls
+
+        # 4. Standard Reciprocal Rank Fusion (RRF)
+        bm25_scored = self._score_bm25(query, units, target_entities=target_entities)
+        bm25_raw = [s.raw_score for s in bm25_scored]
+
+        # 1-based ranks
+        bm25_order = sorted(range(len(units)), key=lambda i: bm25_raw[i], reverse=True)
+        bm25_ranks = {orig_idx: rank + 1 for rank, orig_idx in enumerate(bm25_order)}
+
+        dense_order = sorted(range(len(units)), key=lambda i: dense_scores[i], reverse=True)
+        dense_ranks = {orig_idx: rank + 1 for rank, orig_idx in enumerate(dense_order)}
+
+        k_rrf = self.rrf_k
+        w_lex = self.weight_lexical
+        w_dense = self.weight_dense
+
+        rrf_scores: List[float] = []
+        for i in range(len(units)):
+            r_lex = bm25_ranks[i]
+            r_dns = dense_ranks[i]
+            val = (w_lex / (k_rrf + r_lex)) + (w_dense / (k_rrf + r_dns))
+            rrf_scores.append(val)
+
+        min_rrf = min(rrf_scores) if rrf_scores else 0.0
+        max_rrf = max(rrf_scores) if rrf_scores else 1.0
+        denom = (max_rrf - min_rrf) if (max_rrf - min_rrf) > 1e-6 else 1.0
+
+        res: List[ScoredUnit] = []
+        for i, u in enumerate(units):
+            u_id, u_toks, span, gran = self._extract_unit_meta(u)
+            r_val = rrf_scores[i]
+            norm_score = max(0.0, min(1.0, (r_val - min_rrf) / denom))
+            cal_score = self._apply_calibration(norm_score, raw_score=r_val)
+            res.append(
+                ScoredUnit(
+                    unit=u,
+                    unit_id=u_id,
+                    score=cal_score,
+                    raw_score=r_val,
+                    raw_logprob=math.log(max(1e-5, cal_score)),
+                    tokens=u_toks,
+                    char_span=span,
+                    granularity=gran,
+                    metadata={
+                        "strategy": "F-G_DENSE_HYBRID",
+                        "rrf_score": r_val,
+                        "bm25_score": bm25_raw[i],
+                        "dense_score": float(dense_scores[i]),
+                        "bm25_rank": bm25_ranks[i],
+                        "dense_rank": dense_ranks[i],
+                        "fast_path_triggered": False,
+                        "w_lex": w_lex,
+                        "w_dense": w_dense,
+                        "k_rrf": k_rrf,
+                    },
+                )
+            )
+
+        return res, gpu_calls
 
     # -----------------------------------------------------------------------
     # Helper & Calibration Methods

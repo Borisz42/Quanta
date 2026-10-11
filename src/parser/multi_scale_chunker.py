@@ -16,7 +16,9 @@ from dataclasses import dataclass, field
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+
+import numpy as np
 
 from config.multi_scale_config import MultiScaleConfig
 from parser.chunker import DiscourseChunk, DiscourseChunker
@@ -61,6 +63,7 @@ class MacroBlock:
     concept_codes: List[int] = field(default_factory=list)
     surface_entities: List[str] = field(default_factory=list)
     token_count_estimate: int = 0
+    dense_embedding: Optional[Union[np.ndarray, List[float]]] = None
 
     @property
     def word_count(self) -> int:
@@ -68,7 +71,7 @@ class MacroBlock:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize MacroBlock to JSON-compatible dictionary."""
-        return {
+        d = {
             "macro_id": self.macro_id,
             "char_span": list(self.char_span),
             "text": self.text,
@@ -77,6 +80,12 @@ class MacroBlock:
             "surface_entities": list(self.surface_entities),
             "token_count_estimate": self.token_count_estimate,
         }
+        if self.dense_embedding is not None:
+            if hasattr(self.dense_embedding, "tolist"):
+                d["dense_embedding"] = self.dense_embedding.tolist()
+            else:
+                d["dense_embedding"] = list(self.dense_embedding)
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> MacroBlock:
@@ -86,6 +95,9 @@ class MacroBlock:
             for c in data.get("micro_chunks", [])
         ]
         span = tuple(data.get("char_span", [0, 0]))
+        emb = data.get("dense_embedding")
+        if emb is not None:
+            emb = np.array(emb, dtype=np.float32)
         return cls(
             macro_id=str(data["macro_id"]),
             char_span=(int(span[0]), int(span[1])),
@@ -94,7 +106,27 @@ class MacroBlock:
             concept_codes=[int(c) for c in data.get("concept_codes", [])],
             surface_entities=[str(e) for e in data.get("surface_entities", [])],
             token_count_estimate=int(data.get("token_count_estimate", 0)),
+            dense_embedding=emb,
         )
+
+    def get_dense_embedding(
+        self,
+        embedding_manager: Optional[Any] = None,
+        matryoshka_dim: Optional[int] = None,
+    ) -> Optional[np.ndarray]:
+        """Returns cached embedding, or computes and caches it via embedding_manager."""
+        if self.dense_embedding is not None:
+            emb = np.asarray(self.dense_embedding, dtype=np.float32)
+            if matryoshka_dim is not None and emb.shape[-1] != matryoshka_dim:
+                from server.embedding_manager import truncate_and_normalize
+                emb = truncate_and_normalize(emb, matryoshka_dim)
+                self.dense_embedding = emb
+            return emb
+        if embedding_manager is not None:
+            emb = embedding_manager.embed_document(self.text, matryoshka_dim=matryoshka_dim)
+            self.dense_embedding = emb
+            return emb
+        return None
 
 
 class HierarchicalChunker:
@@ -113,6 +145,8 @@ class HierarchicalChunker:
         micro_target_words: Optional[int] = None,
         config: Optional[MultiScaleConfig] = None,
         grounder: Optional[MmapLexicalGrounder] = None,
+        embedding_manager: Optional[Any] = None,
+        matryoshka_dim: Optional[int] = None,
     ):
         """Initialize the HierarchicalChunker.
 
@@ -121,8 +155,11 @@ class HierarchicalChunker:
             micro_target_words: Target word count for micro DiscourseChunks.
             config: Optional MultiScaleConfig instance for parameter lookup.
             grounder: Optional MmapLexicalGrounder instance for concept code resolution.
+            embedding_manager: Optional EmbeddingManager to compute dense embeddings on ingestion.
+            matryoshka_dim: Configurable Matryoshka dimension D (retrieved from config if None).
         """
         cfg = config or MultiScaleConfig()
+        self.config = cfg
         self.macro_target_tokens = (
             macro_target_tokens
             if macro_target_tokens is not None
@@ -132,6 +169,12 @@ class HierarchicalChunker:
             micro_target_words
             if micro_target_words is not None
             else (cfg.chunker_micro_target_words or self.DEFAULT_MICRO_TARGET_WORDS)
+        )
+        self.embedding_manager = embedding_manager
+        self.matryoshka_dim = (
+            matryoshka_dim
+            if matryoshka_dim is not None
+            else (cfg.embedding_matryoshka_dim if cfg else 768)
         )
 
         # Micro chunker uses min_words ~ half of target, max_words ~ 1.4x target
@@ -214,7 +257,46 @@ class HierarchicalChunker:
             mb = finalize_macro_block(current_macro_micros, macro_idx)
             macro_blocks.append(mb)
 
+        if self.embedding_manager is not None:
+            embed_micros = (getattr(self.config, "filter_unit", "micro") == "micro")
+            self.attach_dense_embeddings(
+                macro_blocks=macro_blocks,
+                micro_chunks=micro_chunks,
+                embedding_manager=self.embedding_manager,
+                matryoshka_dim=self.matryoshka_dim,
+                embed_macros=True,
+                embed_micros=embed_micros,
+            )
+
         return macro_blocks, micro_chunks
+
+    def attach_dense_embeddings(
+        self,
+        macro_blocks: Sequence[MacroBlock],
+        micro_chunks: Optional[Sequence[DiscourseChunk]] = None,
+        embedding_manager: Optional[Any] = None,
+        matryoshka_dim: Optional[int] = None,
+        embed_macros: bool = True,
+        embed_micros: bool = False,
+    ) -> None:
+        """Batch-computes and attaches dense embeddings to MacroBlocks and/or DiscourseChunks."""
+        mgr = embedding_manager or self.embedding_manager
+        if mgr is None:
+            return
+
+        dim = matryoshka_dim or self.matryoshka_dim
+
+        if embed_macros and macro_blocks:
+            macro_texts = [mb.text for mb in macro_blocks]
+            vecs = mgr.embed_documents(macro_texts, matryoshka_dim=dim)
+            for mb, vec in zip(macro_blocks, vecs):
+                mb.dense_embedding = vec
+
+        if embed_micros and micro_chunks:
+            micro_texts = [mc.text for mc in micro_chunks]
+            vecs = mgr.embed_documents(micro_texts, matryoshka_dim=dim)
+            for mc, vec in zip(micro_chunks, vecs):
+                mc.dense_embedding = vec
 
     def _profile_block_concepts(self, block_text: str) -> Tuple[List[str], List[int]]:
         """Extract salient surface entities and ground concept codes.

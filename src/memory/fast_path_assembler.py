@@ -194,6 +194,7 @@ class FastPathAssembler:
         config: Optional[MultiScaleConfig] = None,
         dual_stream_assembler: Optional[DualStreamContextAssembler] = None,
         coverage_evaluator: Optional[FastPathCoverageEvaluator] = None,
+        dense_fast_path_threshold: Optional[float] = None,
     ):
         self.config = config
         raw_mode = mode or (config.fast_path_mode if config else "passthrough")
@@ -212,6 +213,13 @@ class FastPathAssembler:
             self.coverage_threshold = float(config.fast_path_coverage_threshold)
         else:
             self.coverage_threshold = 0.75
+
+        if dense_fast_path_threshold is not None:
+            self.dense_fast_path_threshold = float(dense_fast_path_threshold)
+        elif config and config.filter_dense_fast_path_threshold is not None:
+            self.dense_fast_path_threshold = float(config.filter_dense_fast_path_threshold)
+        else:
+            self.dense_fast_path_threshold = None
 
         self.dual_stream_assembler = dual_stream_assembler or DualStreamContextAssembler()
         self.coverage_evaluator = coverage_evaluator or FastPathCoverageEvaluator()
@@ -234,6 +242,38 @@ class FastPathAssembler:
             return FastPathMode.PASSTHROUGH.value
         return m
 
+    def check_dense_hot_path(
+        self,
+        kept_units: Sequence[Any],
+        threshold: Optional[float] = None,
+    ) -> Tuple[bool, Optional[float], Optional[Any]]:
+        """Checks if any unit exceeds the dense fast-path threshold.
+
+        Returns:
+            Tuple of (triggered: bool, max_dense_score: Optional[float], top_unit: Optional[Any]).
+        """
+        th = threshold if threshold is not None else self.dense_fast_path_threshold
+        if th is None or not kept_units:
+            return False, None, None
+
+        max_score = -1.0
+        top_u = None
+        for u in kept_units:
+            d_score = None
+            if hasattr(u, "metadata") and isinstance(u.metadata, dict):
+                if u.metadata.get("dense_fast_path_triggered"):
+                    return True, float(u.metadata.get("dense_score", 1.0)), u
+                d_score = u.metadata.get("dense_score")
+            elif hasattr(u, "score"):
+                d_score = u.score
+            if d_score is not None and float(d_score) > max_score:
+                max_score = float(d_score)
+                top_u = u
+
+        if max_score >= th:
+            return True, max_score, top_u
+        return False, max_score if max_score >= 0 else None, top_u
+
     def resolve_effective_mode(
         self,
         intent: Union[ExtractedTaskIntent, str],
@@ -244,7 +284,13 @@ class FastPathAssembler:
 
         In M-D (coverage-adaptive), dynamically chooses RAW_ONLY if coverage
         meets coverage_threshold, else HOT_TRANSDUCE.
+        If dense hot-path is triggered, immediately routes to RAW_ONLY fast-path.
         """
+        hot_triggered, max_dense, top_u = self.check_dense_hot_path(kept_units)
+        if hot_triggered:
+            cov_score = 1.0
+            return FastPathMode.RAW_ONLY.value, cov_score
+
         cov_score = self.coverage_evaluator.check_coverage(
             intent=intent,
             units=kept_units,
@@ -259,6 +305,23 @@ class FastPathAssembler:
             return effective, cov_score
 
         return self.mode, cov_score
+
+    def assemble_dense_hot_path(
+        self,
+        top_unit: Any,
+        passage_store: Optional[PassageStore] = None,
+        max_tokens: int = 2500,
+    ) -> FastPathContext:
+        """Immediately assemble context from the top-ranked dense hot-path unit."""
+        return self.assemble(
+            subgraph=None,
+            kept_units=[top_unit],
+            passage_store=passage_store,
+            max_tokens=max_tokens,
+            effective_mode=FastPathMode.RAW_ONLY.value,
+            coverage_score=1.0,
+            transduced_count=0,
+        )
 
     def _units_to_projected_passages(
         self,

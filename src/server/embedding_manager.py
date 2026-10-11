@@ -187,7 +187,7 @@ class LlamaServerEmbeddingBackend(BaseEmbeddingBackend):
 
     def is_available(self) -> bool:
         try:
-            with httpx.Client(timeout=2.0) as client:
+            with httpx.Client(timeout=0.15) as client:
                 r = client.get(f"{self.base_url}/health")
                 if r.status_code == 200:
                     return True
