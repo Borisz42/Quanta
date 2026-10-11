@@ -48,6 +48,7 @@ from urllib.parse import urlparse
 import httpx
 
 from server.unsloth_manager import UnslothServerManager
+from server.embedding_manager import EmbeddingManager
 
 logger = logging.getLogger("quanta.server.service_manager")
 
@@ -85,6 +86,7 @@ class QuantaServiceManager:
             target_slots=self.target_slots,
             allow_cpu_offload=self.allow_cpu_offload,
         )
+        self.embedding_mgr = EmbeddingManager()
         self._spawned_processes: List[subprocess.Popen] = []
 
     @staticmethod
@@ -125,6 +127,14 @@ class QuantaServiceManager:
                 pass
         return False
 
+    def is_embedding_running(self, timeout: float = 2.0) -> bool:
+        """Checks if the ANVC Embedding Coprocessor is responsive or active."""
+        return self.embedding_mgr.is_service_responsive(timeout=timeout)
+
+    def ensure_embedding(self, timeout: float = 30.0) -> bool:
+        """Ensures the ANVC Embedding Coprocessor is running and ready."""
+        return self.embedding_mgr.ensure_service_running(timeout=timeout)
+
     def get_service_status(self) -> Dict[str, Any]:
         """Gathers a comprehensive status report across all components."""
         base_running = self.is_base_llm_running()
@@ -132,6 +142,7 @@ class QuantaServiceManager:
         loaded_variant = self.unsloth_mgr.get_loaded_variant(self.target_model) if base_running else None
         active_slots = self.unsloth_mgr.get_active_slots() if base_running else self.target_slots
         proxy_running = self.is_proxy_running()
+        embedding_running = self.is_embedding_running()
         gpu_telemetry = self.unsloth_mgr.get_gpu_telemetry()
 
         proxy_details: Dict[str, Any] = {}
@@ -165,6 +176,13 @@ class QuantaServiceManager:
                 "url": self.quanta_url,
                 "running": proxy_running,
                 "details": proxy_details,
+            },
+            "embedding_coprocessor": {
+                "port": self.embedding_mgr.port,
+                "backend": self.embedding_mgr.active_backend_name,
+                "model_id": self.embedding_mgr.model_id,
+                "matryoshka_dim": self.embedding_mgr.matryoshka_dim,
+                "running": embedding_running,
             },
             "gpu": gpu_telemetry,
         }
@@ -293,14 +311,27 @@ class QuantaServiceManager:
             print(format_ansi("\n[!] ERROR: QUANTA Reverse Proxy failed to initialize.", "1;31"))
             return False
 
+        # Step 3: Ensure ANVC Embedding Coprocessor
+        emb_ok = self.ensure_embedding(timeout=timeout)
+        if not emb_ok:
+            print(format_ansi("\n[!] WARNING: ANVC Embedding Coprocessor could not be spawned automatically.", "1;33"))
+
         print(format_ansi("\n[+] All Required Services are Ready for Live Execution:", "1;32"))
-        print(f"    * Base LLM (Unsloth Studio) : {self.base_url} [ONLINE - Model Loaded]")
-        print(f"    * QUANTA Reverse Proxy     : {self.quanta_url} [ONLINE - Middleware Active]")
+        print(f"    * Base LLM (Unsloth Studio)   : {self.base_url} [ONLINE - Model Loaded]")
+        print(f"    * QUANTA Reverse Proxy        : {self.quanta_url} [ONLINE - Middleware Active]")
+        emb_desc = self.embedding_mgr.active_backend_name.upper()
+        emb_st = "ONLINE" if self.is_embedding_running() else "MOCK/IN-PROCESS"
+        print(f"    * ANVC Embedding Coprocessor  : Port {self.embedding_mgr.port} [{emb_st} - {emb_desc}]")
         print(format_ansi("================================================================================\n", "1;36"))
         return True
 
     def stop_spawned_services(self):
         """Cleanly terminates any subprocess that was launched by this manager instance."""
+        try:
+            self.embedding_mgr.stop_service()
+        except Exception as e:
+            logger.warning("Error stopping embedding manager: %s", e)
+
         for proc in self._spawned_processes:
             try:
                 if proc.poll() is None:
@@ -557,9 +588,10 @@ def main():
 
     # Start
     start_p = subparsers.add_parser("start", help="Spin up backend services")
-    start_p.add_argument("--all", action="store_true", help="Spin up both Base LLM and Reverse Proxy")
+    start_p.add_argument("--all", action="store_true", help="Spin up Base LLM, Reverse Proxy, and ANVC Embedding Coprocessor")
     start_p.add_argument("--proxy", action="store_true", help="Spin up QUANTA Reverse Proxy only")
     start_p.add_argument("--llm", action="store_true", help="Spin up Base LLM only")
+    start_p.add_argument("--embedding", action="store_true", help="Spin up ANVC Embedding Coprocessor only")
     start_p.add_argument("--base-url", type=str, default="http://127.0.0.1:8888/v1", help="Base LLM URL")
     start_p.add_argument("--quanta-url", type=str, default="http://127.0.0.1:8000/v1", help="QUANTA Proxy URL")
     start_p.add_argument("--variant", type=str, default="Q5_K_M", help="Target model quant variant (default: Q5_K_M)")
@@ -586,8 +618,8 @@ def main():
         slots_info = f", {slots_count} slots" if slots_count else ""
         quant_info = f", {loaded_quant}" if loaded_quant else ""
         model_st = format_ansi(f"LOADED (VRAM{quant_info}{slots_info})", "1;32") if base["model_loaded"] else format_ansi("DORMANT/OFFLINE", "1;33")
-        print(f"  Base LLM Server (:8888)  : {base_st} ({base['url']})")
-        print(f"  Target Model In VRAM     : {model_st} ({base['model_id']})")
+        print(f"  Base LLM Server (:8888)     : {base_st} ({base['url']})")
+        print(f"  Target Model In VRAM        : {model_st} ({base['model_id']})")
 
         proxy = status["quanta_proxy"]
         proxy_st = format_ansi("ONLINE", "1;32") if proxy["running"] else format_ansi("OFFLINE", "1;31")
@@ -596,9 +628,13 @@ def main():
             d = proxy["details"]
             print(f"    -> Nodes Stored: {d.get('stored_nodes', 0)} | Requests: {d.get('total_requests', 0)} | Tokens Saved: {d.get('tokens_saved_estimate', 0)}")
 
+        emb = status.get("embedding_coprocessor", {})
+        emb_st = format_ansi("ONLINE", "1;32") if emb.get("running") else format_ansi("MOCK/IN-PROCESS", "1;33")
+        print(f"  ANVC Embedding Coprocessor  : {emb_st} (Port {emb.get('port')}, {emb.get('backend')}, D={emb.get('matryoshka_dim')})")
+
         gpu = status["gpu"]
         gpu_st = format_ansi(gpu.get("status", "unknown").upper(), "1;32" if gpu.get("status") == "active" else "1;33")
-        print(f"  NVIDIA GPU Telemetry     : {gpu_st}")
+        print(f"  NVIDIA GPU Telemetry        : {gpu_st}")
         if gpu.get("status") == "active":
             print(f"    -> Device: {gpu.get('name')} | VRAM: {gpu.get('used_mb', 0):.0f}/{gpu.get('total_mb', 0):.0f} MB ({gpu.get('util_pct', 0)}% GPU Compute)")
         print(format_ansi("=================================================================\n", "1;36"))
@@ -615,12 +651,14 @@ def main():
             mgr.target_slots = args.slots
             mgr.unsloth_mgr.target_slots = args.slots
 
-        if args.all or (not args.proxy and not args.llm):
+        if args.all or (not args.proxy and not args.llm and not args.embedding):
             mgr.ensure_live_backend()
         elif args.llm:
             mgr.ensure_base_llm()
         elif args.proxy:
             mgr.ensure_proxy()
+        elif args.embedding:
+            mgr.ensure_embedding()
 
     elif args.command == "test-mcp":
         if args.interactive:

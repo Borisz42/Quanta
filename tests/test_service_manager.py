@@ -27,9 +27,13 @@ class TestQuantaServiceManager:
         st = mgr.get_service_status()
         assert "base_llm" in st
         assert "quanta_proxy" in st
+        assert "embedding_coprocessor" in st
         assert "gpu" in st
         assert "running" in st["base_llm"]
         assert "running" in st["quanta_proxy"]
+        assert "running" in st["embedding_coprocessor"]
+        assert "backend" in st["embedding_coprocessor"]
+        assert "matryoshka_dim" in st["embedding_coprocessor"]
 
     def test_mcp_self_test(self):
         mgr = QuantaServiceManager()
