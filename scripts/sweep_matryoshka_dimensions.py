@@ -286,13 +286,17 @@ def evaluate_dimension(
         fidelity = float(np.dot(q_dim, q_native[:dim]))
         fidelities.append(max(0.0, min(1.0, fidelity)))
 
-        # Passages
+        # Passages: batch-embed any uncached passages
+        uncached_indices = [p_idx for p_idx in range(len(passages)) if f"p_{s_idx}_{p_idx}" not in native_embeddings_cache]
+        if uncached_indices:
+            uncached_texts = [passages[i] for i in uncached_indices]
+            p_vecs_batch = manager.embed_documents(uncached_texts, matryoshka_dim=NATIVE_DIMENSION)
+            for i, vec in zip(uncached_indices, p_vecs_batch):
+                native_embeddings_cache[f"p_{s_idx}_{i}"] = vec
+
         p_vecs: List[np.ndarray] = []
-        for p_idx, p_text in enumerate(passages):
-            p_cache_key = f"p_{s_idx}_{p_idx}"
-            if p_cache_key not in native_embeddings_cache:
-                native_embeddings_cache[p_cache_key] = manager.embed_document(p_text, matryoshka_dim=NATIVE_DIMENSION)
-            p_native = native_embeddings_cache[p_cache_key]
+        for p_idx in range(len(passages)):
+            p_native = native_embeddings_cache[f"p_{s_idx}_{p_idx}"]
             p_dim = truncate_and_normalize(p_native, dim)
             p_vecs.append(p_dim)
 
@@ -448,7 +452,9 @@ def generate_markdown_report(
 def main():
     parser = argparse.ArgumentParser(description="Matryoshka Representation Learning Dimension Sweep")
     parser.add_argument("--samples", type=int, default=50, help="Number of benchmark samples (default: 50)")
-    parser.add_argument("--mode", type=str, choices=["mock", "auto", "live"], default="auto", help="Embedding engine mode")
+    parser.add_argument("--mode", type=str, choices=["live", "auto", "mock"], default="live", help="Embedding engine mode (default: live)")
+    parser.add_argument("--backend", type=str, choices=["auto", "sentence_transformers", "llama-server", "mock"], default="auto", help="Embedding engine backend")
+    parser.add_argument("--device", type=str, default="cpu", help="Compute device for in-process embedding (default: cpu)")
     parser.add_argument("--dimensions", nargs="+", type=int, default=DEFAULT_DIMENSIONS, help="Candidate dimensions to benchmark")
     parser.add_argument("--export-report", action="store_true", default=True, help="Export Markdown report and JSON artifact")
     parser.add_argument("--no-calibrate", action="store_true", help="Do not write calibrated winner to multi_scale_profile.json")
@@ -459,10 +465,18 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize EmbeddingManager
-    backend_choice = "mock" if args.mode == "mock" else ("auto" if args.mode == "auto" else "llama-server")
-    logger.info("Initializing EmbeddingManager with backend: %s", backend_choice)
-    manager = EmbeddingManager(backend=backend_choice)
+    # Initialize EmbeddingManager with strict live backend guard
+    allow_mock = (args.mode == "mock" or args.backend == "mock")
+    backend_choice = "mock" if allow_mock else (args.backend if args.backend != "auto" else "auto")
+    logger.info("Initializing EmbeddingManager with backend: %s (device: %s, allow_mock: %s)", backend_choice, args.device, allow_mock)
+    manager = EmbeddingManager(backend=backend_choice, device=args.device, allow_mock=allow_mock)
+
+    if not allow_mock:
+        manager.assert_live_backend()
+        logger.info("LIVE BACKEND GUARD PASSED: %s running live on %s (Device: %s)", manager.model_id, manager.active_backend_name, manager.device)
+    else:
+        logger.warning("RUNNING IN MOCK MODE (allow_mock=True) - Not valid for research benchmarks!")
+
     logger.info("Active backend: %s (Port %d, Device: %s)", manager.active_backend_name, manager.port, manager.device)
 
     # Load benchmark samples
@@ -492,6 +506,17 @@ def main():
     winning_dim = winner["dimension"]
     logger.info("Pareto-Optimal Winning Dimension: D = %d (Score: %.4f)", winning_dim, winner.get("pareto_score", 0.0))
 
+    # Determine source commit
+    import subprocess
+    try:
+        source_commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(repo_root),
+            text=True,
+        ).strip()
+    except Exception:
+        source_commit = "exp-037a"
+
     # Persist calibrated parameter
     if not args.no_calibrate:
         logger.info("Persisting calibrated parameter 'embedding.matryoshka_dim' = %d to multi_scale_profile.json...", winning_dim)
@@ -499,7 +524,7 @@ def main():
             name="embedding.matryoshka_dim",
             value=winning_dim,
             source_exp="exp-037a",
-            source_commit="52a0652",
+            source_commit=source_commit,
             calibrated_on="musique_long/dev",
             notes=(
                 f"Pareto-optimal MRL dimension D={winning_dim}: "

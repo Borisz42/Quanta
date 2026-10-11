@@ -153,9 +153,9 @@
   "embedding.matryoshka_dim": {
     "value": 64,
     "source_exp": "exp-037a",
-    "source_commit": "610e45c",
+    "source_commit": "5d486db",
     "calibrated_on": "musique_long/dev",
-    "notes": "Pareto-optimal MRL dimension D=64: MRR=0.6484, Retention=0.3026, 10k-Latency=0.09ms, Mem=24.4MB"
+    "notes": "Pareto-optimal MRL dimension D=64: MRR=1.0000, Retention=0.3220, 10k-Latency=0.08ms, Mem=24.4MB"
   },
   "filter.weight_dense": {
     "value": 0.5,
