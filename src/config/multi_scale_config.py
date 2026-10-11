@@ -49,6 +49,25 @@ REGISTERED_PARAMS: Dict[str, Tuple[Any, str]] = {
     # Server & Parallel Slot Concurrency (§Section 4)
     "server.max_parallel_slots": (8, "Maximum parallel processing slots / workers for continuous batching (default: 8)"),
     "server.batch_workers": (8, "Worker concurrency for batch document ingestion (default: 8)"),
+    # ANVC: Auxiliary Neural Vector Coprocessor (EmbeddingGemma 2) & Calibration Registry
+    "embedding.model_id": ("google/embeddinggemma-270m", "Model identifier or GGUF path for EmbeddingGemma 2"),
+    "embedding.port": (8889, "HTTP port for dedicated embedding llama-server backend"),
+    "embedding.backend": ("auto", "Embedding inference backend: auto, llama-server, sentence_transformers, mock"),
+    "embedding.matryoshka_dim": (768, "Matryoshka Representation Learning truncation dimension D in [64..768]"),
+    "embedding.device": ("cuda", "Target compute device for in-process embedding engine: cuda or cpu"),
+    "embedding.batch_size": (16, "Inference batch size for chunk embedding extraction"),
+    "filter.rrf_k": (60, "Reciprocal Rank Fusion smoothing constant k for hybrid filtering"),
+    "filter.weight_lexical": (0.5, "RRF lexical BM25 component weight w_lex"),
+    "filter.weight_dense": (0.5, "RRF dense bi-encoder component weight w_dense"),
+    "filter.dense_fast_path_threshold": (None, "Dense similarity threshold to bypass BM25 and route to fast path"),
+    "grounder.archetype_top_k": (2, "Top-k nearest archetype dimensions activated for OOV terms"),
+    "grounder.archetype_threshold": (0.70, "Similarity threshold for OOV archetype slot activation"),
+    "grounder.archetype_belnap_value": (3, "Belnap truth state assigned to activated OOV slots (1=TRUE, 3=UNKNOWN)"),
+    "spreading.dense_seed_threshold": (0.65, "Dense cosine threshold for seed injection"),
+    "spreading.hybrid_blend_alpha": (0.5, "Blend ratio alpha between dense and Hamming seed energy"),
+    "spreading.max_seed_nodes": (5, "Maximum initial dense seed nodes"),
+    "ast.code_similarity_threshold": (0.70, "Similarity threshold for AST code function search"),
+    "scene.visual_archetype_threshold": (0.65, "Similarity threshold for visual archetype crop mapping"),
 }
 
 
@@ -248,6 +267,29 @@ class MultiScaleConfig:
                 notes="Overridden via environment variable QUANTA_BATCH_WORKERS",
             )
 
+        # Direct Embedding environment variables (ANVC)
+        embedding_env_map = {
+            "QUANTA_EMBEDDING_MODEL": "embedding.model_id",
+            "QUANTA_EMBEDDING_MODEL_ID": "embedding.model_id",
+            "QUANTA_EMBEDDING_PORT": "embedding.port",
+            "QUANTA_EMBEDDING_BACKEND": "embedding.backend",
+            "QUANTA_EMBEDDING_DIM": "embedding.matryoshka_dim",
+            "QUANTA_EMBEDDING_MATRYOSHKA_DIM": "embedding.matryoshka_dim",
+            "QUANTA_EMBEDDING_DEVICE": "embedding.device",
+            "QUANTA_EMBEDDING_BATCH_SIZE": "embedding.batch_size",
+        }
+        for env_k, param_key in embedding_env_map.items():
+            if env_k in os.environ:
+                parsed_val = self._parse_env_value(os.environ[env_k])
+                curr_param = self.params.get(param_key)
+                self.params[param_key] = CalibratedParam(
+                    name=param_key,
+                    value=parsed_val,
+                    default_passthrough=curr_param.default_passthrough if curr_param else None,
+                    source_exp=f"env:{env_k}",
+                    notes=f"Overridden via environment variable {env_k}",
+                )
+
         # Tier 4: Runtime / per-request overrides
         for ov_k, ov_v in self.runtime_overrides.items():
             # Normalize key
@@ -409,6 +451,72 @@ class MultiScaleConfig:
     @property
     def server_batch_workers(self) -> int:
         return int(self.get("server.batch_workers", 8))
+
+    # ANVC / Embedding convenience properties
+    @property
+    def embedding_model_id(self) -> str:
+        return str(self.get("embedding.model_id", "google/embeddinggemma-270m"))
+
+    @property
+    def embedding_port(self) -> int:
+        return int(self.get("embedding.port", 8889))
+
+    @property
+    def embedding_backend(self) -> str:
+        return str(self.get("embedding.backend", "auto"))
+
+    @property
+    def embedding_matryoshka_dim(self) -> int:
+        return int(self.get("embedding.matryoshka_dim", 768))
+
+    @property
+    def embedding_device(self) -> str:
+        return str(self.get("embedding.device", "cuda"))
+
+    @property
+    def embedding_batch_size(self) -> int:
+        return int(self.get("embedding.batch_size", 16))
+
+    @property
+    def filter_rrf_k(self) -> int:
+        return int(self.get("filter.rrf_k", 60))
+
+    @property
+    def filter_weight_lexical(self) -> float:
+        return float(self.get("filter.weight_lexical", 0.5))
+
+    @property
+    def filter_weight_dense(self) -> float:
+        return float(self.get("filter.weight_dense", 0.5))
+
+    @property
+    def filter_dense_fast_path_threshold(self) -> Optional[float]:
+        val = self.get("filter.dense_fast_path_threshold")
+        return float(val) if val is not None else None
+
+    @property
+    def grounder_archetype_top_k(self) -> int:
+        return int(self.get("grounder.archetype_top_k", 2))
+
+    @property
+    def grounder_archetype_threshold(self) -> float:
+        return float(self.get("grounder.archetype_threshold", 0.70))
+
+    @property
+    def grounder_archetype_belnap_value(self) -> Any:
+        return self.get("grounder.archetype_belnap_value", 3)
+
+    @property
+    def spreading_dense_seed_threshold(self) -> float:
+        return float(self.get("spreading.dense_seed_threshold", 0.65))
+
+    @property
+    def spreading_hybrid_blend_alpha(self) -> float:
+        return float(self.get("spreading.hybrid_blend_alpha", 0.5))
+
+    @property
+    def spreading_max_seed_nodes(self) -> int:
+        return int(self.get("spreading.max_seed_nodes", 5))
 
     # -------------------------------------------------------------------------
     # Provenance Report & Profile Writing (§1)
