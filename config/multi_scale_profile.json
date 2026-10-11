@@ -23,9 +23,9 @@
   "filter.strategy": {
     "value": "F-G",
     "source_exp": "exp-037b",
-    "source_commit": "c2bd275",
+    "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
-    "notes": "Gate G2b promoted winner: Paraphrase Recall 100.0%, Latency 2.58 ms"
+    "notes": "Gate G2b promoted winner: Paraphrase Recall 100.0%, Latency 0.15 ms"
   },
   "filter.unit": {
     "value": "micro",
@@ -158,30 +158,30 @@
     "notes": "Pareto-optimal MRL dimension D=64: MRR=1.0000, Retention=0.3220, 10k-Latency=0.08ms, Mem=24.4MB"
   },
   "filter.weight_dense": {
-    "value": 0.5,
+    "value": 0.8,
     "source_exp": "exp-037b",
-    "source_commit": "c2bd275",
+    "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
-    "notes": "Calibrated bi-encoder RRF weight w_dense=0.5"
+    "notes": "Calibrated bi-encoder RRF weight w_dense=0.8"
   },
   "filter.weight_lexical": {
-    "value": 0.5,
+    "value": 0.2,
     "source_exp": "exp-037b",
-    "source_commit": "c2bd275",
+    "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
-    "notes": "Calibrated lexical BM25 RRF weight w_lex=0.5"
+    "notes": "Calibrated lexical BM25 RRF weight w_lex=0.2"
   },
   "filter.rrf_k": {
-    "value": 10,
+    "value": 30,
     "source_exp": "exp-037b",
-    "source_commit": "c2bd275",
+    "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
-    "notes": "Calibrated RRF smoothing constant k=10"
+    "notes": "Calibrated RRF smoothing constant k=30"
   },
   "filter.dense_fast_path_threshold": {
     "value": 0.75,
     "source_exp": "exp-037b",
-    "source_commit": "c2bd275",
+    "source_commit": "f9e8500",
     "calibrated_on": "musique_sample_real/dev",
     "notes": "Calibrated dense fast-path threshold theta_fast=0.75"
   }

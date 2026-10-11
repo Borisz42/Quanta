@@ -368,6 +368,7 @@ class EmbeddingManager:
         self._backend: Optional[BaseEmbeddingBackend] = None
         self._server_process: Optional[subprocess.Popen] = None
         self._active_backend_name: str = "uninitialized"
+        self._query_cache: Dict[Tuple[str, str, int], np.ndarray] = {}
 
         self._init_backend()
 
@@ -513,9 +514,21 @@ class EmbeddingManager:
 
         Returns 1D array of shape (D,) with L2-normalized values.
         """
-        formatted = format_query_prefix(query, task=task)
         dim = matryoshka_dim or self.matryoshka_dim
-        return self.embed_raw(formatted, matryoshka_dim=dim)
+        cache_key = (query, task, dim)
+        if hasattr(self, "_query_cache") and cache_key in self._query_cache:
+            return self._query_cache[cache_key].copy()
+
+        formatted = format_query_prefix(query, task=task)
+        vec = self.embed_raw(formatted, matryoshka_dim=dim)
+        if hasattr(self, "_query_cache") and len(self._query_cache) < 4096:
+            self._query_cache[cache_key] = vec
+        return vec
+
+    def clear_cache(self) -> None:
+        """Clears in-memory query embedding cache."""
+        if hasattr(self, "_query_cache"):
+            self._query_cache.clear()
 
     def embed_document(
         self,

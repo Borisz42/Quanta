@@ -222,6 +222,10 @@ def prepare_sample_chunks(
     for c, v in zip(chunks, vecs):
         c.dense_embedding = v
 
+    # Warm query embedding cache
+    embedding_manager.embed_query(sample["raw_query"], matryoshka_dim=matryoshka_dim)
+    embedding_manager.embed_query(sample["paraphrased_query"], matryoshka_dim=matryoshka_dim)
+
     sample["chunks"] = chunks
     sample["gold_chunk_ids"] = gold_chunk_ids
 
@@ -420,9 +424,11 @@ def main():
         "--mode",
         type=str,
         default="auto",
-        choices=["auto", "mock", "llama-server", "in_process"],
+        choices=["auto", "live", "mock", "llama-server", "in_process", "sentence_transformers"],
         help="Inference backend for EmbeddingGemma 2 (default: auto)",
     )
+    parser.add_argument("--device", type=str, default="cpu", help="Compute device for in-process embedding (default: cpu)")
+    parser.add_argument("--allow-mock", action="store_true", help="Allow fallback to mock embedding backend")
     parser.add_argument("--dim", type=int, default=None, help="Matryoshka truncation dimension D")
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Token budget cap (default: 1500)")
     parser.add_argument("--export-report", action="store_true", default=True, help="Export JSON and Markdown reports")
@@ -435,15 +441,30 @@ def main():
 
     print("\n" + "=" * 70)
     print(f"  QUANTA ANVC: Dense Hybrid Relevance Filter Calibration (exp-037b)")
-    print(f"  Backend: {args.mode.upper()} | Matryoshka Dim: {target_dim} | Samples: {args.samples}")
+    print(f"  Backend: {args.mode.upper()} | Device: {args.device} | Matryoshka Dim: {target_dim} | Samples: {args.samples}")
     print(f"  Token Budget: {args.budget} tokens")
     print("=" * 70 + "\n")
 
-    # 1. Initialize embedding manager
-    if args.mode == "mock":
+    # 1. Initialize embedding manager with live guard
+    allow_mock = (args.mode == "mock") or args.allow_mock
+    backend_choice = "mock" if allow_mock else (args.mode if args.mode not in ("auto", "live") else "auto")
+    if allow_mock:
         manager = MockEmbeddingManager(matryoshka_dim=target_dim)
+        logger.warning("RUNNING IN MOCK MODE (allow_mock=True) - Not valid for research benchmarks!")
     else:
-        manager = EmbeddingManager(backend=args.mode, matryoshka_dim=target_dim)
+        manager = EmbeddingManager(
+            backend=backend_choice,
+            matryoshka_dim=target_dim,
+            device=args.device,
+            allow_mock=False,
+        )
+        manager.assert_live_backend()
+        logger.info(
+            "LIVE BACKEND GUARD PASSED: %s running live on %s (Device: %s)",
+            manager.model_id,
+            manager.active_backend_name,
+            manager.device,
+        )
 
     # 2. Load calibration benchmark samples
     samples = load_musique_calibration_samples(max_samples=args.samples)
@@ -518,11 +539,21 @@ def main():
 
     # 6. Write calibrated parameters to config/multi_scale_profile.json
     if not args.no_write_profile:
+        import subprocess
+        try:
+            source_commit = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(repo_root),
+                text=True,
+            ).strip()
+        except Exception:
+            source_commit = "exp-037b"
+
         MultiScaleConfig.write_calibrated(
             name="filter.strategy",
             value="F-G",
             source_exp="exp-037b",
-            source_commit="aecec00",
+            source_commit=source_commit,
             calibrated_on="musique_sample_real/dev",
             notes=f"Gate G2b promoted winner: Paraphrase Recall {winner['paraphrase_recall']*100:.1f}%, Latency {winner['mean_latency_ms']:.2f} ms",
         )
@@ -530,7 +561,7 @@ def main():
             name="filter.weight_dense",
             value=winner["w_dense"],
             source_exp="exp-037b",
-            source_commit="aecec00",
+            source_commit=source_commit,
             calibrated_on="musique_sample_real/dev",
             notes=f"Calibrated bi-encoder RRF weight w_dense={winner['w_dense']}",
         )
@@ -538,7 +569,7 @@ def main():
             name="filter.weight_lexical",
             value=winner["w_lex"],
             source_exp="exp-037b",
-            source_commit="aecec00",
+            source_commit=source_commit,
             calibrated_on="musique_sample_real/dev",
             notes=f"Calibrated lexical BM25 RRF weight w_lex={winner['w_lex']}",
         )
@@ -546,7 +577,7 @@ def main():
             name="filter.rrf_k",
             value=winner["k_rrf"],
             source_exp="exp-037b",
-            source_commit="aecec00",
+            source_commit=source_commit,
             calibrated_on="musique_sample_real/dev",
             notes=f"Calibrated RRF smoothing constant k={winner['k_rrf']}",
         )
@@ -554,7 +585,7 @@ def main():
             name="filter.dense_fast_path_threshold",
             value=winner["theta_fast"],
             source_exp="exp-037b",
-            source_commit="aecec00",
+            source_commit=source_commit,
             calibrated_on="musique_sample_real/dev",
             notes=f"Calibrated dense fast-path threshold theta_fast={winner['theta_fast']}",
         )
