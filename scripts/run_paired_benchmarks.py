@@ -505,6 +505,7 @@ def main():
                 print(format_ansi("\n[!] FATAL: Live backend services could not be verified or awakened.", "1;31"))
                 print(format_ansi("    Check GPU availability or run with '--mode mock' for simulated evaluation.", "1;33"))
                 sys.exit(1)
+            args.base_url = svc_mgr.base_url
         else:
             status = svc_mgr.get_service_status()
             base_ok = status["base_llm"]["running"]

@@ -254,8 +254,8 @@ class PairedEvaluator:
                     choices = data.get("choices", [])
                     choice0 = choices[0] if choices else {}
                     msg = choice0.get("message", {})
-                    raw_content = msg.get("content", "").strip() if choices else ""
-                    raw_reasoning = msg.get("reasoning_content", "").strip() if choices else ""
+                    raw_content = (msg.get("content") or "").strip() if choices else ""
+                    raw_reasoning = (msg.get("reasoning_content") or "").strip() if choices else ""
                     if raw_content:
                         content = raw_content
                     elif raw_reasoning:

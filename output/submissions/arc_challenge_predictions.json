@@ -1,13 +1,151 @@
 {
   "Mercury_7175875": {
     "prediction": "C",
-    "raw_prediction": "The length of a planetary day is determined by the time it takes for the planet to complete one full rotation on its axis. Therefore, an increase in rotational speed means the planet completes a rotation in less time, resulting in shorter days.\n\nAnswer: C",
+    "raw_prediction": "An increase in a planet's rotation speed means it completes one full spin in less time, which directly shortens the duration of a planetary day. The other options are incorrect because rotation speed does not alter the planet's mass or density, nor does it change the orbital period (year) or the strength of gravity.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_SC_409171": {
     "prediction": "B",
-    "raw_prediction": "Testing different building designs allows engineers to analyze how structures react to seismic forces, enabling them to identify weaknesses and improve stability. This process ensures that new constructions are more resilient and capable of protecting occupants during an earthquake.\n\nAnswer: B",
+    "raw_prediction": "Testing different building designs against earthquake conditions allows engineers to identify which structural configurations best absorb and dissipate seismic energy, thereby reducing the risk of collapse. This iterative process of experimentation directly leads to the development of more resilient structures capable of withstanding natural disasters.\n\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "Mercury_SC_408547": {
+    "prediction": "C",
+    "raw_prediction": "Photosynthesis begins when chlorophyll pigments in plant cells absorb light energy from the sun, initiating the conversion of that light into chemical energy. This absorption triggers the series of reactions that ultimately produce glucose and oxygen.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_407327": {
+    "prediction": "D",
+    "raw_prediction": "The physicist is changing the speed of the car, which is the factor being deliberately manipulated to observe its effect on the jump distance. In an experiment, the variable that is intentionally altered by the researcher is known as the independent or manipulated variable.\n\nAnswer: D",
+    "gold": "D",
+    "correct": true
+  },
+  "MCAS_2006_9_44": {
+    "prediction": "C",
+    "raw_prediction": "On the Moon, as both objects fall, gravitational potential energy is converted into kinetic energy, meaning they lose potential energy proportional to the distance fallen regardless of their mass. Since both objects fall the same distance (1.0 m), they each lose the same amount of potential energy ($\\Delta PE = mgh$, where $h$ is constant, but the change in height is the same for both).\n\nAnswer: C",
+    "gold": "D",
+    "correct": false
+  },
+  "Mercury_7270393": {
+    "prediction": "D",
+    "raw_prediction": "Devil facial tumor disease is caused by transmissible cancer cells that are passed between animals through biting, making it an infectious disease, while the presence of tumors that grow and spread over time classifies it as a chronic condition.\n\nAnswer: D",
+    "gold": "B",
+    "correct": false
+  },
+  "MCAS_2014_5_7": {
+    "prediction": "C",
+    "raw_prediction": "This behavior is a form of food caching, where animals store surplus food during periods of abundance to survive during times of scarcity, such as winter when natural food sources are unavailable. By burying grasses and seeds in rock piles, the mammal ensures a reliable food supply for the colder months.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_7086660": {
+    "prediction": "C",
+    "raw_prediction": "Petrified palm trees indicate that the region once supported a warm, wet environment capable of sustaining tropical vegetation, which is inconsistent with the current glacial conditions. The presence of these fossils in sedimentary rock suggests that the area underwent significant geological uplift or climate change over time, but the biological evidence points to a former tropical climate.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_7168805": {
+    "prediction": "B",
+    "raw_prediction": "Removing the top predator (hawks) from an ecosystem typically releases the prey species (mice and rats) from predation pressure, allowing their populations to grow unchecked. This increase in rodent numbers often leads to greater competition for resources and can disrupt the balance of the food web.\n\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "MCAS_2003_8_11": {
+    "prediction": "A",
+    "raw_prediction": "The smallest unit of an element that retains all its chemical properties is the atom, as it contains the complete set of protons, neutrons, and electrons necessary to define the element's identity. Breaking the atom down into subatomic particles like electrons, protons, or nuclei results in a loss of the specific characteristics of that element.\n\nAnswer: A",
+    "gold": "A",
+    "correct": true
+  },
+  "Mercury_7250058": {
+    "prediction": "B",
+    "raw_prediction": "Prokaryotic cells are significantly smaller than eukaryotic cells, typically ranging from 0.1 to 5.0 micrometers, whereas eukaryotic cells are generally 10 to 100 micrometers in size. This distinct difference in scale is a primary and reliable feature used to classify and distinguish between the two cell types.\n\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "Mercury_7012740": {
+    "prediction": "A",
+    "raw_prediction": "The Sun drives the water cycle through evaporation and powers ocean currents via differential heating, which in turn generates the wind patterns responsible for creating waves.\nAnswer: A",
+    "gold": "A",
+    "correct": true
+  },
+  "Mercury_LBS10610": {
+    "prediction": "C",
+    "raw_prediction": "Solar radiation causes the Earth's surface to absorb heat, leading to a significant rise in air temperature during the afternoon hours as long as the sun is shining. Given a mild forecast, the temperature will increase from the morning low but typically will not exceed the high 70s or reach near-100 degrees in such conditions.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_SC_407400": {
+    "prediction": "C",
+    "raw_prediction": "To ensure the investigation is systematic and data is organized before collection begins, creating a recording table is the necessary first step. This allows the class to accurately track daily observations of the light bulbs throughout the experiment.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_7212993": {
+    "prediction": "C",
+    "raw_prediction": "Water vapor is the most abundant greenhouse gas in Earth's lower atmosphere because its concentration varies widely with temperature and humidity, but it generally far exceeds the mixing ratios of carbon dioxide, methane, and ozone.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_SC_413240": {
+    "prediction": "A",
+    "raw_prediction": "Water freezes at 0 degrees Celsius because this is the specific temperature at which its liquid state transitions to a solid crystalline structure under standard atmospheric pressure.\nAnswer: A",
+    "gold": "A",
+    "correct": true
+  },
+  "Mercury_7186358": {
+    "prediction": "C",
+    "raw_prediction": "Scientific research relies on the continuous accumulation and integration of new evidence to refine understanding, rather than discarding past work or making unverified predictions. Therefore, the most appropriate approach is to incorporate fresh findings into the existing body of knowledge as they emerge.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_7166425": {
+    "prediction": "B",
+    "raw_prediction": "Thermal energy always flows spontaneously from a region of higher temperature to a region of lower temperature. Since the tea is hot and the ice is cold, heat will transfer from the tea into the ice until thermal equilibrium is reached.\n\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "MDSA_2007_8_3": {
+    "prediction": "A",
+    "raw_prediction": "If logging companies do not replant trees, the forest's tree population will eventually decline due to natural growth limitations, leading to a reduced supply of timber for lumber mills. According to basic economic principles, a decrease in supply while demand remains constant causes the market price of the resulting boards to rise.\n\nAnswer: A",
+    "gold": "A",
+    "correct": true
+  },
+  "Mercury_7094290": {
+    "prediction": "C",
+    "raw_prediction": "The belief that life arises spontaneously from non-living matter was disproved through rigorous experimentation, most notably by Louis Pasteur's swan-neck flask experiments which demonstrated that sterilized broth remained free of life unless exposed to airborne microorganisms.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_7186568": {
+    "prediction": "B",
+    "raw_prediction": "Lysosomes contain digestive enzymes that break down waste materials, cellular debris, and engulfed food particles into smaller components for recycling or elimination. This process is essential for maintaining cellular health by clearing out damaged organelles and undigested residues.\n\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "Mercury_402216": {
+    "prediction": "B",
+    "raw_prediction": "The process described is electrolysis, where electrical energy splits water molecules into their constituent elements, hydrogen and oxygen, which must be balanced according to the law of conservation of mass.\nAnswer: B",
+    "gold": "B",
+    "correct": true
+  },
+  "Mercury_404894": {
+    "prediction": "A",
+    "raw_prediction": "Penguins are flightless birds adapted with dense feathers and a layer of blubber that allow them to survive and thrive in extremely cold, freezing environments. While they are often considered beautiful and can be competitive, their ability to endure freezing climates is a definitive biological fact.\n\nAnswer: A",
+    "gold": "A",
+    "correct": true
+  },
+  "MCAS_2002_8_11": {
+    "prediction": "C",
+    "raw_prediction": "Newton's Law of Cooling states that an object changes temperature at a rate proportional to the difference between its own temperature and the ambient temperature, eventually reaching thermal equilibrium with the surroundings. Since the room temperature is 73\u00b0F and the glasses are left overnight, both will lose or gain heat until they match the room's temperature.\n\nAnswer: C",
+    "gold": "C",
+    "correct": true
+  },
+  "Mercury_SC_405086": {
+    "prediction": "B",
+    "raw_prediction": "Snow, rain, hail, and fog are all different physical states or appearances of water in the atmosphere, ranging from solid ice crystals to liquid droplets.\nAnswer: B",
     "gold": "B",
     "correct": true
   }
