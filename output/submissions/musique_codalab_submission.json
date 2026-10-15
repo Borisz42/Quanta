@@ -1,25 +1,7 @@
 {
   "musique_ans_preds": {
-    "3hop1__241001_568433_47686": "Toronto Coach Terminal",
-    "2hop__231890_595414": "Miller County",
-    "2hop__525242_52835": "John D",
-    "2hop__169443_83769": "Matt Damon",
-    "4hop1__436202_765799_282674_759393": "Green Bay",
-    "2hop__21104_16335": "inter-marriage and conversions in the time of the Roman Empire",
-    "2hop__499003_853511": "Sire Records",
-    "3hop2__19639_90098_10557": "Medieval Latin",
-    "2hop__82910_75184": "Claudia Wells",
-    "4hop1__17192_17130_70784_61381": "The Persian Gulf was established as a geographical feature in the region north of the Arabian Peninsula and south of the Iranian plateau, while Israel secured southern Lebanon in 1978; the specific establishment date of the Persian Gulf region itself is not provided in the text, but it is described as a historical and geographical entity bordering Iran to the north",
-    "4hop1__56635_49925_13759_736921": "Saxony-Anhalt",
-    "2hop__88372_83837": "Karen Fairchild",
-    "3hop2__326964_36852_7713": "1853",
-    "2hop__669456_108549": "William J",
-    "3hop2__31398_2130_2232": "New York City FC",
-    "2hop__16267_25719": "Not mentioned in the documents",
-    "2hop__44590_510545": "St\u00e9phanie Szostak",
-    "3hop1__506062_792411_51423": "The provided documents do not contain the name of the castle in the place of birth of the performer of When I Was a Boy",
-    "4hop3__323121_88460_30152_20999": "The Phetchabun Mountains form the natural boundary between Thailand and the region historically associated with the Ajuran Empire's cultural sphere, separating them despite the Ajuran Empire's economic independence proclaimed via coinage",
-    "2hop__88834_356793": "George Takei"
+    "3hop1__241001_568433_47686": "Wait, is there a missing link",
+    "2hop__231890_595414": "Miller County"
   },
   "model_name": "QUANTA-Qwen3.5-4B-MTP-NeuroSymbolic"
 }

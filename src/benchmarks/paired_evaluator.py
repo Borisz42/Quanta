@@ -242,7 +242,24 @@ class PairedEvaluator:
                     data = resp.json()
                     choices = data.get("choices", [])
                     choice0 = choices[0] if choices else {}
-                    content = choice0.get("message", {}).get("content", "").strip() if choices else ""
+                    msg = choice0.get("message", {})
+                    raw_content = msg.get("content", "").strip() if choices else ""
+                    raw_reasoning = msg.get("reasoning_content", "").strip() if choices else ""
+                    if raw_content:
+                        content = raw_content
+                    elif raw_reasoning:
+                        content = raw_reasoning
+                    else:
+                        content = ""
+
+                    # If content contains embedded <think>...</think> tags, extract final answer
+                    if "<think>" in content and "</think>" in content:
+                        parts = content.split("</think>")
+                        if len(parts) > 1 and parts[-1].strip():
+                            if not raw_reasoning:
+                                raw_reasoning = parts[0].replace("<think>", "").strip()
+                            content = parts[-1].strip()
+
                     finish_reason = choice0.get("finish_reason", "stop")
                     usage = data.get("usage", {})
                     p_tok = usage.get("prompt_tokens", int(sum(len(m["content"]) for m in messages) * 0.3))
@@ -251,6 +268,8 @@ class PairedEvaluator:
                     ttft = 0.030 + (p_tok * 0.0003)
                     quanta_meta = data.get("quanta_metadata", {})
                     quanta_meta["finish_reason"] = finish_reason
+                    if raw_reasoning:
+                        quanta_meta["reasoning_content"] = raw_reasoning
                     if finish_reason == "length":
                         logger.warning(
                             "TRUNCATION DETECTED on %s: finish_reason='length' (completion_tokens=%d, max_tokens=%d)",
@@ -497,14 +516,10 @@ class PairedEvaluator:
         session_id: Optional[str] = None,
     ) -> PairedResult:
         """Executes Condition A, B, and C on a single benchmark sample."""
-        if sample.suite == "musique":
-            req_max_tokens = 768  # Bounded CoT reasoning budget (2-3 sentences + Answer anchor; prevents runaway loops)
-        elif sample.suite in ("proofwriter", "arc_science"):
-            req_max_tokens = 512  # Concise deductive/scientific reasoning (1-2 sentences + Answer anchor)
-        elif sample.suite in ("humaneval", "long_variable_tracking"):
-            req_max_tokens = 1536  # Generous headroom for complete multi-function code or multi-step ledger arithmetic
+        if sample.suite in ("long_variable_tracking",):
+            req_max_tokens = 2048  # Generous headroom for multi-step ledger arithmetic with deep CoT trace
         else:
-            req_max_tokens = 512  # Sane bounded default preventing runaway generation loops
+            req_max_tokens = 1536  # Headroom for Qwen 3.5 thinking trace + complete answer anchor across all suites
 
         # Adaptive timeout scaling for long-context evaluations
         sample_timeout = max(self.timeout_seconds, 180.0, 30.0 + (sample.token_count / 1000.0) * 3.0)
@@ -665,10 +680,8 @@ class PairedEvaluator:
                         "X-Quanta-Reset": "true",
                         "X-Quanta-Timeout": str(sample_timeout),
                     }
-                    if sample.token_count > 2000:
+                    if sample.token_count > 2000 or sample.suite == "musique":
                         headers_b["X-Quanta-Max-Context-Tokens"] = "2500"
-                    elif sample.suite == "musique":
-                        headers_b["X-Quanta-Max-Context-Tokens"] = "1500"
                     if session_id:
                         headers_b["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_local"
                     ans_b, p_tok_b, c_tok_b, ttft_b, lat_b, tps_b, meta_b = self._call_http_chat(
@@ -722,10 +735,8 @@ class PairedEvaluator:
                 headers_c["X-Quanta-ANVC"] = "true"
                 headers_c["X-Quanta-EmbeddingGemma"] = "true"
 
-            if sample.token_count > 2000:
+            if sample.token_count > 2000 or sample.suite == "musique":
                 headers_c["X-Quanta-Max-Context-Tokens"] = "2500"
-            elif sample.suite == "musique":
-                headers_c["X-Quanta-Max-Context-Tokens"] = "1500"
             if session_id:
                 headers_c["X-Quanta-Session-ID"] = f"{session_id}_{sample.id}_{'gemma' if is_dense_ablation else 'global'}"
             if is_factual_domain:

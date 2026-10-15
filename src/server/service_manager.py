@@ -86,8 +86,19 @@ class QuantaServiceManager:
             target_slots=self.target_slots,
             allow_cpu_offload=self.allow_cpu_offload,
         )
-        self.embedding_mgr = EmbeddingManager()
+        self._embedding_mgr: Optional[EmbeddingManager] = None
         self._spawned_processes: List[subprocess.Popen] = []
+
+    @property
+    def embedding_mgr(self) -> EmbeddingManager:
+        """Lazily obtains the EmbeddingManager instance, preferentially binding to live proxy."""
+        if self._embedding_mgr is None:
+            self._embedding_mgr = EmbeddingManager.get_default()
+        return self._embedding_mgr
+
+    @embedding_mgr.setter
+    def embedding_mgr(self, val: EmbeddingManager):
+        self._embedding_mgr = val
 
     @staticmethod
     def _extract_host(url: str) -> str:
@@ -191,7 +202,7 @@ class QuantaServiceManager:
     # Auto-Spinup Orchestration
     # -------------------------------------------------------------------------
 
-    def ensure_base_llm(self, timeout: float = 60.0) -> bool:
+    def ensure_base_llm(self, timeout: float = 120.0) -> bool:
         """Ensures the Base LLM server is running and the target model is loaded with target variant."""
         if self.is_base_llm_running() and self.is_model_loaded():
             logger.info("Base LLM is already running and model '%s' (%s) is loaded.", self.target_model, self.target_variant)
@@ -267,12 +278,15 @@ class QuantaServiceManager:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
         try:
+            log_dir = REPO_ROOT / "output"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            proxy_log = open(log_dir / "proxy_stdout.log", "a", encoding="utf-8")
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(REPO_ROOT),
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=proxy_log,
+                stderr=proxy_log,
                 creationflags=creationflags,
             )
             self._spawned_processes.append(proc)
@@ -293,7 +307,7 @@ class QuantaServiceManager:
         print(format_ansi(f"    [!] QUANTA Reverse Proxy failed to become ready within {timeout:.1f}s.", "1;31"))
         return False
 
-    def ensure_live_backend(self, timeout: float = 60.0) -> bool:
+    def ensure_live_backend(self, timeout: float = 120.0) -> bool:
         """Coordinates full readiness check and auto-spinup for both Base LLM and Reverse Proxy."""
         print(format_ansi("\n================================================================================", "1;36"))
         print(format_ansi("       QUANTA LIVE BACKEND READINESS & AUTO-SPINUP VERIFICATION", "1;36"))

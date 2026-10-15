@@ -208,7 +208,7 @@ class UnslothServerManager:
             return {"status": "offline", "error": str(e)}
         return {"status": "offline"}
 
-    def ensure_unsloth_service_running(self, timeout: float = 30.0) -> bool:
+    def ensure_unsloth_service_running(self, timeout: float = 120.0) -> bool:
         """Ensures that the unified llama-server / Unsloth backend is responsive, launching it in background if down."""
         if self.is_service_responsive(timeout=5.0):
             logger.info("Unified LLM service is already running on %s", self.base_url)
@@ -223,7 +223,7 @@ class UnslothServerManager:
         launched = False
 
         # Candidate 1: standalone hardware-accelerated llama-server.exe
-        parallel_slots = os.getenv("QUANTA_MAX_SLOTS", os.getenv("QUANTA_PARALLEL_SLOTS", "16"))
+        parallel_slots = os.getenv("QUANTA_MAX_SLOTS", os.getenv("QUANTA_PARALLEL_SLOTS", "4"))
         model_file = Path(self.model_path)
         if not model_file.exists():
             hf_cache = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "hub" / "models--unsloth--Qwen3.5-4B-MTP-GGUF" / "snapshots"
@@ -249,15 +249,15 @@ class UnslothServerManager:
             Path(r"C:\Users\PC\.lmstudio\extensions\backends\llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.53.0\llama-server.exe"),
             Path(r"C:\Users\PC\.docker\bin\inference\llama-server.exe"),
             Path(r"C:\Users\PC\.unsloth\llama.cpp\build\bin\Release\llama-server.exe"),
-            Path(shutil.which("llama-server.exe") or ""),
-            Path(shutil.which("llama-server") or ""),
+            Path(shutil.which("llama-server.exe")) if shutil.which("llama-server.exe") else None,
+            Path(shutil.which("llama-server")) if shutil.which("llama-server") else None,
             Path(os.path.expanduser("~")) / ".lmstudio" / "extensions" / "backends" / "llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.54.0" / "llama-server.exe",
             Path(os.path.expanduser("~")) / ".unsloth" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
             Path("bin/llama-server.exe"),
             Path("llama.cpp/llama-server.exe"),
         ]
         for candidate in llama_candidates:
-            if candidate and candidate.exists() and model_file.exists():
+            if candidate and str(candidate) not in ("", ".") and candidate.is_file() and model_file.is_file():
                 try:
                     cmd = [
                         str(candidate),
@@ -270,19 +270,25 @@ class UnslothServerManager:
                         "-ngl",
                         "99",
                         "-c",
-                        "16384",
+                        "65536",
                         "-np",
                         str(parallel_slots),
+                        "--flash-attn",
+                        "on",
                         "-cb",
+                        "-kvu",
                     ]
                     creationflags = 0
                     if sys.platform == "win32":
                         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
+                    out_log = Path("output") / "llama_stdout.log"
+                    out_log.parent.mkdir(parents=True, exist_ok=True)
+                    self._log_fh = open(out_log, "w", encoding="utf-8")
                     self._server_process = subprocess.Popen(
                         cmd,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
+                        stdout=self._log_fh,
+                        stderr=subprocess.STDOUT,
                         creationflags=creationflags,
                     )
                     time.sleep(0.5)
@@ -359,6 +365,7 @@ class UnslothServerManager:
                             if m.get("id") == target
                             or target in m.get("aliases", [])
                             or target in m.get("id", "")
+                            or "qwen" in m.get("id", "").lower()
                         ),
                         None
                     )
@@ -389,7 +396,7 @@ class UnslothServerManager:
                     entry = next(
                         (
                             m for m in models
-                            if (m.get("id") == target or target in m.get("aliases", []) or target in m.get("id", ""))
+                            if (m.get("id") == target or target in m.get("aliases", []) or target in m.get("id", "") or "qwen" in m.get("id", "").lower())
                             and m.get("loaded", True) is not False
                         ),
                         None

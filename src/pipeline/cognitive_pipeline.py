@@ -411,7 +411,7 @@ class CognitivePipeline:
         else:
             try:
                 from server.embedding_manager import EmbeddingManager
-                self.embedding_manager = EmbeddingManager(config=self.multi_scale_config)
+                self.embedding_manager = EmbeddingManager.get_default(config=self.multi_scale_config)
             except Exception as e:
                 logger.warning("Could not initialize EmbeddingManager (%s); using MockEmbeddingManager fallback", e)
                 from server.embedding_manager import MockEmbeddingManager

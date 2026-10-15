@@ -490,6 +490,7 @@ def main():
         svc_mgr = get_service_manager()
         svc_mgr.base_url = args.base_url
         svc_mgr.quanta_url = args.quanta_url
+        os.environ["QUANTA_PROXY_URL"] = args.quanta_url
         svc_mgr.target_model = args.target_model
         svc_mgr.target_slots = args.workers
         svc_mgr.unsloth_mgr.target_slots = args.workers
