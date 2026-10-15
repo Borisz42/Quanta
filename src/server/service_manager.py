@@ -204,9 +204,12 @@ class QuantaServiceManager:
 
     def ensure_base_llm(self, timeout: float = 120.0) -> bool:
         """Ensures the Base LLM server is running and the target model is loaded with target variant."""
-        if self.is_base_llm_running() and self.is_model_loaded():
-            logger.info("Base LLM is already running and model '%s' (%s) is loaded.", self.target_model, self.target_variant)
-            return True
+        if self.is_base_llm_running():
+            if self.unsloth_mgr.port != self._extract_port(self.base_url):
+                self.base_url = f"http://{self.unsloth_mgr.host}:{self.unsloth_mgr.port}/v1"
+            if self.is_model_loaded():
+                logger.info("Base LLM is already running and model '%s' (%s) is loaded.", self.target_model, self.target_variant)
+                return True
 
         print(format_ansi(f"[*] Checking Base LLM service on {self.base_url}...", "1;33"))
 

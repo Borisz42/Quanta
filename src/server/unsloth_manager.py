@@ -40,6 +40,29 @@ DEFAULT_PARALLEL_SLOTS = 8
 DEFAULT_MODEL_PATH = "models/Qwen3.5-4B-MTP-GGUF/qwen3.5-4b-mtp-q5_k_m.gguf"
 
 
+def get_unsloth_api_key() -> Optional[str]:
+    """Retrieves the active Unsloth Studio API key from environment or local auth storage."""
+    key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+    if key:
+        return key
+    try:
+        p = Path(os.path.expanduser("~")) / ".unsloth" / "studio" / "auth" / "agent_api_key.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            servers = data.get("servers", {})
+            for srv_info in servers.values():
+                minted = srv_info.get("minted", [])
+                if minted:
+                    return minted[0]
+                saved = srv_info.get("saved", [])
+                if saved:
+                    return saved[0]
+    except Exception:
+        pass
+    return None
+
+
+
 class ChatResponse(dict):
     """Chat completion result supporting dictionary, attribute access, and 4-tuple unpacking."""
     def __iter__(self):
@@ -175,24 +198,48 @@ class UnslothServerManager:
 
     def is_service_responsive(self, timeout: float = 8.0) -> bool:
         """Checks if the server responds on /health or /v1/models with an active loaded model."""
-        try:
-            with httpx.Client(timeout=timeout) as client:
-                # 1. Native llama-server /health endpoint
-                try:
-                    r_h = client.get(f"{self.base_url}/health")
-                    if r_h.status_code == 200:
-                        return True
-                except Exception:
-                    pass
-                # 2. OpenAI-compatible /v1/models endpoint
-                r = client.get(f"{self.api_url}/models")
-                if r.status_code == 200:
-                    models = r.json().get("data", [])
-                    loaded_models = [m for m in models if m.get("loaded", True) is not False]
-                    return len(loaded_models) > 0
-                return False
-        except Exception:
-            return False
+        api_key = get_unsloth_api_key()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+        candidate_ports = [self.port]
+        if self.port == 8888 and 8889 not in candidate_ports:
+            candidate_ports.append(8889)
+        elif self.port == 8889 and 8888 not in candidate_ports:
+            candidate_ports.append(8888)
+
+        for p in candidate_ports:
+            base_u = f"http://{self.host}:{p}"
+            api_u = f"{base_u}/v1"
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    # 1. Native llama-server /health endpoint
+                    try:
+                        r_h = client.get(f"{base_u}/health")
+                        if r_h.status_code == 200:
+                            if p != self.port:
+                                self.port = p
+                                self.base_url = base_u
+                                self.api_url = api_u
+                            return True
+                    except Exception:
+                        pass
+                    # 2. OpenAI-compatible /v1/models endpoint with optional auth
+                    r = client.get(f"{api_u}/models", headers=headers)
+                    if r.status_code == 200:
+                        models = r.json().get("data", [])
+                        loaded_models = [
+                            m for m in models
+                            if m.get("loaded", True) is not False or m.get("status", {}).get("value") == "loaded"
+                        ]
+                        if len(loaded_models) > 0:
+                            if p != self.port:
+                                self.port = p
+                                self.base_url = base_u
+                                self.api_url = api_u
+                            return True
+            except Exception:
+                pass
+        return False
 
     def check_health(self, timeout: float = 5.0) -> Dict[str, Any]:
         """Queries /health endpoint for server readiness."""
@@ -354,9 +401,11 @@ class UnslothServerManager:
         """Checks if the target model is currently loaded in GPU VRAM (optionally validating quant variant)."""
         target = model_id or self.target_model
         expected_variant = variant if variant is not None else self.target_variant
+        api_key = get_unsloth_api_key()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
             with httpx.Client(timeout=10.0) as client:
-                r = client.get(f"{self.api_url}/models")
+                r = client.get(f"{self.api_url}/models", headers=headers)
                 if r.status_code == 200:
                     models = r.json().get("data", [])
                     entry = next(
@@ -370,7 +419,10 @@ class UnslothServerManager:
                         None
                     )
                     if entry is not None:
-                        is_loaded = entry.get("loaded", True) is not False
+                        is_loaded = (
+                            entry.get("loaded", True) is not False
+                            or entry.get("status", {}).get("value") == "loaded"
+                        )
                         if is_loaded and expected_variant and "quant" in entry:
                             quant = str(entry.get("quant") or "")
                             if quant and expected_variant.lower() not in quant.lower():
@@ -388,16 +440,18 @@ class UnslothServerManager:
     def get_loaded_variant(self, model_id: Optional[str] = None) -> Optional[str]:
         """Queries the active loaded quant variant (e.g., 'Q5_K_M', 'UD-Q4_K_XL') from the backend."""
         target = model_id or self.target_model
+        api_key = get_unsloth_api_key()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
             with httpx.Client(timeout=5.0) as client:
-                r = client.get(f"{self.api_url}/models")
+                r = client.get(f"{self.api_url}/models", headers=headers)
                 if r.status_code == 200:
                     models = r.json().get("data", [])
                     entry = next(
                         (
                             m for m in models
                             if (m.get("id") == target or target in m.get("aliases", []) or target in m.get("id", "") or "qwen" in m.get("id", "").lower())
-                            and m.get("loaded", True) is not False
+                            and (m.get("loaded", True) is not False or m.get("status", {}).get("value") == "loaded")
                         ),
                         None
                     )
@@ -409,14 +463,16 @@ class UnslothServerManager:
 
     def get_active_slots(self) -> int:
         """Queries the active parallel slot allocation from the backend (/props or /api/inference/status)."""
+        api_key = get_unsloth_api_key()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
             with httpx.Client(timeout=3.0) as client:
-                props_r = client.get(f"{self.base_url}/props")
+                props_r = client.get(f"{self.base_url}/props", headers=headers)
                 if props_r.status_code == 200:
                     slots = props_r.json().get("total_slots")
                     if slots:
                         return int(slots)
-                st_r = client.get(f"{self.base_url}/api/inference/status")
+                st_r = client.get(f"{self.base_url}/api/inference/status", headers=headers)
                 if st_r.status_code == 200:
                     slots = st_r.json().get("parallel_slots")
                     if slots:
@@ -455,6 +511,8 @@ class UnslothServerManager:
 
         # Not loaded or incorrect quant/slots: trigger load request
         try:
+            api_key = get_unsloth_api_key()
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
             with httpx.Client(timeout=5.0) as client:
                 logger.info("Model '%s' (%s, %d slots) requires loading. Sending POST /api/inference/load...", target, variant, slots)
                 load_payload = {
@@ -465,7 +523,7 @@ class UnslothServerManager:
                     "speculative_type": speculative_type,
                     "n_parallel": slots,
                 }
-                load_resp = client.post(f"{self.base_url}/api/inference/load", json=load_payload, timeout=30.0)
+                load_resp = client.post(f"{self.base_url}/api/inference/load", json=load_payload, headers=headers, timeout=30.0)
                 if load_resp.status_code in (200, 202):
                     t0 = time.time()
                     while time.time() - t0 < timeout:

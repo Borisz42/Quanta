@@ -450,11 +450,24 @@ async def _handle_unary_response(
     t0 = time.perf_counter()
     endpoint = f"{backend_url.rstrip('/')}/chat/completions"
     try:
+        downstream_headers = {"Content-Type": "application/json"}
+        api_key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+        if not api_key:
+            try:
+                from server.unsloth_manager import get_unsloth_api_key
+                api_key = get_unsloth_api_key()
+            except Exception:
+                pass
+        if api_key:
+            downstream_headers["Authorization"] = f"Bearer {api_key}"
+        elif raw_request and "authorization" in raw_request.headers and raw_request.headers["authorization"]:
+            downstream_headers["Authorization"] = raw_request.headers["authorization"]
+
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
                 endpoint,
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers=downstream_headers,
             )
             dt_s = time.perf_counter() - t0
             if resp.status_code == 200:
@@ -562,12 +575,23 @@ async def _handle_streaming_response(
         t_stream_start = time.perf_counter()
         first_token_recorded = False
         try:
+            downstream_headers = {"Content-Type": "application/json"}
+            api_key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+            if not api_key:
+                try:
+                    from server.unsloth_manager import get_unsloth_api_key
+                    api_key = get_unsloth_api_key()
+                except Exception:
+                    pass
+            if api_key:
+                downstream_headers["Authorization"] = f"Bearer {api_key}"
+
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream(
                     "POST",
                     f"{backend_url.rstrip('/')}/chat/completions",
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers=downstream_headers,
                 ) as resp:
                     if resp.status_code == 200:
                         upstream_success = True

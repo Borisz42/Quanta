@@ -230,11 +230,22 @@ class PairedEvaluator:
 
         try:
             req_timeout = timeout if timeout is not None else max(self.timeout_seconds, 180.0)
+            req_headers = dict(headers or {})
+            api_key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+            if not api_key:
+                try:
+                    from server.unsloth_manager import get_unsloth_api_key
+                    api_key = get_unsloth_api_key()
+                except Exception:
+                    pass
+            if api_key and "Authorization" not in req_headers:
+                req_headers["Authorization"] = f"Bearer {api_key}"
+
             with httpx.Client(timeout=req_timeout) as client:
                 resp = client.post(
                     f"{endpoint_url}/chat/completions",
                     json=req_payload,
-                    headers=headers or {},
+                    headers=req_headers,
                 )
                 t_total = time.perf_counter() - t0
 
