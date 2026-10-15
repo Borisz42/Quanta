@@ -247,9 +247,9 @@ class RelevanceFilter:
             for u in top_k_kept:
                 u_tok = max(1, u.tokens)
                 is_exact_id = bool(u.metadata.get("has_exact_identifier", False))
-                effective_budget = max(budget, 2500) if is_exact_id else budget
-                # Exact identifier units are unconditionally kept!
-                if not budget_kept or (current_tokens + u_tok <= effective_budget) or is_exact_id:
+                # Elastic expansion up to 3500 tokens for units matching exact technical identifiers
+                effective_budget = max(budget, 3500) if is_exact_id else budget
+                if not budget_kept or (current_tokens + u_tok <= effective_budget):
                     budget_kept.append(u)
                     current_tokens += u_tok
                 else:
@@ -321,8 +321,8 @@ class RelevanceFilter:
 
         # Collect target entities and technical identifiers from query & target_entities
         all_entities: List[str] = list(target_entities or [])
-        # Extract technical alphanumeric variable IDs directly from query (e.g. ACC-9042, SRV-ALPHA)
-        for code in re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b|\bVault\s+\d+\b", f"{clean_q} {query}"):
+        # Extract technical alphanumeric variable IDs directly from query (e.g. ACC-9042, SRV-ALPHA, Vault 81)
+        for code in re.findall(r"\b[A-Za-z0-9]*\d+[A-Za-z0-9_-]*\b|\b[A-Z0-9]{2,}(?:[-_][A-Z0-9]+)+\b|\bVault\s+\d+\b", f"{clean_q} {query}"):
             if code not in all_entities:
                 all_entities.append(code)
 
@@ -334,7 +334,7 @@ class RelevanceFilter:
             ent_clean = ent.strip()
             if not ent_clean or ent_clean.lower() in QUESTION_STOPWORDS:
                 continue
-            if re.search(r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+|\bVault\s+\d+", ent_clean):
+            if re.search(r"\b[A-Za-z0-9]*\d+[A-Za-z0-9_-]*\b|\b[A-Z0-9]{2,}(?:[-_][A-Z0-9]+)+|\bVault\s+\d+", ent_clean):
                 tech_entities.append(ent_clean)
             elif " " in ent_clean:
                 multi_word_entities.append(ent_clean)
@@ -399,14 +399,12 @@ class RelevanceFilter:
             for mwe in multi_word_entities:
                 if re.search(r"\b" + re.escape(mwe) + r"\b", u_text, re.IGNORECASE):
                     entity_boost += 6.0
-                    has_exact_id = True
                     matched.append(mwe)
 
             # 3. Standalone proper nouns / salient query entities (+4.0 boost)
             for swe in single_word_entities:
                 if re.search(r"\b" + re.escape(swe) + r"\b", u_text, re.IGNORECASE):
                     entity_boost += 4.0
-                    has_exact_id = True
                     matched.append(swe)
 
             # Multiplicative boost for units with entity matches

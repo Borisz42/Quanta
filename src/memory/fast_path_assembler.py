@@ -158,8 +158,13 @@ class FastPathCoverageEvaluator:
         # 1. Entity Coverage
         entity_cov: Optional[float] = None
         if entities:
-            matched_entities = sum(1 for e in entities if e.strip() and e.lower().strip() in combined_text_lower)
-            entity_cov = float(matched_entities / len(entities))
+            proper_entities = [
+                e for e in entities
+                if re.search(r"\b[A-Za-z0-9]*\d+[A-Za-z0-9_-]*\b|\b[A-Z]", e)
+            ]
+            eval_entities = proper_entities if proper_entities else entities
+            matched_entities = sum(1 for e in eval_entities if e.strip() and e.lower().strip() in combined_text_lower)
+            entity_cov = float(matched_entities / len(eval_entities))
 
         # 2. Key Term Coverage
         q_clean = re.sub(r"[^\w\s]", " ", query_text.lower())
@@ -458,6 +463,12 @@ class FastPathAssembler:
 
             briefing_tokens = int(len(stream1_briefing.split()) * 1.33) if stream1_briefing else 0
             passage_budget = max(10, max_tokens - briefing_tokens)
+            any_exact_ids = any(
+                getattr(u, "metadata", {}).get("has_exact_identifier", False)
+                for u in kept_units
+            )
+            if any_exact_ids:
+                passage_budget = max(passage_budget, max_tokens)
 
             stream2_passages = self.dual_stream_assembler.assemble_passage_stream(
                 passages=passages,
