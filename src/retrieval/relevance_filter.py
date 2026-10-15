@@ -200,13 +200,23 @@ class RelevanceFilter:
         ):
             return list(scored_units), []
 
-        # Sort units by score descending
-        sorted_units = sorted(scored_units, key=lambda u: u.score, reverse=True)
+        # Sort units by score descending, strictly prioritizing exact identifier hits
+        sorted_units = sorted(
+            scored_units,
+            key=lambda u: (bool(u.metadata.get("has_exact_identifier", False)), u.score),
+            reverse=True,
+        )
 
-        # 1. Filter by threshold if set
+        # 1. Filter by threshold if set (exact identifier matches always pass)
         if self.keep_threshold is not None:
-            threshold_passed = [u for u in sorted_units if u.score >= self.keep_threshold]
-            threshold_rejected = [u for u in sorted_units if u.score < self.keep_threshold]
+            threshold_passed = [
+                u for u in sorted_units
+                if u.score >= self.keep_threshold or bool(u.metadata.get("has_exact_identifier", False))
+            ]
+            threshold_rejected = [
+                u for u in sorted_units
+                if u.score < self.keep_threshold and not bool(u.metadata.get("has_exact_identifier", False))
+            ]
         else:
             threshold_passed = list(sorted_units)
             threshold_rejected = []
@@ -216,11 +226,14 @@ class RelevanceFilter:
             threshold_passed = [sorted_units[0]]
             threshold_rejected = sorted_units[1:]
 
-        # 2. Filter by top_k if set
+        # 2. Filter by top_k if set (exact identifier matches are never dropped by top_k)
         if self.keep_top_k is not None:
             top_k = max(1, int(self.keep_top_k))
-            top_k_kept = threshold_passed[:top_k]
-            top_k_rejected = threshold_passed[top_k:] + threshold_rejected
+            exact_id_units = [u for u in threshold_passed if u.metadata.get("has_exact_identifier", False)]
+            non_exact_units = [u for u in threshold_passed if not u.metadata.get("has_exact_identifier", False)]
+            slots_remaining = max(0, top_k - len(exact_id_units))
+            top_k_kept = exact_id_units + non_exact_units[:slots_remaining]
+            top_k_rejected = non_exact_units[slots_remaining:] + threshold_rejected
         else:
             top_k_kept = threshold_passed
             top_k_rejected = threshold_rejected
@@ -234,9 +247,9 @@ class RelevanceFilter:
             for u in top_k_kept:
                 u_tok = max(1, u.tokens)
                 is_exact_id = bool(u.metadata.get("has_exact_identifier", False))
-                # Elastic expansion up to 2500 - 3000 tokens for units matching exact technical identifiers
                 effective_budget = max(budget, 2500) if is_exact_id else budget
-                if not budget_kept or (current_tokens + u_tok <= effective_budget):
+                # Exact identifier units are unconditionally kept!
+                if not budget_kept or (current_tokens + u_tok <= effective_budget) or is_exact_id:
                     budget_kept.append(u)
                     current_tokens += u_tok
                 else:
@@ -375,28 +388,30 @@ class RelevanceFilter:
             has_exact_id = False
             matched: List[str] = []
 
-            # 1. Technical alphanumeric identifiers (+6.0 boost)
+            # 1. Technical alphanumeric identifiers (+8.0 boost)
             for te in tech_entities:
                 if re.search(r"\b" + re.escape(te) + r"\b", u_text, re.IGNORECASE):
-                    entity_boost += 6.0
+                    entity_boost += 8.0
                     has_exact_id = True
                     matched.append(te)
 
-            # 2. Multi-word proper names (+5.0 boost)
+            # 2. Multi-word proper names (+6.0 boost)
             for mwe in multi_word_entities:
                 if re.search(r"\b" + re.escape(mwe) + r"\b", u_text, re.IGNORECASE):
-                    entity_boost += 5.0
+                    entity_boost += 6.0
+                    has_exact_id = True
                     matched.append(mwe)
 
-            # 3. Standalone proper nouns (+2.5 boost)
+            # 3. Standalone proper nouns / salient query entities (+4.0 boost)
             for swe in single_word_entities:
                 if re.search(r"\b" + re.escape(swe) + r"\b", u_text, re.IGNORECASE):
-                    entity_boost += 2.5
+                    entity_boost += 4.0
+                    has_exact_id = True
                     matched.append(swe)
 
             # Multiplicative boost for units with entity matches
             if entity_boost > 0.0:
-                mult_factor = 1.5 if has_exact_id or any(m in multi_word_entities for m in matched) else 1.3
+                mult_factor = 2.0 if has_exact_id else 1.5
                 boosted_s = (s + entity_boost) * mult_factor
             else:
                 boosted_s = s
@@ -627,7 +642,7 @@ class RelevanceFilter:
         if self.embedding_manager is None:
             try:
                 from server.embedding_manager import EmbeddingManager
-                self.embedding_manager = EmbeddingManager(config=self.config)
+                self.embedding_manager = EmbeddingManager.get_default(config=self.config)
             except Exception as e:
                 logger.warning("Could not instantiate EmbeddingManager (%s); using mock fallback", e)
                 from server.embedding_manager import MockEmbeddingManager
@@ -675,8 +690,13 @@ class RelevanceFilter:
         fast_path_triggered = (theta_fast is not None and max_dense >= theta_fast)
         self.last_fast_path_triggered = fast_path_triggered
 
-        if fast_path_triggered:
-            # Fast-path bypass: directly rank by dense cosine similarity without BM25
+        # 4. Standard Reciprocal Rank Fusion (RRF)
+        bm25_scored = self._score_bm25(query, units, target_entities=target_entities)
+        bm25_raw = [s.raw_score for s in bm25_scored]
+        any_exact_ids = any(s.metadata.get("has_exact_identifier", False) for s in bm25_scored)
+
+        if fast_path_triggered and not any_exact_ids:
+            # Fast-path bypass: directly rank by dense cosine similarity without BM25 only when no specific entity/code requested
             min_dense = float(np.min(dense_scores))
             denom = (max_dense - min_dense) if (max_dense - min_dense) > 1e-6 else 1.0
 
@@ -703,14 +723,12 @@ class RelevanceFilter:
                             "dense_rank": dense_rank,
                             "fast_path_bypassed": True,
                             "dense_fast_path_triggered": True,
+                            "has_exact_identifier": False,
+                            "matched_entities": [],
                         },
                     )
                 )
             return res, gpu_calls
-
-        # 4. Standard Reciprocal Rank Fusion (RRF)
-        bm25_scored = self._score_bm25(query, units, target_entities=target_entities)
-        bm25_raw = [s.raw_score for s in bm25_scored]
 
         # 1-based ranks
         bm25_order = sorted(range(len(units)), key=lambda i: bm25_raw[i], reverse=True)
@@ -728,6 +746,9 @@ class RelevanceFilter:
             r_lex = bm25_ranks[i]
             r_dns = dense_ranks[i]
             val = (w_lex / (k_rrf + r_lex)) + (w_dense / (k_rrf + r_dns))
+            has_id = bool(bm25_scored[i].metadata.get("has_exact_identifier", False))
+            if has_id:
+                val += 1.0  # Dominant boost ensuring exact identifier/entity matches outrank distractor noise
             rrf_scores.append(val)
 
         min_rrf = min(rrf_scores) if rrf_scores else 0.0
@@ -758,6 +779,8 @@ class RelevanceFilter:
                         "bm25_rank": bm25_ranks[i],
                         "dense_rank": dense_ranks[i],
                         "fast_path_triggered": False,
+                        "has_exact_identifier": bool(bm25_scored[i].metadata.get("has_exact_identifier", False)),
+                        "matched_entities": bm25_scored[i].metadata.get("matched_entities", []),
                         "w_lex": w_lex,
                         "w_dense": w_dense,
                         "k_rrf": k_rrf,

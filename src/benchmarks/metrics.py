@@ -133,9 +133,9 @@ class BenchmarkMetrics:
         if pred_norm == gold_norm:
             return True
 
-        # Check for explicit conclusion anchor in prediction (e.g. "Answer: True", "**Answer:** [False]", "Answer: Paris")
+        # Check for explicit conclusion anchor in prediction (e.g. "Answer: True", "**Answer:** [False]", "Answer: Paris", "Final Answer: Paris")
         m_concl = re.findall(
-            r"(?:\*{0,2}(?:answer|conclusion)\*{0,2}\s*[:\-]\s*\[?\*?([^\n\.\*\]]+)\*?\]?)",
+            r"(?:\*{0,2}(?:final\s+)?(?:answer|conclusion)\*{0,2}\s*[:\-]\s*\[?\*?([^\n\.\*\]]+)\*?\]?)",
             prediction,
             re.IGNORECASE,
         )
@@ -168,11 +168,35 @@ class BenchmarkMetrics:
                 r"\binsufficient information\b",
                 r"\buncertain based on\b",
             ]
-            for pat in hedging_patterns:
-                if re.search(pat, prediction, re.IGNORECASE):
-                    # Only pass if there is an explicit answer block despite the hedging
-                    if not re.search(r"\banswer\s*[:\-]\s*[\*\_]*" + re.escape(ground_truth) + r"[\*\_]*", prediction, re.IGNORECASE):
-                        return False
+            has_hedge = any(re.search(pat, prediction, re.IGNORECASE) for pat in hedging_patterns)
+            if has_hedge:
+                # 1. Explicit answer anchor matching ground truth
+                has_explicit_answer = bool(re.search(
+                    r"\b(?:final\s+)?(?:answer|conclusion)\s*[:\-]\s*[\*\_]*" + re.escape(ground_truth) + r"[\*\_]*",
+                    prediction,
+                    re.IGNORECASE,
+                ))
+
+                # 2. Concluding text affirms ground truth without hedging in the conclusion itself
+                concl_snippet = prediction
+                if "</think>" in prediction:
+                    concl_snippet = prediction.split("</think>")[-1].strip()
+                elif "Thinking Process:" in prediction:
+                    parts = re.split(r"(?:[a-zA-Z0-9_]*cw\s*\n\n|\n\n(?=[A-Z][a-z]+|\*\*))", prediction)
+                    if len(parts) > 1 and parts[-1].strip():
+                        concl_snippet = parts[-1].strip()
+
+                lines = [l.strip() for l in concl_snippet.splitlines() if l.strip()]
+                last_lines = " ".join(lines[-3:]) if lines else concl_snippet
+                last_lines_norm = normalize_answer(last_lines)
+                affirms_in_conclusion = (
+                    gold_norm in last_lines_norm
+                    and bool(re.search(r"\b" + re.escape(gold_norm) + r"\b", last_lines_norm))
+                    and not any(re.search(pat, last_lines, re.IGNORECASE) for pat in hedging_patterns)
+                )
+
+                if not (has_explicit_answer or affirms_in_conclusion):
+                    return False
 
         # Check word-boundary match of normalized gold answer in normalized prediction
         if gold_norm in pred_norm:

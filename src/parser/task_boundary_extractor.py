@@ -182,6 +182,13 @@ def extract_target_entities(text: str) -> List[str]:
                 continue
             _add(w_clean)
 
+    # 5. Salient content terms for short queries or when few entities found (e.g. apple, key in bAbI)
+    if len(entities) < 3:
+        for w in words:
+            w_clean = re.sub(r"^[^\w]+|[^\w]+$", "", w)
+            if len(w_clean) >= 3 and w_clean.lower() not in QUESTION_STOPWORDS and not w_clean.isdigit():
+                _add(w_clean)
+
     return entities
 
 

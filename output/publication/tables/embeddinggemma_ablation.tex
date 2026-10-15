@@ -10,15 +10,15 @@
     \cmidrule(lr){3-5} \cmidrule(lr){6-7} \cmidrule(lr){9-10}
     \textbf{Benchmark Suite} & \textbf{$N$} & \textbf{Base LLM} & \textbf{Dense RAG} & \textbf{QUANTA-Gemma} & \textbf{Dense RAG} & \textbf{QUANTA} & \textbf{Save} & \textbf{Dense RAG} & \textbf{QUANTA} \\
     \midrule
-    \textbf{humaneval} & 2 & 100.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 55 & \textbf{32} & -41.8\% & \textbf{0.26s} & 0.27s \\
-    \textbf{arc_science} & 2 & 100.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 108 & \textbf{108} & 0.0\% & 0.21s & \textbf{0.17s} \\
-    \textbf{musique} & 2 & 50.0\% & 50.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 1170 & \textbf{749} & -36.0\% & 0.74s & \textbf{0.40s} \\
-    \textbf{squad_overhead} & 2 & 100.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 134 & \textbf{126} & -6.0\% & \textbf{0.11s} & 0.16s \\
-    \textbf{babilong} & 2 & 0.0\% & 0.0\% & \textbf{100.0\%}$^{***}$ & 854 & \textbf{90} & -89.5\% & \textbf{2.36s} & 2.50s \\
-    \textbf{long_variable_tracking} & 2 & 0.0\% & 0.0\% & \textbf{100.0\%}$^{***}$ & 855 & \textbf{90} & -89.5\% & \textbf{2.42s} & 2.50s \\
-    \textbf{niah_long_context} & 2 & 50.0\% & 50.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 851 & \textbf{90} & -89.4\% & \textbf{2.21s} & 2.49s \\
-    \textbf{proofwriter} & 2 & 100.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 102 & \textbf{63} & -38.2\% & 0.52s & \textbf{0.34s} \\
-    \textbf{babi} & 2 & 0.0\% & 50.0\% & \textbf{100.0\%}$^{***}$ & 9 & \textbf{5} & -44.4\% & 0.52s & \textbf{0.33s} \\
+    \textbf{humaneval} & 82 & \textbf{78.0\%} & \textbf{78.0\%} & 76.8\%$^{\text{n.s.}}$ & 185 & \textbf{185} & 0.0\% & \textbf{5.98s} & 7.11s \\
+    \textbf{arc_science} & 25 & 92.0\% & 92.0\% & \textbf{92.0\%}$^{\text{n.s.}}$ & 134 & \textbf{134} & 0.0\% & \textbf{2.22s} & 5.65s \\
+    \textbf{musique} & 20 & 50.0\% & 15.0\% & \textbf{60.0\%}$^{\text{n.s.}}$ & \textbf{642} & 3166 & 0.0\% & \textbf{6.76s} & 14.29s \\
+    \textbf{proofwriter} & 20 & 100.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 240 & \textbf{240} & 0.0\% & \textbf{2.87s} & 6.23s \\
+    \textbf{babi} & 20 & 95.0\% & 90.0\% & \textbf{95.0\%}$^{\text{n.s.}}$ & \textbf{49} & 68 & 0.0\% & \textbf{2.90s} & 5.27s \\
+    \textbf{squad_overhead} & 20 & 95.0\% & 100.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & 201 & \textbf{201} & 0.0\% & \textbf{2.51s} & 5.66s \\
+    \textbf{niah_long_context} & 5 & 40.0\% & \textbf{100.0\%} & 60.0\%$^{\text{n.s.}}$ & \textbf{213} & 75298 & 0.0\% & 32.35s & \textbf{8.86s} \\
+    \textbf{babilong} & 5 & 40.0\% & 60.0\% & \textbf{100.0\%}$^{\text{n.s.}}$ & \textbf{239} & 2715 & 0.0\% & 34.79s & \textbf{8.05s} \\
+    \textbf{long_variable_tracking} & 5 & 40.0\% & 60.0\% & \textbf{60.0\%}$^{\text{n.s.}}$ & \textbf{156} & 64774 & 0.0\% & 29.17s & \textbf{14.29s} \\
     \bottomrule
   \end{tabular}
 \end{table*}

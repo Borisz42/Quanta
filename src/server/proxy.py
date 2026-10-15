@@ -142,12 +142,20 @@ def estimate_messages_tokens(messages: Sequence[ChatMessage]) -> int:
 
 
 def _dump_model(obj: Any, **kwargs) -> Dict[str, Any]:
-    """Serializes a Pydantic model to a dict, compatible across Pydantic v1 and v2."""
+    """Serializes a Pydantic model to a dict, compatible across Pydantic v1 and v2, omitting None values."""
+    kwargs.setdefault("exclude_none", True)
     if hasattr(obj, "model_dump"):
-        return obj.model_dump(**kwargs)
-    if hasattr(obj, "dict"):
-        return obj.dict(**kwargs)
-    return dict(obj)
+        res = obj.model_dump(**kwargs)
+    elif hasattr(obj, "dict"):
+        res = obj.dict(**kwargs)
+    elif isinstance(obj, dict):
+        res = obj
+    else:
+        try:
+            res = dict(obj)
+        except Exception:
+            return obj
+    return {k: v for k, v in res.items() if v is not None}
 
 
 # Decompose & context extraction utilities imported from parser.task_boundary_extractor (§Phase 1)
@@ -179,18 +187,31 @@ class PipelinePool:
         self.session_hashes: Dict[str, Set[str]] = {}
         self._default_hashes: Set[str] = set()
         self._lock = asyncio.Lock()
+        self._max_sessions = 32
 
     async def get_pipeline(self, session_id: Optional[str]) -> CognitivePipeline:
         if not session_id or session_id == "default":
             return self.default_pipeline
         async with self._lock:
             if session_id not in self.session_pipelines:
+                if len(self.session_pipelines) >= self._max_sessions:
+                    oldest_key = next(iter(self.session_pipelines))
+                    old_pipe = self.session_pipelines.pop(oldest_key, None)
+                    if old_pipe and hasattr(old_pipe, "reset"):
+                        try:
+                            old_pipe.reset()
+                        except Exception:
+                            pass
+                    self.session_hashes.pop(oldest_key, None)
+
                 logger.info("Initializing isolated CognitivePipeline for session '%s'", session_id)
+                shared_emb = getattr(self.default_pipeline, "embedding_manager", None)
                 self.session_pipelines[session_id] = CognitivePipeline(
                     transducer_backend=self.config.transducer_backend,
                     page_table_path=":memory:",
                     skeleton_format=self.config.skeleton_format,
                     co_decoded_kev=self.config.co_decoded_kev,
+                    embedding_manager=shared_emb,
                 )
             return self.session_pipelines[session_id]
 
@@ -314,6 +335,48 @@ def create_proxy_app(config: Optional[QuantaProxyConfig] = None) -> FastAPI:
         return {"status": "ok", "message": f"QUANTA memory and session hashes reset successfully for session {x_quanta_session_id or 'default'}"}
 
     # -------------------------------------------------------------------------
+    # Embeddings Endpoint (ANVC Shared Bi-Encoder Serving)
+    # -------------------------------------------------------------------------
+
+    @app.post("/v1/embeddings")
+    @app.post("/embeddings")
+    async def embeddings_endpoint(raw_req: Request):
+        """Dedicated non-blocking endpoint serving EmbeddingGemma 2 representations."""
+        try:
+            body = await raw_req.json()
+        except Exception:
+            body = {}
+        inputs = body.get("input", [])
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        elif not isinstance(inputs, list):
+            inputs = [str(inputs)]
+
+        # Use the pipeline's shared embedding manager (which caches model in VRAM)
+        shared_mgr = getattr(pool.default_pipeline, "embedding_manager", None)
+        if shared_mgr is None:
+            from server.embedding_manager import EmbeddingManager
+            shared_mgr = EmbeddingManager.get_default()
+
+        raw_vecs = shared_mgr.embed_raw(inputs)
+        items = []
+        for idx, vec in enumerate(raw_vecs):
+            items.append({
+                "object": "embedding",
+                "index": idx,
+                "embedding": vec.tolist(),
+            })
+        return {
+            "object": "list",
+            "data": items,
+            "model": body.get("model", getattr(shared_mgr, "model_id", "google/embeddinggemma-2")),
+            "usage": {
+                "prompt_tokens": sum(len(t.split()) for t in inputs),
+                "total_tokens": sum(len(t.split()) for t in inputs),
+            },
+        }
+
+    # -------------------------------------------------------------------------
     # Chat Completions Endpoint
     # -------------------------------------------------------------------------
 
@@ -385,12 +448,26 @@ async def _handle_unary_response(
 ) -> Union[JSONResponse, Dict[str, Any]]:
     """Forwards non-streaming request to backend or returns local neuro-symbolic completion."""
     t0 = time.perf_counter()
+    endpoint = f"{backend_url.rstrip('/')}/chat/completions"
     try:
+        downstream_headers = {"Content-Type": "application/json"}
+        api_key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+        if not api_key:
+            try:
+                from server.unsloth_manager import get_unsloth_api_key
+                api_key = get_unsloth_api_key()
+            except Exception:
+                pass
+        if api_key:
+            downstream_headers["Authorization"] = f"Bearer {api_key}"
+        elif raw_request and "authorization" in raw_request.headers and raw_request.headers["authorization"]:
+            downstream_headers["Authorization"] = raw_request.headers["authorization"]
+
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
-                f"{backend_url.rstrip('/')}/chat/completions",
+                endpoint,
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers=downstream_headers,
             )
             dt_s = time.perf_counter() - t0
             if resp.status_code == 200:
@@ -402,7 +479,7 @@ async def _handle_unary_response(
                     tracer.record_stage_timing("reader end", dt_s * 1000.0, gpu_calls=1)
                     tracer.record_backend_call(
                         method="POST",
-                        url=f"{backend_url.rstrip('/')}/chat/completions",
+                        url=endpoint,
                         status_code=resp.status_code,
                         latency_s=dt_s,
                         tokens_gen=usage.get("completion_tokens", 0),
@@ -417,9 +494,11 @@ async def _handle_unary_response(
                 if as_dict:
                     return data
                 return JSONResponse(content=data, status_code=200, headers=resp_headers)
-            logger.warning("Downstream backend responded with status %d: %s", resp.status_code, resp.text)
+            logger.warning("Downstream backend %s responded with status %d: %s", endpoint, resp.status_code, resp.text)
+            print(f"[QUANTA PROXY ERROR] Downstream {endpoint} returned {resp.status_code}: {resp.text[:300]}", flush=True)
     except Exception as exc:
-        logger.info("Downstream backend unavailable (%s). Falling back to local QUANTA response.", exc)
+        logger.warning("Downstream backend %s unavailable (%s). Falling back to local QUANTA response.", endpoint, exc)
+        print(f"[QUANTA PROXY EXCEPTION] Downstream {endpoint} failed: {type(exc).__name__}: {exc}", flush=True)
 
     # Local neuro-symbolic fallback
     if fallback_pipeline is not None:
@@ -496,12 +575,23 @@ async def _handle_streaming_response(
         t_stream_start = time.perf_counter()
         first_token_recorded = False
         try:
+            downstream_headers = {"Content-Type": "application/json"}
+            api_key = os.getenv("UNSLOTH_API_KEY") or os.getenv("LLAMA_API_KEY")
+            if not api_key:
+                try:
+                    from server.unsloth_manager import get_unsloth_api_key
+                    api_key = get_unsloth_api_key()
+                except Exception:
+                    pass
+            if api_key:
+                downstream_headers["Authorization"] = f"Bearer {api_key}"
+
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream(
                     "POST",
                     f"{backend_url.rstrip('/')}/chat/completions",
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers=downstream_headers,
                 ) as resp:
                     if resp.status_code == 200:
                         upstream_success = True
@@ -726,7 +816,7 @@ async def expand_context_dialogue(
 
     has_single_query_context = (doc_from_user is not None) or (doc_from_system is not None)
     user_query = isolated_question if doc_from_user else raw_user_content
-    should_compress = (raw_tokens > effective_threshold) or (len(norm_messages) > 4 and raw_tokens > 200) or has_single_query_context
+    should_compress = (raw_tokens > effective_threshold) or (len(norm_messages) > 4 and raw_tokens > 200)
 
     retrieved_context: str = ""
     compressed_messages: List[Dict[str, Any]] = []
@@ -773,7 +863,7 @@ async def expand_context_dialogue(
         elif not active_fp_mode and hasattr(pipeline, "multi_scale_config"):
             active_fp_mode = pipeline.multi_scale_config.fast_path_mode
 
-        is_long_prompt = has_single_query_context or (raw_tokens > effective_threshold) or (len(raw_user_content.split()) > 200)
+        is_long_prompt = (raw_tokens > effective_threshold)
         if active_fp_mode and active_fp_mode not in ("passthrough", "none", "off", "") and is_long_prompt:
             full_prompt = raw_user_content
             if doc_from_system and doc_from_system not in full_prompt:
@@ -1068,8 +1158,12 @@ async def execute_chat_completion(
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created_timestamp = int(time.time())
 
-    downstream_payload = _dump_model(request, exclude_unset=True)
-    downstream_payload["messages"] = compressed_messages
+    downstream_payload = _dump_model(request, exclude_unset=True, exclude_none=True)
+    clean_messages = []
+    for m in compressed_messages:
+        m_dict = _dump_model(m, exclude_unset=True, exclude_none=True) if hasattr(m, "model_dump") or hasattr(m, "dict") else dict(m)
+        clean_messages.append({k: v for k, v in m_dict.items() if v is not None})
+    downstream_payload["messages"] = clean_messages
     if cfg.target_model:
         downstream_payload["model"] = cfg.target_model
     elif "8888" in cfg.backend_url and downstream_payload.get("model") in ("quanta-context-expander", "default", None):

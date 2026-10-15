@@ -1,13 +1,13 @@
 {
   "Mercury_7175875": {
     "prediction": "C",
-    "raw_prediction": "When a planet rotates faster, the time it takes to complete one full revolution on its axis decreases, which directly shortens the duration of a day. This phenomenon is independent of the planet's density, gravity, or orbital period around its star.\n\nAnswer: C",
+    "raw_prediction": "An increase in a planet's rotation speed means it completes one full spin in less time, which directly shortens the duration of a planetary day. The other options are incorrect because rotation speed does not alter the planet's mass or density, nor does it change the orbital period (year) or the strength of gravity.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_SC_409171": {
     "prediction": "B",
-    "raw_prediction": "Testing different building designs against earthquake conditions allows engineers to identify structural weaknesses and optimize stability, directly leading to improved safety standards. By understanding how various designs respond to seismic forces, they can implement features that better protect occupants during an earthquake.\n\nAnswer: B",
+    "raw_prediction": "Testing different building designs against earthquake conditions allows engineers to identify which structural configurations best absorb and dissipate seismic energy, thereby reducing the risk of collapse. This iterative process of experimentation directly leads to the development of more resilient structures capable of withstanding natural disasters.\n\nAnswer: B",
     "gold": "B",
     "correct": true
   },
@@ -24,26 +24,26 @@
     "correct": true
   },
   "MCAS_2006_9_44": {
-    "prediction": "D",
-    "raw_prediction": "On the Moon, where gravity is constant, both objects lose an identical amount of gravitational potential energy because they have fallen the same vertical distance, regardless of their mass. Consequently, they have each gained one-half of their maximum kinetic energy, as the total potential energy lost equals the total kinetic energy gained at that midpoint.\n\nAnswer: D",
+    "prediction": "C",
+    "raw_prediction": "On the Moon, as both objects fall, gravitational potential energy is converted into kinetic energy, meaning they lose potential energy proportional to the distance fallen regardless of their mass. Since both objects fall the same distance (1.0 m), they each lose the same amount of potential energy ($\\Delta PE = mgh$, where $h$ is constant, but the change in height is the same for both).\n\nAnswer: C",
     "gold": "D",
-    "correct": true
+    "correct": false
   },
   "Mercury_7270393": {
     "prediction": "D",
-    "raw_prediction": "Devil facial tumor disease is caused by transmissible cancer cells that are passed between animals through biting, making it an infectious disease, while the presence of tumors that persist and spread throughout the body classifies it as a chronic condition.\nAnswer: D",
+    "raw_prediction": "Devil facial tumor disease is caused by transmissible cancer cells that are passed between animals through biting, making it an infectious disease, while the presence of tumors that grow and spread over time classifies it as a chronic condition.\n\nAnswer: D",
     "gold": "B",
     "correct": false
   },
   "MCAS_2014_5_7": {
     "prediction": "C",
-    "raw_prediction": "The described behavior is a classic food caching strategy used by ground squirrels to collect and store vegetation for consumption during the winter when natural food sources are scarce. By burying grasses and seeds in rock piles, the mammal ensures a reliable energy supply to survive the cold months.\n\nAnswer: C",
+    "raw_prediction": "This behavior is a form of food caching, where animals store surplus food during periods of abundance to survive during times of scarcity, such as winter when natural food sources are unavailable. By burying grasses and seeds in rock piles, the mammal ensures a reliable food supply for the colder months.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_7086660": {
     "prediction": "C",
-    "raw_prediction": "Petrified palm trees indicate that the environment was once warm and wet enough to support tropical vegetation, which is inconsistent with the current glacial conditions. The presence of these fossils in sedimentary rock suggests a significant geological shift where the area's climate changed from tropical to glacial over time.\n\nAnswer: C",
+    "raw_prediction": "Petrified palm trees indicate that the region once supported a warm, wet environment capable of sustaining tropical vegetation, which is inconsistent with the current glacial conditions. The presence of these fossils in sedimentary rock suggests that the area underwent significant geological uplift or climate change over time, but the biological evidence points to a former tropical climate.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
@@ -55,43 +55,43 @@
   },
   "MCAS_2003_8_11": {
     "prediction": "A",
-    "raw_prediction": "The smallest unit of copper that retains all the chemical properties of the element is the atom, as it contains the specific number of protons in its nucleus that define copper's identity. Subatomic particles like electrons, protons, or nuclei alone do not constitute the element in its complete form.\n\nAnswer: A",
+    "raw_prediction": "The smallest unit of an element that retains all its chemical properties is the atom, as it contains the complete set of protons, neutrons, and electrons necessary to define the element's identity. Breaking the atom down into subatomic particles like electrons, protons, or nuclei results in a loss of the specific characteristics of that element.\n\nAnswer: A",
     "gold": "A",
     "correct": true
   },
   "Mercury_7250058": {
     "prediction": "B",
-    "raw_prediction": "The primary feature used to distinguish prokaryotic cells from eukaryotic cells is their size, as prokaryotes are significantly smaller and lack membrane-bound organelles like a nucleus.\nAnswer: B",
+    "raw_prediction": "Prokaryotic cells are significantly smaller than eukaryotic cells, typically ranging from 0.1 to 5.0 micrometers, whereas eukaryotic cells are generally 10 to 100 micrometers in size. This distinct difference in scale is a primary and reliable feature used to classify and distinguish between the two cell types.\n\nAnswer: B",
     "gold": "B",
     "correct": true
   },
   "Mercury_7012740": {
     "prediction": "A",
-    "raw_prediction": "The Sun drives oceanic processes by heating the water surface, which creates density differences and wind patterns that generate waves.\nAnswer: A",
+    "raw_prediction": "The Sun drives the water cycle through evaporation and powers ocean currents via differential heating, which in turn generates the wind patterns responsible for creating waves.\nAnswer: A",
     "gold": "A",
     "correct": true
   },
   "Mercury_LBS10610": {
     "prediction": "C",
-    "raw_prediction": "On a sunny day, solar radiation heats the ground and air, causing temperatures to rise significantly from their morning lows by mid-afternoon. A typical increase for a mild day is 20 to 30 degrees Fahrenheit, making 78\u00b0F the most reasonable estimate for 2:00 p.m.\n\nAnswer: C",
+    "raw_prediction": "Solar radiation causes the Earth's surface to absorb heat, leading to a significant rise in air temperature during the afternoon hours as long as the sun is shining. Given a mild forecast, the temperature will increase from the morning low but typically will not exceed the high 70s or reach near-100 degrees in such conditions.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_SC_407400": {
     "prediction": "C",
-    "raw_prediction": "To ensure accurate data collection, the investigation must begin by establishing a systematic method for tracking the lifespan of the bulbs before any observations are made. Creating a data table first provides the necessary structure to record daily observations consistently throughout the experiment.\n\nAnswer: C",
+    "raw_prediction": "To ensure the investigation is systematic and data is organized before collection begins, creating a recording table is the necessary first step. This allows the class to accurately track daily observations of the light bulbs throughout the experiment.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_7212993": {
     "prediction": "C",
-    "raw_prediction": "Water vapor is the most abundant greenhouse gas in the lower atmosphere because its concentration is governed by temperature through the Clausius-Clapeyron relation, allowing it to exist in much higher quantities than other greenhouse gases like carbon dioxide or methane.\n\nAnswer: C",
+    "raw_prediction": "Water vapor is the most abundant greenhouse gas in Earth's lower atmosphere because its concentration varies widely with temperature and humidity, but it generally far exceeds the mixing ratios of carbon dioxide, methane, and ozone.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_SC_413240": {
     "prediction": "A",
-    "raw_prediction": "Water freezes at 0 degrees Celsius because this is the specific temperature at which liquid water transitions into solid ice under standard atmospheric pressure.\nAnswer: A",
+    "raw_prediction": "Water freezes at 0 degrees Celsius because this is the specific temperature at which its liquid state transitions to a solid crystalline structure under standard atmospheric pressure.\nAnswer: A",
     "gold": "A",
     "correct": true
   },
@@ -103,7 +103,7 @@
   },
   "Mercury_7166425": {
     "prediction": "B",
-    "raw_prediction": "Thermal energy always flows spontaneously from a region of higher temperature to a region of lower temperature until thermal equilibrium is reached. Since the tea is hot and the ice is cold, the heat energy transfers from the tea to the ice.\n\nAnswer: B",
+    "raw_prediction": "Thermal energy always flows spontaneously from a region of higher temperature to a region of lower temperature. Since the tea is hot and the ice is cold, heat will transfer from the tea into the ice until thermal equilibrium is reached.\n\nAnswer: B",
     "gold": "B",
     "correct": true
   },
@@ -115,25 +115,25 @@
   },
   "Mercury_7094290": {
     "prediction": "C",
-    "raw_prediction": "The belief in spontaneous generation was disproved through rigorous experimentation, most notably by Louis Pasteur, who demonstrated that life arises only from pre-existing life under controlled conditions. While microscopes allowed scientists to observe microorganisms, the definitive refutation of the theory relied on systematic experimental design and observation.\n\nAnswer: C",
+    "raw_prediction": "The belief that life arises spontaneously from non-living matter was disproved through rigorous experimentation, most notably by Louis Pasteur's swan-neck flask experiments which demonstrated that sterilized broth remained free of life unless exposed to airborne microorganisms.\n\nAnswer: C",
     "gold": "C",
     "correct": true
   },
   "Mercury_7186568": {
     "prediction": "B",
-    "raw_prediction": "Lysosomes contain digestive enzymes that break down waste materials, cellular debris, and engulfed food particles into usable components.\nAnswer: B",
+    "raw_prediction": "Lysosomes contain digestive enzymes that break down waste materials, cellular debris, and engulfed food particles into smaller components for recycling or elimination. This process is essential for maintaining cellular health by clearing out damaged organelles and undigested residues.\n\nAnswer: B",
     "gold": "B",
     "correct": true
   },
   "Mercury_402216": {
     "prediction": "B",
-    "raw_prediction": "The electrolysis of water involves passing an electric current through liquid water to split it into its constituent elements, hydrogen and oxygen, which must be balanced according to the law of conservation of mass.\n\nAnswer: B",
+    "raw_prediction": "The process described is electrolysis, where electrical energy splits water molecules into their constituent elements, hydrogen and oxygen, which must be balanced according to the law of conservation of mass.\nAnswer: B",
     "gold": "B",
     "correct": true
   },
   "Mercury_404894": {
     "prediction": "A",
-    "raw_prediction": "Penguins are flightless birds adapted for aquatic life with specialized feathers and blubber that provide insulation against extreme cold, allowing them to survive in freezing Antarctic environments. While they are social and can be competitive for resources, their ability to endure harsh climates is a well-documented biological fact.\n\nAnswer: A",
+    "raw_prediction": "Penguins are flightless birds adapted with dense feathers and a layer of blubber that allow them to survive and thrive in extremely cold, freezing environments. While they are often considered beautiful and can be competitive, their ability to endure freezing climates is a definitive biological fact.\n\nAnswer: A",
     "gold": "A",
     "correct": true
   },

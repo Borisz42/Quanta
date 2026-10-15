@@ -19,6 +19,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -188,14 +189,33 @@ class LlamaServerEmbeddingBackend(BaseEmbeddingBackend):
 
     def is_available(self) -> bool:
         try:
-            with httpx.Client(timeout=0.15) as client:
-                r = client.get(f"{self.base_url}/health")
-                if r.status_code == 200:
-                    return True
-                # Try OpenAI models endpoint
-                r2 = client.get(f"{self.base_url}/v1/models")
-                if r2.status_code == 200:
-                    return True
+            with httpx.Client(timeout=0.25) as client:
+                # 1. Probe /v1/embeddings directly
+                try:
+                    r = client.post(
+                        f"{self.base_url}/v1/embeddings",
+                        json={"input": ["probe"], "model": self.model_id},
+                    )
+                    if r.status_code == 200:
+                        return True
+                except Exception:
+                    pass
+                # 2. Probe native llama.cpp /embedding
+                try:
+                    r2 = client.post(f"{self.base_url}/embedding", json={"content": "probe"})
+                    if r2.status_code == 200:
+                        return True
+                except Exception:
+                    pass
+                # 3. Dedicated embedding server /health
+                try:
+                    r3 = client.get(f"{self.base_url}/health")
+                    if r3.status_code == 200:
+                        # Only accept if port is dedicated embedding port
+                        if self.port == DEFAULT_EMBEDDING_PORT:
+                            return True
+                except Exception:
+                    pass
         except Exception:
             pass
         return False
@@ -241,7 +261,16 @@ class LlamaServerEmbeddingBackend(BaseEmbeddingBackend):
 
 
 class InProcessEmbeddingBackend(BaseEmbeddingBackend):
-    """In-process execution using sentence_transformers or Hugging Face transformers."""
+    """In-process execution using sentence_transformers or Hugging Face transformers.
+
+    Implements a strict process-level model cache (_shared_models) and synchronized inference
+    lock (_inference_lock) to guarantee EmbeddingGemma 2 is loaded at most once in memory/VRAM
+    and prevent concurrent activation memory spikes on CUDA.
+    """
+
+    _shared_models: Dict[Tuple[str, str], Tuple[Any, str, str]] = {}
+    _model_lock: threading.Lock = threading.Lock()
+    _inference_lock: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -251,99 +280,156 @@ class InProcessEmbeddingBackend(BaseEmbeddingBackend):
         self.model_id = model_id
         self.device = device
         self._model = None
+        self._tokenizer = None
         self._backend_type = None
         self._init_model()
 
     def _init_model(self):
-        # Prefer sentence_transformers if available
-        try:
-            from sentence_transformers import SentenceTransformer
-            import torch
-
-            actual_device = self.device
-            if actual_device == "cuda" and not torch.cuda.is_available():
-                logger.info("CUDA requested but not available; falling back to CPU for %s", self.model_id)
-                actual_device = "cpu"
-
-            logger.info("Loading in-process SentenceTransformer model: %s on %s", self.model_id, actual_device)
+        target_device = self.device
+        if target_device == "cuda":
             try:
-                self._model = SentenceTransformer(self.model_id, device=actual_device)
-            except Exception as load_err:
-                if actual_device == "cuda" and ("out of memory" in str(load_err).lower() or "cuda" in str(load_err).lower()):
-                    logger.warning("Failed to load SentenceTransformer on CUDA (%s); falling back to CPU", load_err)
-                    torch.cuda.empty_cache()
-                    actual_device = "cpu"
-                    self._model = SentenceTransformer(self.model_id, device="cpu")
-                else:
-                    raise
-            self.device = actual_device
-            self._backend_type = "sentence_transformers"
-            return
-        except Exception as st_err:
-            logger.debug("Could not initialize SentenceTransformer (%s), trying transformers...", st_err)
+                import torch
+                if not torch.cuda.is_available():
+                    logger.info("CUDA requested but not available; falling back to CPU for %s", self.model_id)
+                    target_device = "cpu"
+            except ImportError:
+                target_device = "cpu"
 
-        # Fallback to Hugging Face transformers
-        try:
-            from transformers import AutoModel, AutoTokenizer
-            import torch
+        key = (self.model_id, target_device)
 
-            actual_device = self.device
-            if actual_device == "cuda" and not torch.cuda.is_available():
-                actual_device = "cpu"
+        with self._model_lock:
+            # Check if this model or any variant is ALREADY loaded in this process
+            for (m_id, dev), (mod, b_type, actual_dev) in self._shared_models.items():
+                if mod is not None and (
+                    m_id == self.model_id
+                    or (m_id.endswith("embeddinggemma-2") and self.model_id.endswith("embeddinggemma-2"))
+                    or (m_id.split("/")[-1] == self.model_id.split("/")[-1])
+                ):
+                    self._model = mod
+                    self._backend_type = b_type
+                    self.device = actual_dev
+                    logger.info(
+                        "EmbeddingGemma model already loaded; reusing shared %s instance for '%s' on device '%s'",
+                        self._backend_type,
+                        self.model_id,
+                        self.device,
+                    )
+                    return
 
-            logger.info("Loading in-process HF AutoModel: %s on %s", self.model_id, actual_device)
-            self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+            cpu_key = (self.model_id, "cpu")
+
+            # Prefer sentence_transformers if available
             try:
-                self._model = AutoModel.from_pretrained(self.model_id).to(actual_device)
-            except Exception as hf_load_err:
+                from sentence_transformers import SentenceTransformer
+                import torch
+
+                actual_device = target_device
                 if actual_device == "cuda":
-                    logger.warning("Failed to load HF model on CUDA (%s); falling back to CPU", hf_load_err)
                     torch.cuda.empty_cache()
-                    actual_device = "cpu"
-                    self._model = AutoModel.from_pretrained(self.model_id).to("cpu")
-                else:
-                    raise
-            self.device = actual_device
-            self._model.eval()
-            self._backend_type = "transformers"
-            return
-        except Exception as hf_err:
-            logger.info("In-process embedding model '%s' unavailable (%s).", self.model_id, hf_err)
-            raise
+
+                logger.info("Loading in-process SentenceTransformer model: %s on %s", self.model_id, actual_device)
+                try:
+                    model_kwargs = {}
+                    if actual_device == "cuda":
+                        model_kwargs["torch_dtype"] = torch.float16
+                    loaded_model = SentenceTransformer(
+                        self.model_id,
+                        device=actual_device,
+                        model_kwargs=model_kwargs if model_kwargs else None,
+                    )
+                except Exception as load_err:
+                    if actual_device == "cuda" and ("out of memory" in str(load_err).lower() or "cuda" in str(load_err).lower() or "allocation" in str(load_err).lower()):
+                        logger.warning("Failed to load SentenceTransformer on CUDA (%s); falling back to CPU", load_err)
+                        torch.cuda.empty_cache()
+                        actual_device = "cpu"
+                        if cpu_key in self._shared_models:
+                            self._model, self._backend_type, self.device = self._shared_models[cpu_key]
+                            return
+                        loaded_model = SentenceTransformer(self.model_id, device="cpu")
+                    else:
+                        raise
+
+                self._model = loaded_model
+                self.device = actual_device
+                self._backend_type = "sentence_transformers"
+                self._shared_models[(self.model_id, actual_device)] = (self._model, self._backend_type, actual_device)
+                logger.info("Successfully registered shared SentenceTransformer model for %s on %s", self.model_id, actual_device)
+                return
+            except Exception as st_err:
+                logger.debug("Could not initialize SentenceTransformer (%s), trying transformers...", st_err)
+
+            # Fallback to Hugging Face transformers
+            try:
+                from transformers import AutoModel, AutoTokenizer
+                import torch
+
+                actual_device = target_device
+                if actual_device == "cuda":
+                    torch.cuda.empty_cache()
+
+                logger.info("Loading in-process HF AutoModel: %s on %s", self.model_id, actual_device)
+                self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+                try:
+                    loaded_model = AutoModel.from_pretrained(
+                        self.model_id,
+                        torch_dtype=torch.float16 if actual_device == "cuda" else torch.float32,
+                    ).to(actual_device)
+                except Exception as hf_load_err:
+                    if actual_device == "cuda":
+                        logger.warning("Failed to load HF model on CUDA (%s); falling back to CPU", hf_load_err)
+                        torch.cuda.empty_cache()
+                        actual_device = "cpu"
+                        if cpu_key in self._shared_models:
+                            self._model, self._backend_type, self.device = self._shared_models[cpu_key]
+                            return
+                        loaded_model = AutoModel.from_pretrained(self.model_id).to("cpu")
+                    else:
+                        raise
+                self._model = loaded_model
+                self.device = actual_device
+                self._model.eval()
+                self._backend_type = "transformers"
+                self._shared_models[(self.model_id, actual_device)] = (self._model, self._backend_type, actual_device)
+                logger.info("Successfully registered shared HF model for %s on %s", self.model_id, actual_device)
+                return
+            except Exception as hf_err:
+                logger.info("In-process embedding model '%s' unavailable (%s).", self.model_id, hf_err)
+                raise
 
     def is_available(self) -> bool:
         return self._model is not None
 
     def embed_raw(self, texts: List[str], batch_size: int = DEFAULT_BATCH_SIZE) -> np.ndarray:
-        if self._backend_type == "sentence_transformers":
-            # Do NOT normalize here; Matryoshka truncation requires raw vectors before normalization!
-            embs = self._model.encode(
-                texts,
-                batch_size=batch_size,
-                show_progress_bar=False,
-                normalize_embeddings=False,
-            )
-            return np.array(embs, dtype=np.float32)
+        with self._inference_lock:
+            if self._backend_type == "sentence_transformers":
+                # Do NOT normalize here; Matryoshka truncation requires raw vectors before normalization!
+                embs = self._model.encode(
+                    texts,
+                    batch_size=batch_size,
+                    show_progress_bar=False,
+                    normalize_embeddings=False,
+                )
+                return np.array(embs, dtype=np.float32)
 
-        elif self._backend_type == "transformers":
-            import torch
+            elif self._backend_type == "transformers":
+                import torch
 
-            all_embs: List[np.ndarray] = []
-            device = next(self._model.parameters()).device
-            with torch.no_grad():
-                for i in range(0, len(texts), batch_size):
-                    batch = texts[i : i + batch_size]
-                    inputs = self._tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(device)
-                    outputs = self._model(**inputs)
-                    # Mean pooling over attention mask
-                    token_embeddings = outputs.last_hidden_state
-                    attention_mask = inputs["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
-                    sum_embeddings = torch.sum(token_embeddings * attention_mask, 1)
-                    sum_mask = torch.clamp(attention_mask.sum(1), min=1e-9)
-                    mean_pooled = (sum_embeddings / sum_mask).cpu().float().numpy()
-                    all_embs.append(mean_pooled)
+                all_embs: List[np.ndarray] = []
+                device = next(self._model.parameters()).device
+                with torch.no_grad():
+                    for i in range(0, len(texts), batch_size):
+                        batch = texts[i : i + batch_size]
+                        inputs = self._tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(device)
+                        outputs = self._model(**inputs)
+                        # Mean pooling over attention mask
+                        token_embeddings = outputs.last_hidden_state
+                        attention_mask = inputs["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
+                        sum_embeddings = torch.sum(token_embeddings * attention_mask, 1)
+                        sum_mask = torch.clamp(attention_mask.sum(1), min=1e-9)
+                        mean_pooled = (sum_embeddings / sum_mask).cpu().float().numpy()
+                        all_embs.append(mean_pooled)
 
-            return np.vstack(all_embs)
+                return np.vstack(all_embs)
 
         raise RuntimeError("InProcessEmbeddingBackend has no loaded model.")
 
@@ -363,13 +449,26 @@ class EmbeddingManager:
     """
 
     _default_instance: Optional[EmbeddingManager] = None
+    _instance_lock: threading.Lock = threading.Lock()
 
     @classmethod
-    def get_default(cls, allow_mock: bool = False) -> EmbeddingManager:
-        """Obtain or initialize the global singleton EmbeddingManager instance."""
-        if cls._default_instance is None:
-            cls._default_instance = cls(allow_mock=allow_mock)
-        return cls._default_instance
+    def get_default(
+        cls,
+        allow_mock: bool = False,
+        config: Optional[MultiScaleConfig] = None,
+        backend: Optional[str] = None,
+        device: Optional[str] = None,
+    ) -> EmbeddingManager:
+        """Obtain or initialize the global singleton EmbeddingManager instance in a thread-safe manner."""
+        with cls._instance_lock:
+            if cls._default_instance is None:
+                cls._default_instance = cls(
+                    config=config,
+                    backend=backend,
+                    device=device,
+                    allow_mock=allow_mock,
+                )
+            return cls._default_instance
 
     def __init__(
         self,
@@ -440,9 +539,9 @@ class EmbeddingManager:
                     f"failed to initialize on device '{self.device}': {e}. Mock fallback is disallowed."
                 )
 
-        # Auto dispatch: Probe llama-server (:8889), then in-process, then fail if not allowed
+        # Auto dispatch: Probe llama-server (:8889), then proxy (:8000), then in-process, then fail if not allowed
         if choice == "auto":
-            # 1. Probe if llama-server is already alive on self.port
+            # 1. Probe if dedicated llama-server is already alive on self.port (:8889)
             probe = LlamaServerEmbeddingBackend(
                 host=self.host,
                 port=self.port,
@@ -454,7 +553,34 @@ class EmbeddingManager:
                 logger.info("Auto-dispatch connected to live dedicated llama-server on %s:%d", self.host, self.port)
                 return
 
-            # 2. Try in-process live EmbeddingGemma 2
+            # 2. Probe if QUANTA Reverse Proxy is alive serving /v1/embeddings
+            proxy_url_env = os.environ.get("QUANTA_PROXY_URL", "")
+            target_host = self.host
+            proxy_port = int(os.environ.get("QUANTA_PROXY_PORT", "8000"))
+            if proxy_url_env:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(proxy_url_env if "://" in proxy_url_env else f"http://{proxy_url_env}")
+                    if parsed.hostname:
+                        target_host = parsed.hostname
+                    if parsed.port:
+                        proxy_port = parsed.port
+                except Exception:
+                    pass
+
+            if proxy_port != self.port:
+                proxy_probe = LlamaServerEmbeddingBackend(
+                    host=target_host,
+                    port=proxy_port,
+                    model_id=self.model_id,
+                )
+                if proxy_probe.is_available():
+                    self._backend = proxy_probe
+                    self._active_backend_name = "quanta-proxy-embeddings"
+                    logger.info("Auto-dispatch connected to live QUANTA proxy embedding service on %s:%d", target_host, proxy_port)
+                    return
+
+            # 3. Try in-process live EmbeddingGemma 2
             last_err = None
             try:
                 self._backend = InProcessEmbeddingBackend(
@@ -650,12 +776,20 @@ class EmbeddingManager:
         if self.is_service_responsive():
             return True
 
+        # Re-probe auto-dispatch in case proxy or service just became available
+        try:
+            self._init_backend()
+            if self.is_service_responsive():
+                return True
+        except Exception:
+            pass
+
         # Find executable candidate for llama-server
         candidates = [
             Path(r"C:\Users\PC\.docker\bin\inference\llama-server.exe"),
             Path(r"C:\Users\PC\.unsloth\llama.cpp\build\bin\Release\llama-server.exe"),
-            Path(shutil.which("llama-server.exe") or ""),
-            Path(shutil.which("llama-server") or ""),
+            Path(shutil.which("llama-server.exe")) if shutil.which("llama-server.exe") else None,
+            Path(shutil.which("llama-server")) if shutil.which("llama-server") else None,
             Path(os.path.expanduser("~")) / ".lmstudio" / "extensions" / "backends" / "llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.54.0" / "llama-server.exe",
             Path(os.path.expanduser("~")) / ".unsloth" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
             Path("bin/llama-server.exe"),
@@ -671,27 +805,28 @@ class EmbeddingManager:
         ]
         target_model_file = None
         for mc in model_candidates:
-            if mc.exists():
+            if mc and mc.exists() and mc.is_file():
                 target_model_file = mc
                 break
 
         server_bin = None
         for cand in candidates:
-            if cand and cand.exists():
+            if cand and str(cand) not in ("", ".") and cand.is_file():
                 server_bin = cand
                 break
 
         if not server_bin or not target_model_file:
             logger.debug(
-                "Cannot spawn dedicated llama-server: bin=%s, model=%s. Falling back to in-process or mock.",
+                "Cannot spawn dedicated llama-server: bin=%s, model=%s.",
                 server_bin,
                 target_model_file,
             )
-            # Switch backend to in-process or mock
-            if self._active_backend_name != "mock":
+            if self.is_service_responsive():
+                return True
+            if self.allow_mock and self._active_backend_name != "mock":
                 self._backend = MockEmbeddingBackend(native_dim=NATIVE_DIMENSION)
                 self._active_backend_name = "mock"
-            return True
+            return self.is_service_responsive()
 
         cmd = [
             str(server_bin),

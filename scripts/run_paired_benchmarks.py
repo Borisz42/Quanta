@@ -444,7 +444,7 @@ def main():
 
     print_banner()
 
-    # Pre-detect backend parallel slots if running live mode
+    # Pre-detect backend parallel slots and active base URL if running live mode
     if args.mode == "live":
         try:
             from server.service_manager import get_service_manager
@@ -452,6 +452,10 @@ def main():
             svc_mgr.base_url = args.base_url
             svc_mgr.quanta_url = args.quanta_url
             svc_mgr.target_model = args.target_model
+            if svc_mgr.unsloth_mgr.is_service_responsive():
+                if svc_mgr.unsloth_mgr.port != 8888 and "8888" in args.base_url:
+                    args.base_url = f"http://{svc_mgr.unsloth_mgr.host}:{svc_mgr.unsloth_mgr.port}/v1"
+                    svc_mgr.base_url = args.base_url
             active_slots = svc_mgr.unsloth_mgr.get_active_slots()
             if active_slots and active_slots > 0 and args.workers == default_workers:
                 args.workers = active_slots
@@ -490,6 +494,7 @@ def main():
         svc_mgr = get_service_manager()
         svc_mgr.base_url = args.base_url
         svc_mgr.quanta_url = args.quanta_url
+        os.environ["QUANTA_PROXY_URL"] = args.quanta_url
         svc_mgr.target_model = args.target_model
         svc_mgr.target_slots = args.workers
         svc_mgr.unsloth_mgr.target_slots = args.workers
@@ -500,6 +505,7 @@ def main():
                 print(format_ansi("\n[!] FATAL: Live backend services could not be verified or awakened.", "1;31"))
                 print(format_ansi("    Check GPU availability or run with '--mode mock' for simulated evaluation.", "1;33"))
                 sys.exit(1)
+            args.base_url = svc_mgr.base_url
         else:
             status = svc_mgr.get_service_status()
             base_ok = status["base_llm"]["running"]
